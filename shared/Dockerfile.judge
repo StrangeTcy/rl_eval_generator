@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir \
+        torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir pillow pytest \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends patch \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY judge/     /judge/
+COPY workspace/ /originals/
+
+# Prevent any accidental leakage to train.py
+RUN rm -f /originals/judge.py /originals/patch_validator.py /originals/source_validator.py
+
+WORKDIR /judge
+CMD ["python", "judge.py"]

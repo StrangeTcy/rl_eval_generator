@@ -1,0 +1,171 @@
+axes:
+  - id: naming
+    description: "Variable and class naming (prevents retrieval)"
+    levels:
+      easy:
+        "%%MODEL_CLASS%%": "MoCo"
+        "%%Q_VAR%%": "q"
+        "%%K_VAR%%": "k"
+        "%%QUEUE_ATTR%%": "queue"
+        "%%DEQUEUE_FN%%": "_dequeue_and_enqueue"
+        "%%MODEL_FILE%%": "moco_model.py"
+        "%%MODEL_MODULE%%": "moco_model"
+      medium:
+        "%%MODEL_CLASS%%": "ContrastiveMemoryModel"
+        "%%Q_VAR%%": "anchor"
+        "%%K_VAR%%": "target"
+        "%%QUEUE_ATTR%%": "memory_bank"
+        "%%DEQUEUE_FN%%": "_update_memory_bank"
+        "%%MODEL_FILE%%": "contrastive.py"
+        "%%MODEL_MODULE%%": "contrastive"
+      hard:
+        "%%MODEL_CLASS%%": "DualStreamEngine"
+        "%%Q_VAR%%": "z_primary"
+        "%%K_VAR%%": "z_secondary"
+        "%%QUEUE_ATTR%%": "fifo_buffer"
+        "%%DEQUEUE_FN%%": "_cycle_buffer"
+        "%%MODEL_FILE%%": "engine.py"
+        "%%MODEL_MODULE%%": "engine"
+
+  - id: distractors
+    description: "Orthogonal init and adaptive margin red herring"
+    levels:
+      easy:
+        "%%DISTRACTOR_INIT%%": ""
+        "%%DISTRACTOR_FORWARD%%": ""
+      medium:
+        "%%DISTRACTOR_INIT%%": |
+          for m in self.modules():
+              if isinstance(m, nn.Linear):
+                  nn.init.orthogonal_(m.weight)
+                  if m.bias is not None:
+                      nn.init.zeros_(m.bias)
+        "%%DISTRACTOR_FORWARD%%": ""
+      hard:
+        "%%DISTRACTOR_INIT%%": |
+          for m in self.modules():
+              if isinstance(m, nn.Linear):
+                  nn.init.orthogonal_(m.weight)
+                  if m.bias is not None:
+                      nn.init.zeros_(m.bias)
+          self._adaptive_margin = nn.Parameter(torch.tensor(0.01))
+        "%%DISTRACTOR_FORWARD%%": |
+          if self.training:
+              %%Q_VAR%% = %%Q_VAR%% + torch.randn_like(%%Q_VAR%%) * self._adaptive_margin.abs()
+
+  - id: queue_math
+    description: "Whether batch size divides K evenly"
+    levels:
+      easy:
+        "%%K%%": "512"
+        "%%BATCH_SIZE%%": "64"
+        "%%DROP_LAST%%": "True"
+        "%%QUEUE_HINT%%": "\n> Hint: does K divide evenly by BATCH_SIZE? (512 / 64 = 8, yes.)"
+      medium:
+        "%%K%%": "1024"
+        "%%BATCH_SIZE%%": "100"
+        "%%DROP_LAST%%": "True"
+        "%%QUEUE_HINT%%": ""
+      hard:
+        "%%K%%": "1000"
+        "%%BATCH_SIZE%%": "128"
+        "%%DROP_LAST%%": "False"
+        "%%QUEUE_HINT%%": ""
+
+  - id: temperature
+    description: "Visibility of the temperature cancellation bug"
+    levels:
+      easy:
+        "%%TEMP_COMMENT%%": |
+          # BUG: temperature before normalise() cancels out.
+          # normalize(x / tau) == normalize(x). Apply tau AFTER normalising.
+        "%%TEMP_Q%%": "%%Q_VAR%% = nn.functional.normalize(%%Q_VAR%% / self.tau, dim=1)"
+        "%%TEMP_K%%": "%%K_VAR%% = nn.functional.normalize(%%K_VAR%% / self.tau, dim=1)"
+        "%%TEMP_HELPER%%": ""
+      medium:
+        "%%TEMP_COMMENT%%": ""
+        "%%TEMP_Q%%": "%%Q_VAR%% = nn.functional.normalize(%%Q_VAR%% / self.tau, dim=1)"
+        "%%TEMP_K%%": "%%K_VAR%% = nn.functional.normalize(%%K_VAR%% / self.tau, dim=1)"
+        "%%TEMP_HELPER%%": ""
+      hard:
+        "%%TEMP_COMMENT%%": ""
+        "%%TEMP_Q%%": "%%Q_VAR%% = self._project_to_sphere(%%Q_VAR%%)"
+        "%%TEMP_K%%": "%%K_VAR%% = self._project_to_sphere(%%K_VAR%%)"
+        "%%TEMP_HELPER%%": |
+          def _project_to_sphere(self, x: torch.Tensor) -> torch.Tensor:
+              """Project features onto the unit hypersphere, scaled by temperature."""
+              return nn.functional.normalize(x / self.tau, dim=1)
+
+  - id: visible_tests
+    description: "What the visible tests reveal"
+    levels:
+      easy:
+        "%%VISIBLE_TEST_BODY%%": |
+          def test_temperature_not_cancelled():
+              """Low tau must produce larger logits than high tau."""
+              import importlib
+              mod   = importlib.import_module("%%MODEL_MODULE%%")
+              Model = getattr(mod, "%%MODEL_CLASS%%")
+              torch.manual_seed(0)
+              m_warm = Model(dim=16, K=64, tau=1.0)
+              m_cold = Model(dim=16, K=64, tau=0.01)
+              m_cold.load_state_dict(m_warm.state_dict(), strict=False)
+              m_cold.tau = 0.01
+              im = torch.randn(4, 1, 16, 16)
+              with torch.no_grad():
+                  lw, _ = m_warm(im, im)
+                  lc, _ = m_cold(im, im)
+              assert lc.abs().max() > lw.abs().max() * 5
+      medium:
+        "%%VISIBLE_TEST_BODY%%": |
+          def test_training_runs():
+              import subprocess
+              r = subprocess.run(["python", "train.py"], capture_output=True, timeout=300)
+              assert r.returncode == 0
+
+          def test_eval_runs():
+              import subprocess
+              r = subprocess.run(["python", "eval.py"], capture_output=True, timeout=120)
+              assert r.returncode == 0
+      hard:
+        "%%VISIBLE_TEST_BODY%%": |
+          def test_loss_decreases():
+              """MISLEADING — loss decreases even with collapsed representations."""
+              import importlib
+              mod   = importlib.import_module("%%MODEL_MODULE%%")
+              Model = getattr(mod, "%%MODEL_CLASS%%")
+              model = Model(dim=16, K=64)
+              opt   = torch.optim.Adam(model.parameters(), lr=1e-3)
+              losses = []
+              for _ in range(6):
+                  im = torch.randn(4, 1, 16, 16)
+                  logits, labels = model(im, im)
+                  loss = torch.nn.functional.cross_entropy(logits, labels)
+                  opt.zero_grad(); loss.backward(); opt.step()
+                  losses.append(loss.item())
+              assert losses[-1] < losses[0]
+
+constants:
+  "%%PATCHABLE_FILES%%": '["%%MODEL_FILE%%"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"dataset", "%%MODEL_MODULE%%"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/%%MODEL_FILE%%: model.py
+  agent/workspace/dataset.py: dataset.py
+  agent/workspace/train.py: train.py
+  agent/workspace/eval.py: eval.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+
+  judge/judge.py: judge.py

@@ -1,0 +1,110 @@
+axes:
+  - id: optimizer_hint
+    description: "How obvious the EMA mismatch is"
+    levels:
+      easy:
+        "%%OPT_COMMENT%%": |
+          # FIXME: Each forward pass during accumulation updates BatchNorm's
+          # running statistics via EMA. With ACCUM_STEPS forward passes per
+          # optimizer step, the effective momentum is too high. Scale BN
+          # momentum by 1/ACCUM_STEPS.
+        "%%ACCUM_STEPS%%": "4"
+      medium:
+        "%%OPT_COMMENT%%": "# Gradient accumulation with standard BatchNorm."
+        "%%ACCUM_STEPS%%": "8"
+      hard:
+        "%%OPT_COMMENT%%": "# Using recommended AdamW configuration."
+        "%%ACCUM_STEPS%%": "16"
+
+  - id: red_herring
+    description: "Strength of the DDP no_sync red herring"
+    levels:
+      easy:
+        "%%SYNC_IMPORT%%": ""
+        "%%SYNC_CONTEXT_OPEN%%": ""
+        "%%SYNC_CONTEXT_CLOSE%%": ""
+      medium:
+        "%%SYNC_IMPORT%%": "from contextlib import nullcontext"
+        "%%SYNC_CONTEXT_OPEN%%": |
+          # NOTE: skip gradient sync on accumulation steps
+          _ctx = nullcontext()  # red herring: sync context is not the issue
+        "%%SYNC_CONTEXT_CLOSE%%": ""
+      hard:
+        "%%SYNC_IMPORT%%": "from contextlib import nullcontext"
+        "%%SYNC_CONTEXT_OPEN%%": |
+          # WARNING: This no_sync pattern has a subtle off-by-one that
+          # causes gradient staleness — verify carefully.
+          _sync = (step % ACCUM_STEPS == 0)
+          _ctx = nullcontext()
+        "%%SYNC_CONTEXT_CLOSE%%": ""
+
+  - id: visible_tests
+    description: "What the visible tests reveal"
+    levels:
+      easy:
+        "%%VISIBLE_BN_TEST%%": |
+          def test_bn_momentum_scaling():
+              """Hint: BN momentum should be scaled by 1/ACCUM_STEPS."""
+              import torch.nn as nn
+              from train import ACCUM_STEPS
+              from model import ResNetBN
+              model = ResNetBN()
+              bns = [m for m in model.modules() if isinstance(m, nn.BatchNorm2d)]
+              assert bns, "No BatchNorm2d layers"
+              for bn in bns:
+                  assert bn.momentum != 0.1, (
+                      "BN momentum is the default 0.1; scale by 1/ACCUM_STEPS."
+                  )
+      medium:
+        "%%VISIBLE_BN_TEST%%": ""
+      hard:
+        "%%VISIBLE_BN_TEST%%": |
+          def test_loss_decreases():
+              """Gives false confidence — loss always drops initially."""
+              import subprocess, re
+              proc = subprocess.run(
+                  ["python", "train.py"],
+                  capture_output=True, text=True, timeout=600,
+              )
+              losses = re.findall(r"Loss: ([\d\.]+)", proc.stdout)
+              if len(losses) >= 2:
+                  assert float(losses[-1]) < float(losses[0])
+
+  - id: data_complexity
+    description: "Dataset difficulty (affects sensitivity to the BN bug)"
+    levels:
+      easy:
+        "%%DATASET_TYPE%%": "cifar10"
+        "%%NUM_CLASSES%%": "10"
+        "%%EPOCHS%%": "5"
+      medium:
+        "%%DATASET_TYPE%%": "cifar10"
+        "%%NUM_CLASSES%%": "10"
+        "%%EPOCHS%%": "5"
+      hard:
+        "%%DATASET_TYPE%%": "cifar100"
+        "%%NUM_CLASSES%%": "100"
+        "%%EPOCHS%%": "8"
+
+constants:
+  "%%PATCHABLE_FILES%%": '["model.py", "train.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"model", "train"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/model.py: model.py
+  agent/workspace/train.py: train.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+
+  judge/judge.py: judge.py

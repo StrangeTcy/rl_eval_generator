@@ -1,0 +1,222 @@
+axes:
+  - id: architecture
+    description: "How obvious the Flatten bug is"
+    levels:
+      easy:
+        "%%ARCH_CLASSIFIER%%": |
+          # FIXME: Is Flatten() correct for a permutation-invariant problem?
+          self.classifier = nn.Sequential(
+              nn.Flatten(),
+              nn.Linear(64 * 8 * 8, 128),
+              nn.ReLU(),
+              nn.Linear(128, num_classes)
+          )
+        "%%ARCH_EXTRA_CLASS%%": ""
+        "%%ARCH_FORWARD_HEAD%%": |
+          x = self.classifier(x)
+      medium:
+        "%%ARCH_CLASSIFIER%%": |
+          self.classifier = nn.Sequential(
+              nn.Flatten(),
+              nn.Linear(64 * 8 * 8, 128),
+              nn.ReLU(),
+              nn.Linear(128, num_classes)
+          )
+        "%%ARCH_EXTRA_CLASS%%": ""
+        "%%ARCH_FORWARD_HEAD%%": |
+          x = self.classifier(x)
+      hard:
+        "%%ARCH_CLASSIFIER%%": |
+          self.encoder = SpatialEncoderBlock(64, 8)
+          self.classifier = nn.Sequential(
+              nn.Linear(self.encoder.output_dim, 128),
+              nn.ReLU(),
+              nn.Linear(128, num_classes)
+          )
+        "%%ARCH_EXTRA_CLASS%%": |
+          class SpatialEncoderBlock(nn.Module):
+              """Intermediate block that appears to abstract spatial features."""
+              def __init__(self, in_features, grid_size):
+                  super().__init__()
+                  self.in_features = in_features
+                  self.grid_size = grid_size
+                  self.output_dim = in_features * grid_size * grid_size
+
+              def forward(self, x):
+                  return x.view(x.size(0), -1)
+
+        "%%ARCH_FORWARD_HEAD%%": |
+          x = self.encoder(x)
+          x = self.classifier(x)
+
+  - id: optimizer
+    description: "How obvious the training dynamics issue is"
+    levels:
+      easy:
+        "%%OPT_LINE%%": "optimizer = optim.SGD(model.parameters(), lr=1e-5)  # extremely slow"
+      medium:
+        "%%OPT_LINE%%": "optimizer = optim.SGD(model.parameters(), lr=1e-4)"
+      hard:
+        "%%OPT_LINE%%": "optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.5)"
+
+  - id: red_herring
+    description: "Strength of the augmentation red herring"
+    levels:
+      easy:
+        "%%AUGMENT_CLASS%%": ""
+        "%%AUGMENT_CALL%%": |
+          self.augment = transforms.Compose([
+              transforms.RandomHorizontalFlip(),
+              transforms.ToTensor(),
+              transforms.Normalize((0.5,), (0.5,)),
+          ])
+      medium:
+        "%%AUGMENT_CLASS%%": |
+          class AugmentGlyph:
+              """Aggressive spatial augmentations."""
+              def __init__(self):
+                  self.transform = transforms.Compose([
+                      transforms.RandomAffine(45, (0.15, 0.15), (0.85, 1.15), shear=15),
+                      transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
+                      transforms.ColorJitter(0.3, 0.3),
+                      transforms.ToTensor(),
+                      transforms.Normalize((0.5,), (0.5,)),
+                  ])
+              def __call__(self, img):
+                  return self.transform(img)
+
+        "%%AUGMENT_CALL%%": "self.augment = AugmentGlyph()"
+      hard:
+        "%%AUGMENT_CLASS%%": |
+          class BuggyAugmentation:
+              """Contains a subtle but irrelevant off-by-one bug."""
+              def __init__(self):
+                  self.p_invert = 0.1 + 1.0
+                  self.transform = transforms.Compose([
+                      transforms.RandomAffine(30, (0.1, 0.1), (0.9, 1.1)),
+                      transforms.ToTensor(),
+                      transforms.Normalize((0.5,), (0.5,)),
+                  ])
+              def __call__(self, img):
+                  if random.random() < self.p_invert:
+                      img = transforms.functional.invert(img)
+                  return self.transform(img)
+
+        "%%AUGMENT_CALL%%": "self.augment = BuggyAugmentation()"
+
+  - id: visible_tests
+    description: "Informativeness of visible tests"
+    levels:
+      easy:
+        "%%EXTRA_TESTS%%": |
+          def test_initial_accuracy_low():
+              """Confirm the unmodified model cannot generalise."""
+              import subprocess, re
+              proc = subprocess.run(
+                  ["python", "train.py"],
+                  capture_output=True, text=True, timeout=300
+              )
+              match = re.search(r"Acc: ([\d\.]+)%", proc.stdout)
+              assert match, "No accuracy line found"
+              assert float(match.group(1)) < 30.0
+      medium:
+        "%%EXTRA_TESTS%%": ""
+      hard:
+        "%%EXTRA_TESTS%%": |
+          def test_two_class_sanity():
+              """MISLEADING: passes even with the buggy model on some seeds."""
+              from dataset import generate_glyph
+              from torchvision import transforms as T
+              model = GlyphCNN(num_classes=2)
+              torch.manual_seed(42)
+              tfm = T.Compose([T.ToTensor(), T.Normalize((0.5,), (0.5,))])
+              img1 = tfm(generate_glyph(0))
+              img2 = tfm(generate_glyph(1))
+              batch = torch.stack([img1, img2])
+              with torch.no_grad():
+                  _, preds = torch.max(model(batch), 1)
+              assert preds[0].item() != preds[1].item()
+
+  - id: data_clue
+    description: "How hidden the permutation-invariance rule is"
+    levels:
+      easy:
+        "%%DATA_DOCSTRING%%": |
+          """
+          IMPORTANT: A glyph's class is determined solely by the SET of shape
+          types and counts. Spatial position is irrelevant.
+          """
+        "%%CLASS_DEF_BLOCK%%": |
+          CLASS_DEFS = {
+              0: [("circle",   1), ("square",   2)],
+              1: [("triangle", 2), ("square",   1)],
+              2: [("circle",   2), ("triangle", 1)],
+              3: [("circle",   3)],
+              4: [("square",   3)],
+              5: [("triangle", 3)],
+              6: [("circle",   1), ("triangle", 1), ("square", 1)],
+              7: [("circle",   2), ("square",   1)],
+              8: [("triangle", 2), ("circle",   1)],
+              9: [("square",   2), ("triangle", 1)],
+          }
+      medium:
+        "%%DATA_DOCSTRING%%": |
+          """Procedurally generated glyph images."""
+        "%%CLASS_DEF_BLOCK%%": |
+          CLASS_DEFS = {
+              0: [("circle",   1), ("square",   2)],
+              1: [("triangle", 2), ("square",   1)],
+              2: [("circle",   2), ("triangle", 1)],
+              3: [("circle",   3)],
+              4: [("square",   3)],
+              5: [("triangle", 3)],
+              6: [("circle",   1), ("triangle", 1), ("square", 1)],
+              7: [("circle",   2), ("square",   1)],
+              8: [("triangle", 2), ("circle",   1)],
+              9: [("square",   2), ("triangle", 1)],
+          }
+      hard:
+        "%%DATA_DOCSTRING%%": |
+          """Procedurally generated glyph images."""
+        "%%CLASS_DEF_BLOCK%%": |
+          import base64 as _b64, json as _json
+
+          _ENCODED = (
+              "eyIwIjogW1siY2lyY2xlIiwgMV0sIFsic3F1YXJlIiwgMl1dLCAiMSI6IFtbInRyaWFuZ"
+              "2xlIiwgMl0sIFsic3F1YXJlIiwgMV1dLCAiMiI6IFtbImNpcmNsZSIsIDJdLCBbInRyaW"
+              "FuZ2xlIiwgMV1dLCAiMyI6IFtbImNpcmNsZSIsIDNdXSwgIjQiOiBbWyJzcXVhcmUiLCAz"
+              "XV0sICI1IjogW1sidHJpYW5nbGUiLCAzXV0sICI2IjogW1siY2lyY2xlIiwgMV0sIFsidH"
+              "JpYW5nbGUiLCAxXSwgWyJzcXVhcmUiLCAxXV0sICI3IjogW1siY2lyY2xlIiwgMl0sIFsi"
+              "c3F1YXJlIiwgMV1dLCAiOCI6IFtbInRyaWFuZ2xlIiwgMl0sIFsiY2lyY2xlIiwgMV1dLC"
+              "AiOSI6IFtbInNxdWFyZSIsIDJdLCBbInRyaWFuZ2xlIiwgMV1dfQ=="
+          )
+
+          def _load_class_defs():
+              raw = _b64.b64decode(_ENCODED).decode("utf-8")
+              return {int(k): v for k, v in _json.loads(raw).items()}
+
+          CLASS_DEFS = _load_class_defs()
+
+constants:
+  "%%PATCHABLE_FILES%%": '["dataset.py", "model.py", "train.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"dataset", "model", "train"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/dataset.py: dataset.py
+  agent/workspace/model.py: model.py
+  agent/workspace/train.py: train.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+  
+  judge/judge.py: judge.py

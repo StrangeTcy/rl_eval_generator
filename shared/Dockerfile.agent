@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir \
+        torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir pillow pytest
+
+COPY workspace/ /originals/
+COPY tools/ /tools/
+COPY agent_entrypoint.sh /agent_entrypoint.sh
+
+RUN chmod +x /tools/submit.py /agent_entrypoint.sh
+
+WORKDIR /workspace
+CMD ["/agent_entrypoint.sh"]
