@@ -1,0 +1,174 @@
+axes:
+  - id: paper_clarity
+    description: "How directly the extracted paper text maps notation to code"
+    levels:
+      easy:
+        "%%PAPER_BODY%%": |
+          The rotary transform applies a two-dimensional rotation to each pair
+          of coordinates. For pair (x_0, x_1), position m, and frequency
+          theta_i:
+
+              x'_0 = x_0 cos(m theta_i) - x_1 sin(m theta_i)
+              x'_1 = x_0 sin(m theta_i) + x_1 cos(m theta_i)
+
+          The position index m is the absolute sequence position.
+      medium:
+        "%%PAPER_BODY%%": |
+          RoPE treats each two-dimensional subspace as a complex coordinate and
+          multiplies that coordinate by exp(i m theta_i). In the real-valued
+          representation this is exactly a planar rotation by angle m theta_i.
+          In cached decoding, m remains the absolute index in the full sequence.
+      hard:
+        "%%PAPER_BODY%%": |
+          Let z_i(m) denote the i-th complex component of a token representation
+          at location m. The rotary map sends z_i(m) to z_i(m) exp(i m theta_i).
+          Relative displacement appears through phase differences between
+          positions. Incremental evaluation does not reset m at chunk boundaries.
+
+  - id: implementation_style
+    description: "How obvious the buggy helper and frequency calculation are"
+    levels:
+      easy:
+        "%%ROTATE_HELPER%%": "_rotate_half_buggy"
+        "%%BUG_COMMENT%%": |
+          # BUG: this helper rotates the first half against the second half.
+          # The paper rotates adjacent coordinate pairs.
+        "%%INV_FREQ_DENOM%%": "dim"
+      medium:
+        "%%ROTATE_HELPER%%": "_rotate_feature_pairs"
+        "%%BUG_COMMENT%%": |
+          # Rotates features in pairs.
+        "%%INV_FREQ_DENOM%%": "dim"
+      hard:
+        "%%ROTATE_HELPER%%": "_phase_shift"
+        "%%BUG_COMMENT%%": |
+          # Applies the real-valued phase transform.
+        "%%INV_FREQ_DENOM%%": "(dim // 2)"
+
+  - id: notation_mismatch
+    description: "How much the paper notation differs from code naming"
+    levels:
+      easy:
+        "%%NOTATION_BODY%%": |
+          In the code, the last dimension is the head dimension d, and theta_i
+          corresponds to the inverse-frequency buffer.
+        "%%FREQ_BUFFER%%": "inv_freq"
+        "%%ANGLE_VAR%%": "angles"
+      medium:
+        "%%NOTATION_BODY%%": |
+          The paper writes theta_i, while implementations often store the same
+          quantity as an inverse-frequency vector.
+        "%%FREQ_BUFFER%%": "inv_freq"
+        "%%ANGLE_VAR%%": "phase"
+      hard:
+        "%%NOTATION_BODY%%": |
+          The paper uses complex variables z_i and phase factors. The source
+          implementation is purely real-valued and does not expose complex
+          tensors directly.
+        "%%FREQ_BUFFER%%": "theta_table"
+        "%%ANGLE_VAR%%": "phase"
+
+  - id: visible_tests
+    description: "How informative visible tests are"
+    levels:
+      easy:
+        "%%SHORT_TEST_DIM%%": "4"
+        "%%EXTRA_VISIBLE_TEST%%": |
+          def test_norm_preserved_short_context():
+              rope = RotaryEmbedding(dim=8)
+              x = torch.randn(2, 3, 8, 8)
+              y = rope.apply_rope(x)
+              assert torch.allclose(x.norm(dim=-1), y.norm(dim=-1), atol=1e-5)
+      medium:
+        "%%SHORT_TEST_DIM%%": "2"
+        "%%EXTRA_VISIBLE_TEST%%": ""
+      hard:
+        "%%SHORT_TEST_DIM%%": "2"
+        "%%EXTRA_VISIBLE_TEST%%": |
+          def test_training_smoke_only():
+              import subprocess
+              proc = subprocess.run(["python", "train.py"], capture_output=True, text=True, timeout=60)
+              assert proc.returncode == 0
+
+  - id: hidden_context
+    description: "Long-context and offset severity in hidden judge"
+    levels:
+      easy:
+        "%%HIDDEN_LONG_SEQ%%": "128"
+        "%%HIDDEN_OFFSET%%": "32"
+      medium:
+        "%%HIDDEN_LONG_SEQ%%": "512"
+        "%%HIDDEN_OFFSET%%": "257"
+      hard:
+        "%%HIDDEN_LONG_SEQ%%": "2048"
+        "%%HIDDEN_OFFSET%%": "1027"
+
+  - id: interaction_depth
+    description: "How many paper/tool interactions are needed before the task is diagnosable"
+    levels:
+      easy:
+        "%%EXTRACT_CLEAN_AFTER%%": "1"
+        "%%SECTION_INDEX_MODE%%": "clear"
+        "%%APPENDIX_AVAILABLE_AFTER%%": "1"
+        "%%PROMPT_TOOL_HINT%%": |
+          The workspace includes a paper artifact and auxiliary commands under
+          `/tools/`. You may inspect and use them as needed.
+      medium:
+        "%%EXTRACT_CLEAN_AFTER%%": "2"
+        "%%SECTION_INDEX_MODE%%": "standard"
+        "%%APPENDIX_AVAILABLE_AFTER%%": "2"
+        "%%PROMPT_TOOL_HINT%%": |
+          You may inspect the workspace and use any provided tools.
+      hard:
+        "%%EXTRACT_CLEAN_AFTER%%": "3"
+        "%%SECTION_INDEX_MODE%%": "opaque"
+        "%%APPENDIX_AVAILABLE_AFTER%%": "3"
+        "%%PROMPT_TOOL_HINT%%": |
+          You may inspect the workspace and use any provided tools.
+
+  - id: investigation_difficulty
+    description: "Branching factor, red herrings, and feedback granularity"
+    levels:
+      easy:
+        "%%FEEDBACK_MODE%%": "hint"
+        "%%RED_HERRING_SECTIONS%%": "False"
+        "%%TRAIN_HINT_TEXT%%": "Likely issue category: {category}"
+        "%%INSPECT_STYLE%%": "hint"
+      medium:
+        "%%FEEDBACK_MODE%%": "summary"
+        "%%RED_HERRING_SECTIONS%%": "True"
+        "%%TRAIN_HINT_TEXT%%": "Failure signature: {category}"
+        "%%INSPECT_STYLE%%": "summary"
+      hard:
+        "%%FEEDBACK_MODE%%": "raw"
+        "%%RED_HERRING_SECTIONS%%": "True"
+        "%%TRAIN_HINT_TEXT%%": "max_error={max_error:.6f}; score={score:.6f}"
+        "%%INSPECT_STYLE%%": "raw"
+
+constants:
+  "%%PATCHABLE_FILES%%": '["model.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"model"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/paper_excerpt.pdf: paper_excerpt.pdf
+  agent/workspace/model.py: model.py
+  agent/workspace/train.py: train.py
+  agent/workspace/eval.py: eval.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  agent/tools/extract_pdf.py: extract_pdf.py
+  agent/tools/read_paper.py: read_paper.py
+  agent/tools/run_train.py: run_train.py
+  agent/tools/run_eval.py: run_eval.py
+  agent/tools/inspect_logs.py: inspect_logs.py
+  agent/tools/submit.py: shared/submit.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+  judge/judge.py: judge.py

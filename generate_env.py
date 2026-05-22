@@ -205,8 +205,16 @@ def generate_env(
     subs["ENV_NAME"] = output_name
     subs["JUDGE_SEED"] = str(seed)
 
-    for k, v in config.get("constants", {}).items():
-        subs[k.strip("%")] = str(v)
+    # for k, v in config.get("constants", {}).items():
+    #     subs[k.strip("%")] = str(v)
+    # Merge environment-specific constants (with placeholder resolution)
+    raw_constants = config.get("constants", {})
+    for k, v in raw_constants.items():
+        key = k.strip("%")
+        resolved = resolve_placeholders(
+            str(v), subs, source_hint=f"constant '{k}'", strict=False
+        )
+        subs[key] = resolved
 
     # Resolve placeholders inside substitution values themselves. This is
     # required for composed values such as %%TEMP_Q%% containing %%Q_VAR%%,

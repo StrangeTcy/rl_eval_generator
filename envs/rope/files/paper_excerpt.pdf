@@ -1,0 +1,71 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 941 >>
+stream
+BT
+/F1 10 Tf
+54 750 Td
+13 TL
+(RoFormer: Enhanced Transformer with Rotary Position Embedding) Tj
+T*
+(Rotary Position Embedding) Tj
+T*
+() Tj
+T*
+(Absolute position embedding commonly adds p_i to x_i before projection:) Tj
+T*
+(    f_t\(x_i, i\) := W_t \(x_i + p_i\), t in {q, k, v}.) Tj
+T*
+() Tj
+T*
+(RoFormer instead incorporates position by rotating query and key vectors.) Tj
+T*
+(For a two-dimensional subspace:) Tj
+T*
+(    f_q\(x_m, m\) = R\(m theta\) W_q x_m) Tj
+T*
+(    f_k\(x_n, n\) = R\(n theta\) W_k x_n) Tj
+T*
+(where R\(phi\) is [[cos phi, -sin phi], [sin phi, cos phi]].) Tj
+T*
+() Tj
+T*
+(The resulting dot product depends on relative phase \(m - n\) theta.) Tj
+T*
+(For higher dimensions, independent 2D subspaces use frequencies theta_i.) Tj
+T*
+(Equivalently, adjacent real coordinates form complex components multiplied) Tj
+T*
+(by exp\(i m theta_i\).) Tj
+T*
+() Tj
+T*
+(During incremental decoding, m is the absolute token index.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1303
+%%EOF

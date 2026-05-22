@@ -1,6 +1,7 @@
 from pathlib import Path
 import subprocess
 import sys
+import re
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +40,7 @@ def test_smoke_generate_all_envs():
         ("glyph", "smoke_glyph", "easy,easy,easy,easy,easy"),
         ("batchnorm_ema", "smoke_bn", "easy,easy,easy,easy"),
         ("moco", "smoke_moco", "easy,easy,easy,easy,easy"),
+        ("rope", "smoke_rope", "easy,easy,easy,easy,easy,easy,easy"),
     ]
     for env, name, diff in cases:
         subprocess.run(["rm", "-rf", name], cwd=ROOT)
@@ -46,7 +48,7 @@ def test_smoke_generate_all_envs():
         generated = ROOT / name
         assert generated.exists()
         contents = "\n".join(p.read_text(errors="ignore") for p in generated.rglob("*") if p.is_file())
-        assert "%%" not in contents
+        assert not re.search(r"%%[A-Z0-9_]+%%", contents)
         py_files = [str(p) for p in generated.rglob("*.py")]
         subprocess.run([sys.executable, "-m", "py_compile", *py_files], check=True)
         subprocess.run(["rm", "-rf", name], cwd=ROOT)

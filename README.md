@@ -69,6 +69,24 @@ Difficulty axes:
 - temperature bug visibility;
 - visible-test helpfulness.
 
+### RoPE Paper-to-Implementation (`rope`)
+
+A compact paper-to-code environment. The agent receives a fake PDF artifact,
+stateful paper-reading tools, train/eval diagnostic tools, and a partially
+incorrect RoPE implementation in `model.py`. The solution path now requires
+extracting and inspecting paper sections, forming an implementation hypothesis,
+running diagnostics, reading logs, and revising the patch. Hidden judge tests
+check long-context numerical equivalence, offset correctness for KV-cache-style
+decoding, norm preservation, and a relative-position property.
+
+**Core bugs:** adjacent even/odd coordinate pairing is implemented incorrectly,
+position offsets are ignored during chunked decoding, and hard variants also use
+a plausible but wrong frequency scaling.
+
+**Seven axes:** paper clarity · implementation obfuscation · notation mismatch ·
+visible-test strength · hidden long-context severity · interaction depth ·
+investigation difficulty.
+
 ---
 
 ## Repository layout
@@ -87,12 +105,14 @@ eval-generator/
 ├── envs/
 │   ├── glyph/
 │   ├── batchnorm_ema/
-│   └── moco/
+│   ├── moco/
+│   └── rope/
 ├── tests/
 └── .github/workflows/ci.yml
 ```
 
 Environment-specific files live under `envs/<name>/files/`. Shared tooling is injected from `shared/` when an environment is generated.
+
 
 ---
 
@@ -110,6 +130,7 @@ List axes:
 python generate_env.py --env glyph --list-axes
 python generate_env.py --env batchnorm_ema --list-axes
 python generate_env.py --env moco --list-axes
+python generate_env.py --env rope --list-axes
 ```
 
 Generate an environment:
@@ -120,6 +141,16 @@ python generate_env.py \
   --name glyph_hard_42 \
   --difficulty hard,hard,hard,hard,hard \
   --seed 42
+```
+
+Generate a RoPE paper-to-implementation task:
+
+```bash
+python generate_env.py \
+  --env rope \
+  --name rope_hard_1 \
+  --difficulty hard,hard,hard,hard,hard,hard,hard \
+  --seed 1
 ```
 
 Run it:
@@ -204,7 +235,7 @@ for seed in 1 2 3 4 5; do
   python generate_env.py \
     --env moco \
     --name "moco_hard_${seed}" \
-    --difficulty hard,hard,hard,hard,hard \
+    --difficulty hard,hard,hard,hard,hard,hard,hard \
     --seed "$seed"
 done
 ```
