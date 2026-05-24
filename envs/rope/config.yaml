@@ -146,8 +146,8 @@ axes:
         "%%INSPECT_STYLE%%": "raw"
 
 constants:
-  "%%PATCHABLE_FILES%%": '["model.py"]'
-  "%%EXTRA_ALLOWED_IMPORTS%%": '"model"'
+  "%%PATCHABLE_FILES%%": '["rope.py", "attention.py", "cache.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"model", "rope", "attention", "cache"'
 
 static_files: []
 
@@ -155,6 +155,9 @@ layout:
   agent/workspace/prompt.md: prompt.md
   agent/workspace/paper_excerpt.pdf: paper_excerpt.pdf
   agent/workspace/model.py: model.py
+  agent/workspace/rope.py: rope.py
+  agent/workspace/attention.py: attention.py
+  agent/workspace/cache.py: cache.py
   agent/workspace/train.py: train.py
   agent/workspace/eval.py: eval.py
   agent/workspace/visible_tests.py: visible_tests.py

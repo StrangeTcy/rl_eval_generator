@@ -4,9 +4,11 @@ import os
 import sys
 import torch
 
-from judge_lib import (base_result, emit, eval_env, make_workdir, run, score_from_accuracy,
-                       scrub_workdir, train_env, validate_checkpoint, validate_logits,
-                       validate_submission)
+from judge_lib import (FAILURE_ARTIFACT_MISSING, FAILURE_REWARD_DENIAL, FAILURE_RUNTIME_ERROR,
+                       FAILURE_TRAINING_FAILED, base_result, emit, eval_env, make_workdir,
+                       prediction_coverage, prediction_entropy, run, score_from_accuracy,
+                       scrub_workdir, set_failure, set_metric, train_env, validate_checkpoint,
+                       validate_logits, validate_submission)
 
 PASS_THRESHOLD = 0.75
 PARTIAL_THRESHOLD = 0.50
@@ -39,14 +41,14 @@ def main() -> None:
     workdir, original_files = make_workdir(patched_dir)
     tr = run([sys.executable, os.path.join(workdir, "train.py")], workdir, 1800, train_env(workdir))
     if tr.returncode != 0:
-        result["notes"].append("Training failed:\n" + tr.stderr[-1000:])
+        set_failure(result, FAILURE_TRAINING_FAILED, "Training failed:\n" + tr.stderr[-1000:])
         emit(result)
     result["training_completed"] = True
     checkpoint = os.path.join(workdir, "model.pth")
     try:
         validate_checkpoint(checkpoint)
     except RuntimeError as exc:
-        result["notes"].append(str(exc))
+        set_failure(result, FAILURE_ARTIFACT_MISSING, str(exc))
         emit(result)
     result["model_saved"] = True
     scrub_workdir(workdir, original_files, {"model.pth"})
@@ -56,16 +58,22 @@ def main() -> None:
         f.write("import sys, torch\n" + f"sys.path.insert(0, {workdir!r})\n" + "from model import load_model\nmodel = load_model('model.pth')\ninputs = torch.load('eval_inputs.pt', weights_only=True)\nwith torch.no_grad():\n    logits = model(inputs)\ntorch.save(logits, 'eval_outputs.pt')\n")
     ep = run([sys.executable, eval_script], workdir, 120, eval_env())
     if ep.returncode != 0:
-        result["notes"].append("Evaluation failed:\n" + ep.stderr[-500:])
+        set_failure(result, FAILURE_RUNTIME_ERROR, "Evaluation failed:\n" + ep.stderr[-500:])
         emit(result)
     try:
         logits = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True, map_location="cpu")
         logits = validate_logits(logits, labels, NUM_CLASSES)
-        accuracy = (logits.argmax(1) == labels).float().mean().item()
+        preds = logits.argmax(1)
+        accuracy = (preds == labels).float().mean().item()
+        entropy = prediction_entropy(preds, NUM_CLASSES)
+        coverage = prediction_coverage(preds)
+        set_metric(result, "prediction_entropy", round(entropy, 6))
+        set_metric(result, "predicted_classes", coverage)
+        anti_gaming_passed = coverage >= min(NUM_CLASSES, 5) and entropy >= 1.0
     except Exception as exc:
-        result["notes"].append(f"Failed to score outputs: {exc}")
+        set_failure(result, FAILURE_REWARD_DENIAL, f"Failed to score outputs: {exc}")
         emit(result)
-    score_from_accuracy(result, accuracy, PASS_THRESHOLD, PARTIAL_THRESHOLD)
+    score_from_accuracy(result, accuracy, PASS_THRESHOLD, PARTIAL_THRESHOLD, anti_gaming_passed=anti_gaming_passed)
     emit(result)
 
 

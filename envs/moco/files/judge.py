@@ -5,8 +5,10 @@ import sys
 import torch
 import torch.nn as nn
 
-from judge_lib import (base_result, emit, eval_env, make_workdir, run, score_from_accuracy,
-                       scrub_workdir, train_env, validate_checkpoint, validate_feature_tensor,
+from judge_lib import (FAILURE_ARTIFACT_MISSING, FAILURE_REWARD_DENIAL, FAILURE_RUNTIME_ERROR,
+                       FAILURE_TRAINING_FAILED, base_result, emit, eval_env, feature_variance,
+                       make_workdir, run, score_from_accuracy, scrub_workdir, set_failure,
+                       set_metric, train_env, validate_checkpoint, validate_feature_tensor,
                        validate_submission)
 
 PASS_THRESHOLD = 0.85
@@ -43,14 +45,14 @@ def main() -> None:
     workdir, original_files = make_workdir(patched_dir)
     tr = run([sys.executable, os.path.join(workdir, "train.py")], workdir, 600, train_env(workdir))
     if tr.returncode != 0:
-        result["notes"].append("Training failed:\n" + tr.stderr[-1000:])
+        set_failure(result, FAILURE_TRAINING_FAILED, "Training failed:\n" + tr.stderr[-1000:])
         emit(result)
     result["training_completed"] = True
     checkpoint = os.path.join(workdir, "ckpt.pt")
     try:
         validate_checkpoint(checkpoint)
     except RuntimeError as exc:
-        result["notes"].append(str(exc))
+        set_failure(result, FAILURE_ARTIFACT_MISSING, str(exc))
         emit(result)
     result["checkpoint_saved"] = True
     scrub_workdir(workdir, original_files, {"ckpt.pt"})
@@ -60,7 +62,7 @@ def main() -> None:
         f.write("import sys, torch\n" + f"sys.path.insert(0, {workdir!r})\n" + "from %%MODEL_MODULE%% import %%MODEL_CLASS%% as Model\nmodel = Model(dim=16, K=%%K%%)\nmodel.load_state_dict(torch.load('ckpt.pt', weights_only=True, map_location='cpu'), strict=False)\nmodel.eval()\ntrain_in = torch.load('eval_train_inputs.pt', weights_only=True)\ntest_in = torch.load('eval_test_inputs.pt', weights_only=True)\nwith torch.no_grad():\n    train_f = model.encoder_q(train_in)\n    test_f = model.encoder_q(test_in)\ntorch.save({'train': train_f, 'test': test_f}, 'eval_outputs.pt')\n")
     ep = run([sys.executable, eval_script], workdir, 120, eval_env())
     if ep.returncode != 0:
-        result["notes"].append("Evaluation failed:\n" + ep.stderr[-500:])
+        set_failure(result, FAILURE_RUNTIME_ERROR, "Evaluation failed:\n" + ep.stderr[-500:])
         emit(result)
     try:
         outputs = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True, map_location="cpu")
@@ -68,6 +70,11 @@ def main() -> None:
             raise RuntimeError("Feature output must be a dict")
         train_feats = validate_feature_tensor(outputs.get("train"), train_labels.shape[0], "train")
         test_feats = validate_feature_tensor(outputs.get("test"), test_labels.shape[0], "test")
+        train_var = feature_variance(train_feats)
+        test_var = feature_variance(test_feats)
+        set_metric(result, "train_feature_variance", round(train_var, 6))
+        set_metric(result, "test_feature_variance", round(test_var, 6))
+        anti_gaming_passed = train_var > 1e-4 and test_var > 1e-4
         probe = nn.Linear(train_feats.shape[1], 4)
         opt = torch.optim.Adam(probe.parameters(), lr=1e-2)
         crit = nn.CrossEntropyLoss()
@@ -77,9 +84,9 @@ def main() -> None:
         with torch.no_grad():
             accuracy = (probe(test_feats).argmax(1) == test_labels).float().mean().item()
     except Exception as exc:
-        result["notes"].append(f"Failed to score outputs: {exc}")
+        set_failure(result, FAILURE_REWARD_DENIAL, f"Failed to score outputs: {exc}")
         emit(result)
-    score_from_accuracy(result, accuracy, PASS_THRESHOLD, PARTIAL_THRESHOLD)
+    score_from_accuracy(result, accuracy, PASS_THRESHOLD, PARTIAL_THRESHOLD, anti_gaming_passed=anti_gaming_passed)
     emit(result)
 
 

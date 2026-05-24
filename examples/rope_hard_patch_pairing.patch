@@ -1,0 +1,17 @@
+--- a/rope.py
++++ b/rope.py
+@@ -25,10 +25,10 @@
+     # Applies the real-valued phase transform.
+     
+     def _phase_shift(self, x: torch.Tensor) -> torch.Tensor:
+-        half = x.shape[-1] // 2
+-        x1 = x[..., :half]
+-        x2 = x[..., half:]
+-        return torch.cat((-x2, x1), dim=-1)
++        out = torch.empty_like(x)
++        out[..., 0::2] = -x[..., 1::2]
++        out[..., 1::2] = x[..., 0::2]
++        return out
+ 
+     def apply_rope(self, x: torch.Tensor, positions=None, offset: int = 0) -> torch.Tensor:
+         """Apply rotary position embeddings to x of shape (B, H, T, D)."""

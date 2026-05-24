@@ -169,6 +169,71 @@ exit
 
 The judge then applies the patch, validates it, trains/evaluates, and emits JSON.
 
+
+---
+
+## Gym-like environment runner
+
+The repository includes a minimal `reset` / `step` interface for driving generated
+environments as interaction loops:
+
+```bash
+python env_runner.py reset \
+  --env rope \
+  --episode-id demo_rope \
+  --difficulty hard,hard,hard,hard,hard,hard,hard \
+  --seed 1
+
+python env_runner.py step \
+  --episode demo_rope \
+  --action '{"type":"read_file","path":"prompt.md"}'
+
+python env_runner.py step \
+  --episode demo_rope \
+  --action '{"cmd":"ls -R . /tools"}'
+```
+
+Each `step` returns JSON with:
+
+```json
+{
+  "observation": "...",
+  "reward": 0.0,
+  "done": false,
+  "info": {"step": 1, "budget_remaining": 39}
+}
+```
+
+Supported action types are:
+
+- `shell` / `run` via `{"cmd": "..."}`;
+- `read_file`;
+- `write_file`;
+- `list_files`;
+- `submit`.
+
+The runner is intentionally lightweight. It stores episodes under `.episodes/`
+and uses the persistent filesystem as environment state. If Docker is available,
+`submit` can run the generated Docker judge; otherwise it terminates with a clear
+observation explaining that terminal Docker scoring is unavailable locally.
+
+### Runner limitations
+
+This is a prototype interaction wrapper, not a full RL runtime. Current
+limitations:
+
+- actions are coarse shell/file operations rather than a typed editing API;
+- observations are command output strings;
+- rewards are sparse and terminal by default;
+- the local runner does not maintain a persistent container session;
+- parallel rollouts are not yet implemented;
+- strict resource limits are provided by Docker only when using generated
+  `run_eval.sh`;
+- terminal scoring requires Docker on the host.
+
+These limitations are deliberate for a first version. The next natural step is a
+persistent-container backend with batched rollouts and stricter action budgets.
+
 ---
 
 ## Generator design
@@ -208,6 +273,36 @@ It is **not** a formal Python sandbox. Docker isolation is the primary security 
 
 ---
 
+## Failure mode reporting
+
+Judges emit a structured `failure_mode` in addition to scalar `score`. The common
+vocabulary is:
+
+- `pass`
+- `patch_missing`
+- `patch_invalid`
+- `source_invalid`
+- `training_failed`
+- `artifact_missing`
+- `runtime_error`
+- `timeout`
+- `underfit`
+- `overfit_visible_tests`
+- `specification_gaming`
+- `reward_denial`
+- `unknown`
+
+The result JSON also contains `checks` and `metrics` dictionaries where judges
+record anti-gaming signals such as prediction entropy, predicted-class coverage,
+feature variance, local/proxy score gaps, malformed outputs, and hidden check
+breakdowns.
+
+This is intended to make failures diagnosable: a low score caused by ordinary
+underfitting should look different from a visible-test overfit, malformed output,
+or local-proxy exploit.
+
+---
+
 ## Running tests
 
 ```bash
@@ -241,6 +336,31 @@ done
 ```
 
 Report the environment, difficulty vector, seed, raw accuracy, and score.
+
+---
+
+## Example trace
+
+A hand-authored RoPE hard-mode demonstration is provided under `examples/`. It
+shows the reset/step runner, paper extraction attempts, section reads, diagnostic
+runs, log inspection, and a reference patch application. The trace is a
+demonstration of environment dynamics, not a claim about any model.
+
+```bash
+bash examples/rope_hard_demo.sh
+```
+
+This writes:
+
+```text
+examples/rope_hard_reference_human_trace.jsonl
+```
+
+The reference patch is stored at:
+
+```text
+examples/rope_hard_solution.patch
+```
 
 ---
 

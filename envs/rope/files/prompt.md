@@ -2,9 +2,9 @@
 
 Your workspace is `/workspace/`.
 
-You are given a paper artifact and a small implementation of rotary position
-embeddings in `model.py`. The implementation passes some short-context checks but
-is wrong for the full algorithm.
+You are given a paper artifact and a small repository implementing rotary
+position embeddings across a few files. The implementation passes some
+short-context checks but is wrong for the full algorithm and cached/chunked use.
 
 Fix the implementation.
 
@@ -12,8 +12,8 @@ Fix the implementation.
 
 ## Constraints
 
-- Modify only `model.py`.
+- Modify only `rope.py`, `attention.py`, and `cache.py`.
 - Do not change public method names.
-- Do not modify `train.py`, `eval.py`, or `visible_tests.py`.
+- Do not modify `model.py`, `train.py`, `eval.py`, or `visible_tests.py`.
 - Do not add dependencies.
 - Submit with `python /tools/submit.py`, then exit.

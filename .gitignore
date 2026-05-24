@@ -12,3 +12,7 @@ venv/
 smoke_*/
 test_*/
 .DS_Store
+.episodes/
+
+demo_*/
+_episode_env_*/

@@ -1,5 +1,7 @@
 import torch
-from model import RotaryEmbedding
+from rope import RotaryEmbedding
+from model import TinyRoPEModel
+from cache import PositionCache
 
 
 def reference_rope_interleaved(x, positions=None, offset=0, base=10000.0):
@@ -29,13 +31,28 @@ def test_rope_preserves_shape():
 
 def test_short_context_equivalence():
     # At dim=2, adjacent-pair and half-split rotations coincide. This catches
-    # gross shape/frequency errors without revealing the long-context bug.
+    # gross shape/frequency errors without revealing the multi-file bug.
     torch.manual_seed(0)
     rope = RotaryEmbedding(dim=%%SHORT_TEST_DIM%%)
     x = torch.randn(1, 1, 4, %%SHORT_TEST_DIM%%)
     expected = reference_rope_interleaved(x)
     actual = rope.apply_rope(x)
     assert torch.allclose(actual, expected, atol=1e-5, rtol=1e-5)
+
+
+def test_chunked_shape_matches_full_shape():
+    model = TinyRoPEModel(dim=8, heads=2)
+    x = torch.randn(2, 13, 8)
+    q_full, k_full = model.forward_full(x)
+    q_chunk, k_chunk = model.forward_chunked(x, chunk_size=5)
+    assert q_full.shape == q_chunk.shape
+    assert k_full.shape == k_chunk.shape
+
+
+def test_cache_object_smoke():
+    cache = PositionCache()
+    assert isinstance(cache.position_offset(), int)
+    cache.append(3)
 
 
 %%EXTRA_VISIBLE_TEST%%

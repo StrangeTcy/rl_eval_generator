@@ -1,0 +1,12 @@
+--- a/rope.py
++++ b/rope.py
+@@ -16,8 +16,7 @@
+ 
+     def _angles(self, seq_len: int, device, offset: int = 0, positions=None):
+         if positions is None:
+-            # BUG: cached decoding should use absolute positions offset..offset+T-1.
+-            positions = torch.arange(seq_len, device=device)
++            positions = torch.arange(offset, offset + seq_len, device=device)
+         else:
+             positions = positions.to(device)
+         phase = torch.einsum("s,d->sd", positions.float(), self.theta_table.to(device))
