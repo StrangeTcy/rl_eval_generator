@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import torch
+from judge_lib import require_changed_files
 
 PATCH_PATH = "/submission/agent.patch"
 ORIGINALS_DIR = "/originals"
@@ -111,6 +112,7 @@ def main():
               "chunked_equivalence": False, "score": 0.0, "failure_mode": "unknown",
               "checks": {}, "metrics": {}, "notes": []}
     patched_dir = validate_submission(result)
+    require_changed_files(result, {"rope.py", "attention.py", "cache.py"})
     workdir = tempfile.mkdtemp(prefix="judge_rope_")
     for name in os.listdir(ORIGINALS_DIR):
         shutil.copy2(os.path.join(ORIGINALS_DIR, name), workdir)
