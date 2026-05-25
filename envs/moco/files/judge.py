@@ -9,7 +9,7 @@ from judge_lib import (FAILURE_ARTIFACT_MISSING, FAILURE_REWARD_DENIAL, FAILURE_
                        FAILURE_TRAINING_FAILED, base_result, emit, eval_env, feature_variance,
                        make_workdir, run, score_from_accuracy, scrub_workdir, set_failure,
                        set_metric, train_env, validate_checkpoint, validate_feature_tensor,
-                       validate_submission)
+                       validate_submission, require_changed_files)
 
 PASS_THRESHOLD = 0.85
 PARTIAL_THRESHOLD = 0.60
@@ -42,6 +42,7 @@ def generate_evaluation_data(workdir: str):
 def main() -> None:
     result = base_result(training_completed=False, checkpoint_saved=False, accuracy_bin="< 60%")
     patched_dir = validate_submission(result)
+    require_changed_files(result, {"%%MODEL_FILE%%", "queue_ops.py"})
     workdir, original_files = make_workdir(patched_dir)
     tr = run([sys.executable, os.path.join(workdir, "train.py")], workdir, 600, train_env(workdir))
     if tr.returncode != 0:

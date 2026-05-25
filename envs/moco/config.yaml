@@ -146,8 +146,8 @@ axes:
               assert losses[-1] < losses[0]
 
 constants:
-  "%%PATCHABLE_FILES%%": '["%%MODEL_FILE%%"]'
-  "%%EXTRA_ALLOWED_IMPORTS%%": '"dataset", "%%MODEL_MODULE%%"'
+  "%%PATCHABLE_FILES%%": '["%%MODEL_FILE%%", "queue_ops.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"dataset", "%%MODEL_MODULE%%", "queue_ops"'
 
 static_files: []
 
@@ -155,6 +155,7 @@ layout:
   agent/workspace/prompt.md: prompt.md
   agent/workspace/%%MODEL_FILE%%: model.py
   agent/workspace/dataset.py: dataset.py
+  agent/workspace/queue_ops.py: queue_ops.py
   agent/workspace/train.py: train.py
   agent/workspace/eval.py: eval.py
   agent/workspace/visible_tests.py: visible_tests.py

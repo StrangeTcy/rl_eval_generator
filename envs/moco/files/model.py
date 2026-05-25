@@ -1,6 +1,7 @@
 """MoCo-style contrastive model."""
 import torch
 import torch.nn as nn
+from queue_ops import enqueue_keys
 
 
 class _Backbone(nn.Module):
@@ -52,15 +53,7 @@ class %%MODEL_CLASS%%(nn.Module):
 
     @torch.no_grad()
     def %%DEQUEUE_FN%%(self, keys: torch.Tensor):
-        """
-        BUG: when _ptr + batch_size > K, the slice assignment silently truncates.
-        Keys at the tail of the batch are dropped. The pointer advances by the
-        full batch size, so slots at the end of the queue are never overwritten.
-        """
-        N   = keys.shape[0]
-        ptr = int(self._ptr)
-        self.%%QUEUE_ATTR%%[:, ptr : ptr + N] = keys.T
-        self._ptr[0] = (ptr + N) % self.K
+        enqueue_keys(self.%%QUEUE_ATTR%%, self._ptr, keys)
 
     %%TEMP_HELPER%%
 
