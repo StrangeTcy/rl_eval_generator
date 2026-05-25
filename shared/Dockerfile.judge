@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir \
     && useradd -m -u 10001 judge
 
 COPY judge/ /judge/
-COPY workspace/ /originals/
+COPY agent/workspace/ /originals/
 
 RUN rm -f /originals/judge.py /originals/patch_validator.py /originals/source_validator.py \
     && chmod -R a+rX /judge /originals
