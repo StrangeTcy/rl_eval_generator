@@ -269,3 +269,37 @@ def score_from_accuracy(
         result["score"] = 0.0
         result["accuracy_bin"] = f"< {int(partial_threshold * 100)}%"
         set_failure(result, classify_metric_failure(accuracy, pass_threshold, partial_threshold, proxy_score=proxy_score, anti_gaming_passed=anti_gaming_passed))
+
+
+def changed_files_from_patch() -> set[str]:
+    """Return normalized file paths touched by the submitted patch."""
+    changed: set[str] = set()
+    if not os.path.isfile(PATCH_PATH):
+        return changed
+    with open(PATCH_PATH, encoding="utf-8") as f:
+        for line in f:
+            if not (line.startswith("--- ") or line.startswith("+++ ")):
+                continue
+            path = line[4:].split("\t", 1)[0].strip()
+            if path == "/dev/null":
+                continue
+            if path.startswith("a/") or path.startswith("b/"):
+                path = path[2:]
+            changed.add(path)
+    return changed
+
+
+def require_changed_files(result: dict, required: Iterable[str]) -> None:
+    """Fail unless the submitted patch touches every required file."""
+    required_set = set(required)
+    changed = changed_files_from_patch()
+    set_metric(result, "changed_files", sorted(changed))
+    missing = sorted(required_set - changed)
+    if missing:
+        set_failure(
+            result,
+            FAILURE_OVERFIT_VISIBLE,
+            "Patch does not perform the required cross-context edit; missing changes in: " + ", ".join(missing),
+        )
+        emit(result)
+    mark_check(result, "required_multifile_edit")
