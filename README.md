@@ -273,6 +273,26 @@ It is **not** a formal Python sandbox. Docker isolation is the primary security 
 
 ---
 
+## Cross-context editing
+
+Included environments now require coordinated edits across multiple files rather
+than isolated fill-in-the-blank patches. Judges check the submitted patch touches
+the files needed for the intended repair path. Examples:
+
+- `glyph`: model architecture and training dynamics must both be addressed.
+- `batchnorm_ema`: model/training code must coordinate BatchNorm state behavior
+  with gradient accumulation.
+- `moco`: temperature logic and queue update logic are split across the model file
+  and `queue_ops.py`.
+- `rope`: RoPE math, attention call-site propagation, and cache bookkeeping are
+  split across `rope.py`, `attention.py`, and `cache.py`.
+
+This keeps the tasks closer to cross-context code editing: the agent must inspect
+the call graph, understand where state is produced and consumed, and patch the
+relevant locations together.
+
+---
+
 ## Failure mode reporting
 
 Judges emit a structured `failure_mode` in addition to scalar `score`. The common
