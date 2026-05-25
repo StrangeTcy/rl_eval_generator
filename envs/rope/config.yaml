@@ -161,6 +161,7 @@ layout:
   agent/workspace/train.py: train.py
   agent/workspace/eval.py: eval.py
   agent/workspace/visible_tests.py: visible_tests.py
+  agent/tools/tool_state.py: tool_state.py
   agent/tools/extract_pdf.py: extract_pdf.py
   agent/tools/read_paper.py: read_paper.py
   agent/tools/run_train.py: run_train.py

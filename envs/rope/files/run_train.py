@@ -2,34 +2,18 @@
 """Stateful train-like diagnostics for the current RoPE implementation."""
 import argparse
 import json
-import os
 import sys
-from pathlib import Path
 
 import torch
 
-WORKSPACE = Path(os.environ.get("WORKSPACE", "/workspace"))
-if not WORKSPACE.exists():
-    WORKSPACE = Path.cwd()
-STATE_PATH = WORKSPACE / ".rope_tool_state.json"
-LOG_DIR = WORKSPACE / "logs"
-LOG_PATH = LOG_DIR / "train_runs.jsonl"
+from tool_state import TRAIN_LOG, WORKSPACE, append_jsonl, load_state, log_event, save_state
+
 sys.path.insert(0, str(WORKSPACE))
 from rope import RotaryEmbedding  # noqa: E402
 from model import TinyRoPEModel  # noqa: E402
 
 FEEDBACK_MODE = "%%FEEDBACK_MODE%%"
 TRAIN_HINT_TEXT = "%%TRAIN_HINT_TEXT%%"
-
-
-def load_state() -> dict:
-    if STATE_PATH.exists():
-        return json.loads(STATE_PATH.read_text())
-    return {"train_runs": 0, "observed_failures": []}
-
-
-def save_state(state: dict) -> None:
-    STATE_PATH.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
 def reference_rope(x, offset=0, base=10000.0):
@@ -86,12 +70,6 @@ def metric(config: str):
     return {"config": config, "max_error": max_error, "score": score, "category": category, "status": "pass" if category == "none" else "fail"}
 
 
-def write_log(entry: dict) -> None:
-    LOG_DIR.mkdir(exist_ok=True)
-    with LOG_PATH.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
-
-
 def print_entry(entry: dict) -> None:
     if FEEDBACK_MODE == "hint" and entry["status"] == "fail":
         print(TRAIN_HINT_TEXT.format(**entry))
@@ -113,7 +91,8 @@ def main() -> None:
         entry["run"] = state["train_runs"]
         if entry["status"] == "fail":
             state.setdefault("observed_failures", []).append(entry["category"])
-        write_log(entry)
+        append_jsonl(TRAIN_LOG, entry)
+        log_event("run_train", "diagnostic", entry["status"], f"{cfg}: {entry['status']} {entry['category']}", **entry)
         print_entry(entry)
     save_state(state)
 

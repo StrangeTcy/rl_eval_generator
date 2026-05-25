@@ -5,13 +5,15 @@ RUN pip install --no-cache-dir \
     && pip install --no-cache-dir pillow pytest \
     && apt-get update \
     && apt-get install -y --no-install-recommends patch \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 10001 judge
 
-COPY judge/     /judge/
+COPY judge/ /judge/
 COPY workspace/ /originals/
 
-# Prevent any accidental leakage to train.py
-RUN rm -f /originals/judge.py /originals/patch_validator.py /originals/source_validator.py
+RUN rm -f /originals/judge.py /originals/patch_validator.py /originals/source_validator.py \
+    && chmod -R a+rX /judge /originals
 
+USER judge
 WORKDIR /judge
 CMD ["python", "judge.py"]

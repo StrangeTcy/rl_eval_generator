@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
 """Read sections from the current extracted paper state."""
 import argparse
-import json
-import os
-from pathlib import Path
 
-WORKSPACE = Path(os.environ.get("WORKSPACE", "/workspace"))
-if not WORKSPACE.exists():
-    WORKSPACE = Path.cwd()
-STATE_PATH = WORKSPACE / ".rope_tool_state.json"
+from tool_state import load_state, log_event
 
 SECTION_TITLES = {
     "abstract": "Abstract / overview",
@@ -29,12 +23,6 @@ SECTION_TEXT = {
     "rotary_derivation": """For a two-dimensional subspace, RoPE applies R(m theta) to the query at position m and R(n theta) to the key at position n. R(phi) = [[cos(phi), -sin(phi)], [sin(phi), cos(phi)]]. In higher dimensions, independent two-dimensional subspaces use frequencies theta_i. Adjacent real coordinates correspond to each complex component.""",
     "appendix_incremental": """During incremental evaluation, m is the absolute token position. A chunk beginning after k previous tokens uses positions k, k+1, ..., k+t-1; the rotary phase is not reset at the start of the chunk.""",
 }
-
-
-def load_state() -> dict:
-    if not STATE_PATH.exists():
-        raise SystemExit("No extraction state found. Run `python /tools/extract_pdf.py paper_excerpt.pdf --out paper_excerpt.md` first.")
-    return json.loads(STATE_PATH.read_text())
 
 
 def main() -> None:
@@ -61,15 +49,18 @@ def main() -> None:
                 print(f"- {name}")
         if state.get("last_warning"):
             print("\nwarning: " + state["last_warning"])
+        log_event("read_paper", "index", "ok", "listed paper sections", available_sections=available, missing_sections=state.get("missing_sections", []))
         return
 
     sections = available if args.section == "all" else [args.section]
     for name in sections:
         if name not in available:
+            log_event("read_paper", "read_section", "error", f"section unavailable: {name}", section=name)
             raise SystemExit(f"Section {name!r} is not available in the current extraction. Try extracting again or inspect the index.")
         print(f"# {SECTION_TITLES.get(name, name)}\n")
         print(SECTION_TEXT[name])
         print()
+        log_event("read_paper", "read_section", "ok", f"read {name}", section=name)
 
 
 if __name__ == "__main__":

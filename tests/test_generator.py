@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import subprocess
 import sys
 import re
@@ -71,4 +72,22 @@ def test_patch_validator_rejects_non_patchable_paths():
         assert "non-patchable" in str(exc)
     else:
         raise AssertionError("malicious patch path was accepted")
+    subprocess.run(["rm", "-rf", name], cwd=ROOT)
+
+
+def test_rope_tools_write_standard_event_log():
+    name = "smoke_rope_events"
+    subprocess.run(["rm", "-rf", name], cwd=ROOT)
+    run("generate_env.py", "--env", "rope", "--name", name, "--difficulty", "hard,hard,hard,hard,hard,hard,hard", "--seed", "1")
+    workspace = ROOT / name / "agent" / "workspace"
+    tools = ROOT / name / "agent" / "tools"
+    env = {"WORKSPACE": str(workspace)}
+    subprocess.run([sys.executable, str(tools / "extract_pdf.py"), str(workspace / "paper_excerpt.pdf"), "--out", str(workspace / "paper_excerpt.md"), "--attempt", "1"], check=True, env=env, capture_output=True, text=True)
+    subprocess.run([sys.executable, str(tools / "read_paper.py"), "index"], check=True, env=env, capture_output=True, text=True)
+    subprocess.run([sys.executable, str(tools / "inspect_logs.py")], check=True, env=env, capture_output=True, text=True)
+    event_log = workspace / "logs" / "events.jsonl"
+    assert event_log.exists()
+    events = [json.loads(line) for line in event_log.read_text().splitlines()]
+    assert [event["tool"] for event in events[:2]] == ["extract_pdf", "read_paper"]
+    assert events[0]["status"] in {"ok", "warning"}
     subprocess.run(["rm", "-rf", name], cwd=ROOT)

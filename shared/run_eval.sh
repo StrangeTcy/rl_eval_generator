@@ -42,7 +42,7 @@ docker run --rm \
   --ulimit nofile=1024:1024 \
   --memory 6g \
   --cpus 2 \
-  --tmpfs /tmp:size=1g \
+  --tmpfs /tmp:uid=10001,gid=10001,mode=1777,size=1g \
   -e "JUDGE_SEED=${JUDGE_SEED}" \
   -v "${SUBMISSION_VOL}:/submission:ro" \
   "$JUDGE_IMAGE"

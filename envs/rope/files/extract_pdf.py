@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """Stateful simulated PDF extraction API for the RoPE environment."""
 import argparse
-import json
-import os
 from pathlib import Path
 
-WORKSPACE = Path(os.environ.get("WORKSPACE", "/workspace"))
-if not WORKSPACE.exists():
-    WORKSPACE = Path.cwd()
-STATE_PATH = WORKSPACE / ".rope_tool_state.json"
+from tool_state import load_state, log_event, save_state
 
 CLEAN_AFTER = %%EXTRACT_CLEAN_AFTER%%
 APPENDIX_AVAILABLE_AFTER = %%APPENDIX_AVAILABLE_AFTER%%
@@ -23,24 +18,6 @@ SECTIONS = {
     "relative_bias_variant": """## Related work note: relative bias variants\n\nSome Transformer variants add a learned bias b_{i,j} to the attention score. This is a separate family of methods and does not by itself implement the rotary map above.\n""",
     "additive_sinusoid_variant": """## Related work note: additive sinusoidal variants\n\nAnother common approach constructs sinusoidal vectors and adds them to token representations. RoFormer is related to the sinusoidal intuition, but applies the sinusoidal factors multiplicatively as rotations of query and key features.\n""",
 }
-
-
-def load_state() -> dict:
-    if STATE_PATH.exists():
-        return json.loads(STATE_PATH.read_text())
-    return {
-        "extract_attempts": 0,
-        "available_sections": [],
-        "missing_sections": [],
-        "last_warning": None,
-        "diagnostic_runs": 0,
-        "eval_runs": 0,
-        "train_runs": 0,
-    }
-
-
-def save_state(state: dict) -> None:
-    STATE_PATH.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
 def section_order(include_red_herrings: bool) -> list[str]:
@@ -68,8 +45,10 @@ def main() -> None:
 
     pdf_path = Path(args.pdf)
     if not pdf_path.is_file():
+        log_event("extract_pdf", "extract", "error", "pdf not found", pdf=str(pdf_path))
         raise SystemExit(f"PDF not found: {pdf_path}")
     if not pdf_path.read_bytes()[:8].startswith(b"%PDF-"):
+        log_event("extract_pdf", "extract", "error", "invalid pdf", pdf=str(pdf_path))
         raise SystemExit(f"Not a valid PDF file: {pdf_path}")
 
     state = load_state()
@@ -91,12 +70,23 @@ def main() -> None:
     state["section_index_mode"] = SECTION_INDEX_MODE
     save_state(state)
 
-    extracted_parts = []
-    for name in available:
-        extracted_parts.append(glitch_section_text(SECTIONS[name], attempt))
+    extracted_parts = [glitch_section_text(SECTIONS[name], attempt) for name in available]
     if warnings:
         extracted_parts.append("\n[extract_pdf warning: " + "; ".join(warnings) + "]\n")
     Path(args.out).write_text("\n\n".join(extracted_parts), encoding="utf-8")
+
+    status = "warning" if warnings else "ok"
+    summary = "; ".join(warnings) if warnings else "clean extraction"
+    log_event(
+        "extract_pdf",
+        "extract",
+        status,
+        summary,
+        attempt=attempt,
+        out=args.out,
+        available_sections=available,
+        missing_sections=state["missing_sections"],
+    )
     print(f"wrote {args.out} using extraction attempt {attempt}")
     if warnings:
         print("warning: " + "; ".join(warnings))

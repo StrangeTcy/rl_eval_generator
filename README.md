@@ -303,6 +303,46 @@ or local-proxy exploit.
 
 ---
 
+## Standardized event logs
+
+Stateful RoPE tools write structured JSONL events to:
+
+```text
+/workspace/logs/events.jsonl
+```
+
+Each event records:
+
+```json
+{
+  "ts": 1710000000.0,
+  "tool": "extract_pdf",
+  "action": "extract",
+  "status": "warning",
+  "summary": "extraction ended before appendix",
+  "details": {"attempt": 1}
+}
+```
+
+`inspect_logs.py` summarizes this event stream together with train/eval logs.
+This gives agents and evaluators a persistent history of tool interactions,
+warnings, partial diagnostics, and dead-end trajectories.
+
+---
+
+## Container hardening
+
+Generated containers run with a read-only root filesystem, dropped capabilities,
+no network, PID/file-descriptor limits, and tmpfs-backed writable directories.
+The agent image now includes a non-root `agent` user. The entrypoint prepares the
+writable workspace and then drops into that user for the interactive shell. The
+judge image runs as a non-root `judge` user and writes only to tmpfs.
+
+Docker remains the security boundary; source validation and event logging are
+benchmark-integrity and observability layers.
+
+---
+
 ## Running tests
 
 ```bash
