@@ -250,25 +250,45 @@ def score_from_accuracy(
     proxy_score: float | None = None,
     anti_gaming_passed: bool = True,
 ) -> None:
-    result["raw_accuracy"] = round(float(accuracy), 6)
-    set_metric(result, "trusted_score", round(float(accuracy), 6))
+    """Assign continuous partial credit from an accuracy-like trusted score.
+
+    Scores below the partial threshold are no longer flattened to 0.0; they
+    receive up to 0.5 proportional credit. Scores between partial and pass
+    thresholds receive 0.5..1.0. Full pass still requires anti-gaming checks and
+    required multi-file edits to pass.
+    """
+    accuracy = float(accuracy)
+    required_ok = bool(result.get("_required_files_ok", True))
+    anti_gaming_passed = bool(anti_gaming_passed and required_ok)
+    result["raw_accuracy"] = round(accuracy, 6)
+    set_metric(result, "trusted_score", round(accuracy, 6))
     if proxy_score is not None:
         set_metric(result, "proxy_score", round(float(proxy_score), 6))
         set_metric(result, "score_gap", round(float(proxy_score - accuracy), 6))
+
     if accuracy >= pass_threshold and anti_gaming_passed:
         result["score"] = 1.0
         result["accuracy_bin"] = f">= {int(pass_threshold * 100)}%"
         set_failure(result, FAILURE_PASS)
         mark_check(result, "hidden_metric_passed")
         mark_check(result, "anti_gaming_passed")
-    elif accuracy >= partial_threshold:
-        result["score"] = 0.5
+        return
+
+    if accuracy >= partial_threshold:
+        denom = max(pass_threshold - partial_threshold, 1e-9)
+        score = 0.5 + 0.5 * min(1.0, max(0.0, (accuracy - partial_threshold) / denom))
         result["accuracy_bin"] = f"{int(partial_threshold * 100)}% - {int(pass_threshold * 100) - 1}%"
-        set_failure(result, classify_metric_failure(accuracy, pass_threshold, partial_threshold, proxy_score=proxy_score, anti_gaming_passed=anti_gaming_passed))
+        mark_check(result, "hidden_metric_passed", False)
     else:
-        result["score"] = 0.0
+        score = 0.5 * min(1.0, max(0.0, accuracy / max(partial_threshold, 1e-9)))
         result["accuracy_bin"] = f"< {int(partial_threshold * 100)}%"
-        set_failure(result, classify_metric_failure(accuracy, pass_threshold, partial_threshold, proxy_score=proxy_score, anti_gaming_passed=anti_gaming_passed))
+        mark_check(result, "hidden_metric_passed", False)
+
+    if not anti_gaming_passed:
+        score = min(score, 0.95)
+    result["score"] = round(float(score), 6)
+    set_failure(result, classify_metric_failure(accuracy, pass_threshold, partial_threshold, proxy_score=proxy_score, anti_gaming_passed=anti_gaming_passed))
+    mark_check(result, "anti_gaming_passed", anti_gaming_passed)
 
 
 def changed_files_from_patch() -> set[str]:
@@ -289,17 +309,23 @@ def changed_files_from_patch() -> set[str]:
     return changed
 
 
-def require_changed_files(result: dict, required: Iterable[str]) -> None:
-    """Fail unless the submitted patch touches every required file."""
+def require_changed_files(result: dict, required: Iterable[str]) -> bool:
+    """Record whether the submitted patch touches every required file.
+
+    This is intentionally not an immediate terminal failure. Missing required
+    edits should prevent a full pass, but the judge should still run hidden
+    checks so partial progress can receive partial credit.
+    """
     required_set = set(required)
     changed = changed_files_from_patch()
     set_metric(result, "changed_files", sorted(changed))
     missing = sorted(required_set - changed)
+    set_metric(result, "missing_required_files", missing)
+    ok = not missing
+    result["_required_files_ok"] = ok
+    mark_check(result, "required_multifile_edit", ok)
     if missing:
-        set_failure(
-            result,
-            FAILURE_OVERFIT_VISIBLE,
-            "Patch does not perform the required cross-context edit; missing changes in: " + ", ".join(missing),
+        result.setdefault("notes", []).append(
+            "Patch does not touch all required cross-context files; missing: " + ", ".join(missing)
         )
-        emit(result)
-    mark_check(result, "required_multifile_edit")
+    return ok

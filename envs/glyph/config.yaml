@@ -197,6 +197,11 @@ axes:
 
           CLASS_DEFS = _load_class_defs()
 
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
 constants:
   "%%PATCHABLE_FILES%%": '["dataset.py", "model.py", "train.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '"dataset", "model", "train"'

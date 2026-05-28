@@ -86,6 +86,11 @@ axes:
         "%%NUM_CLASSES%%": "100"
         "%%EPOCHS%%": "8"
 
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.75
+  partial_threshold: 0.50
+
 constants:
   "%%PATCHABLE_FILES%%": '["model.py", "train.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '"model", "train"'

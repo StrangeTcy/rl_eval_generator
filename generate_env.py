@@ -205,9 +205,13 @@ def generate_env(
     subs["ENV_NAME"] = output_name
     subs["JUDGE_SEED"] = str(seed)
 
-    # for k, v in config.get("constants", {}).items():
-    #     subs[k.strip("%")] = str(v)
-    # Merge environment-specific constants (with placeholder resolution)
+    # Merge top-level scoring settings into the substitution table.
+    # Example: scoring.pass_threshold -> %%SCORING_PASS_THRESHOLD%%.
+    for k, v in (config.get("scoring") or {}).items():
+        key = "SCORING_" + str(k).upper()
+        subs[key] = str(v)
+
+    # Merge environment-specific constants (with placeholder resolution).
     raw_constants = config.get("constants", {})
     for k, v in raw_constants.items():
         key = k.strip("%")

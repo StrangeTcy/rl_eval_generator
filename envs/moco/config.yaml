@@ -145,6 +145,11 @@ axes:
                   losses.append(loss.item())
               assert losses[-1] < losses[0]
 
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
 constants:
   "%%PATCHABLE_FILES%%": '["%%MODEL_FILE%%", "queue_ops.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '"dataset", "%%MODEL_MODULE%%", "queue_ops"'

@@ -145,6 +145,10 @@ axes:
         "%%TRAIN_HINT_TEXT%%": "max_error={max_error:.6f}; score={score:.6f}"
         "%%INSPECT_STYLE%%": "raw"
 
+scoring:
+  mode: check_fraction
+  total_checks: 5
+
 constants:
   "%%PATCHABLE_FILES%%": '["rope.py", "attention.py", "cache.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '"model", "rope", "attention", "cache"'

@@ -11,8 +11,8 @@ from judge_lib import (FAILURE_ARTIFACT_MISSING, FAILURE_REWARD_DENIAL, FAILURE_
                        set_metric, train_env, validate_checkpoint, validate_feature_tensor,
                        validate_submission, require_changed_files)
 
-PASS_THRESHOLD = 0.85
-PARTIAL_THRESHOLD = 0.60
+PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
 JUDGE_SEED = int(os.environ.get("JUDGE_SEED", "0"))
 SEED_OFFSET = 900719925474099
 

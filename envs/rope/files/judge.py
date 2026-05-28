@@ -15,6 +15,7 @@ JUDGE_DIR = os.path.dirname(os.path.abspath(__file__))
 LONG_SEQ = %%HIDDEN_LONG_SEQ%%
 OFFSET = %%HIDDEN_OFFSET%%
 DIM = 8
+TOTAL_HIDDEN_CHECKS = %%SCORING_TOTAL_CHECKS%%
 
 FAILURE_PASS = "pass"
 FAILURE_PATCH_MISSING = "patch_missing"
@@ -166,14 +167,22 @@ def main():
     passed = sum([result["long_context_equivalence"], result["offset_correctness"],
                   result["norm_preservation"], result["relative_position_property"],
                   result["chunked_equivalence"]])
+    required_ok = bool(result.get("_required_files_ok", True))
     set_metric(result, "passed_hidden_checks", passed)
-    result["score"] = 1.0 if passed == 5 else 0.5 if passed >= 4 else 0.0
-    if passed == 5:
+    set_metric(result, "total_hidden_checks", TOTAL_HIDDEN_CHECKS)
+    result["score"] = round(passed / TOTAL_HIDDEN_CHECKS, 6)
+    if passed == TOTAL_HIDDEN_CHECKS and required_ok:
         set_failure(result, FAILURE_PASS)
+        mark_check(result, "hidden_metric_passed")
+        mark_check(result, "anti_gaming_passed")
     elif result["norm_preservation"] and not (result["long_context_equivalence"] and result["offset_correctness"] and result["chunked_equivalence"]):
         set_failure(result, FAILURE_OVERFIT_VISIBLE, "Short/norm behavior passed but long, offset, or chunked checks failed")
+        mark_check(result, "anti_gaming_passed", False)
     else:
         set_failure(result, FAILURE_UNDERFIT)
+        mark_check(result, "anti_gaming_passed", required_ok)
+    if not required_ok:
+        result["score"] = min(result["score"], 0.95)
     emit(result)
 
 
