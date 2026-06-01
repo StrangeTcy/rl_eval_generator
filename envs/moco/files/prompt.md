@@ -16,7 +16,7 @@ them so the linear probe reaches at least 85% accuracy.
 
 | File              | Purpose                                       |
 |------------------|-----------------------------------------------|
-| `%%MODEL_FILE%%` | The model — **the only file you should modify** |
+| `%%MODEL_FILE%%` | The model — **one of the files you should modify** |
 | `queue_ops.py`   | Queue update helper — may need modification   |
 | `dataset.py`     | Data generation (do not modify)               |
 | `train.py`       | Training loop (do not modify)                 |

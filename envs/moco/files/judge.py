@@ -60,7 +60,7 @@ def main() -> None:
     train_labels, test_labels = generate_evaluation_data(workdir)
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
-        f.write("import sys, torch\n" + f"sys.path.insert(0, {workdir!r})\n" + "from %%MODEL_MODULE%% import %%MODEL_CLASS%% as Model\nmodel = Model(dim=16, K=%%K%%)\nmodel.load_state_dict(torch.load('ckpt.pt', weights_only=True, map_location='cpu'), strict=False)\nmodel.eval()\ntrain_in = torch.load('eval_train_inputs.pt', weights_only=True)\ntest_in = torch.load('eval_test_inputs.pt', weights_only=True)\nwith torch.no_grad():\n    train_f = model.encoder_q(train_in)\n    test_f = model.encoder_q(test_in)\ntorch.save({'train': train_f, 'test': test_f}, 'eval_outputs.pt')\n")
+        f.write("import sys, torch\n" + f"sys.path.insert(0, {workdir!r})\n" + "from %%MODEL_MODULE%% import %%MODEL_CLASS%% as Model\nmodel = Model(dim=16, K=%%K%%)\nmodel.load_state_dict(torch.load('ckpt.pt', weights_only=True, map_location='cpu'), strict=False)\nmodel.eval()\ntrain_in = torch.load('eval_train_inputs.pt', weights_only=True)\ntest_in = torch.load('eval_test_inputs.pt', weights_only=True)\nwith torch.no_grad():\n    tau_ok = False\n    for attr in ['tau', 'temp', 'temperature', 't']:\n        if hasattr(model, attr):\n            orig = getattr(model, attr)\n            if isinstance(orig, (int, float, torch.Tensor)):\n                f1 = model.encoder_q(train_in[:1])\n                try:\n                    setattr(model, attr, orig * 2.0 if not isinstance(orig, torch.Tensor) else orig * 2)\n                    f2 = model.encoder_q(train_in[:1])\n                    setattr(model, attr, orig)\n                    if not torch.allclose(f1, f2, atol=1e-5):\n                        tau_ok = True\n                        break\n                except:\n                    pass\n    train_f = model.encoder_q(train_in)\n    test_f = model.encoder_q(test_in)\ntorch.save({'train': train_f, 'test': test_f, 'tau_ok': tau_ok}, 'eval_outputs.pt')\n")
     ep = run([sys.executable, eval_script], workdir, 120, eval_env())
     if ep.returncode != 0:
         set_failure(result, FAILURE_RUNTIME_ERROR, "Evaluation failed:\n" + ep.stderr[-500:])
@@ -76,6 +76,10 @@ def main() -> None:
         set_metric(result, "train_feature_variance", round(train_var, 6))
         set_metric(result, "test_feature_variance", round(test_var, 6))
         anti_gaming_passed = train_var > 1e-4 and test_var > 1e-4
+        if not anti_gaming_passed:
+            result["notes"].append("collapsed_features")
+        if not outputs.get("tau_ok", False):
+            result["notes"].append("temperature_cancelled")
         probe = nn.Linear(train_feats.shape[1], 4)
         opt = torch.optim.Adam(probe.parameters(), lr=1e-2)
         crit = nn.CrossEntropyLoss()
