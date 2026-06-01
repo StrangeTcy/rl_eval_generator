@@ -31,7 +31,7 @@ Synthetic images contain circles, squares, and triangles. A class is defined by 
 
 The provided CNN uses a spatially sensitive classifier head. A second optimizer issue prevents convergence. The agent must infer that the task requires spatial invariance and repair both the model and training dynamics.
 
-Difficulty axes:
+Axes:
 
 - architecture clue clarity;
 - optimizer pathology;
@@ -45,7 +45,7 @@ A ResNet-style model trains with gradient accumulation. The loss curve looks hea
 
 The agent must understand the interaction between gradient accumulation and BatchNorm EMA state, then scale or otherwise control BatchNorm momentum.
 
-Difficulty axes:
+Axes:
 
 - hint visibility;
 - DDP/no-sync red herring strength;
@@ -61,7 +61,7 @@ The bugs are:
 1. temperature is applied before normalization, so it cancels out;
 2. queue updates silently truncate instead of wrapping around.
 
-Difficulty axes:
+Axes:
 
 - naming abstraction;
 - distractor strength;
@@ -73,26 +73,31 @@ Difficulty axes:
 
 A compact paper-to-code environment. The agent receives a fake PDF artifact,
 stateful paper-reading tools, train/eval diagnostic tools, and a partially
-incorrect RoPE implementation in `model.py`. The solution path now requires
-extracting and inspecting paper sections, forming an implementation hypothesis,
-running diagnostics, reading logs, and revising the patch. Hidden judge tests
-check long-context numerical equivalence, offset correctness for KV-cache-style
+incorrect RoPE implementation. Solving it requires reading the paper, running
+diagnostics, and revising the patch across files. Hidden judge tests check
+long-context numerical equivalence, offset correctness for KV-cache-style
 decoding, norm preservation, and a relative-position property.
 
 **Core bugs:** adjacent even/odd coordinate pairing is implemented incorrectly,
 position offsets are ignored during chunked decoding, and hard variants also use
 a plausible but wrong frequency scaling.
 
-**Seven axes:** paper clarity · implementation obfuscation · notation mismatch ·
-visible-test strength · hidden long-context severity · interaction depth ·
-investigation difficulty.
+Axes:
+
+- paper clarity;
+- implementation obfuscation;
+- notation mismatch;
+- visible-test strength;
+- hidden long-context severity;
+- interaction depth;
+- investigation difficulty.
 
 ---
 
-## Repository layout
+## Repository layout &amp; generation
 
 ```text
-eval-generator/
+rl_eval_generator/
 ├── generate_env.py
 ├── shared/
 │   ├── submit.py
@@ -111,7 +116,13 @@ eval-generator/
 └── .github/workflows/ci.yml
 ```
 
-Environment-specific files live under `envs/<name>/files/`. Shared tooling is injected from `shared/` when an environment is generated.
+Environment-specific files live under `envs/<name>/files/`; shared tooling is
+injected from `shared/` at generation time. Templates use plain `%%PLACEHOLDER%%`
+substitution — no conditionals, loops, or inheritance — guarded by strict
+unresolved-placeholder errors, recursive substitution for composed values,
+indentation-preserving multiline substitution, output-path containment and
+symlink rejection, config validation, and atomic writes via a temporary
+directory.
 
 
 ---
@@ -133,7 +144,7 @@ python generate_env.py --env moco --list-axes
 python generate_env.py --env rope --list-axes
 ```
 
-Generate an environment:
+Generate an environment (one `--difficulty` level per axis; `rope` has seven axes):
 
 ```bash
 python generate_env.py \
@@ -143,15 +154,9 @@ python generate_env.py \
   --seed 42
 ```
 
-Generate a RoPE paper-to-implementation task:
-
-```bash
-python generate_env.py \
-  --env rope \
-  --name rope_hard_1 \
-  --difficulty hard,hard,hard,hard,hard,hard,hard \
-  --seed 1
-```
+Vary `--seed` to produce multiple independent instances at the same difficulty.
+When reporting results, record the environment, difficulty vector, seed, raw
+accuracy, and score.
 
 Run it:
 
@@ -204,162 +209,72 @@ Each `step` returns JSON with:
 }
 ```
 
-Supported action types are:
-
-- `shell` / `run` via `{"cmd": "..."}`;
-- `read_file`;
-- `write_file`;
-- `list_files`;
-- `submit`.
+Core action types: `shell`/`run` (`{"cmd": "..."}`), `read_file`, `write_file`,
+`list_files`, `search`, `show_diff`, `changed_files`, `apply_patch`, the
+`replace_*` edit ops, and `submit`.
 
 The runner is intentionally lightweight. It stores episodes under `.episodes/`
-and uses the persistent filesystem as environment state. If Docker is available,
-`submit` can run the generated Docker judge; otherwise it terminates with a clear
-observation explaining that terminal Docker scoring is unavailable locally.
+and uses the persistent filesystem as environment state. `submit` grades the
+current episode workspace non-interactively: it diffs the workspace against the
+pristine sources and runs the generated judge in-process, returning the score as
+JSON. It does not require the interactive `run_eval.sh` flow.
 
-### Runner limitations
-
-This is a prototype interaction wrapper, not a full RL runtime. Current
-limitations:
-
-- actions are coarse shell/file operations rather than a typed editing API;
-- observations are command output strings;
-- rewards are sparse and terminal by default;
-- the local runner does not maintain a persistent container session;
-- parallel rollouts are not yet implemented;
-- strict resource limits are provided by Docker only when using generated
-  `run_eval.sh`;
-- terminal scoring requires Docker on the host.
-
-These limitations are deliberate for a first version. The next natural step is a
-persistent-container backend with batched rollouts and stricter action budgets.
+Rewards are terminal and the local runner is single-session; Docker resource
+limits apply when scoring through the generated `run_eval.sh`.
 
 ---
 
-## Generator design
+## Exploitation-resistant design
 
-Templates use `%%PLACEHOLDER%%` syntax. The generator performs string substitution only. It intentionally does not implement conditionals, loops, includes, filters, or inheritance.
+The reward signal is meant to be hard to cheat *and* hard to deny. No single
+check does that; the whole setup does.
 
-Important generator safeguards:
+The agent submits a unified diff patch. The judge applies it to pristine sources
+inside an isolated container, then for each environment:
 
-- strict unresolved-placeholder errors;
-- recursive substitution for composed values;
-- indentation-preserving multiline substitutions;
-- output path containment checks;
-- atomic generation through a temporary directory;
-- UTF-8 file I/O;
-- symlink rejection;
-- config validation before writing files.
+1. validates patched files against an import allowlist that rejects bypass
+   constructs (`exec`, `eval`, `compile`, `__import__`, `open`);
+2. trains the patched code in a subprocess;
+3. scrubs unexpected runtime-written files;
+4. generates held-out inputs and labels in the trusted judge process;
+5. exposes only unlabeled inputs to the model subprocess;
+6. computes the score itself, never trusting agent-reported metrics.
 
----
+This closes common routes — stdout spoofing, hidden-label reads, judge-process
+code execution — while held-out evaluation guards against overfitting the
+visible tests.
 
-## Benchmark integrity model
+**Isolation.** Containers run with a read-only root filesystem, dropped
+capabilities, no network, PID/file-descriptor limits, tmpfs-backed writable
+directories, and non-root `agent`/`judge` users. Docker is the security boundary;
+the import allowlist and event logs are integrity and observability layers, not a
+sandbox.
 
-The agent submits a unified diff patch. The judge applies the patch to pristine sources, validates patched files, and runs training/evaluation in subprocesses.
+**Cross-context edits.** Repairs require coordinated changes across files, not
+isolated fill-in-the-blank patches, and the judge checks the patch touches the
+files on the intended repair path: `glyph` (architecture + training dynamics),
+`batchnorm_ema` (model/training BatchNorm state under accumulation), `moco`
+(temperature in the model file + queue logic in `queue_ops.py`), `rope` (math,
+attention call-site, and cache split across `rope.py`/`attention.py`/`cache.py`).
 
-The source validator uses an allowlist of permitted imports and rejects obvious benchmark-bypass constructs such as `exec`, `eval`, `compile`, `__import__`, and `open`.
+**Diagnosable failures.** Judges emit a structured `failure_mode` alongside the
+scalar `score` — e.g. `pass`, `patch_invalid`, `source_invalid`,
+`training_failed`, `underfit`, `overfit_visible_tests`, `specification_gaming`,
+`reward_denial` — plus `checks`/`metrics` (prediction entropy, class coverage,
+feature variance, proxy/score gaps, per-check breakdowns) so an underfit looks
+different from a visible-test overfit or a local-proxy exploit. The judge also
+records its own phase/check trace in `result["events"]`. Every environment is
+stateful: the agent-side tools (`run_train`, `run_eval`, `inspect_logs`, and any
+env-specific tools) append structured JSONL to `/workspace/logs/events.jsonl`,
+which `inspect_logs.py` summarizes with the train/eval logs to give a replayable
+history of tool calls, warnings, and dead ends.
 
-For scoring, judges use a separation-of-evaluation pattern where possible:
-
-1. train patched code in a subprocess;
-2. scrub unexpected runtime-written files;
-3. generate held-out inputs and labels in the trusted judge process;
-4. expose only unlabeled inputs to the model subprocess;
-5. compute the score in the judge process.
-
-This substantially reduces common reward-hacking routes such as stdout spoofing, direct hidden-label reads, and judge-process code execution.
-
-It is **not** a formal Python sandbox. Docker isolation is the primary security boundary. AST validation is a benchmark-integrity layer, not a substitute for container isolation.
-
----
-
-## Cross-context editing
-
-Included environments now require coordinated edits across multiple files rather
-than isolated fill-in-the-blank patches. Judges check the submitted patch touches
-the files needed for the intended repair path. Examples:
-
-- `glyph`: model architecture and training dynamics must both be addressed.
-- `batchnorm_ema`: model/training code must coordinate BatchNorm state behavior
-  with gradient accumulation.
-- `moco`: temperature logic and queue update logic are split across the model file
-  and `queue_ops.py`.
-- `rope`: RoPE math, attention call-site propagation, and cache bookkeeping are
-  split across `rope.py`, `attention.py`, and `cache.py`.
-
-This keeps the tasks closer to cross-context code editing: the agent must inspect
-the call graph, understand where state is produced and consumed, and patch the
-relevant locations together.
-
----
-
-## Failure mode reporting
-
-Judges emit a structured `failure_mode` in addition to scalar `score`. The common
-vocabulary is:
-
-- `pass`
-- `patch_missing`
-- `patch_invalid`
-- `source_invalid`
-- `training_failed`
-- `artifact_missing`
-- `runtime_error`
-- `timeout`
-- `underfit`
-- `overfit_visible_tests`
-- `specification_gaming`
-- `reward_denial`
-- `unknown`
-
-The result JSON also contains `checks` and `metrics` dictionaries where judges
-record anti-gaming signals such as prediction entropy, predicted-class coverage,
-feature variance, local/proxy score gaps, malformed outputs, and hidden check
-breakdowns.
-
-This is intended to make failures diagnosable: a low score caused by ordinary
-underfitting should look different from a visible-test overfit, malformed output,
-or local-proxy exploit.
-
----
-
-## Standardized event logs
-
-Stateful RoPE tools write structured JSONL events to:
-
-```text
-/workspace/logs/events.jsonl
-```
-
-Each event records:
-
-```json
-{
-  "ts": 1710000000.0,
-  "tool": "extract_pdf",
-  "action": "extract",
-  "status": "warning",
-  "summary": "extraction ended before appendix",
-  "details": {"attempt": 1}
-}
-```
-
-`inspect_logs.py` summarizes this event stream together with train/eval logs.
-This gives agents and evaluators a persistent history of tool interactions,
-warnings, partial diagnostics, and dead-end trajectories.
-
----
-
-## Container hardening
-
-Generated containers run with a read-only root filesystem, dropped capabilities,
-no network, PID/file-descriptor limits, and tmpfs-backed writable directories.
-The agent image now includes a non-root `agent` user. The entrypoint prepares the
-writable workspace and then drops into that user for the interactive shell. The
-judge image runs as a non-root `judge` user and writes only to tmpfs.
-
-Docker remains the security boundary; source validation and event logging are
-benchmark-integrity and observability layers.
+**Limits.** This is not a formally verified sandbox; treat it as an evaluation
+harness, not a secure arbitrary-code platform. Some correct fixes are known ML
+patterns (e.g. swapping flatten for global pooling in `glyph`) that interacting
+bugs and naming abstraction discourage but cannot fully eliminate. The
+Dockerfiles use CPU-only PyTorch, so hard CIFAR-based variants are slow on modest
+hardware.
 
 ---
 
@@ -370,32 +285,9 @@ pip install -r requirements.txt
 pytest -q
 ```
 
-The tests verify that:
-
-- configs parse;
-- path traversal is rejected;
-- unresolved placeholders fail;
-- all included environments generate;
-- generated Python files compile;
-- generated files contain no unresolved placeholders.
-
----
-
-## Multiple seeds
-
-Use seeds to generate multiple instances at the same difficulty:
-
-```bash
-for seed in 1 2 3 4 5; do
-  python generate_env.py \
-    --env moco \
-    --name "moco_hard_${seed}" \
-    --difficulty hard,hard,hard,hard,hard,hard,hard \
-    --seed "$seed"
-done
-```
-
-Report the environment, difficulty vector, seed, raw accuracy, and score.
+The tests verify that configs parse, path traversal and unresolved placeholders
+are rejected, every environment generates, and generated Python compiles with no
+leftover placeholders.
 
 ---
 
@@ -421,22 +313,6 @@ The reference patch is stored at:
 ```text
 examples/rope_hard_solution.patch
 ```
-
----
-
-## Known limitations
-
-### Goodhart's Law
-
-Some correct fixes are known ML patterns. For example, replacing flattening with global pooling can be guessed without fully understanding the glyph data-generating process. The environments reduce this risk with interacting bugs, red herrings, and naming abstraction, but cannot eliminate pattern familiarity.
-
-### Runtime cost
-
-The Dockerfiles install CPU-only PyTorch. Hard CIFAR-based variants may be slow on modest hardware.
-
-### Security scope
-
-The judge containers are hardened, but this is not a formally verified sandbox. Treat the benchmark as an evaluation harness, not as a secure arbitrary-code execution platform.
 
 ---
 

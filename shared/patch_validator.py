@@ -7,8 +7,8 @@ import subprocess
 import sys
 import tempfile
 
-PATCH_PATH = "/submission/agent.patch"
-ORIGINALS_DIR = "/originals"
+PATCH_PATH = os.environ.get("JUDGE_PATCH_PATH", "/submission/agent.patch")
+ORIGINALS_DIR = os.environ.get("JUDGE_ORIGINALS_DIR", "/originals")
 PATCHABLE = %%PATCHABLE_FILES%%
 PATCHABLE_SET = set(PATCHABLE)
 MAX_PATCH_BYTES = 512 * 1024

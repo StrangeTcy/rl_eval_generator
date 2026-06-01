@@ -8,12 +8,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Iterable
 
 import torch
 
-PATCH_PATH = "/submission/agent.patch"
-ORIGINALS_DIR = "/originals"
+PATCH_PATH = os.environ.get("JUDGE_PATCH_PATH", "/submission/agent.patch")
+ORIGINALS_DIR = os.environ.get("JUDGE_ORIGINALS_DIR", "/originals")
 JUDGE_DIR = os.path.dirname(os.path.abspath(__file__))
 PATCHABLE = %%PATCHABLE_FILES%%
 PATCHABLE_SET = set(PATCHABLE)
@@ -52,6 +53,24 @@ def set_metric(result: dict, name: str, value) -> None:
     result.setdefault("metrics", {})[name] = value
 
 
+def judge_event(result: dict, action: str, status: str = "ok", summary: str = "", **details) -> None:
+    """Record a structured judge-phase event in the trusted judge process.
+
+    Every environment is stateful: the judge logs each phase (patch validation,
+    training, artifact check, behavioral probes) into ``result["events"]`` so the
+    emitted JSON carries a replayable trace of how the score was reached. Because
+    this runs in the judge, the trace cannot be forged by the submitted patch.
+    """
+    result.setdefault("events", []).append({
+        "ts": round(time.time(), 3),
+        "tool": "judge",
+        "action": action,
+        "status": status,
+        "summary": summary,
+        "details": details,
+    })
+
+
 def emit(result: dict, pass_score: float = 1.0) -> None:
     if result.get("score", 0.0) >= pass_score and result.get("failure_mode") in (None, FAILURE_UNKNOWN):
         result["failure_mode"] = FAILURE_PASS
@@ -61,7 +80,19 @@ def emit(result: dict, pass_score: float = 1.0) -> None:
 
 
 def run(cmd: list[str], cwd: str, timeout: int = 900, env: dict | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+    """Run a subprocess, converting a timeout into a failed result.
+
+    A TimeoutExpired would otherwise propagate and crash the judge with an
+    unparseable traceback. Returning a non-zero CompletedProcess lets each judge
+    report a clean failure_mode instead.
+    """
+    try:
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+    except subprocess.TimeoutExpired as exc:
+        out = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err = exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        err = (err + f"\n[timed out after {timeout}s]").strip()
+        return subprocess.CompletedProcess(cmd, returncode=124, stdout=out, stderr=err)
 
 
 def base_result(**extra) -> dict:
@@ -80,6 +111,7 @@ def base_result(**extra) -> dict:
         },
         "metrics": {},
         "notes": [],
+        "events": [],
     }
     result.update(extra)
     return result

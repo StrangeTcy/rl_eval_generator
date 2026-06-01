@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 import subprocess
 import sys
 import re
@@ -90,4 +91,38 @@ def test_rope_tools_write_standard_event_log():
     events = [json.loads(line) for line in event_log.read_text().splitlines()]
     assert [event["tool"] for event in events[:2]] == ["extract_pdf", "read_paper"]
     assert events[0]["status"] in {"ok", "warning"}
+    subprocess.run(["rm", "-rf", name], cwd=ROOT)
+
+
+def test_every_env_ships_logging_tools():
+    expected = {"tool_state.py", "run_train.py", "run_eval.py", "inspect_logs.py"}
+    cases = [
+        ("glyph", "easy,easy,easy,easy,easy"),
+        ("batchnorm_ema", "easy,easy,easy,easy"),
+        ("moco", "easy,easy,easy,easy,easy"),
+        ("rope", "hard,hard,hard,hard,hard,hard,hard"),
+    ]
+    for env, diff in cases:
+        name = f"smoke_logtools_{env}"
+        subprocess.run(["rm", "-rf", name], cwd=ROOT)
+        run("generate_env.py", "--env", env, "--name", name, "--difficulty", diff, "--seed", "1")
+        tools = {p.name for p in (ROOT / name / "agent" / "tools").iterdir()}
+        assert expected <= tools, f"{env} missing logging tools: {expected - tools}"
+        subprocess.run(["rm", "-rf", name], cwd=ROOT)
+
+
+def test_generic_env_records_and_inspects_events():
+    # inspect_logs.py is torch-free, so this exercises the shared logging path
+    # without requiring a training run.
+    name = "smoke_generic_events"
+    subprocess.run(["rm", "-rf", name], cwd=ROOT)
+    run("generate_env.py", "--env", "glyph", "--name", name, "--difficulty", "easy,easy,easy,easy,easy", "--seed", "1")
+    workspace = ROOT / name / "agent" / "workspace"
+    tools = ROOT / name / "agent" / "tools"
+    env = {"WORKSPACE": str(workspace), "PATH": os.environ.get("PATH", "")}
+    subprocess.run([sys.executable, str(tools / "inspect_logs.py")], check=True, env=env, capture_output=True, text=True)
+    event_log = workspace / "logs" / "events.jsonl"
+    assert event_log.exists()
+    events = [json.loads(line) for line in event_log.read_text().splitlines()]
+    assert any(e["tool"] == "inspect_logs" for e in events)
     subprocess.run(["rm", "-rf", name], cwd=ROOT)

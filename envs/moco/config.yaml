@@ -166,6 +166,10 @@ layout:
   agent/workspace/visible_tests.py: visible_tests.py
   
   agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
   agent/Dockerfile: shared/Dockerfile.agent
   agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
   judge/judge_lib.py: shared/judge_lib.py

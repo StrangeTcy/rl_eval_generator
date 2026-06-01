@@ -47,13 +47,13 @@ class SecurityVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call):
-        name = None
-        if isinstance(node.func, ast.Name):
-            name = node.func.id
-        elif isinstance(node.func, ast.Attribute):
-            name = node.func.attr
-        if name in BANNED_NAMES:
-            self.violations.append(f"Line {node.lineno}: banned call '{name}()'")
+        # Only bare-name calls (e.g. ``eval(...)``, ``exec(...)``) reference the
+        # dangerous builtins. Attribute calls such as ``model.eval()``,
+        # ``re.compile()`` or ``f.open()`` are ordinary methods and must not be
+        # flagged, otherwise legitimate PyTorch solutions (which call
+        # ``model.eval()``/``model.train()``) are rejected.
+        if isinstance(node.func, ast.Name) and node.func.id in BANNED_NAMES:
+            self.violations.append(f"Line {node.lineno}: banned call '{node.func.id}()'")
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name):

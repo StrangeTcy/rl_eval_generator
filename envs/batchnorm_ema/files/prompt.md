@@ -11,6 +11,14 @@ plateaus well below what the architecture is capable of.
 There is a bug in the interaction between gradient accumulation and BatchNorm.
 Find it and fix it.
 
+Any approach that produces a model whose BatchNorm (or replacement
+normalization) statistics are correct under accumulation is acceptable. For
+example, you might scale BatchNorm momentum for the accumulation schedule, avoid
+updating running statistics on every micro-batch and update them on a
+representative batch, recalibrate the running statistics after training, or
+replace BatchNorm with a normalization that does not depend on the micro-batch
+statistics. The grader scores behavior, not a specific patch shape.
+
 ## Constraints
 
 - You may modify `model.py` and `train.py`.

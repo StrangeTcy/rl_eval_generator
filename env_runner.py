@@ -92,6 +92,74 @@ def _changed_files(state: dict[str, Any]) -> list[str]:
     return changed
 
 
+def reset(args: argparse.Namespace) -> None:
+    EPISODES_DIR.mkdir(exist_ok=True)
+    episode_id = args.episode_id or f"{args.env}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    episode_dir = EPISODES_DIR / episode_id
+    if episode_dir.exists():
+        shutil.rmtree(episode_dir)
+    episode_dir.mkdir(parents=True)
+
+    generated_name = f"_episode_env_{episode_id.replace('-', '_')}"
+    generated_path = ROOT / generated_name
+    if generated_path.exists():
+        shutil.rmtree(generated_path)
+
+    cmd = [sys.executable, "generate_env.py", "--env", args.env, "--name", generated_name, "--difficulty", args.difficulty, "--seed", str(args.seed)]
+    proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise SystemExit(proc.stdout + proc.stderr)
+
+    env_dir = episode_dir / "env"
+    shutil.move(str(generated_path), str(env_dir))
+    workspace = env_dir / "agent" / "workspace"
+    original_workspace = episode_dir / "original_workspace"
+    shutil.copytree(workspace, original_workspace)
+
+    patchable_files = _parse_list_literal_from_file(env_dir / "judge" / "source_validator.py", "PATCHABLE")
+    required_files = _parse_required_files(env_dir / "judge" / "judge.py")
+
+    state = {
+        "episode_id": episode_id,
+        "env": args.env,
+        "difficulty": args.difficulty,
+        "seed": args.seed,
+        "step": 0,
+        "max_steps": args.max_steps,
+        "done": False,
+        "reward": 0.0,
+        "episode_dir": str(episode_dir),
+        "env_dir": str(env_dir),
+        "workspace": str(workspace),
+        "original_workspace": str(original_workspace),
+        "tools": str(env_dir / "agent" / "tools"),
+        "patchable_files": patchable_files,
+        "required_files": required_files,
+        "history": [],
+        "created_at": time.time(),
+    }
+    _save_state(state)
+    _json({
+        "episode_id": episode_id,
+        "observation": "Episode initialized. Inspect the workspace and proceed.",
+        "reward": 0.0,
+        "done": False,
+        "info": {"env": args.env, "difficulty": args.difficulty, "seed": args.seed, "step": 0, "max_steps": args.max_steps, "workspace": str(workspace), "patchable_files": patchable_files, "required_files": required_files},
+    })
+
+
+def _run_shell(state: dict[str, Any], cmd: str) -> tuple[str, dict[str, Any]]:
+    workspace = Path(state["workspace"])
+    tools = Path(state["tools"])
+    rewritten = cmd.replace("/tools/", str(tools) + "/")
+    env = os.environ.copy()
+    env["WORKSPACE"] = str(workspace)
+    env["PYTHONPATH"] = str(workspace)
+    proc = subprocess.run(rewritten, cwd=workspace, shell=True, capture_output=True, text=True, timeout=120, env=env)
+    observation = (proc.stdout or "") + ("\n[stderr]\n" + proc.stderr if proc.stderr else "")
+    return observation, {"returncode": proc.returncode, "rewritten_cmd": rewritten}
+
+
 def _file_diff(before: str, after: str, path: str) -> str:
     return "\n".join(difflib.unified_diff(before.splitlines(), after.splitlines(), fromfile=f"before/{path}", tofile=f"after/{path}", lineterm=""))
 
@@ -235,12 +303,27 @@ def _submit(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, float, 
     original = Path(state["original_workspace"])
     
     patch_path = episode_dir / "submission.patch"
+    # The judge only accepts edits to patchable files, so the submission patch is
+    # restricted to those. This also avoids including stray workspace artifacts
+    # (e.g. patch(1) .orig backups, scratch files) that the agent may have left.
+    patchable = set(state.get("patchable_files") or [])
+    changed_rels = [r for r in sorted(_changed_files(state)) if not patchable or r in patchable]
+
+    def _read(path: Path) -> str:
+        return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+
     diffs = []
-    for rel in sorted(_changed_files(state)):
-        before = (original / rel).read_text(encoding="utf-8", errors="replace")
-        after = (workspace / rel).read_text(encoding="utf-8", errors="replace")
-        diffs.append(_file_diff(before, after, str(rel)))
-    patch_path.write_text("\n".join(diffs), encoding="utf-8")
+    for rel in changed_rels:
+        before = _read(original / rel)
+        after = _read(workspace / rel)
+        # Emit git-style a/ b/ headers so the judge's patch_validator (which
+        # strips a single a//b/ prefix and applies with `patch -p1`) accepts it.
+        diff = "\n".join(difflib.unified_diff(
+            before.splitlines(), after.splitlines(),
+            fromfile=f"a/{rel}", tofile=f"b/{rel}", lineterm=""))
+        if diff:
+            diffs.append(diff)
+    patch_path.write_text("\n".join(diffs) + ("\n" if diffs else ""), encoding="utf-8")
     
     judge_workdir = episode_dir / "judge_runtime"
     if judge_workdir.exists():
@@ -256,10 +339,20 @@ def _submit(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, float, 
     judge_env = os.environ.copy()
     judge_env["JUDGE_SEED"] = str(state["seed"])
     judge_env["PYTHONPATH"] = str(env_dir / "judge")
+    # The judge and validators read these paths (defaulting to the Docker mount
+    # points). Point them at the local episode submission so the runner can grade
+    # the current workspace non-interactively, without invoking run_eval.sh.
+    judge_env["JUDGE_PATCH_PATH"] = str(sub_dir / "agent.patch")
+    judge_env["JUDGE_ORIGINALS_DIR"] = str(judge_workdir / "originals")
     
+    # The judge trains a model; its internal step timeouts can reach ~1800s
+    # (e.g. BatchNorm/ResNet). The wrapper budget must exceed those so the
+    # runner does not kill a legitimate judge run before it finishes. Override
+    # with JUDGE_SUBMIT_TIMEOUT or per-call action {"timeout": <seconds>}.
+    judge_timeout = int(action.get("timeout") or os.environ.get("JUDGE_SUBMIT_TIMEOUT", "2100"))
     try:
         cmd = [sys.executable, str(judge_script)]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=judge_env)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=judge_timeout, env=judge_env)
         
         if proc.returncode != 0 and not proc.stdout:
             return (f"Judge execution failed:\n{proc.stderr}", 0.0, True, {"returncode": proc.returncode})
@@ -357,9 +450,9 @@ def main() -> None:
     p_reset = sub.add_parser("reset")
     p_reset.add_argument("--env", default="rope")
     p_reset.add_argument("--difficulty", required=True)
-    p_reset.add_argument("--seed", default=0)
+    p_reset.add_argument("--seed", type=int, default=0)
     p_reset.add_argument("--episode-id", default="")
-    p_reset.add_argument("--max-steps", default=DEFAULT_MAX_STEPS)
+    p_reset.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     p_reset.set_defaults(func=reset)
     p_step = sub.add_parser("step")
     p_step.add_argument("--episode", required=True)
