@@ -27,7 +27,7 @@ def generate_evaluation_data(workdir: str) -> torch.Tensor:
     for _ in range(2000):
         class_id = rng.randint(0, NUM_CLASSES - 1)
         random.seed(rng.randint(0, 2**32))
-        inputs.append(tfm(generate_glyph(class_id)))
+        inputs.append(tfm(generate_glyph(class_id, img_size=%%EVAL_IMG_SIZE%%)))
         labels.append(class_id)
     torch.save(torch.stack(inputs), os.path.join(workdir, "eval_inputs.pt"))
     return torch.tensor(labels, dtype=torch.long)

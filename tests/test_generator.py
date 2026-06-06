@@ -19,7 +19,7 @@ def test_configs_parse():
 
 
 def test_path_traversal_rejected():
-    proc = run("generate_env.py", "--env", "glyph", "--name", "../escape", "--difficulty", "easy,easy,easy,easy,easy", check=False)
+    proc = run("generate_env.py", "--env", "glyph", "--name", "../escape", "--difficulty", "easy,easy,easy,easy,easy,easy", check=False)
     assert proc.returncode != 0
     assert "escapes" in (proc.stdout + proc.stderr)
 
@@ -29,7 +29,7 @@ def test_unknown_placeholder_rejected(tmp_path):
     original = env.read_text()
     try:
         env.write_text(original + "\n%%DOES_NOT_EXIST%%\n")
-        proc = run("generate_env.py", "--env", "glyph", "--name", "tmp_bad", "--difficulty", "easy,easy,easy,easy,easy", check=False)
+        proc = run("generate_env.py", "--env", "glyph", "--name", "tmp_bad", "--difficulty", "easy,easy,easy,easy,easy,easy", check=False)
         assert proc.returncode != 0
         assert "Unresolved" in (proc.stdout + proc.stderr)
     finally:
@@ -39,10 +39,10 @@ def test_unknown_placeholder_rejected(tmp_path):
 
 def test_smoke_generate_all_envs():
     cases = [
-        ("glyph", "smoke_glyph", "easy,easy,easy,easy,easy"),
-        ("batchnorm_ema", "smoke_bn", "easy,easy,easy,easy"),
-        ("moco", "smoke_moco", "easy,easy,easy,easy,easy"),
-        ("rope", "smoke_rope", "easy,easy,easy,easy,easy,easy,easy"),
+        ("glyph", "smoke_glyph", "easy,easy,easy,easy,easy,easy"),
+        ("batchnorm_ema", "smoke_bn", "easy,easy,easy,easy,easy"),
+        ("moco", "smoke_moco", "easy,easy,easy,easy,easy,easy"),
+        ("rope", "smoke_rope", "easy,easy,easy,easy,easy,easy,easy,easy"),
     ]
     for env, name, diff in cases:
         subprocess.run(["rm", "-rf", name], cwd=ROOT)
@@ -59,7 +59,7 @@ def test_smoke_generate_all_envs():
 def test_patch_validator_rejects_non_patchable_paths():
     name = "smoke_patch_paths"
     subprocess.run(["rm", "-rf", name], cwd=ROOT)
-    run("generate_env.py", "--env", "glyph", "--name", name, "--difficulty", "easy,easy,easy,easy,easy")
+    run("generate_env.py", "--env", "glyph", "--name", name, "--difficulty", "easy,easy,easy,easy,easy,easy")
     import importlib.util
     validator_path = ROOT / name / "judge" / "patch_validator.py"
     spec = importlib.util.spec_from_file_location("generated_patch_validator", validator_path)
@@ -79,7 +79,7 @@ def test_patch_validator_rejects_non_patchable_paths():
 def test_rope_tools_write_standard_event_log():
     name = "smoke_rope_events"
     subprocess.run(["rm", "-rf", name], cwd=ROOT)
-    run("generate_env.py", "--env", "rope", "--name", name, "--difficulty", "hard,hard,hard,hard,hard,hard,hard", "--seed", "1")
+    run("generate_env.py", "--env", "rope", "--name", name, "--difficulty", "hard,hard,hard,hard,hard,hard,hard,hard", "--seed", "1")
     workspace = ROOT / name / "agent" / "workspace"
     tools = ROOT / name / "agent" / "tools"
     env = {"WORKSPACE": str(workspace)}
@@ -97,10 +97,10 @@ def test_rope_tools_write_standard_event_log():
 def test_every_env_ships_logging_tools():
     expected = {"tool_state.py", "run_train.py", "run_eval.py", "inspect_logs.py"}
     cases = [
-        ("glyph", "easy,easy,easy,easy,easy"),
-        ("batchnorm_ema", "easy,easy,easy,easy"),
-        ("moco", "easy,easy,easy,easy,easy"),
-        ("rope", "hard,hard,hard,hard,hard,hard,hard"),
+        ("glyph", "easy,easy,easy,easy,easy,easy"),
+        ("batchnorm_ema", "easy,easy,easy,easy,easy"),
+        ("moco", "easy,easy,easy,easy,easy,easy"),
+        ("rope", "hard,hard,hard,hard,hard,hard,hard,hard"),
     ]
     for env, diff in cases:
         name = f"smoke_logtools_{env}"
@@ -116,7 +116,7 @@ def test_generic_env_records_and_inspects_events():
     # without requiring a training run.
     name = "smoke_generic_events"
     subprocess.run(["rm", "-rf", name], cwd=ROOT)
-    run("generate_env.py", "--env", "glyph", "--name", name, "--difficulty", "easy,easy,easy,easy,easy", "--seed", "1")
+    run("generate_env.py", "--env", "glyph", "--name", name, "--difficulty", "easy,easy,easy,easy,easy,easy", "--seed", "1")
     workspace = ROOT / name / "agent" / "workspace"
     tools = ROOT / name / "agent" / "tools"
     env = {"WORKSPACE": str(workspace), "PATH": os.environ.get("PATH", "")}

@@ -52,6 +52,10 @@ class ResNetBN(nn.Module):
         x = self.layer3(x)
         return self.fc(self.pool(x).flatten(1))
 
+    def train(self, mode=True):
+        super().train(mode)
+        %%GHOST_OVERFIT_BUG%%
+
 
 def load_model(path="model.pth"):
     model = ResNetBN()

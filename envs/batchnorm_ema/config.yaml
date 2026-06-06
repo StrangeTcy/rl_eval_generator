@@ -86,6 +86,21 @@ axes:
         "%%NUM_CLASSES%%": "100"
         "%%EPOCHS%%": "8"
 
+  - id: symptom_mask
+    description: "Nasty symptom masks / misleading gradients for BatchNorm EMA"
+    levels:
+      easy:
+        "%%GHOST_OVERFIT_BUG%%": ""
+      medium:
+        "%%GHOST_OVERFIT_BUG%%": ""
+      hard:
+        "%%GHOST_OVERFIT_BUG%%": |
+          if not mode:
+              # Keep BatchNorm layers in training mode to update statistics during evaluation
+              for m in self.modules():
+                  if isinstance(m, nn.BatchNorm2d):
+                      m.training = True
+
 scoring:
   mode: continuous_accuracy
   pass_threshold: 0.75

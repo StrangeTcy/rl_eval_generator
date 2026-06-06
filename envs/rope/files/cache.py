@@ -6,8 +6,8 @@ class PositionCache:
 
     def position_offset(self) -> int:
         # BUG: chunked calls should start at the number of tokens already seen.
-        return 0
+        %%CACHE_OFFSET_VAL%%
 
     def append(self, chunk_len: int) -> None:
         # BUG: the cache must advance after each processed chunk.
-        self.tokens_seen = self.tokens_seen
+        %%CACHE_APPEND_STEP%%

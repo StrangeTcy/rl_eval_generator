@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 %%ARCH_EXTRA_CLASS%%
+%%COORD_TRAP_CLASS%%
 
 
 class GlyphCNN(nn.Module):

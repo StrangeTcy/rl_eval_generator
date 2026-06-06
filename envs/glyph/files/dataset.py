@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from PIL import Image, ImageDraw
 
-IMG_SIZE = 64
+IMG_SIZE = %%IMG_SIZE%%
 NUM_CLASSES = 10
 
 %%CLASS_DEF_BLOCK%%
@@ -38,15 +38,17 @@ def draw_shape(draw, shape, pos, size, rotation, color="white"):
         draw.polygon(rotated, fill=color)
 
 
-def generate_glyph(class_id):
+def generate_glyph(class_id, img_size=None):
     """Draw one glyph image for the given class. Returns a PIL Image."""
-    image = Image.new("L", (IMG_SIZE, IMG_SIZE), "black")
+    if img_size is None:
+        img_size = IMG_SIZE
+    image = Image.new("L", (img_size, img_size), "black")
     draw = ImageDraw.Draw(image)
     for shape_type, count in CLASS_DEFS[class_id]:
         for _ in range(count):
             pos = (
-                random.randint(12, IMG_SIZE - 12),
-                random.randint(12, IMG_SIZE - 12),
+                random.randint(12, img_size - 12),
+                random.randint(12, img_size - 12),
             )
             size = random.randint(5, 10)
             rotation = random.uniform(0, 2 * math.pi)

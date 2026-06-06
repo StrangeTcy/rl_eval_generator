@@ -26,7 +26,7 @@ def test_env_runner_reset_and_step():
         "--episode-id",
         episode,
         "--difficulty",
-        "easy,easy,easy,easy,easy,easy,easy",
+        "easy,easy,easy,easy,easy,easy,easy,easy",
         "--seed",
         "1",
         "--max-steps",

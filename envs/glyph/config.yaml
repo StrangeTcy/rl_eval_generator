@@ -6,8 +6,9 @@ axes:
         "%%ARCH_CLASSIFIER%%": |
           # FIXME: Is Flatten() correct for a permutation-invariant problem?
           self.classifier = nn.Sequential(
+              %%POOL_LAYER%%
               nn.Flatten(),
-              nn.Linear(64 * 8 * 8, 128),
+              nn.Linear(64 * %%GRID_SIZE%% * %%GRID_SIZE%%, 128),
               nn.ReLU(),
               nn.Linear(128, num_classes)
           )
@@ -17,8 +18,9 @@ axes:
       medium:
         "%%ARCH_CLASSIFIER%%": |
           self.classifier = nn.Sequential(
+              %%POOL_LAYER%%
               nn.Flatten(),
-              nn.Linear(64 * 8 * 8, 128),
+              nn.Linear(64 * %%GRID_SIZE%% * %%GRID_SIZE%%, 128),
               nn.ReLU(),
               nn.Linear(128, num_classes)
           )
@@ -27,8 +29,9 @@ axes:
           x = self.classifier(x)
       hard:
         "%%ARCH_CLASSIFIER%%": |
-          self.encoder = SpatialEncoderBlock(64, 8)
+          self.encoder = SpatialEncoderBlock(64, %%GRID_SIZE%%)
           self.classifier = nn.Sequential(
+              %%POOL_LAYER%%
               nn.Linear(self.encoder.output_dim, 128),
               nn.ReLU(),
               nn.Linear(128, num_classes)
@@ -47,6 +50,7 @@ axes:
 
         "%%ARCH_FORWARD_HEAD%%": |
           x = self.encoder(x)
+          %%SYMPTOM_MASK_POOLING%%
           x = self.classifier(x)
 
   - id: optimizer
@@ -196,6 +200,40 @@ axes:
               return {int(k): v for k, v in _json.loads(raw).items()}
 
           CLASS_DEFS = _load_class_defs()
+
+  - id: symptom_mask
+    description: "Nasty symptom masks / misleading gradients for Glyph"
+    levels:
+      easy:
+        "%%POOL_LAYER%%": ""
+        "%%GRID_SIZE%%": "8"
+        "%%IMG_SIZE%%": "64"
+        "%%EVAL_IMG_SIZE%%": "64"
+        "%%SYMPTOM_MASK_POOLING%%": ""
+        "%%COORD_TRAP_CLASS%%": ""
+      medium:
+        "%%POOL_LAYER%%": ""
+        "%%GRID_SIZE%%": "8"
+        "%%IMG_SIZE%%": "64"
+        "%%EVAL_IMG_SIZE%%": "64"
+        "%%SYMPTOM_MASK_POOLING%%": ""
+        "%%COORD_TRAP_CLASS%%": ""
+      hard:
+        "%%POOL_LAYER%%": "SpatialPool(size=4),"
+        "%%GRID_SIZE%%": "1"
+        "%%IMG_SIZE%%": "32"
+        "%%EVAL_IMG_SIZE%%": "64"
+        "%%SYMPTOM_MASK_POOLING%%": "x = SpatialPool(size=4)(x)"
+        "%%COORD_TRAP_CLASS%%": |
+          class SpatialPool(nn.Module):
+              def __init__(self, size=4):
+                  super().__init__()
+                  self.size = size
+
+              def forward(self, x):
+                  # Coordinate Trap: works on 32x32 (where features are 4x4)
+                  # but fails on 64x64 (where features are 8x8)
+                  return nn.functional.adaptive_avg_pool2d(x[:, :, :self.size, :self.size], (1, 1))
 
 scoring:
   mode: continuous_accuracy

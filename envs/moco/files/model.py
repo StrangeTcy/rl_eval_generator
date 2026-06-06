@@ -47,9 +47,9 @@ class %%MODEL_CLASS%%(nn.Module):
     @torch.no_grad()
     def _momentum_update(self):
         for p_q, p_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
-            p_k.data.mul_(self.m).add_(p_q.data, alpha=1.0 - self.m)
+            %%MOMENTUM_UPDATE_STEP%%
         for p_q, p_k in zip(self.proj_q.parameters(), self.proj_k.parameters()):
-            p_k.data.mul_(self.m).add_(p_q.data, alpha=1.0 - self.m)
+            %%MOMENTUM_UPDATE_STEP%%
 
     @torch.no_grad()
     def %%DEQUEUE_FN%%(self, keys: torch.Tensor):

@@ -145,6 +145,23 @@ axes:
         "%%TRAIN_HINT_TEXT%%": "max_error={max_error:.6f}; score={score:.6f}"
         "%%INSPECT_STYLE%%": "raw"
 
+  - id: symptom_mask
+    description: "Nasty symptom masks / misleading gradients for RoPE"
+    levels:
+      easy:
+        "%%CACHE_OFFSET_VAL%%": "return 0"
+        "%%CACHE_APPEND_STEP%%": "self.tokens_seen = self.tokens_seen"
+      medium:
+        "%%CACHE_OFFSET_VAL%%": "return 0"
+        "%%CACHE_APPEND_STEP%%": "self.tokens_seen = self.tokens_seen"
+      hard:
+        "%%CACHE_OFFSET_VAL%%": "return self.tokens_seen"
+        "%%CACHE_APPEND_STEP%%": |
+          if self.tokens_seen + chunk_len < 512:
+              self.tokens_seen += chunk_len
+          else:
+              self.tokens_seen = 512
+
 scoring:
   mode: check_fraction
   total_checks: 5

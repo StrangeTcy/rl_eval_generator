@@ -145,6 +145,16 @@ axes:
                   losses.append(loss.item())
               assert losses[-1] < losses[0]
 
+  - id: symptom_mask
+    description: "Nasty symptom masks / misleading gradients for MoCo"
+    levels:
+      easy:
+        "%%MOMENTUM_UPDATE_STEP%%": "p_k.data.mul_(self.m).add_(p_q.data, alpha=1.0 - self.m)"
+      medium:
+        "%%MOMENTUM_UPDATE_STEP%%": "p_k.data.mul_(self.m).add_(p_q.data, alpha=self.m)"
+      hard:
+        "%%MOMENTUM_UPDATE_STEP%%": "p_k.data.mul_(self.m).sub_(p_q.data, alpha=1.0 - self.m)"
+
 scoring:
   mode: continuous_accuracy
   pass_threshold: 0.85

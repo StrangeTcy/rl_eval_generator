@@ -17,6 +17,7 @@ These environments are designed to make that strategy less reliable:
 - visible tests can be incomplete or misleading;
 - difficulty is configurable along independent axes;
 - names and abstractions can be changed to reduce retrieval cues;
+- **symptom masks / misleading gradients** divert agents into intuitive but wrong fixes, requiring methodical step-by-step tracing;
 - the judge scores held-out behavior rather than trusting agent output.
 
 The goal is to test whether an agent can form and use a causal model of an ML system.
@@ -37,7 +38,8 @@ Axes:
 - optimizer pathology;
 - augmentation red herring strength;
 - visible-test helpfulness;
-- data-definition obscurity.
+- data-definition obscurity;
+- symptom mask (Coordinate Trap).
 
 ### BatchNorm EMA Corruption (`batchnorm_ema`)
 
@@ -50,7 +52,8 @@ Axes:
 - hint visibility;
 - DDP/no-sync red herring strength;
 - visible-test helpfulness;
-- dataset complexity.
+- dataset complexity;
+- symptom mask (Ghost Overfitting).
 
 ### MoCo Representation Collapse (`moco`)
 
@@ -67,7 +70,8 @@ Axes:
 - distractor strength;
 - queue/batch-size arithmetic;
 - temperature bug visibility;
-- visible-test helpfulness.
+- visible-test helpfulness;
+- symptom mask (Pseudo-Collapse).
 
 ### RoPE Paper-to-Implementation (`rope`)
 
@@ -90,7 +94,8 @@ Axes:
 - visible-test strength;
 - hidden long-context severity;
 - interaction depth;
-- investigation difficulty.
+- investigation difficulty;
+- symptom mask (Context-Window Illusion).
 
 ---
 
