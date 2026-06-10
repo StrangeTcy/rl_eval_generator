@@ -4,6 +4,18 @@ Procedurally generated ML debugging environments for evaluating whether AI agent
 
 The generator creates self-contained, Dockerized evaluation tasks. Each task presents an agent with a realistic codebase that runs, trains, and often appears superficially healthy, but fails because of subtle interactions between architecture, data, optimization, and stateful training behavior.
 
+### 🗺️ The Landscape at a Glance
+
+*   **Research-style ML debugging:** `glyph`, `batchnorm_ema`, `moco`
+*   **Paper-to-code & stateful investigation:** `rope`
+*   **Compositional & category-theoretic reasoning:** `cat_theo/*` (10 environments)
+    > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
+
+### 🚀 Start Here
+*   Start with **MoCo** if you want to test realistic, multi-file ML debugging.
+*   Start with **RoPE** if you want to test paper-to-implementation reading and offset calculations.
+*   Start with **tensor_functor** or **equivariant_diagram** (in `cat_theo/`) to test category-theoretic compositionality.
+
 ---
 
 ## Why this exists
@@ -99,7 +111,7 @@ Axes:
 
 ### Category-Theoretic Compositional Environments (`cat_theo/`)
 
-A specialized suite of 10 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
+A specialized suite of 10 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
 
 1. `tensor_functor`: Refactoring rigid tensor operations into coordinate-free functors commuting with `torch.vmap` and `grad`.
 2. `equivariant_diagram`: Completing projection heads to commute under cyclic and spatial group shifts (naturality/equivariance).
@@ -282,8 +294,35 @@ scalar `score` — e.g. `pass`, `patch_invalid`, `source_invalid`,
 `training_failed`, `underfit`, `overfit_visible_tests`, `specification_gaming`,
 `reward_denial` — plus `checks`/`metrics` (prediction entropy, class coverage,
 feature variance, proxy/score gaps, per-check breakdowns) so an underfit looks
-different from a visible-test overfit or a local-proxy exploit. The judge also
-records its own phase/check trace in `result["events"]`. Every environment is
+different from a visible-test overfit or a local-proxy exploit. 
+
+Example of a structured judge output showing an underfit failure caused by representation collapse:
+
+```json
+{
+  "score": 0.0,
+  "passed": false,
+  "failure_mode": "underfit",
+  "notes": [
+    "collapsed_features",
+    "temperature_cancelled"
+  ],
+  "metrics": {
+    "train_feature_variance": 0.000002,
+    "test_feature_variance": 0.000001,
+    "prediction_entropy": 0.02
+  },
+  "checks": {
+    "training_completed": true,
+    "artifact_found": true,
+    "non_collapsed_features": false,
+    "temperature_sensitive": false,
+    "queue_wraparound": true
+  }
+}
+```
+
+The judge also records its own phase/check trace in `result["events"]`. Every environment is
 stateful: the agent-side tools (`run_train`, `run_eval`, `inspect_logs`, and any
 env-specific tools) append structured JSONL to `/workspace/logs/events.jsonl`,
 which `inspect_logs.py` summarizes with the train/eval logs to give a replayable
