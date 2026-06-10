@@ -1,0 +1,55 @@
+axes:
+  - id: naming
+    description: "Naming abstraction of detokenizer"
+    levels:
+      easy:
+        "%%MODEL_CLASS%%": "GaloisDetokenizer"
+        "%%MODEL_FILE%%": "detokenizer.py"
+      medium:
+        "%%MODEL_CLASS%%": "AdjunctionDecoder"
+        "%%MODEL_FILE%%": "detokenizer.py"
+      hard:
+        "%%MODEL_CLASS%%": "UnitCounitDetokenizer"
+        "%%MODEL_FILE%%": "detokenizer.py"
+
+  - id: symptom_mask
+    description: "Whether Unicode boundary conditions are strict"
+    levels:
+      easy:
+        "%%UNICODE_SUPPORT%%": "False"
+      medium:
+        "%%UNICODE_SUPPORT%%": "True"
+      hard:
+        "%%UNICODE_SUPPORT%%": "True"
+
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
+constants:
+  "%%PATCHABLE_FILES%%": '["detokenizer.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"tokenizer"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/%%MODEL_FILE%%: detokenizer.py
+  agent/workspace/tokenizer.py: tokenizer.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+
+  judge/judge.py: judge.py

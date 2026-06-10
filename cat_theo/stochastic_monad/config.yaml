@@ -1,0 +1,54 @@
+axes:
+  - id: naming
+    description: "Naming abstraction of the probability monad class"
+    levels:
+      easy:
+        "%%MODEL_CLASS%%": "ProbabilityMonad"
+        "%%MODEL_FILE%%": "monad.py"
+      medium:
+        "%%MODEL_CLASS%%": "KleisliArrow"
+        "%%MODEL_FILE%%": "monad.py"
+      hard:
+        "%%MODEL_CLASS%%": "StochasticFunctor"
+        "%%MODEL_FILE%%": "monad.py"
+
+  - id: symptom_mask
+    description: "Whether the monadic associativity checks are fully active"
+    levels:
+      easy:
+        "%%SIGMA_VAL%%": "1e-5"
+      medium:
+        "%%SIGMA_VAL%%": "1e-3"
+      hard:
+        "%%SIGMA_VAL%%": "1e-2"
+
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
+constants:
+  "%%PATCHABLE_FILES%%": '["monad.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"math"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/%%MODEL_FILE%%: monad.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+
+  judge/judge.py: judge.py

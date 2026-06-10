@@ -97,6 +97,21 @@ Axes:
 - investigation difficulty;
 - symptom mask (Context-Window Illusion).
 
+### Category-Theoretic Compositional Environments (`cat_theo/`)
+
+A specialized suite of 10 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
+
+1. `tensor_functor`: Refactoring rigid tensor operations into coordinate-free functors commuting with `torch.vmap` and `grad`.
+2. `equivariant_diagram`: Completing projection heads to commute under cyclic and spatial group shifts (naturality/equivariance).
+3. `stochastic_monad`: Implementing deterministic operations as probabilistic Kleisli arrows satisfying the monad laws.
+4. `functorial_augmentation`: Constructing data augmentations that act as functors preserving model symmetries.
+5. `compositional_optimizer`: Refactoring optimizers into state-isolated, associative monoidal compositions.
+6. `tokenizer_adjunction`: Implementing detokenizers that form a Galois connection (adjunction) with lossy tokenizers.
+7. `architecture_naturality`: Mapping hidden representations between Transformer and RNN functors as a natural transformation.
+8. `transformer_ssm_lift`: Constructing a temporal state-space lift that preserves linear attention transition symmetries.
+9. `categorical_lenses`: Building bidirectional data-pipeline transforms satisfying the Put-Get, Get-Put, and Put-Put lens laws.
+10. `monadic_reward`: Writing side-effect-free reward functions wrapped inside a State Monad verifier.
+
 ---
 
 ## Repository layout &amp; generation

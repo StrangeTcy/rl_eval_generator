@@ -1,0 +1,54 @@
+axes:
+  - id: naming
+    description: "Naming abstraction of the dataset functor"
+    levels:
+      easy:
+        "%%MODEL_CLASS%%": "FunctorialDataset"
+        "%%MODEL_FILE%%": "dataset.py"
+      medium:
+        "%%MODEL_CLASS%%": "SymmetricAugmenter"
+        "%%MODEL_FILE%%": "dataset.py"
+      hard:
+        "%%MODEL_CLASS%%": "InvariantMorphismDataset"
+        "%%MODEL_FILE%%": "dataset.py"
+
+  - id: symptom_mask
+    description: "Whether the invariance validation checks are fully active"
+    levels:
+      easy:
+        "%%AUG_PARAM%%": "0.1"
+      medium:
+        "%%AUG_PARAM%%": "0.2"
+      hard:
+        "%%AUG_PARAM%%": "0.5"
+
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
+constants:
+  "%%PATCHABLE_FILES%%": '["dataset.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"torchvision", "transforms"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/%%MODEL_FILE%%: dataset.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+
+  judge/judge.py: judge.py
