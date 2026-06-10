@@ -4,17 +4,18 @@ Procedurally generated ML debugging environments for evaluating whether AI agent
 
 The generator creates self-contained, Dockerized evaluation tasks. Each task presents an agent with a realistic codebase that runs, trains, and often appears superficially healthy, but fails because of subtle interactions between architecture, data, optimization, and stateful training behavior.
 
-### 🗺️ The Landscape at a Glance
+### Environment Categories
 
-*   **Research-style ML debugging:** `glyph`, `batchnorm_ema`, `moco`
-*   **Paper-to-code & stateful investigation:** `rope`
-*   **Compositional & category-theoretic reasoning:** `cat_theo/*` (10 environments)
+*   **Research-Style ML Debugging:** `glyph`, `batchnorm_ema`, `moco`
+*   **Paper-to-Code & Stateful Investigation:** `rope`
+*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (10 environments)
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
 
-### 🚀 Start Here
-*   Start with **MoCo** if you want to test realistic, multi-file ML debugging.
-*   Start with **RoPE** if you want to test paper-to-implementation reading and offset calculations.
-*   Start with **tensor_functor** or **equivariant_diagram** (in `cat_theo/`) to test category-theoretic compositionality.
+### Recommended Entry Points
+
+*   **MoCo** for testing realistic, multi-file ML debugging.
+*   **RoPE** for testing paper-to-implementation reading and offset calculations.
+*   **tensor_functor** or **equivariant_diagram** (in `cat_theo/`) to test category-theoretic compositionality.
 
 ---
 
