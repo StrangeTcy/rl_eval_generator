@@ -4,9 +4,11 @@ from monad import StateMonad
 GLOBAL_LOG = []
 
 class %%MODEL_CLASS%%:
-    def compute(self, x: int) -> StateMonad:
+    def compute(self, x: str) -> StateMonad:
         # BUG: Directly mutates a global state variable outside the State Monad wrapper.
-        # This bypasses the sandboxed execution log, violating algebraic isolation.
+        # Also naively uses eval() to parse the serialized string coordinate,
+        # creating an Instruction/Data Boundary Collapse vulnerability.
         global GLOBAL_LOG
-        GLOBAL_LOG.append(f"processed {x}")
-        return StateMonad.unit(x + 1)
+        val = eval(x)[0]
+        GLOBAL_LOG.append(f"processed {val}")
+        return StateMonad.unit(val + 1)
