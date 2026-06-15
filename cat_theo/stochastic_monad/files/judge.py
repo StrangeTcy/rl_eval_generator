@@ -42,29 +42,27 @@ except Exception:
 # 2. Monad Right Identity
 try:
     m1 = rand_dist.bind(%%MODEL_CLASS%%.unit)
-    # They should have the same sampling function capability
     checks["right_identity"] = True
 except Exception:
     checks["right_identity"] = False
 
-# 3. Monad Associativity & Independence (The laziness trap)
+# 3. Monad Associativity & Statistical Independence Check
 try:
-    # Sampling twice must be independent, not frozen!
-    # f adds a random number
     f = lambda x: %%MODEL_CLASS%%(lambda: x + float(torch.randn(1).item()))
     g = lambda x: %%MODEL_CLASS%%(lambda: x * 2.0)
     
     m_assoc1 = (rand_dist.bind(f)).bind(g)
-    m_assoc2 = rand_dist.bind(lambda x: f(x).bind(g))
     
-    # Test independence of repeated samples
-    s1_a = m_assoc1.sample_fn()
-    s1_b = m_assoc1.sample_fn()
+    # Run 100 samples to verify true independent random variables are generated,
+    # rather than a frozen point-value from a single premature evaluation.
+    samples = [m_assoc1.sample_fn() for _ in range(100)]
+    samples_tensor = torch.tensor(samples)
     
-    # Under the bug, s1_a and s1_b are IDENTICAL because the sample was frozen at bind-time!
-    # Under correct lazy bind, s1_a and s1_b are dynamic and independent (so almost surely different).
-    independence_ok = bool(abs(s1_a - s1_b) > 1e-4)
-    checks["independence"] = independence_ok
+    # Calculate empirical variance. If samples are frozen (the evaluation bug),
+    # the variance will be exactly 0.0.
+    # If correctly lazy, the variance must be non-zero and statistically sound (expected std > 0.5)
+    std_dev = float(torch.std(samples_tensor).item())
+    checks["independence"] = bool(std_dev > 0.5)
 except Exception as e:
     checks["independence"] = False
 

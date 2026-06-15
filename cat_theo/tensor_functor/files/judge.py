@@ -56,6 +56,17 @@ try:
 except Exception:
     checks["dynamic_spatial"] = False
 
+# 4. Functorial Naturality under Differentiation (Contravariant Pullback)
+try:
+    x_grad = torch.randn(2, 16, 8, 8, requires_grad=True)
+    out_grad = model(x_grad)
+    loss = out_grad.sum()
+    loss.backward()
+    # Check that gradient flows perfectly back to input and is non-trivial (non-zero)
+    checks["jacobian_naturality"] = bool(x_grad.grad is not None and torch.norm(x_grad.grad) > 1e-4)
+except Exception:
+    checks["jacobian_naturality"] = False
+
 torch.save(checks, "eval_outputs.pt")
 """)
 
@@ -69,13 +80,15 @@ torch.save(checks, "eval_outputs.pt")
         basic_ok = bool(checks.get("basic_run", False))
         vmap_ok = bool(checks.get("vmap_naturality", False))
         dynamic_ok = bool(checks.get("dynamic_spatial", False))
+        jac_ok = bool(checks.get("jacobian_naturality", False))
 
         mark_check(result, "basic_run", basic_ok)
         mark_check(result, "vmap_naturality", vmap_ok)
         mark_check(result, "dynamic_spatial", dynamic_ok)
+        mark_check(result, "jacobian_naturality", jac_ok)
 
-        passed = sum([basic_ok, vmap_ok, dynamic_ok])
-        accuracy = passed / 3.0
+        passed = sum([basic_ok, vmap_ok, dynamic_ok, jac_ok])
+        accuracy = passed / 4.0
         result["training_completed"] = True
         result["model_saved"] = True
         
