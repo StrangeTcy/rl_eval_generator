@@ -146,6 +146,12 @@ rl_eval_generator/
 │   ├── batchnorm_ema/
 │   ├── moco/
 │   └── rope/
+├── cat_theo/
+│   ├── <individual_ct_envs>/
+│   └── semiring/
+│       ├── gnn_message_passing/
+│       ├── ssm_parallel_scan/
+│       └── neuro_symbolic_parser/
 ├── tests/
 └── .github/workflows/ci.yml
 ```
