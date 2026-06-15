@@ -1,9 +1,9 @@
-# The Monadic Reward Verifier
+# Monadic Verification & Sandboxing
 
-Your task is to implement a correct monadic state transition function in `agent_code.py` using the State Monad defined in `monad.py`.
+Your task is to correct the state transition logic `%%MODEL_CLASS%%` in `agent_code.py` using the State Monad defined in `monad.py`.
 
-In sandboxed execution, we want to isolate code side-effects (such as unauthorized filesystem access or global state mutation) from the reward verifier. We model state transitions as a State Monad:
+In verifiable reward harnesses, we want to isolate code execution from external environmental side-effects. We model state transitions purely as a State Monad:
 $$S \to (A, S)$$
-where $S$ is the log of allowed operations, and $A$ is the computation result.
+where $S$ is the log of allowed transitions, and $A$ is the computation output.
 
-The starting implementation in `agent_code.py` bypasses the monad wrapper by mutating global variables or printing results directly, which violates the algebraic state encapsulation of the monad. Correct the code to use the monad `bind` and `return` operations properly so that all state transitions are logged.
+The current implementation in `agent_code.py` runs, but violates the strict algebraic state encapsulation of the monad by triggering forbidden side-effects. Correct the code to use the State Monad correctly so that all state updates are securely encapsulated.

@@ -1,9 +1,7 @@
-# Differentiable Viterbi/Dijkstra via Log-Sum-Exp Semiring
+# Differentiable Parsing Step
 
-Your task is to implement a differentiable parsing step in `parser.py` using the Log-Sum-Exp semiring.
+Your task is to correct the transition minimization step in `parser.py`.
 
-In neuro-symbolic AI, combining hard symbolic logic (such as sequence parsing or path-planning) with backpropagation requires **differentiable dynamic programming**. We do this by swapping:
-- The **Tropical semiring** ($\min, +$) for finding exact shortest paths.
-- The **Log-Sum-Exp (LSE) semiring** ($\text{logsumexp}, +$) for a smooth, fully differentiable approximation.
+To allow backpropagation of gradients through dynamic programming layers, hard minimum operations must be replaced with a smooth, differentiable minimum. 
 
-The starting implementation in `parser.py` uses a hard `min` or non-differentiable indexing step that breaks gradient flow (producing zero gradients). Implement the smooth `logsumexp` multiplication/addition step so that gradients can flow perfectly back to the neural parameter inputs.
+The current implementation of `smooth_min` in `parser.py` is non-differentiable, causing gradients to be zeroed out. Correct the function using a smooth Log-Sum-Exp (LSE) formulation so that non-trivial gradients flow perfectly back to the input parameters.

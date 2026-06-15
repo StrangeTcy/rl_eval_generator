@@ -1,8 +1,7 @@
-# Functorial Dataset Transformation
+# Symmetry Preserving Augmentations
 
-Your task is to implement an augmentation function in `dataset.py` that behaves as a functor preserving rotation symmetry (invariance).
+Your task is to correct the dataset augmentation pipeline `%%MODEL_CLASS%%` in `dataset.py`.
 
-Mathematically, an augmentation pipeline is functorial if it preserves the algebraic structure of the symmetry group. For a model $M$ that is $90^\circ$ rotation-invariant, any augmentation $T$ (like vertical flips or rotations) must commute with the model's prediction space:
-$$M(T(x)) \equiv M(x)$$
+For downstream layers that rely on specific geometric invariants (such as $90^\circ$ rotational invariance), any augmentation function $T$ must act as a functor preserving these structural symmetries. If $T$ introduces distortions or shears that violate the group orbit of the symmetry, accuracy degrades under transformation.
 
-The starting implementation in `dataset.py` contains a naive shear and crop transformation that does not preserve $90^\circ$ rotations, causing major performance drop when the dataset is rotated. Fix the augmentation function in `dataset.py` using pure $90^\circ$ rotations so that the invariants of the model are preserved under composition.
+The current implementation in `dataset.py` runs, but fails to preserve the required geometric symmetries. Correct the augmentation function to ensure it preserves these structural invariants under composition.

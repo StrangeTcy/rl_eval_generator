@@ -1,10 +1,10 @@
-# Monad-Correct Stochastic Computation
+# Correct Composition of Stochastic Mappers
 
-Your task is to implement/correct a Probability Monad in `monad.py` that strictly obeys the standard monad laws.
+Your task is to correct the monadic class `%%MODEL_CLASS%%` in `monad.py`.
 
-In functional programming and Category Theory, stochastic computations can be modeled as monads (Kleisli arrows). For the monad to compose correctly, it must satisfy:
+To allow sequential stochastic computations to compose correctly, the monadic class must satisfy the standard algebraic monad laws:
 1. **Left Identity:** `return x >>= f == f x`
 2. **Right Identity:** `m >>= return == m`
 3. **Associativity:** `(m >>= f) >>= g == m >>= (\x. f(x) >>= g)`
 
-The starting implementation of `%%MODEL_CLASS%%` has a buggy `bind` method that mutates shared state, breaking the Associativity law. Refactor the `bind` and `unit` (return) operations so that they behave functionally and pass all the monad laws.
+The current implementation in `monad.py` runs, but fails these laws. Correct the `bind` and `unit` methods to ensure they compose functionally and satisfy all three laws under dynamic sampling.

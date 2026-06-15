@@ -1,11 +1,9 @@
-# Algebraic Aggregation in GNNs
+# Permutation Equivariant Message Passing
 
-Your task is to implement an equivariant neighborhood aggregator in `gnn.py`.
+Your task is to complete the graph message-passing layer `%%MODEL_CLASS%%` in `gnn.py`.
 
-In Geometric Deep Learning, graph message-passing layers are category-theoretic functors from the category of Graphs to the category of Vector Spaces. For a Graph Neural Network (GNN) layer to be correct, it must be **permutation equivariant**:
-$$f_{\text{GNN}}(P \cdot A \cdot P^T, P \cdot X) \equiv P \cdot f_{\text{GNN}}(A, X)$$
-for any permutation matrix $P$, adjacency matrix $A$, and node features $X$.
+To be structurally sound, a Graph Neural Network (GNN) aggregation layer must be strictly **permutation equivariant**. That is, permuting the input graph's node order must result in an identically permuted output representation:
+$$f(P \cdot A \cdot P^T, P \cdot X) \equiv P \cdot f(A, X)$$
+where $P$ is any permutation matrix, $A$ is the graph adjacency matrix, and $X$ is the input node feature matrix.
 
-To guarantee scale and permutation invariance, neighborhood aggregation must satisfy the identity and distributivity properties of a Semiring.
-
-The starting implementation in `gnn.py` uses a naive aggregation loop that has a hardcoded indexing bias (representing a coordinate trap), which breaks permutation equivariance when nodes are permuted. Fix the neighborhood aggregator to use a mathematically robust, permutable reduce operation (like `sum` or `max`) across the neighborhood adjacency.
+The current implementation in `gnn.py` runs, but fails to satisfy this equivariance property. Correct the implementation of `forward()` to ensure it behaves equivariantly for any arbitrary node permutation.

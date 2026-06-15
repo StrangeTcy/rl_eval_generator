@@ -1,14 +1,9 @@
-# Functor-Correct Tensor Operation Refactoring
+# Vectorized Dimension Mixer
 
-Your task is to refactor a rigid, non-compositional spatial-channel mixing layer into a functor-correct form that is coordinate-free.
+Your task is to refactor the sequence mixing layer `%%MODEL_CLASS%%` in `model.py`.
 
-The original implementation in `model.py` uses rigid dimensions and loops. This works for standard batch sizes, but violates the mathematical properties of a tensor functor:
-1. It does not behave naturally under batching (meaning applying the function to a batched tensor via `torch.vmap` produces shape/indexing errors).
-2. It breaks under coordinate resizing (due to hardcoded dimension slicing under hard difficulty, representing a coordinate-trap).
+The current implementation in `model.py` works only under a fixed batch size and dimension, but is not robust under vectorization. Specifically:
+1. It fails under `torch.vmap` (vectorization), throwing shape or index-slicing errors.
+2. It fails to generalize when input spatial/sequence dimensions change during evaluation.
 
-To solve this, refactor `%%MODEL_CLASS%%` in `model.py` such that:
-- It uses coordinate-free operators like `einops` for shape manipulation.
-- It is fully compatible with the vectorization functor (`torch.vmap`) and automatic differentiation (`torch.func`).
-- Any coordinate-trap slices like `x[:, :, :self.size, :self.size]` are replaced with safe, dynamically shaped operations.
-
-Run the visible tests using `pytest` to make sure your basic implementation runs correctly.
+Refactor the module in `model.py` so that it is coordinate-free, fully supports `torch.vmap` and gradient computation, and generalizes correctly to any arbitrary input shapes.

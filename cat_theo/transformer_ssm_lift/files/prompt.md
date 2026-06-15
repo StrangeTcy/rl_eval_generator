@@ -1,8 +1,7 @@
-# Transformer-to-SSM State Lift
+# Stateful Attention-to-Recurrence Lift
 
-Your task is to implement a state lifting morphism `%%MODEL_CLASS%%` in `lifter.py`.
+Your task is to correct the state lifting function `%%MODEL_CLASS%%` in `lifter.py`.
 
-In sequential model architectures, mapping historical context from self-attention key/value matrices to state-space models (like Mamba) represents a state isomorphism. For a lift map $L$ to preserve stateful transition symmetries under shift operations:
-$$L(T_t(X)) \equiv T'_t(L(X))$$
+In sequential sequence modeling, converting history-dependent self-attention key/values into a recurrent state matrix represents a state-space transformation. For the transformation to be correct and lossless, reading the lifted recurrent state must produce the exact same attention outputs as the original sequence history under composition.
 
-The starting code in `lifter.py` implements a projection that collapses temporal elements, discarding history-dependent features and causing information loss. Correct the lifting function so that the state transformation forms a lossless representation across timesteps.
+The starting implementation in `lifter.py` runs, but performs a lossy transformation that violates this stateful equivalence. Correct the lifting function so that the state conversion is mathematically correct and lossless.

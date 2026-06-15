@@ -1,11 +1,8 @@
-# Associative Scan in State-Space Models (SSM)
+# Parallel State-Space Scan
 
-Your task is to implement the associative scan binary operator in `ssm.py`.
+Your task is to correct the state composition operator `combine` in `ssm.py`.
 
-In State-Space Models like Mamba, sequence updates are linear recurrences:
-$$h_t = A_t h_{t-1} + B_t x_t$$
+In State-Space Models (SSMs), sequential updates can be computed in parallel using an associative prefix scan over state transitions. For this parallel scan to be mathematically equivalent to a standard sequential recurrent pass, the transition composition operator must be strictly associative:
+$$(s_1 \otimes s_2) \otimes s_3 \equiv s_1 \otimes (s_2 \otimes s_3)$$
 
-To run this recurrence in parallel on GPUs, the state updates are computed as an associative prefix scan over a monoid. The binary operator $\otimes$ must be strictly associative:
-$$(u_1, M_1) \otimes (u_2, M_2) = (M_2 u_1 + u_2, M_2 M_1)$$
-
-If the operator is not associative (for example, if you swap the multiplication order or fail to scale the state correctly), the parallel scan output will completely diverge from the standard sequential scan. Correct the operator in `ssm.py` so that parallel scan commutes perfectly with sequential scan.
+The current implementation of the `combine` method in `ssm.py` runs, but fails this associativity requirement, causing parallel scans to diverge from sequential rollouts. Fix the combination logic so that it is strictly associative.
