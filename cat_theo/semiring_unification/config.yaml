@@ -1,0 +1,61 @@
+axes:
+  - id: naming
+    description: "Naming abstraction of the semiring classes"
+    levels:
+      easy:
+        "%%ARITH_CLASS%%": "ArithmeticSemiring"
+        "%%TROP_CLASS%%": "TropicalSemiring"
+        "%%BOOL_CLASS%%": "BooleanSemiring"
+        "%%MODEL_FILE%%": "semirings.py"
+      medium:
+        "%%ARITH_CLASS%%": "LinearAdditiveMorphism"
+        "%%TROP_CLASS%%": "MinPlusRing"
+        "%%BOOL_CLASS%%": "BooleanLattice"
+        "%%MODEL_FILE%%": "semirings.py"
+      hard:
+        "%%ARITH_CLASS%%": "StandardField"
+        "%%TROP_CLASS%%": "IdempotentMinPlus"
+        "%%BOOL_CLASS%%": "DistributiveBoolean"
+        "%%MODEL_FILE%%": "semirings.py"
+
+  - id: symptom_mask
+    description: "Whether infinite boundaries and algebraic laws are strictly evaluated"
+    levels:
+      easy:
+        "%%INF_VAL%%": "float('inf')"
+      medium:
+        "%%INF_VAL%%": "1e9"
+      hard:
+        "%%INF_VAL%%": "float('inf')"
+
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
+constants:
+  "%%PATCHABLE_FILES%%": '["semirings.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"matrix_ops"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/%%MODEL_FILE%%: semirings.py
+  agent/workspace/matrix_ops.py: matrix_ops.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+
+  judge/judge.py: judge.py

@@ -16,10 +16,11 @@ envs = [
     ("architecture_naturality", "easy,hard"),
     ("transformer_ssm_lift", "easy,hard"),
     ("categorical_lenses", "easy,hard"),
-    ("monadic_reward", "easy,hard")
+    ("monadic_reward", "easy,hard"),
+    ("semiring_unification", "easy,hard")
 ]
 
-print("Testing generation and compilation of all 10 Category Theory environments...\n")
+print("Testing generation and compilation of all 11 Category Theory environments...\n")
 
 failed = False
 for env, diff in envs:
@@ -75,4 +76,4 @@ if failed:
     print("\n❌ One or more tests failed.")
     sys.exit(1)
 else:
-    print("\n🎉 All 10 environments generated and compiled successfully with ZERO syntax errors and unresolved placeholders!")
+    print("\n🎉 All 11 environments generated and compiled successfully with ZERO syntax errors and unresolved placeholders!")

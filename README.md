@@ -8,7 +8,7 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 
 *   **Research-Style ML Debugging:** `glyph`, `batchnorm_ema`, `moco`
 *   **Paper-to-Code & Stateful Investigation:** `rope`
-*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (10 environments)
+*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (11 environments)
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
 
 ### Recommended Entry Points
@@ -112,7 +112,7 @@ Axes:
 
 ### Category-Theoretic Compositional Environments (`cat_theo/`)
 
-A specialized suite of 10 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
+A specialized suite of 11 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
 
 1. `tensor_functor`: Refactoring rigid tensor operations into coordinate-free functors commuting with `torch.vmap` and `grad`.
 2. `equivariant_diagram`: Completing projection heads to commute under cyclic and spatial group shifts (naturality/equivariance).
@@ -124,6 +124,7 @@ A specialized suite of 10 environments targeting compositional reasoning, algebr
 8. `transformer_ssm_lift`: Constructing a temporal state-space lift that preserves linear attention transition symmetries.
 9. `categorical_lenses`: Building bidirectional data-pipeline transforms satisfying the Put-Get, Get-Put, and Put-Put lens laws.
 10. `monadic_reward`: Writing side-effect-free reward functions wrapped inside a State Monad verifier.
+11. `semiring_unification`: Implementing abstract Semirings (Arithmetic, Tropical/Min-Plus, Boolean) to unify shortest paths, reachability, and arithmetic under a single matrix multiplication functor.
 
 ---
 
