@@ -32,9 +32,9 @@ except ImportError:
 def load_config(env_name: str) -> dict:
     config_path = Path("envs") / env_name / "config.yaml"
     if not config_path.is_file():
-        config_path = Path("cat_theo") / env_name / "config.yaml"
+        config_path = Path("envs") / "cat_theo" / env_name / "config.yaml"
     if not config_path.is_file():
-        config_path = Path("cat_theo") / "semiring" / env_name / "config.yaml"
+        config_path = Path("envs") / "cat_theo" / "semiring" / env_name / "config.yaml"
     if not config_path.is_file():
         print(f"ERROR: Config not found at {config_path}")
         sys.exit(1)
@@ -199,9 +199,9 @@ def generate_env(
     config = load_config(env_name)
     files_dir = Path("envs") / env_name / "files"
     if not files_dir.is_dir():
-        files_dir = Path("cat_theo") / env_name / "files"
+        files_dir = Path("envs") / "cat_theo" / env_name / "files"
     if not files_dir.is_dir():
-        files_dir = Path("cat_theo") / "semiring" / env_name / "files"
+        files_dir = Path("envs") / "cat_theo" / "semiring" / env_name / "files"
 
     validate_config(config, files_dir, env_name)
 
@@ -344,10 +344,10 @@ Examples:
     envs_root = Path("envs")
     env_path = envs_root / args.env
     if not env_path.is_dir():
-        envs_root = Path("cat_theo")
+        envs_root = Path("envs") / "cat_theo"
         env_path = envs_root / args.env
     if not env_path.is_dir():
-        envs_root = Path("cat_theo") / "semiring"
+        envs_root = Path("envs") / "cat_theo" / "semiring"
         env_path = envs_root / args.env
 
     if not env_path.is_dir():

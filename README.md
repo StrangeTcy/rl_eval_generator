@@ -15,7 +15,7 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 
 *   **MoCo** for testing realistic, multi-file ML debugging.
 *   **RoPE** for testing paper-to-implementation reading and offset calculations.
-*   **tensor_functor** or **equivariant_diagram** (in `cat_theo/`) to test category-theoretic compositionality.
+*   **tensor_functor** or **equivariant_diagram** (in `envs/cat_theo/`) to test category-theoretic compositionality.
 
 ---
 
@@ -110,7 +110,7 @@ Axes:
 - investigation difficulty;
 - symptom mask (Context-Window Illusion).
 
-### Category-Theoretic Compositional Environments (`cat_theo/`)
+### Category-Theoretic Compositional Environments (`envs/cat_theo/`)
 
 A specialized suite of 11 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
 
@@ -145,13 +145,13 @@ rl_eval_generator/
 │   ├── glyph/
 │   ├── batchnorm_ema/
 │   ├── moco/
-│   └── rope/
-├── cat_theo/
-│   ├── <individual_ct_envs>/
-│   └── semiring/
-│       ├── gnn_message_passing/
-│       ├── ssm_parallel_scan/
-│       └── neuro_symbolic_parser/
+│   ├── rope/
+│   └── cat_theo/
+│       ├── <individual_ct_envs>/
+│       └── semiring/
+│           ├── gnn_message_passing/
+│           ├── ssm_parallel_scan/
+│           └── neuro_symbolic_parser/
 ├── tests/
 └── .github/workflows/ci.yml
 ```
