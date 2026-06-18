@@ -8,7 +8,7 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 
 *   **Research-Style ML Debugging:** `glyph`, `batchnorm_ema`, `moco`
 *   **Paper-to-Code & Stateful Investigation:** `rope`
-*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (11 environments)
+*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (17 environments)
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
 
 ### Recommended Entry Points
@@ -112,19 +112,30 @@ Axes:
 
 ### Category-Theoretic Compositional Environments (`envs/cat_theo/`)
 
-A specialized suite of 11 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
+A specialized suite of 17 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
 
-1. `tensor_functor`: Refactoring rigid tensor operations into coordinate-free functors commuting with `torch.vmap` and `grad`.
-2. `equivariant_diagram`: Completing projection heads to commute under cyclic and spatial group shifts (naturality/equivariance).
-3. `stochastic_monad`: Implementing deterministic operations as probabilistic Kleisli arrows satisfying the monad laws.
-4. `functorial_augmentation`: Constructing data augmentations that act as functors preserving model symmetries.
-5. `compositional_optimizer`: Refactoring optimizers into state-isolated, associative monoidal compositions.
-6. `tokenizer_adjunction`: Implementing detokenizers that form a Galois connection (adjunction) with lossy tokenizers.
-7. `architecture_naturality`: Mapping hidden representations between Transformer and RNN functors as a natural transformation.
-8. `transformer_ssm_lift`: Constructing a temporal state-space lift that preserves linear attention transition symmetries.
-9. `categorical_lenses`: Building bidirectional data-pipeline transforms satisfying the Put-Get, Get-Put, and Put-Put lens laws.
-10. `monadic_reward`: Writing side-effect-free reward functions wrapped inside a State Monad verifier.
-11. `semiring_unification`: Implementing abstract Semirings (Arithmetic, Tropical/Min-Plus, Boolean) to unify shortest paths, reachability, and arithmetic under a single matrix multiplication functor.
+*   **Core Category Theory Tasks:**
+    1. `tensor_functor`: Refactoring rigid tensor operations into coordinate-free functors commuting with `torch.vmap` and `grad`.
+    2. `equivariant_diagram`: Completing projection heads to commute under cyclic and spatial group shifts (naturality/equivariance).
+    3. `stochastic_monad`: Implementing deterministic operations as probabilistic Kleisli arrows satisfying the monad laws.
+    4. `functorial_augmentation`: Constructing data augmentations that act as functors preserving model symmetries.
+    5. `compositional_optimizer`: Refactoring optimizers into state-isolated, associative monoidal compositions.
+    6. `tokenizer_adjunction`: Implementing detokenizers that form a Galois connection (adjunction) with lossy tokenizers.
+    7. `architecture_naturality`: Mapping hidden representations between Transformer and RNN functors as a natural transformation.
+    8. `transformer_ssm_lift`: Constructing a temporal state-space lift that preserves linear attention transition symmetries.
+    9. `categorical_lenses`: Building bidirectional data-pipeline transforms satisfying the Put-Get, Get-Put, and Put-Put lens laws.
+    10. `monadic_reward`: Writing side-effect-free reward functions wrapped inside a State Monad verifier.
+    11. `semiring_unification`: Implementing abstract Semirings (Arithmetic, Tropical, Boolean) to unify shortest paths, reachability, and arithmetic.
+
+*   **Semiring Recurrent & GNN Operations (`semiring/`):**
+    12. `ssm_parallel_scan`: Constructing an associative parallel scan composition operator for state-space model transitions.
+    13. `neuro_symbolic_parser`: Implementing a smooth, differentiable Log-Sum-Exp semiring parser to preserve gradient flow.
+    14. `gnn_message_passing`: Building a permutation-equivariant neighborhood GNN aggregator that respects semiring distributivity.
+
+*   **Sheaf-Inspired Global Invariant Scaling (`sheaf/`):**
+    15. `sheaf_schema_sync`: Implementing transactional database migrations over circular, microservice-level schema overlaps.
+    16. `sheaf_invariant_gluing`: Constructing compositional data-preprocessing boundaries that resist out-of-distribution cascades.
+    17. `sheaf_physical_constraints`: Building a distributed network-topology traffic scheduler that respects global backbone bandwidth constraints.
 
 ---
 
@@ -148,10 +159,14 @@ rl_eval_generator/
 │   ├── rope/
 │   └── cat_theo/
 │       ├── <individual_ct_envs>/
-│       └── semiring/
-│           ├── gnn_message_passing/
-│           ├── ssm_parallel_scan/
-│           └── neuro_symbolic_parser/
+│       ├── semiring/
+│       │   ├── gnn_message_passing/
+│       │   ├── ssm_parallel_scan/
+│       │   └── neuro_symbolic_parser/
+│       └── sheaf/
+│           ├── sheaf_schema_sync/
+│           ├── sheaf_invariant_gluing/
+│           └── sheaf_physical_constraints/
 ├── tests/
 └── .github/workflows/ci.yml
 ```
