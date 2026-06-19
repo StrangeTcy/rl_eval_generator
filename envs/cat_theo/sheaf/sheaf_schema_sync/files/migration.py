@@ -3,6 +3,7 @@ import sqlite3
 class %%MODEL_CLASS%%:
     def create_schema(self, db_path: str) -> None:
         # Establishes schema tables with circular dependencies.
+        # Uses %%DEFER_CONSTRAINTS%% to toggle deferral of foreign keys.
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON;")
@@ -11,7 +12,7 @@ class %%MODEL_CLASS%%:
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
             address_id INTEGER,
-            FOREIGN KEY(address_id) REFERENCES addresses(id)
+            FOREIGN KEY(address_id) REFERENCES addresses(id) %%DEFER_CONSTRAINTS%%
         );
         """)
         cursor.execute("""
@@ -19,14 +20,14 @@ class %%MODEL_CLASS%%:
             id INTEGER PRIMARY KEY,
             user_id INTEGER,
             amount REAL,
-            FOREIGN KEY(user_id) REFERENCES users(id)
+            FOREIGN KEY(user_id) REFERENCES users(id) %%DEFER_CONSTRAINTS%%
         );
         """)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS addresses (
             id INTEGER PRIMARY KEY,
             transaction_id INTEGER,
-            FOREIGN KEY(transaction_id) REFERENCES transactions(id)
+            FOREIGN KEY(transaction_id) REFERENCES transactions(id) %%DEFER_CONSTRAINTS%%
         );
         """)
         conn.commit()

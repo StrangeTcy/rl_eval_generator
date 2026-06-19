@@ -21,7 +21,7 @@ def main() -> None:
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
         f.write(f"""
-import sys
+import sys, math
 sys.path.insert(0, {workdir!r})
 from pipeline import %%MODEL_CLASS%%
 
@@ -36,14 +36,41 @@ try:
 except Exception:
     checks["local_run_ok"] = False
 
-# 2. Global Gluing Consistency (Handles large out-of-distribution values safely)
+# 2. Global Gluing Consistency (Handles positive and negative extreme OOD values)
 try:
-    # Large adversarial input that triggers float math limit
-    x_large = %%THRESHOLD%%
-    out_large = pipe.compose_pipeline(x_large)
-    checks["global_gluing_ok"] = bool(0 <= out_large < 100)
-except Exception as e:
+    x_pos = %%THRESHOLD%%
+    x_neg = -%%THRESHOLD%%
+    out_pos = pipe.compose_pipeline(x_pos)
+    out_neg = pipe.compose_pipeline(x_neg)
+    
+    checks["global_gluing_ok"] = bool(0 <= out_pos < 100 and 0 <= out_neg < 100)
+except Exception:
     checks["global_gluing_ok"] = False
+
+# 3. Monotonicity & Anti-Gaming Verification (Prevents constant-return hacks)
+try:
+    # Test 5 ascending values spanning a wide dynamic range
+    test_points = [-100.0, -1.0, 0.0, 1.0, 100.0]
+    outputs = [pipe.compose_pipeline(pt) for pth, pt in enumerate(test_points)]
+    
+    # Assert monotonicity: output indices must be non-decreasing and non-constant
+    monotonic = all(outputs[i] <= outputs[i+1] for i in range(len(outputs) - 1))
+    non_constant = len(set(outputs)) >= 3
+    
+    # Check that boundaries are strictly respected
+    all_bounded = all(0 <= o < 100 for o in outputs)
+    
+    checks["monotonicity_ok"] = bool(monotonic and non_constant and all_bounded)
+except Exception:
+    checks["monotonicity_ok"] = False
+
+# 4. NaN & Infinity Robustness (Extreme Topological Edge Cases)
+try:
+    out_nan = pipe.compose_pipeline(float('nan'))
+    out_inf = pipe.compose_pipeline(float('inf'))
+    checks["robustness_ok"] = bool(0 <= out_nan < 100 and 0 <= out_inf < 100)
+except Exception:
+    checks["robustness_ok"] = False
 
 import torch
 torch.save(checks, "eval_outputs.pt")
@@ -58,12 +85,16 @@ torch.save(checks, "eval_outputs.pt")
         checks = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True)
         local_ok = bool(checks.get("local_run_ok", False))
         global_ok = bool(checks.get("global_gluing_ok", False))
+        mono_ok = bool(checks.get("monotonicity_ok", False))
+        robust_ok = bool(checks.get("robustness_ok", False))
 
         mark_check(result, "local_run_ok", local_ok)
         mark_check(result, "global_gluing_ok", global_ok)
+        mark_check(result, "monotonicity_ok", mono_ok)
+        mark_check(result, "robustness_ok", robust_ok)
 
-        passed = sum([local_ok, global_ok])
-        accuracy = passed / 2.0
+        passed = sum([local_ok, global_ok, mono_ok, robust_ok])
+        accuracy = passed / 4.0
         result["training_completed"] = True
         result["model_saved"] = True
         

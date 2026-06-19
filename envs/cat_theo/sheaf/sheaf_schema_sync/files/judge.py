@@ -40,20 +40,66 @@ try:
 except Exception:
     checks["local_schema_ok"] = False
 
-# 2. Global Gluing Consistency (Symmetric transaction handles circular bounds)
+# 2. Strict Constraint Integrity Verification (Anti-Cheat / No Bypass)
 try:
-    # Attempt to insert a full circular microservice record:
-    # Transaction -> User -> Address -> Transaction
-    mig.insert_transaction(db_path, t_id=101, u_id=202, a_id=303, amount=99.9)
-    
-    # Verify the insertion is complete and matches
+    # We must verify that the agent did NOT delete, disable, or relax the foreign keys.
+    # We open a fresh connection and run PRAGMA foreign_key_check.
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT amount FROM transactions WHERE id=101;")
-    row = cursor.fetchone()
-    conn.close()
     
-    checks["global_gluing_ok"] = bool(row is not None and float(row[0]) == 99.9)
+    # Enable foreign keys and verify that they are structurally registered in SQLite
+    cursor.execute("PRAGMA foreign_keys = ON;")
+    
+    # Query foreign key list on all three tables
+    fk_users = cursor.execute("PRAGMA foreign_key_list(users);").fetchall()
+    fk_txs = cursor.execute("PRAGMA foreign_key_list(transactions);").fetchall()
+    fk_addr = cursor.execute("PRAGMA foreign_key_list(addresses);").fetchall()
+    
+    # Each table must have exactly 1 active foreign key reference
+    structural_constraints_ok = bool(len(fk_users) == 1 and len(fk_txs) == 1 and len(fk_addr) == 1)
+    
+    # Assert they reference the correct tables
+    # fk_users -> addresses, fk_txs -> users, fk_addr -> transactions
+    ref_users = fk_users[0][2] == "addresses"
+    ref_txs = fk_txs[0][2] == "users"
+    ref_addr = fk_addr[0][2] == "transactions"
+    
+    checks["constraints_preserved"] = bool(structural_constraints_ok and ref_users and ref_txs and ref_addr)
+    conn.close()
+except Exception as e:
+    checks["constraints_preserved"] = False
+
+# 3. Global Gluing Consistency (Symmetric transaction handles circular bounds)
+try:
+    # Attempt to insert a full circular microservice record
+    mig.insert_transaction(db_path, t_id=101, u_id=202, a_id=303, amount=99.9)
+    
+    # Verify the insertion is complete, circular references are valid, and foreign keys are intact
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON;")
+    
+    # Check that all records exist and relate to each other
+    cursor.execute("SELECT address_id FROM users WHERE id=202;")
+    addr_id = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT user_id, amount FROM transactions WHERE id=101;")
+    user_row = cursor.fetchone()
+    
+    cursor.execute("SELECT transaction_id FROM addresses WHERE id=303;")
+    tx_id = cursor.fetchone()[0]
+    
+    # Run PRAGMA foreign_key_check to ensure no foreign key constraint is currently broken!
+    fk_check_result = cursor.execute("PRAGMA foreign_key_check;").fetchall()
+    fk_clean = bool(len(fk_check_result) == 0)
+    
+    checks["global_gluing_ok"] = bool(
+        addr_id == 303 and 
+        user_row is not None and user_row[0] == 202 and float(user_row[1]) == 99.9 and 
+        tx_id == 101 and 
+        fk_clean
+    )
+    conn.close()
 except Exception as e:
     checks["global_gluing_ok"] = False
 
@@ -72,13 +118,15 @@ torch.save(checks, "eval_outputs.pt")
     try:
         checks = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True)
         local_ok = bool(checks.get("local_schema_ok", False))
+        const_ok = bool(checks.get("constraints_preserved", False))
         global_ok = bool(checks.get("global_gluing_ok", False))
 
         mark_check(result, "local_schema_ok", local_ok)
+        mark_check(result, "constraints_preserved", const_ok)
         mark_check(result, "global_gluing_ok", global_ok)
 
-        passed = sum([local_ok, global_ok])
-        accuracy = passed / 2.0
+        passed = sum([local_ok, const_ok, global_ok])
+        accuracy = passed / 3.0
         result["training_completed"] = True
         result["model_saved"] = True
         

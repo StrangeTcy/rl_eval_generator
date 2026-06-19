@@ -16,11 +16,11 @@ axes:
     description: "Whether the cascading foreign-key constraint loops are verified"
     levels:
       easy:
-        "%%DEFER_CONSTRAINTS%%": "False"
+        "%%DEFER_CONSTRAINTS%%": ""
       medium:
-        "%%DEFER_CONSTRAINTS%%": "True"
+        "%%DEFER_CONSTRAINTS%%": "DEFERRABLE INITIALLY DEFERRED"
       hard:
-        "%%DEFER_CONSTRAINTS%%": "True"
+        "%%DEFER_CONSTRAINTS%%": "DEFERRABLE INITIALLY DEFERRED"
 
 scoring:
   mode: continuous_accuracy
