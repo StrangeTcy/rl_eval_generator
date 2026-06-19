@@ -21,7 +21,7 @@ def main() -> None:
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
         f.write(f"""
-import sys
+import sys, random
 sys.path.insert(0, {workdir!r})
 from lenses import %%MODEL_CLASS%%
 
@@ -29,9 +29,10 @@ lens = %%MODEL_CLASS%%()
 
 checks = {{}}
 
-s = (1.5, 3.7)
-a = 4.2
-a_prime = 9.9
+# Dynamically randomize state and feature inputs to prevent static hardcoding/overfitting hacks
+s = (random.uniform(-100.0, 100.0), random.uniform(-100.0, 100.0))
+a = random.uniform(-100.0, 100.0)
+a_prime = random.uniform(-100.0, 100.0)
 
 # 1. Put-Get Law: view(update(s, a)) == a
 try:

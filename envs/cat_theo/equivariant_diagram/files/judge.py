@@ -22,6 +22,7 @@ def main() -> None:
     with open(eval_script, "w", encoding="utf-8") as f:
         f.write(f"""
 import sys, torch
+import torch.nn.functional as F
 sys.path.insert(0, {workdir!r})
 from layers import %%MODEL_CLASS%%
 from symmetry import shift_2d
@@ -31,12 +32,21 @@ layer.eval()
 
 checks = {{}}
 
-# 1. Output shape correctness
+# Helper to compute trusted circular convolution reference
+def get_expected(x):
+    # Circular pad 1 pixel on all sides, then apply the projection weights with zero padding (padding=0)
+    x_padded = F.pad(x, (1, 1, 1, 1), mode="circular")
+    return F.conv2d(x_padded, layer.proj.weight, layer.proj.bias, stride=1, padding=0)
+
+# 1. Output shape correctness & Semantic Correctness (Not an identity/no-op hack!)
 try:
     x = torch.randn(2, 16, 8, 8)
     out = layer(x)
-    checks["basic_run"] = bool(out.shape == x.shape)
-except Exception:
+    expected = get_expected(x)
+    
+    # Must match expected circular convolution AND must NOT be a simple identity return
+    checks["basic_run"] = bool(out.shape == x.shape and torch.allclose(out, expected, atol=1e-4) and not torch.allclose(out, x, atol=1e-3))
+except Exception as e:
     checks["basic_run"] = False
 
 # 2. Strict translation-equivariance commutativity

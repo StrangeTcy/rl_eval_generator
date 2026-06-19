@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_scoring_is_configured_in_environment_settings():
     """Scoring mechanics should be environment settings, not hardcoded policy."""
-    for config_path in (ROOT / "envs").glob("*/config.yaml"):
+    for config_path in (ROOT / "envs").rglob("config.yaml"):
         config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         assert "scoring" in config, f"missing scoring block in {config_path}"
         assert "mode" in config["scoring"]
@@ -23,7 +23,7 @@ def test_scoring_is_configured_in_environment_settings():
 def test_judges_use_scoring_placeholders_from_config():
     judges = {
         path.parts[-3]: path.read_text(encoding="utf-8")
-        for path in (ROOT / "envs").glob("*/files/judge.py")
+        for path in (ROOT / "envs").rglob("judge.py")
     }
     for env in ["glyph", "batchnorm_ema", "moco"]:
         assert "%%SCORING_PASS_THRESHOLD%%" in judges[env]

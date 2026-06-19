@@ -30,21 +30,33 @@ model.eval()
 
 checks = {{}}
 
-# 1. Output shape & type correctness
+# Helper for expected channel-wise reference projection (semantic correctness)
+def get_expected(x):
+    # Channel-wise projection: permute (B, C, H, W) to (B, H, W, C), project, and permute back
+    x_perm = x.permute(0, 2, 3, 1)
+    return model.proj(x_perm).permute(0, 3, 1, 2)
+
+# 1. Output shape & type correctness + Semantic Correctness (Not an identity/no-op hack!)
 try:
     x = torch.randn(2, 16, 8, 8)
     out = model(x)
-    checks["basic_run"] = bool(out.shape == x.shape)
-except Exception:
+    expected = get_expected(x)
+    
+    # Must match expected projection AND must NOT be a simple identity return
+    checks["basic_run"] = bool(out.shape == x.shape and torch.allclose(out, expected, atol=1e-4) and not torch.allclose(out, x, atol=1e-3))
+except Exception as e:
     checks["basic_run"] = False
 
 # 2. Functorial Naturality under vmap
 try:
     x_batch = torch.randn(3, 2, 16, 8, 8)
-    # vmap the forward pass over the outer dimension
     vmapped_fn = torch.vmap(model)
     out_vmap = vmapped_fn(x_batch)
-    checks["vmap_naturality"] = bool(out_vmap.shape == x_batch.shape)
+    
+    # Expected vmap outputs
+    expected_vmap = torch.stack([get_expected(x_batch[i]) for i in range(3)])
+    
+    checks["vmap_naturality"] = bool(out_vmap.shape == x_batch.shape and torch.allclose(out_vmap, expected_vmap, atol=1e-4))
 except Exception as e:
     checks["vmap_naturality"] = False
 
@@ -52,7 +64,9 @@ except Exception as e:
 try:
     x_large = torch.randn(2, 16, 12, 12)
     out_large = model(x_large)
-    checks["dynamic_spatial"] = bool(out_large.shape == x_large.shape)
+    expected_large = get_expected(x_large)
+    
+    checks["dynamic_spatial"] = bool(out_large.shape == x_large.shape and torch.allclose(out_large, expected_large, atol=1e-4))
 except Exception:
     checks["dynamic_spatial"] = False
 
@@ -62,7 +76,6 @@ try:
     out_grad = model(x_grad)
     loss = out_grad.sum()
     loss.backward()
-    # Check that gradient flows perfectly back to input and is non-trivial (non-zero)
     checks["jacobian_naturality"] = bool(x_grad.grad is not None and torch.norm(x_grad.grad) > 1e-4)
 except Exception:
     checks["jacobian_naturality"] = False

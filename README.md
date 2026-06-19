@@ -171,7 +171,7 @@ rl_eval_generator/
 └── .github/workflows/ci.yml
 ```
 
-Environment-specific files live under `envs/<name>/files/`; shared tooling is
+Environment-specific files live under `envs/&lt;name&gt;/files/`; shared tooling is
 injected from `shared/` at generation time. Templates use plain `%%PLACEHOLDER%%`
 substitution — no conditionals, loops, or inheritance — guarded by strict
 unresolved-placeholder errors, recursive substitution for composed values,
@@ -400,8 +400,8 @@ examples/rope_hard_solution.patch
 
 ## Adding an environment
 
-1. Create `envs/<name>/config.yaml`.
-2. Add templates under `envs/<name>/files/`.
+1. Create `envs/&lt;name&gt;/config.yaml`.
+2. Add templates under `envs/&lt;name&gt;/files/`.
 3. Define patchable files and allowed imports via config constants.
 4. Write an environment-specific `judge.py` using `shared/judge_lib.py`.
 5. Run `pytest -q` and generate a smoke environment.

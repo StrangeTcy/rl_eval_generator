@@ -30,12 +30,19 @@ layer.eval()
 
 checks = {{}}
 
-# 1. Output shape correctness
+# Helper to compute expected GNN message passing reference (symmetrical aggregation)
+def get_expected(adj, x):
+    return torch.matmul(adj, layer.proj(x))
+
+# 1. Output shape correctness & Semantic Correctness (Not an identity/no-op hack!)
 try:
     adj = torch.eye(4)
     x = torch.randn(4, 8)
     out = layer(adj, x)
-    checks["basic_run"] = bool(out.shape == x.shape)
+    expected = get_expected(adj, x)
+    
+    # Must match expected neighborhood aggregation AND must NOT be a simple identity return
+    checks["basic_run"] = bool(out.shape == x.shape and torch.allclose(out, expected, atol=1e-4) and not torch.allclose(out, x, atol=1e-3))
 except Exception:
     checks["basic_run"] = False
 
@@ -43,7 +50,6 @@ except Exception:
 try:
     N = 6
     adj = torch.zeros(N, N)
-    # A simple path graph (0-1-2-3-4-5)
     for i in range(N - 1):
         adj[i, i+1] = 1.0
         adj[i+1, i] = 1.0

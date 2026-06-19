@@ -14,7 +14,7 @@ def run(*args, check=True):
 
 
 def test_configs_parse():
-    for path in (ROOT / "envs").glob("*/config.yaml"):
+    for path in (ROOT / "envs").rglob("config.yaml"):
         yaml.safe_load(path.read_text())
 
 

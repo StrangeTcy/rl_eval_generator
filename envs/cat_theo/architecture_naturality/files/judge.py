@@ -30,11 +30,15 @@ tfm.eval()
 
 checks = {{}}
 
-# 1. Output shape correctness (length 8)
+# 1. Output shape correctness + Semantic Correctness (Not an identity/no-op hack!)
 try:
     x = torch.randn(2, 8, 16)
     out = tfm(x)
-    checks["basic_run"] = bool(out.shape == x.shape)
+    
+    # The expected output should scale x by tfm.scale (which starts as 2.0)
+    expected = tfm.scale * x
+    
+    checks["basic_run"] = bool(out.shape == x.shape and torch.allclose(out, expected, atol=1e-4) and not torch.allclose(out, x, atol=1e-3))
 except Exception:
     checks["basic_run"] = False
 

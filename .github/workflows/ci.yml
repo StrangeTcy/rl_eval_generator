@@ -16,8 +16,8 @@ jobs:
       - run: pytest -q
       - name: Docker build smoke test
         run: |
-          python generate_env.py --env glyph --name smoke_glyph_docker --difficulty easy,easy,easy,easy,easy --seed 1
-          python generate_env.py --env rope --name smoke_rope_docker --difficulty easy,easy,easy,easy,easy,easy,easy --seed 1
+          python generate_env.py --env glyph --name smoke_glyph_docker --difficulty easy,easy,easy,easy,easy,easy --seed 1
+          python generate_env.py --env rope --name smoke_rope_docker --difficulty easy,easy,easy,easy,easy,easy,easy,easy --seed 1
           docker build -t smoke_glyph_agent -f smoke_glyph_docker/agent/Dockerfile smoke_glyph_docker/agent
           docker build -t smoke_glyph_judge -f smoke_glyph_docker/judge/Dockerfile smoke_glyph_docker
           docker build -t smoke_rope_agent -f smoke_rope_docker/agent/Dockerfile smoke_rope_docker/agent

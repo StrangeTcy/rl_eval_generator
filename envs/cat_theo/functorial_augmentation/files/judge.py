@@ -37,21 +37,39 @@ try:
 except Exception:
     checks["basic_run"] = False
 
-# 2. Strict C_4 group-action symmetry verification
+# 2. Strict C_4 group-action symmetry & Non-Triviality verification
 try:
-    # Let's verify that the output of augment(x) is strictly a 90, 180, 270, or 360-degree rotation of x.
-    # This guarantees the transformation is functorial and preserves C_4 symmetry without deformation.
+    # We must verify that:
+    # 1. The output is strictly a 90, 180, 270, or 360-degree rotation of x.
+    # 2. The augmenter is not a simple identity (no-op) return, meaning it produces
+    #    actual rotations (k > 0) under multiple independent runs.
     x = torch.arange(1, 3 * 32 * 32 + 1, dtype=torch.float).reshape(1, 3, 32, 32)
-    out = augmenter.augment(x)
     
-    is_valid_rotation = False
-    for k in range(4):
-        rotated_candidate = torch.rot90(x, k, [2, 3])
-        if torch.allclose(out, rotated_candidate, atol=1e-4):
-            is_valid_rotation = True
+    # Run 10 trials to check for dynamic, non-trivial rotations
+    non_trivial_count = 0
+    all_valid = True
+    
+    for _ in range(10):
+        out = augmenter.augment(x)
+        
+        is_valid_rotation = False
+        k_matched = -1
+        for k in range(4):
+            rotated_candidate = torch.rot90(x, k, [2, 3])
+            if torch.allclose(out, rotated_candidate, atol=1e-4):
+                is_valid_rotation = True
+                k_matched = k
+                break
+                
+        if not is_valid_rotation:
+            all_valid = False
             break
             
-    checks["symmetry_preserved"] = is_valid_rotation
+        if k_matched > 0:
+            non_trivial_count += 1
+            
+    # Passes only if all 10 trials are valid C_4 group elements and at least 30% are non-trivial (k > 0)
+    checks["symmetry_preserved"] = bool(all_valid and non_trivial_count >= 3)
 except Exception as e:
     checks["symmetry_preserved"] = False
 

@@ -29,13 +29,25 @@ scanner = %%MODEL_CLASS%%()
 
 checks = {{}}
 
-u = torch.randn(4, 8)
-M = torch.randn(4, 8)
-
-# 1. Output shape correctness
+# 1. Output shape correctness & Semantic Correctness (Not a trivial associative hack!)
 try:
-    u_out, M_out = scanner.combine((u, M), (u, M))
-    checks["basic_run"] = bool(u_out.shape == u.shape and M_out.shape == M.shape)
+    u1 = torch.randn(4, 8)
+    M1 = torch.randn(4, 8)
+    u2 = torch.randn(4, 8)
+    M2 = torch.randn(4, 8)
+    
+    u_out, M_out = scanner.combine((u1, M1), (u2, M2))
+    
+    # Expected sequential recurrent combination (M2 * u1 + u2, M2 * M1)
+    expected_u = M2 * u1 + u2
+    expected_M = M2 * M1
+    
+    checks["basic_run"] = bool(
+        u_out.shape == u1.shape and 
+        M_out.shape == M1.shape and 
+        torch.allclose(u_out, expected_u, atol=1e-4) and 
+        torch.allclose(M_out, expected_M, atol=1e-4)
+    )
 except Exception:
     checks["basic_run"] = False
 
