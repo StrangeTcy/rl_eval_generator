@@ -4,9 +4,14 @@ class %%MODEL_CLASS%%:
         self.global_capacity = global_capacity
 
     def allocate_bandwidth(self, demands: dict[str, float]) -> dict[str, float]:
-        # BUG: Naively allocates bandwidth up to the local switch capacity (local_capacity)
-        # for each node-pair individually, ignoring the global backbone capacity limit (global_capacity).
-        # This causes the aggregate sum of all paths to overload the main router.
+        # Demands are mapped over three overlapping paths: "route_A", "route_B", and "route_C".
+        # Symmetries and overlapping topologies:
+        # - Switch S1 is shared by: route_A + route_C (capacity <= local_capacity)
+        # - Switch S2 is shared by: route_A + route_B (capacity <= local_capacity)
+        # - Switch S3 is shared by: route_B + route_C (capacity <= local_capacity)
+        #
+        # BUG: Naive allocator that only checks local individual route demands,
+        # ignoring the overlapping shared switch constraints and the global backbone capacity.
         allocations = {}
         for path, demand in demands.items():
             allocations[path] = min(demand, self.local_capacity)

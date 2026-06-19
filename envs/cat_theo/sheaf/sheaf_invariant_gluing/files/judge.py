@@ -21,7 +21,7 @@ def main() -> None:
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
         f.write(f"""
-import sys, math
+import sys, math, random
 sys.path.insert(0, {workdir!r})
 from pipeline import %%MODEL_CLASS%%
 
@@ -36,10 +36,11 @@ try:
 except Exception:
     checks["local_run_ok"] = False
 
-# 2. Global Gluing Consistency (Handles positive and negative extreme OOD values)
+# 2. Global Gluing Consistency (Handles dynamically randomized extreme OOD values)
 try:
-    x_pos = %%THRESHOLD%%
-    x_neg = -%%THRESHOLD%%
+    # Use dynamically generated random high limits to prevent piecewise hardcoded hacks
+    x_pos = random.uniform(%%THRESHOLD%%, %%THRESHOLD%% * 10)
+    x_neg = -random.uniform(%%THRESHOLD%%, %%THRESHOLD%% * 10)
     out_pos = pipe.compose_pipeline(x_pos)
     out_neg = pipe.compose_pipeline(x_neg)
     
@@ -47,17 +48,21 @@ try:
 except Exception:
     checks["global_gluing_ok"] = False
 
-# 3. Monotonicity & Anti-Gaming Verification (Prevents constant-return hacks)
+# 3. Monotonicity & Anti-Gaming Verification (Ensures math order invariants are preserved)
 try:
-    # Test 5 ascending values spanning a wide dynamic range
-    test_points = [-100.0, -1.0, 0.0, 1.0, 100.0]
-    outputs = [pipe.compose_pipeline(pt) for pth, pt in enumerate(test_points)]
+    # Generate 5 strictly ascending random points across the dynamic range
+    p1 = random.uniform(-1000.0, -10.0)
+    p2 = random.uniform(-9.0, -0.1)
+    p3 = 0.0
+    p4 = random.uniform(0.1, 9.0)
+    p5 = random.uniform(10.0, 1000.0)
+    test_points = [p1, p2, p3, p4, p5]
+    
+    outputs = [pipe.compose_pipeline(pt) for pt in test_points]
     
     # Assert monotonicity: output indices must be non-decreasing and non-constant
     monotonic = all(outputs[i] <= outputs[i+1] for i in range(len(outputs) - 1))
     non_constant = len(set(outputs)) >= 3
-    
-    # Check that boundaries are strictly respected
     all_bounded = all(0 <= o < 100 for o in outputs)
     
     checks["monotonicity_ok"] = bool(monotonic and non_constant and all_bounded)

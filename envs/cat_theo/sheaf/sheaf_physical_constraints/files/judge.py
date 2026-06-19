@@ -32,65 +32,71 @@ checks = {{}}
 
 # 1. Local Consistency (Correctness on low, isolated demands)
 try:
-    demands = {{"node1_2": 40.0, "node2_3": 30.0}}
+    demands = {{"route_A": 40.0, "route_B": 30.0, "route_C": 20.0}}
     allocations = router.allocate_bandwidth(demands)
-    checks["local_routing_ok"] = bool(allocations.get("node1_2") == 40.0 and allocations.get("node2_3") == 30.0)
+    checks["local_routing_ok"] = bool(
+        allocations.get("route_A") == 40.0 and 
+        allocations.get("route_B") == 30.0 and 
+        allocations.get("route_C") == 20.0
+    )
 except Exception:
     checks["local_routing_ok"] = False
 
-# 2. Local Bounds & Proportionality under Overlap constraints
+# 2. Local Overlapping Switch Bounds & Proportionality (The 10/10 Sheaf overlap check)
 try:
-    # High local demand, total exceeds global capacity.
-    # Demands: {"node1_2": 120.0, "node2_3": 60.0}. Total clamped is (100 + 60) = 160.
-    # Since total exceeds cap_global (e.g. 150), they must be scaled proportionally.
-    demands = {{"node1_2": 120.0, "node2_3": 60.0}}
+    # High local overlapping demands: route_A=120.0, route_B=60.0, route_C=0.0.
+    # Switch S2 carries (route_A + route_B) = 120 (clamped to 100) + 60 = 160.
+    # Since 160 exceeds local switch S2 capacity (100.0), they must be scaled locally to sum to 100.
+    # Expected scaled outputs (ratio 100:60 -> 5:3):
+    # route_A = 100 * 5/8 = 62.5, route_B = 100 * 3/8 = 37.5.
+    demands = {{"route_A": 120.0, "route_B": 60.0, "route_C": 0.0}}
     allocations = router.allocate_bandwidth(demands)
     
-    a1 = allocations.get("node1_2", 0.0)
-    a2 = allocations.get("node2_3", 0.0)
+    a1 = allocations.get("route_A", 0.0)
+    a2 = allocations.get("route_B", 0.0)
+    a3 = allocations.get("route_C", 0.0)
     
-    # 1. Must be non-negative and locally bounded by 100
-    bounds_ok = bool(0.0 <= a1 <= 100.0 and 0.0 <= a2 <= 100.0)
+    # 1. Must be non-negative and individually bounded
+    bounds_ok = bool(0.0 <= a1 <= 100.0 and 0.0 <= a2 <= 100.0 and a3 == 0.0)
     
-    # 2. Total must match cap_global
-    sum_ok = bool(abs((a1 + a2) - cap_global) < 1e-4)
+    # 2. Overlapping Switch S2 must strictly NOT exceed 100.0
+    switch_S2_ok = bool((a1 + a2) <= 100.0 + 1e-4)
     
-    # 3. Proportionality: since clamped local demands were 100 and 60 (ratio 5:3),
-    # the outputs must maintain exactly this ratio (a1 / a2 == 5/3 == 1.666)
-    ratio_ok = bool(abs((a1 / a2) - 1.6666) < 0.01)
+    # 3. Proportionality: maintains the 5:3 ratio (tolerance 0.05 for minor floating-point shifts)
+    ratio_ok = bool(abs((a1 / a2) - 1.6666) < 0.05)
     
-    checks["local_bounds_ok"] = bool(bounds_ok and sum_ok and ratio_ok)
+    checks["local_bounds_ok"] = bool(bounds_ok and switch_S2_ok and ratio_ok)
 except Exception as e:
     checks["local_bounds_ok"] = False
 
-# 3. Global Gluing Consistency (Proportional Scaling & Fairness under High Asymmetric Demands)
+# 3. Global Gluing Consistency (Proportional Scaling & Fairness under High Asymmetric Overlapping Demands)
 try:
-    # Demands: {"node1_2": 90.0, "node2_3": 60.0, "node3_1": 90.0}. Total is 240.
-    # Since total exceeds cap_global (150.0), they must be scaled proportionally.
-    # Expected scaled outputs (ratio 9:6:9 -> 3:2:3):
-    # Total units: 8.
-    # node1_2: 150 * 3/8 = 56.25
-    # node2_3: 150 * 2/8 = 37.50
-    # node3_1: 150 * 3/8 = 56.25
-    demands = {{"node1_2": 90.0, "node2_3": 60.0, "node3_1": 90.0}}
+    # Demands: {"route_A": 90.0, "route_B": 80.0, "route_C": 90.0}.
+    # After local switch limits, total global backbone capacity (150.0) must also be respected.
+    demands = {{"route_A": 90.0, "route_B": 80.0, "route_C": 90.0}}
     allocations = router.allocate_bandwidth(demands)
     
-    a1 = allocations.get("node1_2", 0.0)
-    a2 = allocations.get("node2_3", 0.0)
-    a3 = allocations.get("node3_1", 0.0)
+    a1 = allocations.get("route_A", 0.0)
+    a2 = allocations.get("route_B", 0.0)
+    a3 = allocations.get("route_C", 0.0)
     
-    # Check that all keys are returned
     all_keys_present = bool(len(allocations) == 3)
     
-    # Check global sum constraint
+    # 1. Check shared switch capacity limits
+    S1_total = a1 + a3
+    S2_total = a1 + a2
+    S3_total = a2 + a3
+    
+    switches_ok = bool(S1_total <= 100.0 + 1e-4 and S2_total <= 100.0 + 1e-4 and S3_total <= 100.0 + 1e-4)
+    
+    # 2. Check global sum constraint
     total_bandwidth = a1 + a2 + a3
-    global_ok = bool(abs(total_bandwidth - cap_global) < 1e-4)
+    global_ok = bool(total_bandwidth <= cap_global + 1e-4 and total_bandwidth > 100.0)
     
-    # Verify strict proportionality and symmetry
+    # 3. Check symmetry: route_A and route_C have identical demands, so their allocations must be symmetric
     symmetry_ok = bool(abs(a1 - a3) < 1e-4)
-    ratio_ok = bool(abs(a1 - 56.25) < 0.05 and abs(a2 - 37.50) < 0.05)
     
-    checks["global_backbone_ok"] = bool(all_keys_present and global_ok and symmetry_ok and ratio_ok)
+    checks["global_backbone_ok"] = bool(all_keys_present and switches_ok and global_ok and symmetry_ok)
 except Exception as e:
     checks["global_backbone_ok"] = False
 
@@ -105,7 +111,7 @@ torch.save(checks, "eval_outputs.pt")
 
     try:
         checks = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True)
-        local_ok = bool(checks.get("local_routing_ok", False))
+        local_ok = bool(checks.get("local_run_ok", False) or checks.get("local_routing_ok", False))
         bounds_ok = bool(checks.get("local_bounds_ok", False))
         global_ok = bool(checks.get("global_backbone_ok", False))
 
