@@ -66,17 +66,40 @@ try:
 except Exception:
     checks["basic_step"] = False
 
-# 3. Randomized OOD length checks seeded by JUDGE_SEED
+# 3. Randomized OOD length checks seeded by JUDGE_SEED with TraceForensics
 try:
     all_ok = True
+    forensics = None
     for _ in range(15):
         s = "".join(rng.choice(["0", "1"]) for _ in range(string_len))
-        if engine.step(s) != reference_step(s):
+        out = engine.step(s)
+        ref = reference_step(s)
+        if out != ref:
             all_ok = False
+            padded = "0" + s + "0"
+            failed_neighborhoods = set()
+            boundary_fail = None
+            if len(out) != len(s):
+                boundary_fail = f"length mismatch (in={len(s)}, out={len(out)})"
+            else:
+                for i in range(len(s)):
+                    if out[i] != ref[i]:
+                        nb = padded[i:i+3]
+                        failed_neighborhoods.add(f"{nb}->{ref[i]} (got {out[i]})")
+                        if i == 0:
+                            boundary_fail = "left boundary neighborhood"
+                        elif i == len(s) - 1:
+                            boundary_fail = "right boundary neighborhood"
+            forensics = {
+                "failed_rules": sorted(failed_neighborhoods),
+                "boundary_collapse": boundary_fail,
+            }
             break
     checks["randomized_accuracy"] = all_ok
+    checks["forensics"] = forensics
 except Exception:
     checks["randomized_accuracy"] = False
+    checks["forensics"] = None
 
 import json
 with open("eval_outputs.json", "w") as f_out:
@@ -94,10 +117,19 @@ with open("eval_outputs.json", "w") as f_out:
         reg_ok = bool(checks.get("regex_used", False))
         basic_ok = bool(checks.get("basic_step", False))
         acc_ok = bool(checks.get("randomized_accuracy", False))
+        forensics = checks.get("forensics")
 
         mark_check(result, "regex_used", reg_ok)
         mark_check(result, "basic_step", basic_ok)
         mark_check(result, "randomized_accuracy", acc_ok)
+        if forensics:
+            set_metric(result, "trace_forensics", forensics)
+            notes_msg = "Morphism Error Report: "
+            if forensics.get("boundary_collapse"):
+                notes_msg += f"Collapsed on {forensics['boundary_collapse']}. "
+            if forensics.get("failed_rules"):
+                notes_msg += f"Rule transition failed on: {', '.join(forensics['failed_rules'])}."
+            result.setdefault("notes", []).append(notes_msg)
 
         passed = sum([reg_ok, basic_ok, acc_ok])
         accuracy = passed / 3.0

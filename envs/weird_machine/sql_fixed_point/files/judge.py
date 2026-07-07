@@ -66,9 +66,15 @@ try:
     rows = set(cur.fetchall())
     expected = {{(1, 3), (1, 1), (2, 1)}}
     checks["cycle_handling"] = bool(rows == expected)
+    checks["cycle_error"] = None if rows == expected else f"Expected {expected}, got {rows}"
     conn.close()
-except Exception:
+except Exception as e:
     checks["cycle_handling"] = False
+    err_str = str(e).lower()
+    if "recursion" in err_str or "limit" in err_str or "loop" in err_str:
+        checks["cycle_error"] = "INFINITE_RECURSION: query failed to terminate on cyclic graph"
+    else:
+        checks["cycle_error"] = f"SQL Execution Error on cycle: {e}"
 
 # 3. Randomized complex graph reachability seeded by JUDGE_SEED
 try:
@@ -133,6 +139,10 @@ with open("eval_outputs.json", "w") as f_out:
         mark_check(result, "query_is_sql", sql_ok)
         mark_check(result, "cycle_handling", cyc_ok)
         mark_check(result, "randomized_reachability", rand_ok)
+        
+        cycle_error = checks.get("cycle_error")
+        if cycle_error:
+            result.setdefault("notes", []).append(f"Cycle Handling Diagnostic: {cycle_error}")
 
         passed = sum([sql_ok, cyc_ok, rand_ok])
         accuracy = passed / 3.0

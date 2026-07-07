@@ -5,22 +5,25 @@ axes:
       easy:
         "%%MODEL_CLASS%%": "RegexAutomaton"
         "%%MODEL_FILE%%": "regex_machine.py"
+        "%%PERF_COMMENT%%": ""
       medium:
         "%%MODEL_CLASS%%": "PatternTransducer"
         "%%MODEL_FILE%%": "regex_machine.py"
+        "%%PERF_COMMENT%%": ""
       hard:
         "%%MODEL_CLASS%%": "StringValidator"
         "%%MODEL_FILE%%": "regex_machine.py"
+        "%%PERF_COMMENT%%": "\n        # Note: standard regex lookaheads and backreferences can cause O(N^2) backtracking overhead at large state lengths.\n        # Avoid lookarounds if possible to prevent performance collapse.\n"
 
   - id: hidden_depth
     description: "Depth and complexity of generated string states"
     levels:
       easy:
-        "%%STRING_LEN%%": "12"
-      medium:
-        "%%STRING_LEN%%": "20"
-      hard:
         "%%STRING_LEN%%": "32"
+      medium:
+        "%%STRING_LEN%%": "128"
+      hard:
+        "%%STRING_LEN%%": "512"
 
 scoring:
   mode: continuous_accuracy
