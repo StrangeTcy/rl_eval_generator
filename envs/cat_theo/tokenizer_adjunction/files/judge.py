@@ -52,11 +52,13 @@ except Exception:
 # 3. Unit Adjunction Galois Connection (Strict CT Adjunction on randomized strings)
 try:
     # Generate randomized evaluation strings to prevent any static hardcoding hacks
+    rng = random.Random(%%JUDGE_SEED%%)
+    words = ["adjunctions", "are", "functors", "compositionality", "is", "key", "sheaves", "and", "monads", "compose", "random", "sentence", "for", "validation", "🚀", "category", "theory", "functorial", "gluing"]
     test_strings = [
         "adjunctions are functors",
         "compositionality is key",
         "sheaves and monads compose",
-        "random sentence for validation 🚀"
+        " ".join(rng.sample(words, k=5))
     ]
     
     all_adj_ok = True

@@ -1,0 +1,54 @@
+axes:
+  - id: surface_deceptiveness
+    description: "Framing of template task (string formatter vs data structure reducer)"
+    levels:
+      easy:
+        "%%MODEL_CLASS%%": "TemplateInterpreter"
+        "%%MODEL_FILE%%": "template_machine.py"
+      medium:
+        "%%MODEL_CLASS%%": "MacroEvaluator"
+        "%%MODEL_FILE%%": "template_machine.py"
+      hard:
+        "%%MODEL_CLASS%%": "TextRenderer"
+        "%%MODEL_FILE%%": "template_machine.py"
+
+  - id: hidden_depth
+    description: "Input structure depth and recursion complexity"
+    levels:
+      easy:
+        "%%MAX_ITEMS%%": "10"
+      medium:
+        "%%MAX_ITEMS%%": "25"
+      hard:
+        "%%MAX_ITEMS%%": "50"
+
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
+constants:
+  "%%PATCHABLE_FILES%%": '["template_machine.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"jinja2"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/%%MODEL_FILE%%: template_machine.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+
+  judge/judge.py: judge.py

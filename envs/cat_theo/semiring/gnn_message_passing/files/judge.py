@@ -56,8 +56,9 @@ try:
         
     x = torch.arange(1, N * 8 + 1, dtype=torch.float).reshape(N, 8)
     
-    # Generate a random permutation matrix P
-    p_indices = torch.randperm(N)
+    # Generate a random permutation matrix P seeded by JUDGE_SEED
+    g_gen = torch.Generator().manual_seed(%%JUDGE_SEED%%)
+    p_indices = torch.randperm(N, generator=g_gen)
     P = torch.zeros(N, N)
     for i, idx in enumerate(p_indices.tolist()):
         P[i, idx] = 1.0

@@ -26,6 +26,7 @@ sys.path.insert(0, {workdir!r})
 from pipeline import %%MODEL_CLASS%%
 
 pipe = %%MODEL_CLASS%%()
+rng = random.Random(%%JUDGE_SEED%%)
 
 checks = {{}}
 
@@ -39,8 +40,8 @@ except Exception:
 # 2. Global Gluing Consistency (Handles dynamically randomized extreme OOD values)
 try:
     # Use dynamically generated random high limits to prevent piecewise hardcoded hacks
-    x_pos = random.uniform(%%THRESHOLD%%, %%THRESHOLD%% * 10)
-    x_neg = -random.uniform(%%THRESHOLD%%, %%THRESHOLD%% * 10)
+    x_pos = rng.uniform(%%THRESHOLD%%, %%THRESHOLD%% * 10)
+    x_neg = -rng.uniform(%%THRESHOLD%%, %%THRESHOLD%% * 10)
     out_pos = pipe.compose_pipeline(x_pos)
     out_neg = pipe.compose_pipeline(x_neg)
     
@@ -51,11 +52,11 @@ except Exception:
 # 3. Monotonicity & Anti-Gaming Verification (Ensures math order invariants are preserved)
 try:
     # Generate 5 strictly ascending random points across the dynamic range
-    p1 = random.uniform(-1000.0, -10.0)
-    p2 = random.uniform(-9.0, -0.1)
+    p1 = rng.uniform(-1000.0, -10.0)
+    p2 = rng.uniform(-9.0, -0.1)
     p3 = 0.0
-    p4 = random.uniform(0.1, 9.0)
-    p5 = random.uniform(10.0, 1000.0)
+    p4 = rng.uniform(0.1, 9.0)
+    p5 = rng.uniform(10.0, 1000.0)
     test_points = [p1, p2, p3, p4, p5]
     
     outputs = [pipe.compose_pipeline(pt) for pt in test_points]

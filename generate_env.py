@@ -38,6 +38,8 @@ def load_config(env_name: str) -> dict:
     if not config_path.is_file():
         config_path = Path("envs") / "cat_theo" / "sheaf" / env_name / "config.yaml"
     if not config_path.is_file():
+        config_path = Path("envs") / "weird_machine" / env_name / "config.yaml"
+    if not config_path.is_file():
         print(f"ERROR: Config not found at {config_path}")
         sys.exit(1)
     with config_path.open(encoding="utf-8") as f:
@@ -206,6 +208,8 @@ def generate_env(
         files_dir = Path("envs") / "cat_theo" / "semiring" / env_name / "files"
     if not files_dir.is_dir():
         files_dir = Path("envs") / "cat_theo" / "sheaf" / env_name / "files"
+    if not files_dir.is_dir():
+        files_dir = Path("envs") / "weird_machine" / env_name / "files"
 
     validate_config(config, files_dir, env_name)
 
@@ -355,6 +359,9 @@ Examples:
         env_path = envs_root / args.env
     if not env_path.is_dir():
         envs_root = Path("envs") / "cat_theo" / "sheaf"
+        env_path = envs_root / args.env
+    if not env_path.is_dir():
+        envs_root = Path("envs") / "weird_machine"
         env_path = envs_root / args.env
 
     if not env_path.is_dir():

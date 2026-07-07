@@ -10,12 +10,15 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 *   **Paper-to-Code & Stateful Investigation:** `rope`
 *   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (17 environments)
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
+*   **Latent Substrate & Weird Machine Discovery:** `weird_machine/*` (6 environments)
+    > *These tasks evaluate whether agents can recognize and exploit latent computational power in substrates whose surface semantics present them as non-programming artifacts.*
 
 ### Recommended Entry Points
 
 *   **MoCo** for testing realistic, multi-file ML debugging.
 *   **RoPE** for testing paper-to-implementation reading and offset calculations.
 *   **tensor_functor** or **equivariant_diagram** (in `envs/cat_theo/`) to test category-theoretic compositionality.
+*   **sql_fixed_point** or **regex_state_machine** (in `envs/weird_machine/`) to test recognizing and exploiting latent computational substrates.
 
 ---
 
@@ -137,6 +140,17 @@ A specialized suite of 17 environments targeting compositional reasoning, algebr
     16. `sheaf_invariant_gluing`: Constructing compositional data-preprocessing boundaries that resist out-of-distribution cascades.
     17. `sheaf_physical_constraints`: Building a distributed network-topology traffic scheduler that respects global backbone bandwidth constraints.
 
+### Latent Substrate & Weird Machine Environments (`envs/weird_machine/`)
+
+A suite of 6 environments targeting unintended expressivity and cross-substrate compilation. These environments test whether an agent can infer and exploit latent computational structure in substrates whose surface semantics present them as non-programming artifacts:
+
+1. `regex_state_machine`: Implementing synchronous steps of the Rule 110 cellular automaton via regular expression substitution rewriting without host loops.
+2. `sql_fixed_point`: Computing graph reachability and transitive closure over arbitrary cyclic graphs using pure recursive relational SQL queries.
+3. `spreadsheet_dataflow`: Encoding dynamic programming paths as declarative spreadsheet cell formula dependency graphs.
+4. `css_state_machine`: Constructing boolean logic circuits and parity evaluators using pure CSS general sibling combinators and state pseudo-classes.
+5. `template_interpreter`: Decoding run-length structured data by leveraging template macro loop and conditional evaluation semantics.
+6. `ci_dependency_graph`: Scheduling execution layers and topological dependencies across continuous integration pipeline workflows.
+
 ---
 
 ## Repository layout &amp; generation
@@ -157,16 +171,17 @@ rl_eval_generator/
 │   ├── batchnorm_ema/
 │   ├── moco/
 │   ├── rope/
-│   └── cat_theo/
-│       ├── <individual_ct_envs>/
-│       ├── semiring/
-│       │   ├── gnn_message_passing/
-│       │   ├── ssm_parallel_scan/
-│       │   └── neuro_symbolic_parser/
-│       └── sheaf/
-│           ├── sheaf_schema_sync/
-│           ├── sheaf_invariant_gluing/
-│           └── sheaf_physical_constraints/
+│   ├── cat_theo/
+│   │   ├── <individual_ct_envs>/
+│   │   ├── semiring/
+│   │   └── sheaf/
+│   └── weird_machine/
+│       ├── regex_state_machine/
+│       ├── sql_fixed_point/
+│       ├── spreadsheet_dataflow/
+│       ├── css_state_machine/
+│       ├── template_interpreter/
+│       └── ci_dependency_graph/
 ├── tests/
 └── .github/workflows/ci.yml
 ```

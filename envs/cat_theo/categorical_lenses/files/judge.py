@@ -30,9 +30,10 @@ lens = %%MODEL_CLASS%%()
 checks = {{}}
 
 # Dynamically randomize state and feature inputs to prevent static hardcoding/overfitting hacks
-s = (random.uniform(-100.0, 100.0), random.uniform(-100.0, 100.0))
-a = random.uniform(-100.0, 100.0)
-a_prime = random.uniform(-100.0, 100.0)
+rng = random.Random(%%JUDGE_SEED%%)
+s = (rng.uniform(-100.0, 100.0), rng.uniform(-100.0, 100.0))
+a = rng.uniform(-100.0, 100.0)
+a_prime = rng.uniform(-100.0, 100.0)
 
 # 1. Put-Get Law: view(update(s, a)) == a
 try:

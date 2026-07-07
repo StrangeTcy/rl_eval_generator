@@ -1,0 +1,54 @@
+axes:
+  - id: surface_deceptiveness
+    description: "Framing of CSS task (visual stylesheet vs boolean logic circuit)"
+    levels:
+      easy:
+        "%%MODEL_CLASS%%": "CSSLogicEngine"
+        "%%MODEL_FILE%%": "css_logic.py"
+      medium:
+        "%%MODEL_CLASS%%": "StylesheetTransducer"
+        "%%MODEL_FILE%%": "css_logic.py"
+      hard:
+        "%%MODEL_CLASS%%": "VisualSelectorRules"
+        "%%MODEL_FILE%%": "css_logic.py"
+
+  - id: hidden_depth
+    description: "Number of input bits and logical complexity"
+    levels:
+      easy:
+        "%%NUM_BITS%%": "3"
+      medium:
+        "%%NUM_BITS%%": "4"
+      hard:
+        "%%NUM_BITS%%": "5"
+
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
+constants:
+  "%%PATCHABLE_FILES%%": '["css_logic.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '""'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/%%MODEL_FILE%%: css_logic.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh
+
+  judge/judge.py: judge.py
