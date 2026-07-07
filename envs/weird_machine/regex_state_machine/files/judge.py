@@ -42,18 +42,27 @@ def reference_step(s: str) -> str:
 rng = random.Random(%%JUDGE_SEED%%)
 string_len = int("%%STRING_LEN%%")
 
-# 1. AST Check: verify regex mechanisms are used rather than raw character indexing loops
+# 1. AST Check: verify regex mechanisms are used and reject host-language indexing/loops over characters
 try:
     with open(os.path.join({workdir!r}, "regex_machine.py"), "r", encoding="utf-8") as f:
         tree = ast.parse(f.read())
-    # Check if 're' module calls or regex methods are present
     re_found = False
+    forbidden_indexing = False
+    forbidden_loop = False
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and getattr(node.value, "id", "") == "re":
             re_found = True
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in ("sub", "subn", "finditer", "findall", "match", "search"):
             re_found = True
-    checks["regex_used"] = re_found
+            
+        if isinstance(node, ast.FunctionDef) and node.name == "step":
+            arg_names = {{arg.arg for arg in node.args.args}}
+            for subnode in ast.walk(node):
+                if isinstance(subnode, ast.Subscript) and isinstance(subnode.value, ast.Name) and subnode.value.id in arg_names:
+                    forbidden_indexing = True
+                if isinstance(subnode, ast.For) and isinstance(subnode.iter, ast.Call) and isinstance(subnode.iter.func, ast.Name) and subnode.iter.func.id == "range":
+                    forbidden_loop = True
+    checks["regex_used"] = bool(re_found and not forbidden_indexing and not forbidden_loop)
 except Exception:
     checks["regex_used"] = False
 
@@ -66,38 +75,43 @@ try:
 except Exception:
     checks["basic_step"] = False
 
-# 3. Randomized OOD length checks seeded by JUDGE_SEED with TraceForensics
+# 3. Randomized length preservation & OOD accuracy checks seeded by JUDGE_SEED with TraceForensics
 try:
+    test_strings = ["".join(rng.choice(["0", "1"]) for _ in range(string_len)) for _ in range(15)]
+    length_ok = True
     all_ok = True
     forensics = None
-    for _ in range(15):
-        s = "".join(rng.choice(["0", "1"]) for _ in range(string_len))
+    for s in test_strings:
         out = engine.step(s)
         ref = reference_step(s)
+        if len(out) != len(s):
+            length_ok = False
         if out != ref:
             all_ok = False
             padded = "0" + s + "0"
             failed_neighborhoods = set()
             boundary_fail = None
             if len(out) != len(s):
-                boundary_fail = f"length mismatch (in={len(s)}, out={len(out)})"
+                boundary_fail = f"length mismatch (in={{len(s)}}, out={{len(out)}})"
             else:
                 for i in range(len(s)):
                     if out[i] != ref[i]:
                         nb = padded[i:i+3]
-                        failed_neighborhoods.add(f"{nb}->{ref[i]} (got {out[i]})")
+                        failed_neighborhoods.add(f"{{nb}}->{{ref[i]}} (got {{out[i]}})")
                         if i == 0:
                             boundary_fail = "left boundary neighborhood"
                         elif i == len(s) - 1:
                             boundary_fail = "right boundary neighborhood"
-            forensics = {
-                "failed_rules": sorted(failed_neighborhoods),
-                "boundary_collapse": boundary_fail,
-            }
-            break
+            if forensics is None:
+                forensics = {
+                    "failed_rules": sorted(failed_neighborhoods),
+                    "boundary_collapse": boundary_fail,
+                }
+    checks["length_preservation"] = length_ok
     checks["randomized_accuracy"] = all_ok
     checks["forensics"] = forensics
 except Exception:
+    checks["length_preservation"] = False
     checks["randomized_accuracy"] = False
     checks["forensics"] = None
 
@@ -116,11 +130,13 @@ with open("eval_outputs.json", "w") as f_out:
             checks = json.load(f_in)
         reg_ok = bool(checks.get("regex_used", False))
         basic_ok = bool(checks.get("basic_step", False))
+        len_ok = bool(checks.get("length_preservation", False))
         acc_ok = bool(checks.get("randomized_accuracy", False))
         forensics = checks.get("forensics")
 
         mark_check(result, "regex_used", reg_ok)
         mark_check(result, "basic_step", basic_ok)
+        mark_check(result, "length_preservation", len_ok)
         mark_check(result, "randomized_accuracy", acc_ok)
         if forensics:
             set_metric(result, "trace_forensics", forensics)
@@ -131,8 +147,8 @@ with open("eval_outputs.json", "w") as f_out:
                 notes_msg += f"Rule transition failed on: {', '.join(forensics['failed_rules'])}."
             result.setdefault("notes", []).append(notes_msg)
 
-        passed = sum([reg_ok, basic_ok, acc_ok])
-        accuracy = passed / 3.0
+        passed = sum([reg_ok, basic_ok, len_ok, acc_ok])
+        accuracy = passed / 4.0
         result["training_completed"] = True
         result["model_saved"] = True
         

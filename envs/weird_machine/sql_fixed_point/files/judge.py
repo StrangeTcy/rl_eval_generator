@@ -76,7 +76,25 @@ except Exception as e:
     else:
         checks["cycle_error"] = f"SQL Execution Error on cycle: {e}"
 
-# 3. Randomized complex graph reachability seeded by JUDGE_SEED
+# 3. Reflexive vs Strictly Positive 1+ Hop Reachability Check
+try:
+    conn = sqlite3.connect(":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE edges (src INTEGER, dst INTEGER)")
+    cur.execute("CREATE TABLE queries (start INTEGER, target INTEGER)")
+    cur.executemany("INSERT INTO edges VALUES (?, ?)", [(1, 2), (3, 3)])
+    cur.executemany("INSERT INTO queries VALUES (?, ?)", [(1, 1), (3, 3), (1, 2)])
+    conn.commit()
+    
+    cur.execute(query)
+    rows = set(cur.fetchall())
+    expected = {{(3, 3), (1, 2)}}
+    checks["reflexive_semantics"] = bool(rows == expected)
+    conn.close()
+except Exception:
+    checks["reflexive_semantics"] = False
+
+# 4. Randomized complex graph reachability seeded by JUDGE_SEED
 try:
     rng = random.Random(%%JUDGE_SEED%%)
     chain_len = int("%%CHAIN_LEN%%")
@@ -134,18 +152,20 @@ with open("eval_outputs.json", "w") as f_out:
             checks = json.load(f_in)
         sql_ok = bool(checks.get("query_is_sql", False))
         cyc_ok = bool(checks.get("cycle_handling", False))
+        refl_ok = bool(checks.get("reflexive_semantics", False))
         rand_ok = bool(checks.get("randomized_reachability", False))
 
         mark_check(result, "query_is_sql", sql_ok)
         mark_check(result, "cycle_handling", cyc_ok)
+        mark_check(result, "reflexive_semantics", refl_ok)
         mark_check(result, "randomized_reachability", rand_ok)
         
         cycle_error = checks.get("cycle_error")
         if cycle_error:
             result.setdefault("notes", []).append(f"Cycle Handling Diagnostic: {cycle_error}")
 
-        passed = sum([sql_ok, cyc_ok, rand_ok])
-        accuracy = passed / 3.0
+        passed = sum([sql_ok, cyc_ok, refl_ok, rand_ok])
+        accuracy = passed / 4.0
         result["training_completed"] = True
         result["model_saved"] = True
         
