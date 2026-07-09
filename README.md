@@ -1,5 +1,7 @@
 # Frontier ML Evaluation Environments
 
+[![CI](https://github.com/StrangeTcy/rl_eval_generator/actions/workflows/ci.yml/badge.svg)](https://github.com/StrangeTcy/rl_eval_generator/actions/workflows/ci.yml)
+
 Procedurally generated ML debugging environments for evaluating whether AI agents can reason about machine-learning systems, rather than merely retrieving familiar fixes.
 
 The generator creates self-contained, Dockerized evaluation tasks. Each task presents an agent with a realistic codebase that runs, trains, and often appears superficially healthy, but fails because of subtle interactions between architecture, data, optimization, and stateful training behavior.
@@ -19,6 +21,23 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 *   **RoPE** for testing paper-to-implementation reading and offset calculations.
 *   **tensor_functor** or **equivariant_diagram** (in `envs/cat_theo/`) to test category-theoretic compositionality.
 *   **sql_fixed_point** or **regex_state_machine** (in `envs/weird_machine/`) to test recognizing and exploiting latent computational substrates.
+
+---
+
+## Quick Start
+
+See [GETTING_STARTED.md](GETTING_STARTED.md) for a 5-minute guide from clone to first evaluation.
+
+```bash
+# Install and verify
+pip install -r requirements.txt
+pytest -q
+
+# Generate and run a simple environment
+python generate_env.py --env glyph --name glyph_test --difficulty easy,easy,easy,easy,easy,easy --seed 42
+cd glyph_test
+./run_eval.sh
+```
 
 ---
 
@@ -385,6 +404,24 @@ pytest -q
 The tests verify that configs parse, path traversal and unresolved placeholders
 are rejected, every environment generates, and generated Python compiles with no
 leftover placeholders.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding new environments, reporting issues, and improving the codebase.
+
+---
+
+## Releases
+
+Stable releases are tagged on GitHub. To pin to a specific version:
+
+```bash
+git checkout v0.1.0  # Example: check out a tagged release
+```
+
+For the latest features, use the `main` branch. See [GitHub Releases](https://github.com/StrangeTcy/rl_eval_generator/releases) for changelogs.
 
 ---
 
