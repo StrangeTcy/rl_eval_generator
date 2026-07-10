@@ -14,19 +14,28 @@ from judge_lib import (FAILURE_ARTIFACT_MISSING, FAILURE_REWARD_DENIAL, FAILURE_
 PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
 PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
 JUDGE_SEED = int(os.environ.get("JUDGE_SEED", "0"))
+# SEED_OFFSET: Large prime used to derive a different random seed for evaluation data.
+# This ensures evaluation data differs from training data even when JUDGE_SEED is small.
+# Using a large prime reduces the chance of accidental collisions with training seeds.
 SEED_OFFSET = 900719925474099
 K = %%K%%
 
-# Behavioral probe executed inside the patched workspace. It extracts held-out
-# features and runs targeted subchecks (temperature sensitivity, queue
-# wraparound) so the judge can attribute failures to distinct causes rather than
-# only reporting final accuracy.
-PROBE_SOURCE = '''
-import sys, torch
-sys.path.insert(0, {workdir!r})
-from {model_module} import {model_class} as Model
+# Write probe as a standalone module instead of using string formatting.
+# This avoids code injection vulnerabilities from .format() with untrusted values.
+PROBE_MODULE_TEMPLATE = '''import sys
+import torch
 
-model = Model(dim=16, K={K})
+# Configuration passed via command-line arguments, not string interpolation
+workdir = sys.argv[1]
+model_module_name = sys.argv[2]
+model_class_name = sys.argv[3]
+K_value = int(sys.argv[4])
+
+sys.path.insert(0, workdir)
+model_module = __import__(model_module_name)
+Model = getattr(model_module, model_class_name)
+
+model = Model(dim=16, K=K_value)
 model.load_state_dict(torch.load("ckpt.pt", weights_only=True, map_location="cpu"), strict=False)
 model.eval()
 
@@ -35,8 +44,6 @@ test_in = torch.load("eval_test_inputs.pt", weights_only=True)
 
 with torch.no_grad():
     # --- temperature sensitivity ---------------------------------------
-    # If the temperature divides a quantity that is then re-normalized, tau
-    # cancels and changing it has no effect on the encoder output.
     tau_ok = False
     for attr in ["tau", "temp", "temperature", "t"]:
         if hasattr(model, attr):
@@ -54,16 +61,14 @@ with torch.no_grad():
                     pass
 
     # --- queue wraparound ----------------------------------------------
-    # enqueue_keys must wrap when ptr + batch crosses K: tail keys land at the
-    # end, the overflow wraps to the front, and ptr advances modulo K.
     queue_wrap_ok = False
     try:
         from queue_ops import enqueue_keys
         dim, k = 4, 10
         queue = torch.zeros(dim, k)
         ptr = torch.zeros(1, dtype=torch.long)
-        ptr[0] = 8  # near the end
-        n = 4       # crosses the boundary (8,9 then wrap to 0,1)
+        ptr[0] = 8
+        n = 4
         keys = torch.arange(1, n * dim + 1, dtype=torch.float).reshape(n, dim)
         enqueue_keys(queue, ptr, keys)
         tail_ok = torch.allclose(queue[:, 8], keys[0]) and torch.allclose(queue[:, 9], keys[1])
@@ -76,7 +81,7 @@ with torch.no_grad():
     train_f = model.encoder_q(train_in)
     test_f = model.encoder_q(test_in)
 
-torch.save({{"train": train_f, "test": test_f, "tau_ok": tau_ok, "queue_wrap_ok": queue_wrap_ok}}, "eval_outputs.pt")
+torch.save({"train": train_f, "test": test_f, "tau_ok": tau_ok, "queue_wrap_ok": queue_wrap_ok}, "eval_outputs.pt")
 '''
 
 
@@ -124,11 +129,18 @@ def main() -> None:
     mark_check(result, "artifact_found")
     scrub_workdir(workdir, original_files, {"ckpt.pt"})
     train_labels, test_labels = generate_evaluation_data(workdir)
+    
+    # Write probe as a standalone file and pass config via argv
+    # This is safer than string formatting which could have code injection
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
-        f.write(PROBE_SOURCE.format(workdir=workdir, model_module="%%MODEL_MODULE%%",
-                                    model_class="%%MODEL_CLASS%%", K=K))
-    ep = run([sys.executable, eval_script], workdir, 120, eval_env())
+        f.write(PROBE_MODULE_TEMPLATE)
+    
+    # Pass configuration as command-line arguments
+    ep = run([
+        sys.executable, eval_script, workdir, "%%MODEL_MODULE%%", "%%MODEL_CLASS%%", str(K)
+    ], workdir, 120, eval_env())
+    
     if ep.returncode != 0:
         set_failure(result, FAILURE_RUNTIME_ERROR, "Evaluation failed:\n" + ep.stderr[-500:])
         emit(result)

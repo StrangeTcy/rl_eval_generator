@@ -20,28 +20,33 @@ TOTAL_HIDDEN_CHECKS = %%SCORING_TOTAL_CHECKS%%
 HIDDEN_LONG_SEQ = %%HIDDEN_LONG_SEQ%%
 HIDDEN_OFFSET = %%HIDDEN_OFFSET%%
 JUDGE_SEED = int(os.environ.get("JUDGE_SEED", "0"))
+# SEED_OFFSET: Large prime used to derive a different random seed for evaluation data.
+# This ensures evaluation data differs from training data even when JUDGE_SEED is small.
 SEED_OFFSET = 900719925474099
 
-# The behavioral probe runs inside the patched workspace (which imports the
-# agent's rope.py / attention.py / cache.py) and writes a JSON-like dict of the
-# individual check outcomes to eval_outputs.pt.
-PROBE_SOURCE = '''
-import math
-import sys, torch
-sys.path.insert(0, {workdir!r})
-torch.manual_seed({seed})
+# Write probe as a standalone module instead of using string formatting.
+# This avoids code injection vulnerabilities from .format() with untrusted values.
+PROBE_MODULE_TEMPLATE = '''import math
+import sys
+import torch
+
+# Configuration passed via command-line arguments, not string interpolation
+workdir = sys.argv[1]
+seed_value = int(sys.argv[2])
+long_seq_value = int(sys.argv[3])
+
+sys.path.insert(0, workdir)
+torch.manual_seed(seed_value)
 
 from rope import RotaryEmbedding
 from attention import RotaryFeatureProjector
 from cache import PositionCache
 from model import TinyRoPEModel
 
-checks = {{}}
+checks = {}
 notes = []
 
 # --- check: rope_pairing -------------------------------------------------
-# Adjacent-coordinate rotation must preserve the per-pair norm. The buggy
-# first-half/second-half helper does not.
 try:
     rope = RotaryEmbedding(dim=8)
     x = torch.randn(2, 2, 6, 8)
@@ -55,15 +60,12 @@ except Exception as exc:
     notes.append("rope_pairing_error: " + repr(exc))
 
 # --- check: rope_offset --------------------------------------------------
-# apply_rope must honor the absolute offset. Encoding a token at position p via
-# offset must equal encoding it via an explicit positions tensor [p].
 try:
     rope = RotaryEmbedding(dim=8)
     x = torch.randn(1, 1, 3, 8)
     via_offset = rope.apply_rope(x, offset=5)
     via_positions = rope.apply_rope(x, positions=torch.arange(5, 5 + 3))
     offset_ok = bool(torch.allclose(via_offset, via_positions, atol=1e-4))
-    # And a nonzero offset must actually change the result.
     moved = not torch.allclose(rope.apply_rope(x, offset=0), via_offset, atol=1e-4)
     offset_ok = offset_ok and moved
     checks["rope_offset"] = offset_ok
@@ -74,7 +76,6 @@ except Exception as exc:
     notes.append("rope_offset_error: " + repr(exc))
 
 # --- check: cache_state --------------------------------------------------
-# PositionCache must report the running token count and advance on append.
 try:
     cache = PositionCache()
     s0 = cache.position_offset()
@@ -91,10 +92,6 @@ except Exception as exc:
     notes.append("cache_state_error: " + repr(exc))
 
 # --- check: attention_offset_propagated ----------------------------------
-# The chunked attention path must read the cache offset. We detect this by
-# checking that a second chunk is encoded with a nonzero absolute offset, i.e.
-# processing [chunk0, chunk1] chunked matches processing the same tokens whole
-# *for the second chunk only* (which is the part that depends on the offset).
 try:
     proj = RotaryFeatureProjector(dim=8, heads=2)
     proj.eval()
@@ -104,8 +101,6 @@ try:
         cache = PositionCache()
         q_c0, _ = proj.apply_chunk(x[:, :4], cache)
         q_c1, _ = proj.apply_chunk(x[:, 4:], cache)
-    # Second chunk under chunking must match the corresponding slice of the full
-    # pass; this only holds if apply_chunk used the cache offset (=4).
     prop_ok = bool(torch.allclose(q_c1, q_full[:, :, 4:], atol=1e-4))
     checks["attention_offset_propagated"] = prop_ok
     if not prop_ok:
@@ -115,13 +110,10 @@ except Exception as exc:
     notes.append("attention_offset_error: " + repr(exc))
 
 # --- check: chunked_equals_full (long-context integration) ----------------
-# The end-to-end property: chunked decoding over a long sequence must match the
-# single full pass. This is the integrating check and also exercises the
-# configured long-sequence / offset severity.
 try:
     model = TinyRoPEModel(dim=8, heads=2)
     model.eval()
-    seq = {long_seq}
+    seq = long_seq_value
     x = torch.randn(1, seq, 8)
     with torch.no_grad():
         q_full, k_full = model.forward_full(x)
@@ -136,7 +128,7 @@ except Exception as exc:
     checks["chunked_equals_full"] = False
     notes.append("chunked_equivalence_error: " + repr(exc))
 
-torch.save({{"checks": checks, "notes": notes}}, "eval_outputs.pt")
+torch.save({"checks": checks, "notes": notes}, "eval_outputs.pt")
 '''
 
 
@@ -166,8 +158,11 @@ def main() -> None:
 
     probe_path = os.path.join(workdir, "_eval_runner.py")
     with open(probe_path, "w", encoding="utf-8") as f:
-        f.write(PROBE_SOURCE.format(workdir=workdir, seed=JUDGE_SEED + SEED_OFFSET,
-                                    long_seq=HIDDEN_LONG_SEQ, offset=HIDDEN_OFFSET))
+        f.write(PROBE_MODULE_TEMPLATE)
+    ep = run([
+        sys.executable, probe_path, workdir, 
+        str(JUDGE_SEED + SEED_OFFSET), str(HIDDEN_LONG_SEQ)
+    ], workdir, 180, eval_env())
     ep = run([sys.executable, probe_path], workdir, 180, eval_env())
     if ep.returncode != 0:
         set_failure(result, FAILURE_RUNTIME_ERROR, "Behavioral probe failed:\n" + ep.stderr[-1000:])

@@ -1,4 +1,20 @@
-"""AST-level integrity validation — allowlist approach."""
+"""AST-level integrity validation — allowlist approach.
+
+NOTE: This is NOT a security sandbox. Docker container isolation is the
+actual security boundary. This validator provides defense-in-depth by:
+1. Catching obvious import allowlist violations (disallowed modules)
+2. Catching direct use of dangerous builtins (eval, exec, compile, etc.)
+
+However, it CAN be bypassed by determined attackers using:
+- getattr(__builtins__, 'exec')(code)
+- __builtins__['eval'](code)
+- __import__('o' + 'pen')(...)
+- type.__subclasses__(int) introspection
+
+The container's read-only filesystem, dropped capabilities, and no-network
+policy are the real protections. This validator is for catching accidental
+violations and making gaming attempts slightly harder.
+"""
 import ast
 import os
 import sys
@@ -91,6 +107,8 @@ if __name__ == "__main__":
         print("VIOLATIONS:")
         for v in violations:
             print(f"  {v}")
+        print("\nNOTE: This validator is NOT a security sandbox. Docker isolation is.")
+        print("Some bypasses (getattr, string concat, etc.) are not caught here.")
         sys.exit(1)
     print("OK: all imports on allowlist, no banned names found")
     sys.exit(0)
