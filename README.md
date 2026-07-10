@@ -388,9 +388,9 @@ history of tool calls, warnings, and dead ends.
 **Limits.** This is not a formally verified sandbox; treat it as an evaluation
 harness, not a secure arbitrary-code platform. Some correct fixes are known ML
 patterns (e.g. swapping flatten for global pooling in `glyph`) that interacting
-bugs and naming abstraction discourage but cannot fully eliminate. The
-Dockerfiles use CPU-only PyTorch, so hard CIFAR-based variants are slow on modest
-hardware.
+bugs and naming abstraction discourage but cannot fully eliminate. The default
+Dockerfiles use CPU-only PyTorch. For GPU acceleration, use `shared/Dockerfile.gpu`
+which installs CUDA-enabled PyTorch via a build argument (`ARG TORCH_INDEX`).
 
 ---
 

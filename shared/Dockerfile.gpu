@@ -1,0 +1,31 @@
+# GPU-enabled Dockerfile for rl_eval_generator
+# Use this for environments that require CUDA (CIFAR-based, large models)
+# Build with: docker build -t rl_eval_generator:gpu -f shared/Dockerfile.gpu .
+
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PyTorch with CUDA
+# To use a specific CUDA version, change the index URL
+# For CUDA 12.1: https://download.pytorch.org/whl/cu121
+# For CUDA 11.8: https://download.pytorch.org/whl/cu118
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cu121
+RUN pip install torch torchvision --index-url $TORCH_INDEX
+
+# Install other dependencies
+RUN pip install PyYAML
+
+# Create agent user
+RUN useradd -m agent && useradd -m judge
+
+# Set up workspace
+WORKDIR /workspace
+
+# Copy shared files
+COPY shared/ /shared/
+
+# The entrypoint will be set by the generated run_eval.sh
