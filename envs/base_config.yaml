@@ -1,0 +1,56 @@
+# Base configuration with common layout for all environments.
+# Environments can inherit from this by including these entries in their own config.
+# This reduces boilerplate and ensures consistency across environments.
+
+# Common layout entries for all environments
+# Each environment should include these in their layout section:
+#
+# layout:
+#   # Agent workspace files (environment-specific)
+#   agent/workspace/prompt.md: prompt.md
+#   agent/workspace/model.py: model.py
+#   ...
+#   
+#   # Shared tools (common to all environments)
+#   agent/tools/submit.py: shared/submit.py
+#   agent/tools/tool_state.py: shared/tool_state.py
+#   agent/tools/run_train.py: shared/run_train.py
+#   agent/tools/run_eval.py: shared/run_eval.py
+#   agent/tools/inspect_logs.py: shared/inspect_logs.py
+#   
+#   # Docker files (common to all environments)
+#   agent/Dockerfile: shared/Dockerfile.agent
+#   agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+#   
+#   # Judge files (common to all environments)
+#   judge/judge_lib.py: shared/judge_lib.py
+#   judge/patch_validator.py: shared/patch_validator.py
+#   judge/source_validator.py: shared/source_validator.py
+#   judge/Dockerfile: shared/Dockerfile.judge
+#   
+#   # Entry script (common to all environments)
+#   run_eval.sh: shared/run_eval.sh
+#   
+#   # Environment-specific judge
+#   judge/judge.py: judge.py
+
+# Common constants for all environments
+# Each environment should define these in their constants section:
+#
+# constants:
+#   "%%PATCHABLE_FILES%%": '["model.py", "train.py"]'
+#   "%%EXTRA_ALLOWED_IMPORTS%%": '"model", "train"'
+
+# Common scoring configuration
+# Each environment should have a scoring section like:
+#
+# scoring:
+#   mode: continuous_accuracy  # or check_fraction
+#   pass_threshold: 0.85
+#   partial_threshold: 0.60
+#   # For check_fraction mode:
+#   total_checks: 5
+
+# Common static files
+# These files should not have placeholders replaced (they use static substitution)
+# static_files: []

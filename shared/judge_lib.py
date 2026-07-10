@@ -19,9 +19,21 @@ JUDGE_DIR = os.path.dirname(os.path.abspath(__file__))
 PATCHABLE = %%PATCHABLE_FILES%%
 PATCHABLE_SET = set(PATCHABLE)
 
+# Max checkpoint size: 150 MB. This limits the size of model checkpoints to prevent
+# memory exhaustion attacks via extremely large models. Chosen to accommodate
+# typical ResNet-scale models while preventing abuse.
 MAX_CHECKPOINT_BYTES = 150 * 1024 * 1024
+
+# Max number of tensors in a checkpoint state dict. Limits model complexity.
+# 500 tensors allows for large models (e.g., ResNet-50 has ~160 weight tensors)
+# while preventing state dicts with millions of tiny tensors.
 MAX_STATE_TENSORS = 500
+
+# Max total elements across all tensors in checkpoint. ~200M parameters at float32.
+# This prevents checkpoints with billions of parameters that would exhaust memory.
 MAX_STATE_ELEMENTS = 50_000_000
+
+# Max elements in model output. Prevents models from returning huge tensors.
 MAX_OUTPUT_ELEMENTS = 20_000_000
 
 FAILURE_PASS = "pass"
