@@ -10,6 +10,10 @@ from PIL import Image, ImageDraw
 IMG_SIZE = %%IMG_SIZE%%
 NUM_CLASSES = 10
 
+# Seed the random generator for reproducible data generation
+# This ensures different episodes with different seeds have different data
+random.seed(%%SEED%%)
+
 %%CLASS_DEF_BLOCK%%
 
 

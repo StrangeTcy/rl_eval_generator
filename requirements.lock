@@ -1,0 +1,6 @@
+# Pinned dependencies for reproducible builds
+# Generated from: pip freeze
+# To update: pip install -r requirements.txt && pip freeze > requirements.lock
+
+PyYAML==6.0.2
+pytest==9.0.3
