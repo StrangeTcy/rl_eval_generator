@@ -16,7 +16,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 try:
     import yaml
@@ -26,10 +26,69 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Config loading and validation
+# Environment Registry
 # ---------------------------------------------------------------------------
 
+_REGISTRY: Optional[Dict[str, str]] = None
+
+
+def _load_registry() -> Dict[str, str]:
+    """Load environment registry from envs/registry.yaml."""
+    global _REGISTRY
+    if _REGISTRY is not None:
+        return _REGISTRY
+    registry_path = Path("envs") / "registry.yaml"
+    if not registry_path.is_file():
+        # Fallback: build registry by scanning for config.yaml files
+        _REGISTRY = _build_registry_from_filesystem()
+    else:
+        with registry_path.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+            _REGISTRY = {}
+            for env_name, config_path in data.get("environments", {}).items():
+                _REGISTRY[env_name] = config_path
+    return _REGISTRY
+
+
+def _build_registry_from_filesystem() -> Dict[str, str]:
+    """Build registry by scanning for config.yaml files under envs/."""
+    registry: Dict[str, str] = {}
+    envs_dir = Path("envs")
+    if not envs_dir.is_dir():
+        return registry
+    for config_path in envs_dir.rglob("config.yaml"):
+        # config_path is like: envs/glyph/config.yaml or envs/cat_theo/tensor_functor/config.yaml
+        # We want the env name to be the directory name containing config.yaml
+        config_dir = config_path.parent
+        # Remove the envs/ prefix
+        relative = config_dir.relative_to(envs_dir)
+        env_name = str(relative).replace("\\", "/").replace("/", "_")
+        # But also register with the actual directory structure
+        registry[env_name] = str(config_path)
+        # Also register with the nested path for backwards compatibility
+        parts = list(relative.parts)
+        if len(parts) > 0:
+            registry[parts[-1]] = str(config_path)
+    return registry
+
+
+def resolve_env_path(env_name: str) -> Optional[Path]:
+    """Resolve an environment name to its config.yaml path using the registry."""
+    registry = _load_registry()
+    if env_name in registry:
+        return Path(registry[env_name])
+    return None
+
+
 def load_config(env_name: str) -> dict:
+    """Load environment config, using registry-based lookup."""
+    # Try registry first
+    config_path = resolve_env_path(env_name)
+    if config_path is not None and config_path.is_file():
+        with config_path.open(encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    
+    # Fallback to old hardcoded chain for backwards compatibility
     config_path = Path("envs") / env_name / "config.yaml"
     if not config_path.is_file():
         config_path = Path("envs") / "cat_theo" / env_name / "config.yaml"
@@ -40,10 +99,33 @@ def load_config(env_name: str) -> dict:
     if not config_path.is_file():
         config_path = Path("envs") / "weird_machine" / env_name / "config.yaml"
     if not config_path.is_file():
-        print(f"ERROR: Config not found at {config_path}")
+        print(f"ERROR: Config not found for '{env_name}'")
         sys.exit(1)
     with config_path.open(encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def find_files_dir(env_name: str) -> Path:
+    """Find the files directory for an environment using registry-based lookup."""
+    # Try registry first
+    config_path = resolve_env_path(env_name)
+    if config_path is not None:
+        # files dir is sibling to config.yaml
+        files_dir = config_path.parent / "files"
+        if files_dir.is_dir():
+            return files_dir
+    
+    # Fallback to old hardcoded chain for backwards compatibility
+    files_dir = Path("envs") / env_name / "files"
+    if not files_dir.is_dir():
+        files_dir = Path("envs") / "cat_theo" / env_name / "files"
+    if not files_dir.is_dir():
+        files_dir = Path("envs") / "cat_theo" / "semiring" / env_name / "files"
+    if not files_dir.is_dir():
+        files_dir = Path("envs") / "cat_theo" / "sheaf" / env_name / "files"
+    if not files_dir.is_dir():
+        files_dir = Path("envs") / "weird_machine" / env_name / "files"
+    return files_dir
 
 
 def validate_config(config: dict, files_dir: Path, env_name: str) -> None:
@@ -201,15 +283,7 @@ def generate_env(
     strict = not allow_unresolved
 
     config = load_config(env_name)
-    files_dir = Path("envs") / env_name / "files"
-    if not files_dir.is_dir():
-        files_dir = Path("envs") / "cat_theo" / env_name / "files"
-    if not files_dir.is_dir():
-        files_dir = Path("envs") / "cat_theo" / "semiring" / env_name / "files"
-    if not files_dir.is_dir():
-        files_dir = Path("envs") / "cat_theo" / "sheaf" / env_name / "files"
-    if not files_dir.is_dir():
-        files_dir = Path("envs") / "weird_machine" / env_name / "files"
+    files_dir = find_files_dir(env_name)
 
     validate_config(config, files_dir, env_name)
 
@@ -220,6 +294,7 @@ def generate_env(
     subs = build_substitutions(levels, axes_def)
     subs["ENV_NAME"] = output_name
     subs["JUDGE_SEED"] = str(seed)
+    subs["SEED"] = str(seed)  # For use in source code templates
 
     # Merge top-level scoring settings into the substitution table.
     # Example: scoring.pass_threshold -> %%SCORING_PASS_THRESHOLD%%.
@@ -349,26 +424,22 @@ Examples:
                         help="Seed for hidden test set (allows multiple instances)")
     args = parser.parse_args()
 
-    envs_root = Path("envs")
-    env_path = envs_root / args.env
-    if not env_path.is_dir():
-        envs_root = Path("envs") / "cat_theo"
-        env_path = envs_root / args.env
-    if not env_path.is_dir():
-        envs_root = Path("envs") / "cat_theo" / "semiring"
-        env_path = envs_root / args.env
-    if not env_path.is_dir():
-        envs_root = Path("envs") / "cat_theo" / "sheaf"
-        env_path = envs_root / args.env
-    if not env_path.is_dir():
-        envs_root = Path("envs") / "weird_machine"
-        env_path = envs_root / args.env
-
-    if not env_path.is_dir():
-        available = sorted(
-            d.name for d in envs_root.iterdir() if d.is_dir()
-        ) if envs_root.is_dir() else []
-        print(f"ERROR: Environment '{args.env}' not found under envs/")
+    # Use registry to check if environment exists
+    config_path = resolve_env_path(args.env)
+    if config_path is None:
+        # Fallback: check filesystem
+        registry = _load_registry()
+        available = sorted(registry.keys())
+        print(f"ERROR: Environment '{args.env}' not found")
+        if available:
+            print(f"  Available: {', '.join(available)}")
+        sys.exit(1)
+    
+    # Verify the config file exists
+    if not config_path.is_file():
+        registry = _load_registry()
+        available = sorted(registry.keys())
+        print(f"ERROR: Config for '{args.env}' not found at {config_path}")
         if available:
             print(f"  Available: {', '.join(available)}")
         sys.exit(1)

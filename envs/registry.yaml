@@ -1,0 +1,42 @@
+# Environment registry
+# Maps environment names to their config.yaml paths.
+# This replaces the hardcoded fallback chains in generate_env.py.
+# To add a new environment: add an entry here - no code changes needed.
+
+environments:
+  # Core ML debugging environments
+  glyph: envs/glyph/config.yaml
+  batchnorm_ema: envs/batchnorm_ema/config.yaml
+  moco: envs/moco/config.yaml
+  rope: envs/rope/config.yaml
+
+  # Category-theoretic environments
+  tensor_functor: envs/cat_theo/tensor_functor/config.yaml
+  equivariant_diagram: envs/cat_theo/equivariant_diagram/config.yaml
+  stochastic_monad: envs/cat_theo/stochastic_monad/config.yaml
+  functorial_augmentation: envs/cat_theo/functorial_augmentation/config.yaml
+  compositional_optimizer: envs/cat_theo/compositional_optimizer/config.yaml
+  tokenizer_adjunction: envs/cat_theo/tokenizer_adjunction/config.yaml
+  architecture_naturality: envs/cat_theo/architecture_naturality/config.yaml
+  transformer_ssm_lift: envs/cat_theo/transformer_ssm_lift/config.yaml
+  categorical_lenses: envs/cat_theo/categorical_lenses/config.yaml
+  monadic_reward: envs/cat_theo/monadic_reward/config.yaml
+  semiring_unification: envs/cat_theo/semiring_unification/config.yaml
+
+  # Semiring sub-family
+  ssm_parallel_scan: envs/cat_theo/semiring/ssm_parallel_scan/config.yaml
+  neuro_symbolic_parser: envs/cat_theo/semiring/neuro_symbolic_parser/config.yaml
+  gnn_message_passing: envs/cat_theo/semiring/gnn_message_passing/config.yaml
+
+  # Sheaf sub-family
+  sheaf_schema_sync: envs/cat_theo/sheaf/sheaf_schema_sync/config.yaml
+  sheaf_invariant_gluing: envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml
+  sheaf_physical_constraints: envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml
+
+  # Weird machine environments
+  regex_state_machine: envs/weird_machine/regex_state_machine/config.yaml
+  sql_fixed_point: envs/weird_machine/sql_fixed_point/config.yaml
+  spreadsheet_dataflow: envs/weird_machine/spreadsheet_dataflow/config.yaml
+  css_state_machine: envs/weird_machine/css_state_machine/config.yaml
+  template_interpreter: envs/weird_machine/template_interpreter/config.yaml
+  ci_dependency_graph: envs/weird_machine/ci_dependency_graph/config.yaml
