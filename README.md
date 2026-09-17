@@ -159,6 +159,10 @@ A specialized suite of 17 environments targeting compositional reasoning, algebr
     16. `sheaf_invariant_gluing`: Constructing compositional data-preprocessing boundaries that resist out-of-distribution cascades.
     17. `sheaf_physical_constraints`: Building a distributed network-topology traffic scheduler that respects global backbone bandwidth constraints.
 
+### Recurrent-depth environments (`envs/recurrent_depth/`)
+
+The `rd_state_carry`, `rd_adaptive_halting`, and `rd_gradient_credit` families test behavioral invariants under increasing recurrence depth. They exercise state reuse, per-example halting masks, and autograd credit assignment with tiny CPU tensors. These are black-box behavioral tasks: a score at depth 64 does **not** establish that a model used recurrent computation internally.
+
 ### Latent Substrate & Weird Machine Environments (`envs/weird_machine/`)
 
 A suite of 6 environments targeting unintended expressivity and cross-substrate compilation. These environments test whether an agent can infer and exploit latent computational structure in substrates whose surface semantics present them as non-programming artifacts:
@@ -190,6 +194,10 @@ rl_eval_generator/
 │   ├── batchnorm_ema/
 │   ├── moco/
 │   ├── rope/
+│   ├── recurrent_depth/
+│   │   ├── state_carry/
+│   │   ├── adaptive_halting/
+│   │   └── gradient_credit/
 │   ├── cat_theo/
 │   │   ├── <individual_ct_envs>/
 │   │   ├── semiring/
@@ -266,7 +274,7 @@ The judge then applies the patch, validates it, trains/evaluates, and emits JSON
 
 ---
 
-## Gym-like environment runner
+## Stateful environment runner
 
 The repository includes a minimal `reset` / `step` interface for driving generated
 environments as interaction loops:
@@ -305,11 +313,13 @@ Core action types: `shell`/`run` (`{"cmd": "..."}`), `read_file`, `write_file`,
 The runner is intentionally lightweight. It stores episodes under `.episodes/`
 and uses the persistent filesystem as environment state. `submit` grades the
 current episode workspace non-interactively: it diffs the workspace against the
-pristine sources and runs the generated judge in-process, returning the score as
-JSON. It does not require the interactive `run_eval.sh` flow.
+pristine sources and runs the generated judge either locally (`--sandbox local`)
+or in the generated no-network judge image (`--sandbox docker`). It does not
+require the interactive `run_eval.sh` flow.
 
-Rewards are terminal and the local runner is single-session; Docker resource
-limits apply when scoring through the generated `run_eval.sh`.
+Rewards are terminal and the local runner is single-session. The Docker mode
+uses the same read-only root, dropped-capability, no-network, PID, memory, CPU,
+and tmpfs restrictions as the automated arena.
 
 ---
 
@@ -391,6 +401,116 @@ patterns (e.g. swapping flatten for global pooling in `glyph`) that interacting
 bugs and naming abstraction discourage but cannot fully eliminate. The default
 Dockerfiles use CPU-only PyTorch. For GPU acceleration, use `shared/Dockerfile.gpu`
 which installs CUDA-enabled PyTorch via a build argument (`ARG TORCH_INDEX`).
+
+---
+
+## Provider-neutral automated arena
+
+`arena.py` keeps the model controller on the host and runs generated environment
+commands in a no-network Docker container. OpenRouter, Hugging Face Inference
+Providers, and custom OpenAI-compatible endpoints all use `POST
+{api_base}/chat/completions`.
+
+```bash
+export OPENROUTER_API_KEY="..."
+python arena.py run \
+  --provider openrouter \
+  --model openai/gpt-5.6-sol \
+  --env rd_state_carry \
+  --difficulty hard,hard,hard,hard,hard \
+  --seed 42 \
+  --max-steps 40 \
+  --max-tokens 2048 \
+  --temperature 0 \
+  --sandbox docker \
+  --out runs/
+```
+
+Use `--provider huggingface --model openai/gpt-oss-120b` with `HF_TOKEN` for
+Hugging Face, or `--provider custom --api-base URL --api-key-env API_KEY` for a
+compatible endpoint. `--api-key` is supported for automation, but environment
+variables are safer because shell arguments can appear in history and process
+listings. Keys are not put into traces, manifests, Docker environment variables,
+or container command lines.
+
+Each run directory contains `manifest.json`, `trace.jsonl`,
+`model_responses.jsonl`, `api_errors.jsonl`, `submission.patch`,
+`workspace.diff`, judge stdout/stderr, and the final judge JSON. Summarize a run
+with:
+
+```bash
+python arena.py summarize runs/<run-id>
+```
+
+The legacy `run_hf_episode.py` flags remain available as a wrapper, but it now
+uses the same chat-completions path and no longer makes an implicit legacy HF
+fallback request.
+
+### Trajectory-semantics direct-answer benchmark
+
+The primary relay benchmark is a host-side direct-answer evaluation, not a task
+where the model writes a solver. It keeps rollout horizon, query-specific
+computation, representation, query-specific witness status, and the answer-only
+versus external-scratchpad resource protocol as separate metadata. It includes
+flat and operationally reflective relay presentations, parse-only/one-step/
+state-at-horizon/template-return/complete-state-return controls, semantic
+relabelings, format-only variants, and matched horizons such as `6, 30, 126,
+510`. Its summaries report behavioral accuracy and stale-witness diagnostics;
+they do not produce an aggregate depth score or an internal-algorithm claim.
+
+```bash
+export OPENROUTER_API_KEY="..."
+python arena.py trajectory \
+  --provider openrouter \
+  --model openai/gpt-5.6-sol \
+  --out runs/trajectory-demo \
+  --system-seeds 0:3 \
+  --initial-state-seeds 0:0,0,0,0 \
+  --presentation-seeds 1000:1003 \
+  --resource-protocol answer_only \
+  --max-calls 1632
+
+# Or inspect the exact request budget before resolving credentials.
+python arena.py trajectory-plan \
+  --provider openrouter --model openai/gpt-5.6-sol \
+  --system-seeds 0:3 --initial-state-seeds 0:0,0,0,0 \
+  --max-tokens 64 --confirm-calls 1632
+
+python arena.py trajectory-analyze runs/trajectory-demo
+```
+
+The controller and API key stay on the host. `cases.jsonl` is the private case
+record, while `trace.jsonl`, `answers.jsonl`, `model_responses.jsonl`, and
+`api_errors.jsonl` retain prompts, raw outputs, parsed answers, correctness,
+retry/error information, latency, usage, and provider metadata with secret
+redaction. Controls are query-conditioned: parse-only cases use horizon `0`,
+one-step cases use horizon `1`, and only trajectory queries expand across the
+requested horizon list. `matched_control_id` joins parse and one-step controls
+to the same trajectory condition without pooling valid and witness-broken
+siblings.
+
+Use `--judge host`, `--judge docker`, or `--judge both`. The latter fails if
+host and offline Docker judgments disagree. The optional
+`docker/Dockerfile.trajectory_judge` image evaluates private case/answer records
+offline with `--network none`; it has no provider client and never receives an
+API key. `trajectory-plan` estimates calls and maximum output-token budget
+without resolving credentials, and a live trajectory run requires either
+`--max-calls` or an exact `--confirm-calls` guard.
+
+The `ts_parse_only`, `ts_one_step`, and `ts_trajectory` generated environments
+are a separate solver-synthesis/debugging track. Their judge scores must remain
+separate from direct-answer results and are not evidence that a model used
+recurrent internal computation.
+
+For a depth comparison, keep the model version, prompt, output-token limit,
+maximum tool steps, judge budget, and environment seeds fixed while varying only
+the recurrence-depth axis. Use multiple seeds and report invalid-action failures
+separately from incorrect repairs. Useful derived metrics include
+`pass_rate_by_depth`, `mean_score_by_depth`, `maximum_reliably_solved_depth`,
+`output_tokens_per_score`, `tool_steps_per_score`, `latency_per_score`, and a
+failure-mode distribution. These tasks measure behavioral robustness and cost or
+latency scaling; a black-box result cannot prove that the model used recurrent
+depth internally.
 
 ---
 
