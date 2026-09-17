@@ -62,8 +62,8 @@ def certify_system_pair(seed: int = 0) -> Certification:
     masks = (
         (False, True, False),
         (True, False, False),
-        (False, True, False),
-        (True, False, False),
+        (False, False, True),
+        (True, True, True),
     )
     flip_a, flip_b, flip_c = masks[seed % len(masks)]
     valid = RelaySystem(

@@ -67,7 +67,12 @@ def test_relay_certification_is_independent_and_relabeling_stable():
         )
         assert broken.expected_answer == "no"
         assert broken.stale_witness_prediction == "yes"
-        assert "C(payload) -> A(payload)" in first.spec_text
+        expected_valid_c = (
+            "C(payload) -> A(payload)"
+            if seed % 4 in {0, 1}
+            else "C(payload) -> A(flip(payload))"
+        )
+        assert expected_valid_c in first.spec_text
         assert "C(payload) -> A(1)" in broken.spec_text
 
 

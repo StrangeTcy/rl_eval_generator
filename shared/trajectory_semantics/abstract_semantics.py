@@ -5,20 +5,19 @@ from .schema import OrbitMetadata, RelayRule, RelaySystem, State
 
 
 def _flip_mask(system_seed: int) -> tuple[bool, bool, bool]:
-    """Choose a seeded relay presentation with a fixed complete-state witness.
+    """Choose one of four odd-parity Boolean relay maps.
 
-    V1 keeps the C edge exactly ``C(payload) -> A(payload)`` so the broken
-    sibling is always the specified ``C(b) -> A(1)`` edit.  The two possible
-    odd-parity edge masks are paired with four distinct canonical system IDs;
-    the ID is rendered as a declaration so seeded cases are not identical
-    prompts while the witness and answer semantics remain controlled.
+    Every valid sibling has a six-state orbit, while the seed changes the
+    abstract transition semantics rather than merely changing presentation
+    names. The C edge remains the witness-edit edge in every sibling; the
+    broken sibling replaces it with the specified constant ``A(1)`` edge.
     """
 
     variants = (
         (False, True, False),
         (True, False, False),
-        (False, True, False),
-        (True, False, False),
+        (False, False, True),
+        (True, True, True),
     )
     return variants[system_seed % len(variants)]
 
