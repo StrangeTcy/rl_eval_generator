@@ -17,6 +17,16 @@ from arena.providers import (
     resolve_api_base,
     resolve_credentials,
 )
+from arena.trajectory_runner import (
+    TrajectoryOptions,
+    parse_int_values,
+    parse_seed_range,
+    parse_values,
+    run_trajectory,
+)
+from arena.trajectory_runner import (
+    write_summary as write_trajectory_summary,
+)
 
 REVIEW_PROMPT = """Review this recurrent-depth evaluation result in no more than 300 words.
 
@@ -76,6 +86,49 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--keep-images", action="store_true")
     run.add_argument("--keep-workspace", action="store_true")
 
+    trajectory = sub.add_parser(
+        "trajectory",
+        help="run the direct-answer trajectory-semantics behavioral benchmark",
+    )
+    _common_provider_args(trajectory)
+    trajectory.add_argument("--out", type=Path, required=True)
+    trajectory.add_argument("--representations", default="flat,reflective")
+    trajectory.add_argument("--witnesses", default="valid,broken")
+    trajectory.add_argument(
+        "--queries",
+        default="parse_only,one_step,state_at_T,template_at_T,complete_return",
+    )
+    trajectory.add_argument("--horizons", default="1,6,30,126,510")
+    trajectory.add_argument("--relabelings", default="canonical,permuted_templates,recoded_payloads")
+    trajectory.add_argument("--syntax-noise", default="clean,noisy")
+    trajectory.add_argument(
+        "--semantic-seeds",
+        default=None,
+        help="inclusive comma-separated seeds or ranges (default: 0:4)",
+    )
+    trajectory.add_argument("--seed", type=int, default=None, help="single semantic seed convenience alias")
+    trajectory.add_argument(
+        "--presentation-seeds",
+        default=None,
+        help="one independent presentation seed per semantic seed (default: derived, disjoint seeds)",
+    )
+    trajectory.add_argument(
+        "--resource-protocol",
+        choices=("answer_only", "external_scratchpad"),
+        default="answer_only",
+    )
+    trajectory.add_argument("--api-replications", type=int, default=1)
+    trajectory.add_argument("--max-tokens", type=int, default=64)
+    trajectory.add_argument("--temperature", type=float, default=0.0)
+    trajectory.add_argument("--limit", type=int, default=None)
+
+    trajectory_analysis = sub.add_parser(
+        "trajectory-analyze",
+        aliases=("trajectory-summary", "trajectory-analysis"),
+        help="rebuild summary artifacts for a direct-answer trajectory run",
+    )
+    trajectory_analysis.add_argument("run_dir", type=Path)
+
     summary = sub.add_parser("summarize", help="write summary.csv and summary.md for a run")
     summary.add_argument("run_dir", type=Path)
 
@@ -111,6 +164,59 @@ def _run(args: argparse.Namespace) -> int:
     result = run_episode(options)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result.get("final", {}).get("verdict") == "PASS" else 1
+
+
+def _trajectory(args: argparse.Namespace) -> int:
+    options = TrajectoryOptions(
+        provider=args.provider,
+        model=args.model,
+        api_key=args.api_key,
+        api_key_env=args.api_key_env,
+        api_base=args.api_base,
+        out=args.out,
+        representations=parse_values(args.representations),
+        witnesses=parse_values(args.witnesses),
+        queries=parse_values(args.queries),
+        horizons=parse_int_values(args.horizons),
+        relabelings=parse_values(args.relabelings),
+        syntax_noise=parse_values(args.syntax_noise),
+        semantic_seeds=parse_seed_range(
+            args.semantic_seeds
+            if args.semantic_seeds is not None
+            else str(args.seed) if args.seed is not None else "0:4"
+        ),
+        presentation_seeds=(
+            parse_seed_range(args.presentation_seeds)
+            if args.presentation_seeds is not None
+            else None
+        ),
+        resource_protocol=args.resource_protocol,
+        api_replications=args.api_replications,
+        max_tokens=args.max_tokens,
+        temperature=args.temperature,
+        limit=args.limit,
+    )
+    result = run_trajectory(options)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+def _trajectory_analyze(args: argparse.Namespace) -> int:
+    manifest = args.run_dir / "manifest.json"
+    records: list[dict[str, Any]] = []
+    trace = args.run_dir / "trace.jsonl"
+    if not trace.is_file():
+        raise ValueError(f"trajectory trace not found: {trace}")
+    for line in trace.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        value = json.loads(line)
+        if value.get("event") == "case_result":
+            records.append(value)
+    manifest_value = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
+    summary_value = write_trajectory_summary(args.run_dir, records, manifest_value)
+    print(json.dumps({"summary": str(args.run_dir / "summary.json"), **summary_value}, indent=2))
+    return 0
 
 
 def _summarize(args: argparse.Namespace) -> int:
@@ -163,6 +269,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "run":
             return _run(args)
+        if args.command == "trajectory":
+            return _trajectory(args)
+        if args.command in {"trajectory-analyze", "trajectory-summary", "trajectory-analysis"}:
+            return _trajectory_analyze(args)
         if args.command == "summarize":
             return _summarize(args)
         return _review(args)

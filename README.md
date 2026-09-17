@@ -446,6 +446,44 @@ The legacy `run_hf_episode.py` flags remain available as a wrapper, but it now
 uses the same chat-completions path and no longer makes an implicit legacy HF
 fallback request.
 
+### Trajectory-semantics direct-answer benchmark
+
+The primary relay benchmark is a host-side direct-answer evaluation, not a task
+where the model writes a solver. It keeps rollout horizon, query-specific
+computation, representation, query-specific witness status, and the answer-only
+versus external-scratchpad resource protocol as separate metadata. It includes
+flat and operationally reflective relay presentations, parse-only/one-step/
+state-at-horizon/template-return/complete-state-return controls, semantic
+relabelings, format-only variants, and matched horizons such as `6, 30, 126,
+510`. Its summaries report behavioral accuracy and stale-witness diagnostics;
+they do not produce an aggregate depth score or an internal-algorithm claim.
+
+```bash
+export OPENROUTER_API_KEY="..."
+python arena.py trajectory \
+  --provider openrouter \
+  --model openai/gpt-5.6-sol \
+  --out runs/trajectory-demo \
+  --semantic-seeds 0:4 \
+  --presentation-seeds 1000:1004 \
+  --resource-protocol answer_only
+
+python arena.py trajectory-analyze runs/trajectory-demo
+```
+
+The controller and API key stay on the host. `cases.jsonl` is the private case
+record, while `trace.jsonl`, `answers.jsonl`, `model_responses.jsonl`, and
+`api_errors.jsonl` retain prompts, raw outputs, parsed answers, correctness,
+retry/error information, latency, usage, and provider metadata with secret
+redaction. The optional `docker/Dockerfile.trajectory_judge` image evaluates
+private case/answer records offline with `--network none`; it has no provider
+client and never receives an API key.
+
+The `ts_parse_only`, `ts_one_step`, and `ts_trajectory` generated environments
+are a separate solver-synthesis/debugging track. Their judge scores must remain
+separate from direct-answer results and are not evidence that a model used
+recurrent internal computation.
+
 For a depth comparison, keep the model version, prompt, output-token limit,
 maximum tool steps, judge budget, and environment seeds fixed while varying only
 the recurrence-depth axis. Use multiple seeds and report invalid-action failures

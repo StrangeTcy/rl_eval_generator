@@ -45,6 +45,8 @@ class Completion:
     latency_ms: int
     request_id: str | None
     response_headers: dict[str, str]
+    provider: str = ""
+    upstream_provider: str | None = None
 
 
 class ProviderError(RuntimeError):
@@ -361,6 +363,10 @@ class ProviderClient:
                     latency_ms=max(0, int(round((time.monotonic() - started) * 1000))),
                     request_id=_request_id(response_headers, data),
                     response_headers=response_headers,
+                    provider=self.provider,
+                    upstream_provider=(
+                        str(data["provider"]) if data.get("provider") is not None else None
+                    ),
                 )
             except error.HTTPError as exc:
                 response_body = exc.read().decode("utf-8", errors="replace")
@@ -474,9 +480,11 @@ def provider_metadata(completion: Completion) -> dict[str, Any]:
 
     raw = completion.raw_response
     metadata: dict[str, Any] = {}
+    if completion.provider:
+        metadata["provider"] = completion.provider
+    if completion.upstream_provider is not None:
+        metadata["upstream_provider"] = completion.upstream_provider
     for key in (
-        "provider",
-        "upstream_provider",
         "system_fingerprint",
         "service_tier",
         "created",

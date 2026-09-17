@@ -410,6 +410,8 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                         "request_started_at": request_started,
                         "requested_model": completion.requested_model,
                         "resolved_model": completion.resolved_model,
+                        "provider": completion.provider,
+                        "upstream_provider": completion.upstream_provider,
                         "finish_reason": completion.finish_reason,
                         "usage": completion.usage,
                         "latency_ms": completion.latency_ms,
