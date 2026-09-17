@@ -33,6 +33,11 @@ environments:
   sheaf_invariant_gluing: envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml
   sheaf_physical_constraints: envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml
 
+  # Recurrent-depth environments
+  rd_state_carry: envs/recurrent_depth/state_carry/config.yaml
+  rd_adaptive_halting: envs/recurrent_depth/adaptive_halting/config.yaml
+  rd_gradient_credit: envs/recurrent_depth/gradient_credit/config.yaml
+
   # Weird machine environments
   regex_state_machine: envs/weird_machine/regex_state_machine/config.yaml
   sql_fixed_point: envs/weird_machine/sql_fixed_point/config.yaml

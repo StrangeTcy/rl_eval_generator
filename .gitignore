@@ -13,6 +13,7 @@ smoke_*/
 test_*/
 .DS_Store
 .episodes/
+runs/
 
 demo_*/
 _episode_env_*/

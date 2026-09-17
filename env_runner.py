@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Minimal gym-like runner for generated evaluation environments."""
+"""Minimal stateful runner for generated evaluation environments.
+
+The runner is intentionally repository-specific and does not depend on Gym.
+"""
 from __future__ import annotations
 
 import argparse
@@ -16,6 +19,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from arena.docker_backend import DockerBackend, DockerBackendError
+
 ROOT = Path(__file__).resolve().parent
 EPISODES_DIR = ROOT / ".episodes"
 DEFAULT_MAX_STEPS = 40
@@ -30,8 +35,8 @@ def _safe_join(root: Path, rel: str) -> Path:
     candidate = (root / rel).resolve()
     try:
         candidate.relative_to(root.resolve())
-    except ValueError:
-        raise ValueError(f"Path escapes workspace: {rel}")
+    except ValueError as exc:
+        raise ValueError(f"Path escapes workspace: {rel}") from exc
     return candidate
 
 
@@ -45,6 +50,21 @@ def _load_state(episode_id: str) -> dict[str, Any]:
 def _save_state(state: dict[str, Any]) -> None:
     path = EPISODES_DIR / state["episode_id"] / "state.json"
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def _event_path(state_or_dir: dict[str, Any] | Path) -> Path:
+    if isinstance(state_or_dir, Path):
+        episode_dir = state_or_dir
+    else:
+        episode_dir = Path(state_or_dir["episode_dir"])
+    return episode_dir / "environment-events.jsonl"
+
+
+def _write_event(state_or_dir: dict[str, Any] | Path, event: dict[str, Any]) -> None:
+    path = _event_path(state_or_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, ensure_ascii=False) + "\n")
 
 
 def _obs(text: str) -> str:
@@ -93,6 +113,9 @@ def _changed_files(state: dict[str, Any]) -> list[str]:
 
 
 def reset(args: argparse.Namespace) -> None:
+    sandbox = getattr(args, "sandbox", "local")
+    keep_images = bool(getattr(args, "keep_images", False))
+    keep_workspace = bool(getattr(args, "keep_workspace", False))
     EPISODES_DIR.mkdir(exist_ok=True)
     episode_id = args.episode_id or f"{args.env}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
     episode_dir = EPISODES_DIR / episode_id
@@ -105,7 +128,18 @@ def reset(args: argparse.Namespace) -> None:
     if generated_path.exists():
         shutil.rmtree(generated_path)
 
-    cmd = [sys.executable, "generate_env.py", "--env", args.env, "--name", generated_name, "--difficulty", args.difficulty, "--seed", str(args.seed)]
+    cmd = [
+        sys.executable,
+        "generate_env.py",
+        "--env",
+        args.env,
+        "--name",
+        generated_name,
+        "--difficulty",
+        args.difficulty,
+        "--seed",
+        str(args.seed),
+    ]
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if proc.returncode != 0:
         raise SystemExit(proc.stdout + proc.stderr)
@@ -118,6 +152,17 @@ def reset(args: argparse.Namespace) -> None:
 
     patchable_files = _parse_list_literal_from_file(env_dir / "judge" / "source_validator.py", "PATCHABLE")
     required_files = _parse_required_files(env_dir / "judge" / "judge.py")
+    agent_image: dict[str, Any] | None = None
+    judge_image: dict[str, Any] | None = None
+    if sandbox == "docker":
+        try:
+            backend = DockerBackend()
+            agent, judge = backend.build_environment(env_dir, episode_id)
+            agent_image = agent.as_dict()
+            judge_image = judge.as_dict()
+        except DockerBackendError as exc:
+            shutil.rmtree(episode_dir, ignore_errors=True)
+            raise SystemExit(f"Docker sandbox setup failed: {exc}") from exc
 
     state = {
         "episode_id": episode_id,
@@ -128,6 +173,7 @@ def reset(args: argparse.Namespace) -> None:
         "max_steps": args.max_steps,
         "done": False,
         "reward": 0.0,
+        "sandbox": sandbox,
         "episode_dir": str(episode_dir),
         "env_dir": str(env_dir),
         "workspace": str(workspace),
@@ -135,29 +181,93 @@ def reset(args: argparse.Namespace) -> None:
         "tools": str(env_dir / "agent" / "tools"),
         "patchable_files": patchable_files,
         "required_files": required_files,
+        "agent_image": agent_image,
+        "judge_image": judge_image,
+        "agent_image_id": (agent_image or {}).get("id"),
+        "judge_image_id": (judge_image or {}).get("id"),
+        "agent_image_digest": (agent_image or {}).get("digest"),
+        "judge_image_digest": (judge_image or {}).get("digest"),
+        "keep_images": keep_images,
+        "keep_workspace": keep_workspace,
         "history": [],
         "created_at": time.time(),
     }
     _save_state(state)
+    _write_event(
+        episode_dir,
+        {
+            "ts": time.time(),
+            "event": "reset",
+            "episode_id": episode_id,
+            "env": args.env,
+            "difficulty": args.difficulty,
+            "seed": args.seed,
+            "sandbox": sandbox,
+            "agent_image": agent_image,
+            "judge_image": judge_image,
+        },
+    )
     _json({
         "episode_id": episode_id,
         "observation": "Episode initialized. Inspect the workspace and proceed.",
         "reward": 0.0,
         "done": False,
-        "info": {"env": args.env, "difficulty": args.difficulty, "seed": args.seed, "step": 0, "max_steps": args.max_steps, "workspace": str(workspace), "patchable_files": patchable_files, "required_files": required_files},
+        "info": {
+            "env": args.env,
+            "difficulty": args.difficulty,
+            "seed": args.seed,
+            "step": 0,
+            "max_steps": args.max_steps,
+            "workspace": str(workspace),
+            "episode_dir": str(episode_dir),
+            "sandbox": sandbox,
+            "patchable_files": patchable_files,
+            "required_files": required_files,
+            "agent_image": agent_image,
+            "judge_image": judge_image,
+            "agent_image_id": (agent_image or {}).get("id"),
+            "judge_image_id": (judge_image or {}).get("id"),
+            "agent_image_digest": (agent_image or {}).get("digest"),
+            "judge_image_digest": (judge_image or {}).get("digest"),
+        },
     })
 
 
 def _run_shell(state: dict[str, Any], cmd: str) -> tuple[str, dict[str, Any]]:
     workspace = Path(state["workspace"])
     tools = Path(state["tools"])
+    if state.get("sandbox") == "docker":
+        image_info = state.get("agent_image") or {}
+        image = image_info.get("name") or state.get("agent_image_name")
+        if not image:
+            raise RuntimeError("Docker agent image is missing from episode state")
+        result = DockerBackend().run_agent(image, workspace, tools, cmd)
+        observation = (result.stdout or "") + ("\n[stderr]\n" + result.stderr if result.stderr else "")
+        return observation, {
+            "returncode": result.returncode,
+            "sandbox": "docker",
+            "container_command": result.command,
+        }
+
     rewritten = cmd.replace("/tools/", str(tools) + "/")
     env = os.environ.copy()
+    for name in list(env):
+        upper = name.upper()
+        if upper in {"OPENROUTER_API_KEY", "HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN", "API_KEY"} or "API_KEY" in upper or upper.endswith("_TOKEN"):
+            env.pop(name, None)
     env["WORKSPACE"] = str(workspace)
     env["PYTHONPATH"] = str(workspace)
-    proc = subprocess.run(rewritten, cwd=workspace, shell=True, capture_output=True, text=True, timeout=120, env=env)
+    proc = subprocess.run(
+        rewritten,
+        cwd=workspace,
+        shell=True,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+    )
     observation = (proc.stdout or "") + ("\n[stderr]\n" + proc.stderr if proc.stderr else "")
-    return observation, {"returncode": proc.returncode, "rewritten_cmd": rewritten}
+    return observation, {"returncode": proc.returncode, "rewritten_cmd": rewritten, "sandbox": "local"}
 
 
 def _file_diff(before: str, after: str, path: str) -> str:
@@ -289,83 +399,193 @@ def _progress(state: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     return json.dumps(details, indent=2), details
 
 
-def _submit(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, float, bool, dict[str, Any]]:
-    """Non-interactive submit that judges the current episode workspace."""
-    required = set(state.get("required_files") or [])
-    changed = set(_changed_files(state))
-    missing = sorted(required - changed)
-    if missing and not action.get("confirm"):
-        return (f"Submit blocked: required files missing: {', '.join(missing)}. Use {{'type':'submit','confirm':true}} to submit anyway.", 0.0, False, {"submit_blocked": True, "missing_required_files": missing})
-    
-    env_dir = Path(state["env_dir"])
+def _extract_last_json_object(text: str) -> dict[str, Any] | None:
+    stripped = text.strip()
+    if stripped:
+        try:
+            value = json.loads(stripped)
+            if isinstance(value, dict):
+                return value
+        except json.JSONDecodeError:
+            pass
+    decoder = json.JSONDecoder()
+    candidates: list[dict[str, Any]] = []
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            candidates.append(value)
+    if not candidates:
+        return None
+    scored = [item for item in candidates if "verdict" in item or "score" in item]
+    return max(scored or candidates, key=lambda item: len(json.dumps(item)))
+
+
+def _make_submission_patch(state: dict[str, Any]) -> tuple[Path, list[str]]:
+    """Create a git-style patch from the persistent workspace."""
     episode_dir = Path(state["episode_dir"])
     workspace = Path(state["workspace"])
     original = Path(state["original_workspace"])
-    
     patch_path = episode_dir / "submission.patch"
-    # The judge only accepts edits to patchable files, so the submission patch is
-    # restricted to those. This also avoids including stray workspace artifacts
-    # (e.g. patch(1) .orig backups, scratch files) that the agent may have left.
     patchable = set(state.get("patchable_files") or [])
-    changed_rels = [r for r in sorted(_changed_files(state)) if not patchable or r in patchable]
+    changed_rels = [
+        rel for rel in sorted(_changed_files(state)) if not patchable or rel in patchable
+    ]
 
     def _read(path: Path) -> str:
         return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
 
-    diffs = []
+    diffs: list[str] = []
     for rel in changed_rels:
         before = _read(original / rel)
         after = _read(workspace / rel)
-        # Emit git-style a/ b/ headers so the judge's patch_validator (which
-        # strips a single a//b/ prefix and applies with `patch -p1`) accepts it.
-        diff = "\n".join(difflib.unified_diff(
-            before.splitlines(), after.splitlines(),
-            fromfile=f"a/{rel}", tofile=f"b/{rel}", lineterm=""))
+        diff = "\n".join(
+            difflib.unified_diff(
+                before.splitlines(),
+                after.splitlines(),
+                fromfile=f"a/{rel}",
+                tofile=f"b/{rel}",
+                lineterm="",
+            )
+        )
         if diff:
             diffs.append(diff)
     patch_path.write_text("\n".join(diffs) + ("\n" if diffs else ""), encoding="utf-8")
-    
+    return patch_path, changed_rels
+
+
+def _submit(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, float, bool, dict[str, Any]]:
+    """Submit the current workspace to the local or isolated generated judge."""
+    required = set(state.get("required_files") or [])
+    changed = set(_changed_files(state))
+    missing = sorted(required - changed)
+    if missing and not action.get("confirm"):
+        return (
+            f"Submit blocked: required files missing: {', '.join(missing)}. Use "
+            "{'type':'submit','confirm':true} to submit anyway.",
+            0.0,
+            False,
+            {"submit_blocked": True, "missing_required_files": missing},
+        )
+
+    env_dir = Path(state["env_dir"])
+    episode_dir = Path(state["episode_dir"])
+    patch_path, _ = _make_submission_patch(state)
+
+    if state.get("sandbox") == "docker":
+        image_info = state.get("judge_image") or {}
+        image = image_info.get("name") or state.get("judge_image_name")
+        if not image:
+            return (
+                "Submission error: Docker judge image is missing from episode state",
+                0.0,
+                True,
+                {"error": "judge_image_missing"},
+            )
+        submission_dir = episode_dir / "submission"
+        submission_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(patch_path, submission_dir / "agent.patch")
+        backend = DockerBackend()
+        container = backend.run_judge(image, submission_dir, int(state["seed"]))
+        (episode_dir / "judge.stdout").write_text(container.stdout, encoding="utf-8")
+        (episode_dir / "judge.stderr").write_text(container.stderr, encoding="utf-8")
+        result_json = _extract_last_json_object(container.stdout)
+        if result_json is None:
+            result_json = {
+                "verdict": "FAIL",
+                "score": 0.0,
+                "failure_mode": "judge_runtime_error",
+                "notes": [
+                    f"Judge exited {container.returncode} without a JSON result",
+                    container.stderr[-2000:],
+                ],
+            }
+        info: dict[str, Any] = {
+            "sandbox": "docker",
+            "returncode": container.returncode,
+            "judge_result": result_json,
+            "judge_stdout": container.stdout,
+            "judge_stderr": container.stderr,
+            "submission_dir": str(submission_dir),
+        }
+        if not state.get("keep_images"):
+            try:
+                removed = backend.remove_images(
+                    (state.get("agent_image") or {}).get("name"),
+                    image,
+                )
+            except DockerBackendError:
+                removed = []
+            state["images_removed"] = removed
+        return (
+            json.dumps(result_json, indent=2),
+            float(result_json.get("score", 0.0)),
+            True,
+            info,
+        )
+
+    # Local mode retains the original runner behavior for compatibility and
+    # testing, but uses the same patch and final-result parsing as Docker mode.
     judge_workdir = episode_dir / "judge_runtime"
     if judge_workdir.exists():
         shutil.rmtree(judge_workdir)
     judge_workdir.mkdir(parents=True)
-    
-    shutil.copytree(original, judge_workdir / "originals")
+    shutil.copytree(Path(state["original_workspace"]), judge_workdir / "originals")
     sub_dir = judge_workdir / "submission"
     sub_dir.mkdir(parents=True)
     shutil.copy2(patch_path, sub_dir / "agent.patch")
-    
+
     judge_script = env_dir / "judge" / "judge.py"
     judge_env = os.environ.copy()
+    for name in list(judge_env):
+        upper = name.upper()
+        if upper in {"OPENROUTER_API_KEY", "HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN", "API_KEY"} or "API_KEY" in upper or upper.endswith("_TOKEN"):
+            judge_env.pop(name, None)
     judge_env["JUDGE_SEED"] = str(state["seed"])
     judge_env["PYTHONPATH"] = str(env_dir / "judge")
-    # The judge and validators read these paths (defaulting to the Docker mount
-    # points). Point them at the local episode submission so the runner can grade
-    # the current workspace non-interactively, without invoking run_eval.sh.
     judge_env["JUDGE_PATCH_PATH"] = str(sub_dir / "agent.patch")
     judge_env["JUDGE_ORIGINALS_DIR"] = str(judge_workdir / "originals")
-    
-    # The judge trains a model; its internal step timeouts can reach ~1800s
-    # (e.g. BatchNorm/ResNet). The wrapper budget must exceed those so the
-    # runner does not kill a legitimate judge run before it finishes. Override
-    # with JUDGE_SUBMIT_TIMEOUT or per-call action {"timeout": <seconds>}.
     judge_timeout = int(action.get("timeout") or os.environ.get("JUDGE_SUBMIT_TIMEOUT", "2100"))
     try:
-        cmd = [sys.executable, str(judge_script)]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=judge_timeout, env=judge_env)
-        
-        if proc.returncode != 0 and not proc.stdout:
-            return (f"Judge execution failed:\n{proc.stderr}", 0.0, True, {"returncode": proc.returncode})
-        
-        try:
-            result_json = json.loads(proc.stdout.strip().splitlines()[-1])
-            return (json.dumps(result_json, indent=2), result_json.get("score", 0.0), True, result_json)
-        except Exception:
-            return (proc.stdout or proc.stderr, 0.0, True, {"error": "could not parse judge output"})
-
+        proc = subprocess.run(
+            [sys.executable, str(judge_script)],
+            capture_output=True,
+            text=True,
+            timeout=judge_timeout,
+            env=judge_env,
+        )
+        (episode_dir / "judge.stdout").write_text(proc.stdout or "", encoding="utf-8")
+        (episode_dir / "judge.stderr").write_text(proc.stderr or "", encoding="utf-8")
+        result_json = _extract_last_json_object(proc.stdout or "")
+        if result_json is None:
+            result_json = {
+                "verdict": "FAIL",
+                "score": 0.0,
+                "failure_mode": "judge_runtime_error",
+                "notes": [
+                    f"Judge exited {proc.returncode} without a JSON result",
+                    (proc.stderr or "")[-2000:],
+                ],
+            }
+        return (
+            json.dumps(result_json, indent=2),
+            float(result_json.get("score", 0.0)),
+            True,
+            {
+                "sandbox": "local",
+                "returncode": proc.returncode,
+                "judge_result": result_json,
+                "judge_stdout": proc.stdout or "",
+                "judge_stderr": proc.stderr or "",
+            },
+        )
     except Exception as exc:
+        (episode_dir / "judge.stderr").write_text(str(exc), encoding="utf-8")
         return (f"Submission error: {exc}", 0.0, True, {"error": str(exc)})
-
 
 def step(args: argparse.Namespace) -> None:
     state = _load_state(args.episode)
@@ -437,7 +657,48 @@ def step(args: argparse.Namespace) -> None:
     state["reward"] = reward
     state["history"].append({"step": state["step"], "action": action, "reward": reward, "done": done, "info": info})
     _save_state(state)
+    _write_event(
+        state,
+        {
+            "ts": time.time(),
+            "event": "step",
+            "step": state["step"],
+            "action": action,
+            "observation": _obs(observation),
+            "reward": reward,
+            "done": done,
+            "info": info,
+        },
+    )
     _json({"observation": _obs(observation), "reward": reward, "done": done, "info": {**info, "episode_id": state["episode_id"], "step": state["step"], "budget_remaining": max(0, state["max_steps"] - state["step"])}})
+
+
+def submit_episode(args: argparse.Namespace) -> None:
+    """Submit even if the interaction budget has already been exhausted."""
+    state = _load_state(args.episode)
+    observation, reward, done, info = _submit(state, {"confirm": args.confirm, "timeout": args.timeout})
+    state["done"] = done
+    state["reward"] = reward
+    state["submitted"] = True
+    state["submission_info"] = info
+    _save_state(state)
+    _write_event(
+        state,
+        {
+            "ts": time.time(),
+            "event": "submit",
+            "step": state["step"],
+            "reward": reward,
+            "done": done,
+            "info": info,
+        },
+    )
+    _json({
+        "observation": _obs(observation),
+        "reward": reward,
+        "done": done,
+        "info": {**info, "episode_id": state["episode_id"], "step": state["step"]},
+    })
 
 
 def show_state(args: argparse.Namespace) -> None:
@@ -453,11 +714,19 @@ def main() -> None:
     p_reset.add_argument("--seed", type=int, default=0)
     p_reset.add_argument("--episode-id", default="")
     p_reset.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
+    p_reset.add_argument("--sandbox", choices=("local", "docker"), default="local")
+    p_reset.add_argument("--keep-images", action="store_true")
+    p_reset.add_argument("--keep-workspace", action="store_true")
     p_reset.set_defaults(func=reset)
     p_step = sub.add_parser("step")
     p_step.add_argument("--episode", required=True)
     p_step.add_argument("--action", required=True, help="JSON action")
     p_step.set_defaults(func=step)
+    p_submit = sub.add_parser("submit")
+    p_submit.add_argument("--episode", required=True)
+    p_submit.add_argument("--confirm", action="store_true")
+    p_submit.add_argument("--timeout", type=int, default=2100)
+    p_submit.set_defaults(func=submit_episode)
     p_state = sub.add_parser("state")
     p_state.add_argument("--episode", required=True)
     p_state.set_defaults(func=show_state)

@@ -1,0 +1,103 @@
+axes:
+  - id: recurrence_depth
+    description: "Unrolled depth used for training and held-out gradients"
+    levels:
+      easy:
+        "%%TRAIN_DEPTH%%": "4"
+        "%%HIDDEN_DEPTH%%": "8"
+      medium:
+        "%%TRAIN_DEPTH%%": "16"
+        "%%HIDDEN_DEPTH%%": "32"
+      hard:
+        "%%TRAIN_DEPTH%%": "32"
+        "%%HIDDEN_DEPTH%%": "64"
+
+  - id: clue_clarity
+    description: "How directly the prompt mentions autograd credit"
+    levels:
+      easy:
+        "%%CLUE%%": "Keep the computation graph connected through every active transition."
+      medium:
+        "%%CLUE%%": "Compare both input and parameter gradients with an unrolled reference."
+      hard:
+        "%%CLUE%%": ""
+
+  - id: visible_tests
+    description: "Visible gradient checks"
+    levels:
+      easy:
+        "%%VISIBLE_TESTS%%": |
+          def test_backward():
+              block = CreditBlock(4, 4, depth=2)
+              x = torch.randn(2, 4, requires_grad=True)
+              block(x).sum().backward()
+              assert x.grad is not None
+      medium:
+        "%%VISIBLE_TESTS%%": |
+          def test_backward():
+              block = CreditBlock(4, 4, depth=2)
+              x = torch.randn(2, 4, requires_grad=True)
+              block(x).square().mean().backward()
+              assert x.grad is not None and torch.isfinite(x.grad).all()
+
+          def test_tied_parameters():
+              assert sum(p.numel() for p in CreditBlock(depth=1).parameters()) == sum(p.numel() for p in CreditBlock(depth=8).parameters())
+      hard:
+        "%%VISIBLE_TESTS%%": |
+          def test_backward():
+              block = CreditBlock(4, 4, depth=2)
+              x = torch.randn(2, 4, requires_grad=True)
+              block(x).sum().backward()
+              assert x.grad is not None
+
+  - id: implementation_obfuscation
+    description: "Potentially misleading advice about recurrent state"
+    levels:
+      easy:
+        "%%IMPLEMENTATION_NOTE%%": "# Avoid creating a fresh tensor that severs autograd history."
+      medium:
+        "%%IMPLEMENTATION_NOTE%%": "# The transition is a single module reused at every depth."
+      hard:
+        "%%IMPLEMENTATION_NOTE%%": ""
+
+  - id: batching_complexity
+    description: "Batch size in visible gradient probes"
+    levels:
+      easy:
+        "%%BATCH_SIZE%%": "2"
+      medium:
+        "%%BATCH_SIZE%%": "4"
+      hard:
+        "%%BATCH_SIZE%%": "8"
+
+scoring:
+  mode: check_fraction
+  total_checks: 5
+
+constants:
+  "%%PATCHABLE_FILES%%": '["recurrent_block.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"recurrent_block"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/recurrent_block.py: recurrent_block.py
+  agent/workspace/train.py: train.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  judge/judge.py: judge.py
+
+  run_eval.sh: shared/run_eval.sh
