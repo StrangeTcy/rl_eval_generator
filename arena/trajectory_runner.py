@@ -509,8 +509,15 @@ def write_summary(
         "total_cases": len(records),
         "correct": sum(bool(item.get("correct")) for item in records),
         "accuracy": sum(bool(item.get("correct")) for item in records) / max(1, len(records)),
+        "all_case_accuracy": sum(bool(item.get("correct")) for item in records) / max(1, len(records)),
         "group_count": len(rows),
         "groups": rows,
+        "trajectory_cases": len(trajectory_records),
+        "unconditional_trajectory_correct": sum(bool(item.get("correct")) for item in trajectory_records),
+        "unconditional_trajectory_accuracy": (
+            sum(bool(item.get("correct")) for item in trajectory_records)
+            / max(1, len(trajectory_records))
+        ),
         "conditional_trajectory_cases": len(conditional_records),
         "conditional_trajectory_correct": sum(bool(item.get("correct")) for item in conditional_records),
         "conditional_trajectory_accuracy": (
@@ -528,8 +535,13 @@ def write_summary(
     markdown = [
         "# Trajectory-semantics summary",
         "",
-        f"- Total API results: `{summary['total_cases']}`",
-        f"- Accuracy: `{summary['accuracy']}`",
+        f"- Total logged results (including controls): `{summary['total_cases']}`",
+        f"- All-case accuracy: `{summary['all_case_accuracy']}`",
+        f"- Unconditional trajectory accuracy: `{summary['unconditional_trajectory_accuracy']}`",
+        f"- Conditional trajectory accuracy: `{summary['conditional_trajectory_accuracy']}` "
+        f"(included `{summary['conditional_trajectory_cases']}`, "
+        f"failed controls `{summary['failed_control_trajectory_cases']}`, "
+        f"missing controls `{summary['missing_control_trajectory_cases']}`)",
         "- Interpretation: behavioral sensitivity to named interventions; no internal depth claim.",
         "",
         "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | parse passed | one-step passed | conditional n | conditional accuracy | missing controls | failed controls | stale match |",

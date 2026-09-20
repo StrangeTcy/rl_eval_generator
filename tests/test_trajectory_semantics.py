@@ -317,6 +317,8 @@ def test_fake_provider_attaches_controls_and_excludes_only_failed_reflective_row
     assert trajectory_rows["reflective"]["parse_control_passed"] is False
     assert trajectory_rows["reflective"]["one_step_control_passed"] is True
     assert trajectory_rows["reflective"]["conditional_n"] == 0
+    assert result["summary"]["trajectory_cases"] == 2
+    assert result["summary"]["unconditional_trajectory_accuracy"] == 1.0
     assert result["summary"]["conditional_trajectory_cases"] == 1
     assert result["summary"]["excluded_trajectory_cases"] == 1
 
