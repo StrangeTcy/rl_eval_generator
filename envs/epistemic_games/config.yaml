@@ -1,0 +1,80 @@
+# epistemic_games: epistemic-reasoning evaluation environments.
+#
+# Minimal prototype: two hidden player types (level-1 genuine, level-3
+# strategic), three reasoning levels (0, 1, 3), one public observation, and
+# paired worlds with identical transcripts in the non-identifiable regime.
+# The instance is generated symbolically by files/renderer.py (via the
+# generate_env.py renderer hook) from files/core.py, which is also shipped to
+# the judge, which re-derives the ground truth from the seed (provenance
+# check) and grades the agent's ANSWER with a structured failure-mode
+# taxonomy. See envs/epistemic_games/core.py for the full design doc.
+
+renderer: renderer.py
+
+axes:
+  - id: scenario
+    description: "Surface scenario template (varies names and labels to reduce retrieval cues)"
+    levels:
+      trap:
+        "%%TEMPLATE_ID%%": "trap"
+      report:
+        "%%TEMPLATE_ID%%": "report"
+
+  - id: evidence
+    description: "Information content of the observed announcement: no information, weak information, or strong information (likelihood-ratio band)"
+    levels:
+      ambiguous:
+        "%%EVIDENCE_ID%%": "ambiguous"
+      weak:
+        "%%EVIDENCE_ID%%": "weak"
+      strong:
+        "%%EVIDENCE_ID%%": "strong"
+
+  - id: presentation
+    description: "Task framing: type inference (solo) or paired-world observational equivalence (strategic ambiguity)"
+    levels:
+      solo:
+        "%%PRESENTATION_ID%%": "solo"
+      paired:
+        "%%PRESENTATION_ID%%": "paired"
+
+  - id: prior
+    description: "Prior over the two worlds: balanced (0.5/0.5) or skewed (0.6/0.4 toward the level-1 world)"
+    levels:
+      balanced:
+        "%%PRIOR_ID%%": "balanced"
+      skewed:
+        "%%PRIOR_ID%%": "skewed"
+
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 0.85
+  partial_threshold: 0.60
+
+constants:
+  "%%PATCHABLE_FILES%%": '["answer.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '""'
+
+static_files: []
+
+layout:
+  agent/workspace/task.md: task.md
+  agent/workspace/answer.py: answer.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge.py: judge.py
+  judge/core.py: core.py
+  judge/instance_spec.py: instance_spec.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: Dockerfile.judge
+
+  run_eval.sh: shared/run_eval.sh

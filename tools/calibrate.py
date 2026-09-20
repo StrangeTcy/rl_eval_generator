@@ -168,7 +168,8 @@ def main():
         else:
             envs_to_calibrate = [
                 "glyph", "batchnorm_ema", "moco", "rope",
-                "regex_state_machine", "sql_fixed_point"
+                "regex_state_machine", "sql_fixed_point",
+                "epistemic_games",
             ]
     else:
         parser.error("Specify --env or --all")
