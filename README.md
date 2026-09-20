@@ -201,28 +201,33 @@ assignment `ANSWER = { ... }` (`posterior_world1`, `verdict`,
 the seed with the shipped symbolic core (provenance check), extracts ANSWER
 as *data* with bounded `ast.literal_eval` (no code execution, size and
 AST-node limits, rejection of imports/calls/comprehensions), checks internal
-consistency (posterior vs most_supported), and emits a **structured behavioral
-error signature** — e.g. `seductive_truth`, `overcaution`, `prior_neglect`,
-`missed_information`, `wrong_direction`, `invalid_certainty`,
-`verdict_miscalibration`, `inconsistent_support` — rather than only a scalar
-score. Labels are interpretable names for observable error patterns
-consistent with narrative-driven inference; they do not establish internal
-mechanisms. Training reward (forgiving, 0.05 full credit) is separated from
-strict correctness (0.02 tolerance + categorical + consistency).
+consistency (numeric posterior vs ordinal most_supported — `internal_contradiction`
+if they disagree), and emits a **structured behavioral error signature** —
+e.g. `seductive_truth`, `overcaution`, `prior_neglect`, `missed_information`,
+`wrong_direction`, `invalid_certainty`, `verdict_miscalibration`,
+`internal_contradiction` — rather than only a scalar score. Labels are
+interpretable names for observable error patterns consistent with
+narrative-driven inference; they do not establish internal mechanisms.
+Training reward (forgiving, 0.05 full credit) is separated from strict
+correctness (0.02 tolerance + categorical + consistency); a response only
+passes if `numeric_correct`, `ordinal_correct`, and `verdict_correct` all align.
 
 Axes:
 
 - `scenario`: surface template (`trap` | `report`); the seed varies names/labels to reduce retrieval cues;
 - `evidence`: likelihood-ratio band — `ambiguous` (R = 1, total non-identifiability), `weak` (1 < R < 3), `strong` (R >= 3);
 - `presentation`: `solo` (type inference) | `paired` (paired-world observational equivalence);
-- `prior`: `balanced` (0.5/0.5) | `skewed` (0.6/0.4).
+- `prior`: `balanced` (0.5/0.5) | `skewed` (0.6/0.4);
+- `framing`: `narrative` (story-based trap/report) | `bare_table` (only prior, policies, observation — control for narrative seduction).
 
 ```bash
 python generate_env.py --env epistemic_games --name epg_1 \
-  --difficulty trap,ambiguous,paired,balanced --seed 7
+  --difficulty trap,ambiguous,paired,balanced,narrative --seed 7
 # development loop without any model access:
-python tools/epistemic_probe.py --baseline seductive --seeds 5
-python tools/epistemic_probe.py --module my_model_adapter.py:answer_fn --seeds 5
+python tools/epistemic_probe.py --baseline seductive --seeds 2
+python tools/public_bayes_oracle.py --self-test
+# bare-table vs narrative matched control:
+python tools/epistemic_probe.py --baseline narrative_match --seeds 2
 ```
 
 Design notes:
@@ -236,8 +241,18 @@ Design notes:
   the level-3 player reproduces the level-1 announcement; behavior tables
   sum to 1; no ground-truth leakage into the public task; hidden-world
   invariance: changing only `actual_world` does not change public payload).
-- Public-only oracle: `test_public_only_oracle` recomputes the answer from
-  only the public behavior tables and prior, without importing grading helpers.
+- Public-only oracle: `tools/public_bayes_oracle.py` parses only `task.md`
+  text (regex extraction of prior, behavior tables, observation) and recomputes
+  posterior with Bayes' rule, without importing generator helpers.
+  `tests/test_epistemic_invariants.py` asserts `oracle(task.md) == reference`.
+- Counterfactual invariant: `test_observational_equivalence_invariant`
+  generates `actual_world=world1` and counterfactual `world2` with identical
+  transcript and asserts byte-for-byte identical public task and identical
+  reference posterior/verdict.
+- Bare-table control: `framing=bare_table` strips all prose, providing only
+  prior, policies, observation. Probe groups by `(scenario,evidence,prior)`
+  and reports delta in failure-mode frequencies between `narrative` and
+  `bare_table` to isolate narrative seduction.
 - Planned subfamilies: `type_inference`, `deception`, `higher_order`,
   `strategic_ambiguity`, `level_race`, `self_reference`. The prototype covers
   `type_inference` (solo) and `strategic_ambiguity` (paired), with the

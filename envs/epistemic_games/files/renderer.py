@@ -21,11 +21,13 @@ import core
 
 def render(subs: Dict[str, str]) -> Dict[str, str]:
     seed = int(subs["SEED"])
+    framing = subs.get("FRAMING_ID", "narrative")
     instance = core.build_instance(
         template=subs["TEMPLATE_ID"],
         evidence=subs["EVIDENCE_ID"],
         prior_id=subs["PRIOR_ID"],
         presentation=subs["PRESENTATION_ID"],
+        framing=framing,
         seed=seed,
     )
     spec = instance.to_spec()

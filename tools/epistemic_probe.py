@@ -56,6 +56,7 @@ SCENARIOS = ("trap", "report")
 EVIDENCE = ("ambiguous", "weak", "strong")
 PRIORS = ("balanced", "skewed")
 PRESENTATIONS = ("solo", "paired")
+FRAMINGS = ("narrative", "bare_table")
 
 PASS_THRESHOLD = 0.85
 
@@ -79,6 +80,7 @@ def public_info(instance) -> dict:
         "subfamily": instance.subfamily,
         "template": instance.template,
         "presentation": instance.presentation,
+        "framing": instance.framing,
         "scenario_text": instance.public_task_md(),
         "prior_world1": float(instance.prior1),
         "actions": {
@@ -199,11 +201,11 @@ def main() -> None:
     out = open(args.output, "w", encoding="utf-8") if args.output else None
     rows: List[dict] = []
     try:
-        for scenario, evidence, presentation, prior in itertools.product(
-            SCENARIOS, EVIDENCE, PRESENTATIONS, PRIORS
+        for scenario, evidence, presentation, prior, framing in itertools.product(
+            SCENARIOS, EVIDENCE, PRESENTATIONS, PRIORS, FRAMINGS
         ):
             for seed in range(max(args.seeds, 1)):
-                instance = CORE.build_instance(scenario, evidence, prior, presentation, seed)
+                instance = CORE.build_instance(scenario, evidence, prior, presentation, seed, framing=framing)
                 public = public_info(instance)
                 if args.baseline == "calibrated":
                     answer = answer_fn(public, instance)
@@ -216,6 +218,7 @@ def main() -> None:
                     "evidence": evidence,
                     "presentation": presentation,
                     "prior": prior,
+                    "framing": framing,
                     "seed": seed,
                     "observation": instance.observation,
                     "failure_mode": grading["failure_mode"],
@@ -250,8 +253,33 @@ def main() -> None:
               f"{sum(counts.values()):>8}")
     passed = sum(1 for r in rows if r["failure_mode"] == "pass")
     print(f"\npass: {passed}/{len(rows)}")
+
+    # Bare-table vs narrative control: group by (scenario, evidence, prior) and
+    # measure delta in failure_mode frequencies between framings.
+    from collections import Counter, defaultdict
+
+    grouped: Dict[tuple, Dict[str, Counter]] = defaultdict(lambda: defaultdict(Counter))
+    for r in rows:
+        key = (r["scenario"], r["evidence"], r["prior"])
+        grouped[key][r["framing"]][r["failure_mode"]] += 1
+
+    print("\n--- Narrative vs Bare-Table delta (matched by scenario,evidence,prior) ---")
+    for key in sorted(grouped):
+        scen, ev, prior = key
+        narr = grouped[key].get("narrative", Counter())
+        bare = grouped[key].get("bare_table", Counter())
+        if narr != bare:
+            total_narr = sum(narr.values())
+            total_bare = sum(bare.values())
+            pass_narr = narr.get("pass", 0)
+            pass_bare = bare.get("pass", 0)
+            print(
+                f"{scen},{ev},{prior}: pass narrative {pass_narr}/{total_narr} vs bare {pass_bare}/{total_bare} "
+                f"delta={pass_bare - pass_narr:+d} | narr {dict(narr)} vs bare {dict(bare)}"
+            )
+
     if args.output:
-        print(f"report: {args.output}")
+        print(f"\nreport: {args.output}")
 
 
 if __name__ == "__main__":

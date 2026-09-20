@@ -46,6 +46,14 @@ axes:
       skewed:
         "%%PRIOR_ID%%": "skewed"
 
+  - id: framing
+    description: "Presentation framing: narrative story vs bare probability tables (control for narrative seduction)"
+    levels:
+      narrative:
+        "%%FRAMING_ID%%": "narrative"
+      bare_table:
+        "%%FRAMING_ID%%": "bare_table"
+
 scoring:
   mode: continuous_accuracy
   pass_threshold: 0.85

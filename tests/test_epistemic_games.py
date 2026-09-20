@@ -35,6 +35,7 @@ SCENARIOS = ("trap", "report")
 EVIDENCE = ("ambiguous", "weak", "strong")
 PRIORS = ("balanced", "skewed")
 PRESENTATIONS = ("solo", "paired")
+FRAMINGS = ("narrative", "bare_table")
 
 ANSWER_BLOCK = (
     "ANSWER = {\n"
@@ -375,7 +376,7 @@ def test_p0_inconsistent_posterior_support_rejected():
     contradictory = _answer(0.49, "weakly_distinguishable", "world1", "Illustrative inconsistent answer.")
     g = inst.grade(contradictory, pass_threshold=0.85)
     # Must be flagged as inconsistent, not pass, and score 0
-    assert g["failure_mode"] == "inconsistent_support", g
+    assert g["failure_mode"] == "internal_contradiction", g
     assert g["checks"]["support_consistent"] is False
     assert g["metrics"]["score"] == 0.0
     assert g["metrics"]["strict_correct"] is False
@@ -383,7 +384,7 @@ def test_p0_inconsistent_posterior_support_rejected():
     # Also test the opposite direction
     contradictory2 = _answer(0.51, "weakly_distinguishable", "world2", "inconsistent other way")
     g2 = inst.grade(contradictory2, 0.85)
-    assert g2["failure_mode"] == "inconsistent_support"
+    assert g2["failure_mode"] == "internal_contradiction"
     assert g2["metrics"]["score"] == 0.0
 
 
@@ -510,7 +511,7 @@ def test_safe_extraction_rejects_disallowed_constructs():
 
 def test_config_shape():
     config = yaml.safe_load((ENV_DIR / "config.yaml").read_text(encoding="utf-8"))
-    assert [ax["id"] for ax in config["axes"]] == ["scenario", "evidence", "presentation", "prior"]
+    assert [ax["id"] for ax in config["axes"]] == ["scenario", "evidence", "presentation", "prior", "framing"]
     assert config["scoring"]["mode"] == "continuous_accuracy"
     assert config["renderer"] == "renderer.py"
     registry = yaml.safe_load((ROOT / "envs" / "registry.yaml").read_text(encoding="utf-8"))
@@ -549,12 +550,12 @@ def test_renderer_hook_rejects_invalid_placeholder_names():
 
 
 def test_smoke_generate_all_combinations():
-    for scenario, evidence, presentation, prior in itertools.product(
-        SCENARIOS, EVIDENCE, PRESENTATIONS, PRIORS
+    for scenario, evidence, presentation, prior, framing in itertools.product(
+        SCENARIOS, EVIDENCE, PRESENTATIONS, PRIORS, FRAMINGS
     ):
-        name = f"smoke_eg_{scenario}_{evidence}_{presentation}_{prior}"
+        name = f"smoke_eg_{scenario}_{evidence}_{presentation}_{prior}_{framing}"
         cleanup(name)
-        run_generate("epistemic_games", name, f"{scenario},{evidence},{presentation},{prior}", seed=1)
+        run_generate("epistemic_games", name, f"{scenario},{evidence},{presentation},{prior},{framing}", seed=1)
         generated = ROOT / name
         assert generated.exists()
         assert (generated / "run_eval.sh").exists()
@@ -571,6 +572,7 @@ def test_smoke_generate_all_combinations():
         assert f"'evidence': '{evidence}'" in spec_text
         assert f"'presentation': '{presentation}'" in spec_text
         assert f"'prior_id': '{prior}'" in spec_text
+        assert f"'framing': '{framing}'" in spec_text
         cleanup(name)
 
 
@@ -578,8 +580,8 @@ def test_seed_varies_surface_across_generations():
     a = f"smoke_eg_seed_a"
     b = f"smoke_eg_seed_b"
     cleanup(a, b)
-    run_generate("epistemic_games", a, "trap,weak,paired,balanced", seed=101)
-    run_generate("epistemic_games", b, "trap,weak,paired,balanced", seed=102)
+    run_generate("epistemic_games", a, "trap,weak,paired,balanced,narrative", seed=101)
+    run_generate("epistemic_games", b, "trap,weak,paired,balanced,narrative", seed=102)
     task_a = (ROOT / a / "agent" / "workspace" / "task.md").read_text(encoding="utf-8")
     task_b = (ROOT / b / "agent" / "workspace" / "task.md").read_text(encoding="utf-8")
     assert task_a != task_b
@@ -627,7 +629,7 @@ def _run_judge(env_dir: Path, patch_text: str, seed: int, label: str) -> dict:
 
 
 def test_e2e_judge_correct_answer_passes():
-    env_dir = _generate_judge_env("smoke_eg_e2e_ok", "trap,weak,paired,balanced", seed=3)
+    env_dir = _generate_judge_env("smoke_eg_e2e_ok", "trap,weak,paired,balanced,narrative", seed=3)
     try:
         inst = CORE.build_instance("trap", "weak", "balanced", "paired", seed=3)
         result = _run_judge(env_dir, _answer_patch(env_dir, CORE.ground_truth_answer(inst)), 3, "ok")
@@ -642,7 +644,7 @@ def test_e2e_judge_correct_answer_passes():
 
 
 def test_e2e_judge_seductive_answer_diagnosed():
-    env_dir = _generate_judge_env("smoke_eg_e2e_sed", "trap,ambiguous,paired,balanced", seed=7)
+    env_dir = _generate_judge_env("smoke_eg_e2e_sed", "trap,ambiguous,paired,balanced,narrative", seed=7)
     try:
         sed = _answer(0.9, "distinguishable", "world1", "A stated it plainly; level 1 tells the truth.")
         result = _run_judge(env_dir, _answer_patch(env_dir, sed), 7, "sed")
@@ -654,7 +656,7 @@ def test_e2e_judge_seductive_answer_diagnosed():
 
 
 def test_e2e_judge_format_invalid_scores_zero():
-    env_dir = _generate_judge_env("smoke_eg_e2e_bad", "trap,weak,solo,balanced", seed=5)
+    env_dir = _generate_judge_env("smoke_eg_e2e_bad", "trap,weak,solo,balanced,narrative", seed=5)
     try:
         bad = _answer("yes", "indistinguishable", "neither")
         result = _run_judge(env_dir, _answer_patch(env_dir, bad), 5, "bad")
@@ -665,7 +667,7 @@ def test_e2e_judge_format_invalid_scores_zero():
 
 
 def test_e2e_judge_rejects_tampered_provenance():
-    env_dir = _generate_judge_env("smoke_eg_e2e_tamper", "trap,ambiguous,paired,skewed", seed=9)
+    env_dir = _generate_judge_env("smoke_eg_e2e_tamper", "trap,ambiguous,paired,skewed,narrative", seed=9)
     spec_path = env_dir / "judge" / "instance_spec.py"
     original = spec_path.read_text(encoding="utf-8")
     try:
@@ -681,13 +683,13 @@ def test_e2e_judge_rejects_tampered_provenance():
         cleanup("smoke_eg_e2e_tamper", "smoke_eg_judge_work")
 
 
-def test_e2e_judge_inconsistent_support_rejected():
-    env_dir = _generate_judge_env("smoke_eg_e2e_inc", "trap,weak,paired,balanced", seed=3)
+def test_e2e_judge_internal_contradiction_rejected():
+    env_dir = _generate_judge_env("smoke_eg_e2e_inc", "trap,weak,paired,balanced,narrative", seed=3)
     try:
         # Inconsistent: posterior 0.49 but support world1
         inc = _answer(0.49, "weakly_distinguishable", "world1", "inconsistent")
         result = _run_judge(env_dir, _answer_patch(env_dir, inc), 3, "inc")
-        assert result["failure_mode"] == "inconsistent_support"
+        assert result["failure_mode"] == "internal_contradiction"
         assert result["score"] == 0.0
         assert result["checks"]["support_consistent"] is False
     finally:
@@ -702,7 +704,7 @@ def test_e2e_judge_rejects_code_execution():
     as a valid rejection — the key property is that code is not executed and
     score is 0.
     """
-    env_dir = _generate_judge_env("smoke_eg_e2e_exec", "trap,weak,paired,balanced", seed=3)
+    env_dir = _generate_judge_env("smoke_eg_e2e_exec", "trap,weak,paired,balanced,narrative", seed=3)
     try:
         pristine = (env_dir / "agent" / "workspace" / "answer.py").read_text(encoding="utf-8")
         # Inject a call — should be rejected, not executed
@@ -729,7 +731,7 @@ def test_env_runner_episode_submits_and_scores():
     try:
         proc = subprocess.run(
             [sys.executable, "env_runner.py", "reset", "--env", "epistemic_games",
-             "--episode-id", episode, "--difficulty", "report,ambiguous,paired,balanced",
+             "--episode-id", episode, "--difficulty", "report,ambiguous,paired,balanced,narrative",
              "--seed", "42", "--max-steps", "6"],
             cwd=ROOT, text=True, capture_output=True,
         )

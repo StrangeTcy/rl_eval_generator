@@ -117,6 +117,10 @@ SUBFAMILY_BY_PRESENTATION: Dict[str, str] = {
     "paired": "strategic_ambiguity",
 }
 
+FRAMING_NARRATIVE = "narrative"
+FRAMING_BARE = "bare_table"
+FRAMINGS: Tuple[str, ...] = (FRAMING_NARRATIVE, FRAMING_BARE)
+
 
 def _cap_first(text: str) -> str:
     """Capitalize only the first character (str.capitalize would lowercase the rest)."""
@@ -298,6 +302,7 @@ class Instance:
     evidence: str
     prior_id: str
     presentation: str
+    framing: str
     seed: int
     subfamily: str
     vocab: SurfaceVocab
@@ -342,6 +347,7 @@ class Instance:
             "evidence": self.evidence,
             "prior_id": self.prior_id,
             "presentation": self.presentation,
+            "framing": self.framing,
             "seed": self.seed,
             "prior_world1": float(self.prior1),
             "prior_world2": float(1 - self.prior1),
@@ -402,69 +408,109 @@ class Instance:
         return "\n".join(lines)
 
     def public_task_md(self) -> str:
-        """Render the agent-facing task. Contains NO ground-truth values."""
+        """Render the agent-facing task. Contains NO ground-truth values.
+
+        Two framings:
+        - narrative: story-based trap/report templates (existing)
+        - bare_table: stripped prose, only prior, policies, observation
+        """
         h1, h2 = self.hypotheses[WORLD1], self.hypotheses[WORLD2]
         v = self.vocab
         parts: List[str] = []
 
-        if self.presentation == "paired":
-            parts.append(f"# Strategic Ambiguity Task (epistemic_games/{self.subfamily})")
+        if self.framing == FRAMING_BARE:
+            # Bare-table control: mathematically identical, no narrative seduction
+            parts.append(f"# Bare-Table Task (epistemic_games/{self.subfamily})")
             parts.append(
-                f"{v.actor} is involved in an incident at {v.site}. Two candidate "
-                f"explanations are on the table, and **you do not know which one is "
-                f"actually the case**. Both explanations share every public fact; "
-                f"they differ in the player's type and internal state. "
-                f"{_cap_first(v.stakes_text)}."
+                "Two hypotheses (world1 = genuine, world2 = strategic) with a common prior "
+                "and known announcement policies. You observe one transcript. "
+                "This is the bare-table control for the narrative framing."
             )
-            parts.append("## World 1: the level-1 (genuine) world")
-            parts.append(f"{h1.narrative} {self._level_lines(h1)}")
-            parts.append("Announcement policy (common knowledge):")
-            parts.append(self._behavior_block(h1))
-            parts.append("## World 2: the level-3 (strategic) world")
-            parts.append(f"{h2.narrative} {self._level_lines(h2)}")
-            parts.append("Announcement policy (common knowledge):")
-            parts.append(self._behavior_block(h2))
-        else:  # solo
-            parts.append(f"# Type Inference Task (epistemic_games/{self.subfamily})")
+            parts.append("## Prior")
             parts.append(
-                f"{v.actor} is involved in an incident at {v.site}. A single player "
-                f"made the public announcement quoted below, and **you do not know the "
-                f"player's type**: either a level-1 (genuine) reasoner or a level-3 "
-                f"(strategic) reasoner. {_cap_first(v.stakes_text)}."
+                f"P(world 1) = {float(self.prior1):.2f}, "
+                f"P(world 2) = {float(1 - self.prior1):.2f}"
             )
-            parts.append("## Hypothesis 1 (world 1): the player is level-1 (genuine)")
-            parts.append(f"{h1.narrative} {self._level_lines(h1)}")
-            parts.append("Announcement policy (common knowledge):")
-            parts.append(self._behavior_block(h1))
-            parts.append("## Hypothesis 2 (world 2): the player is level-3 (strategic)")
-            parts.append(f"{h2.narrative} {self._level_lines(h2)}")
-            parts.append("Announcement policy (common knowledge):")
-            parts.append(self._behavior_block(h2))
-
-        parts.append("## Reasoning levels")
-        parts.append(self._level_box())
-
-        parts.append("## Observed transcript")
-        parts.append(f'You observed: {v.actor} said: "{self.action_text(self.observation)}"')
-
-        if self.presentation == "paired" and self.observational_equivalence:
+            parts.append("## Behavior")
             parts.append(
-                "Note: in this instance both worlds' announcement policies are "
-                "identical. The transcript is the only observation you have about "
-                "which world you are in."
+                f"World1: P(denial)={float(h1.behavior['denial']):.2f}, "
+                f"P(vague)={float(h1.behavior['vague']):.2f}"
             )
-        elif self.presentation == "paired":
             parts.append(
-                "Note: the two worlds' announcement policies differ. The single "
-                "observed transcript is the only observation you have about which "
-                "world you are in."
+                f"World2: P(denial)={float(h2.behavior['denial']):.2f}, "
+                f"P(vague)={float(h2.behavior['vague']):.2f}"
             )
+            # Keep action texts for oracle parsing, but label them abstractly
+            parts.append(
+                f"Action texts: denial={self.action_text('denial')!r}, "
+                f"vague={self.action_text('vague')!r}"
+            )
+            parts.append("## Observed transcript")
+            parts.append(f"Observation: {self.observation}")
+            parts.append(f'You observed: "{self.action_text(self.observation)}"')
+            parts.append(
+                f"Likelihoods: L1=P(observed|world1)={float(self.likelihoods[WORLD1]):.2f}, "
+                f"L2=P(observed|world2)={float(self.likelihoods[WORLD2]):.2f}"
+            )
+        else:
+            if self.presentation == "paired":
+                parts.append(f"# Strategic Ambiguity Task (epistemic_games/{self.subfamily})")
+                parts.append(
+                    f"{v.actor} is involved in an incident at {v.site}. Two candidate "
+                    f"explanations are on the table, and **you do not know which one is "
+                    f"actually the case**. Both explanations share every public fact; "
+                    f"they differ in the player's type and internal state. "
+                    f"{_cap_first(v.stakes_text)}."
+                )
+                parts.append("## World 1: the level-1 (genuine) world")
+                parts.append(f"{h1.narrative} {self._level_lines(h1)}")
+                parts.append("Announcement policy (common knowledge):")
+                parts.append(self._behavior_block(h1))
+                parts.append("## World 2: the level-3 (strategic) world")
+                parts.append(f"{h2.narrative} {self._level_lines(h2)}")
+                parts.append("Announcement policy (common knowledge):")
+                parts.append(self._behavior_block(h2))
+            else:  # solo
+                parts.append(f"# Type Inference Task (epistemic_games/{self.subfamily})")
+                parts.append(
+                    f"{v.actor} is involved in an incident at {v.site}. A single player "
+                    f"made the public announcement quoted below, and **you do not know the "
+                    f"player's type**: either a level-1 (genuine) reasoner or a level-3 "
+                    f"(strategic) reasoner. {_cap_first(v.stakes_text)}."
+                )
+                parts.append("## Hypothesis 1 (world 1): the player is level-1 (genuine)")
+                parts.append(f"{h1.narrative} {self._level_lines(h1)}")
+                parts.append("Announcement policy (common knowledge):")
+                parts.append(self._behavior_block(h1))
+                parts.append("## Hypothesis 2 (world 2): the player is level-3 (strategic)")
+                parts.append(f"{h2.narrative} {self._level_lines(h2)}")
+                parts.append("Announcement policy (common knowledge):")
+                parts.append(self._behavior_block(h2))
 
-        parts.append("## Prior")
-        parts.append(
-            f"P(world 1) = {float(self.prior1):.2f}, "
-            f"P(world 2) = {float(1 - self.prior1):.2f}. This prior is common knowledge."
-        )
+            parts.append("## Reasoning levels")
+            parts.append(self._level_box())
+
+            parts.append("## Observed transcript")
+            parts.append(f'You observed: {v.actor} said: "{self.action_text(self.observation)}"')
+
+            if self.presentation == "paired" and self.observational_equivalence:
+                parts.append(
+                    "Note: in this instance both worlds' announcement policies are "
+                    "identical. The transcript is the only observation you have about "
+                    "which world you are in."
+                )
+            elif self.presentation == "paired":
+                parts.append(
+                    "Note: the two worlds' announcement policies differ. The single "
+                    "observed transcript is the only observation you have about which "
+                    "world you are in."
+                )
+
+            parts.append("## Prior")
+            parts.append(
+                f"P(world 1) = {float(self.prior1):.2f}, "
+                f"P(world 2) = {float(1 - self.prior1):.2f}. This prior is common knowledge."
+            )
 
         parts.append("## Question")
         parts.append(
@@ -508,6 +554,7 @@ class Instance:
         text = "\n\n".join(parts) + "\n"
         _assert_clean(text, "task.md")
         return text
+
 
     # -- grading ------------------------------------------------------------
 
@@ -763,7 +810,7 @@ def classify_failure(
     score threshold — a high training reward does not suppress the diagnosis.
 
     Ordering (new, hardened):
-    1. inconsistent_support — reported posterior and reported most_supported
+    1. internal_contradiction (aka inconsistent_support) — reported posterior and reported most_supported
        contradict each other (e.g. posterior 0.49 but support world1).
     2. wrong_direction — reported posterior on opposite side of 0.5 from truth.
     3. verdict_miscalibration — posterior accurate (err <=0.15) but verdict band wrong.
@@ -774,7 +821,7 @@ def classify_failure(
 
     # 1. Internal inconsistency — must be caught even if weighted score would pass.
     if not support_consistent:
-        return "inconsistent_support"
+        return "internal_contradiction"
 
     wrong_direction = (
         (true_posterior > 0.5 and reported_posterior < 0.5)
@@ -837,9 +884,10 @@ def build_instance(
     prior_id: str,
     presentation: str,
     seed: int,
+    framing: str = FRAMING_NARRATIVE,
 ) -> Instance:
     """Deterministically build one instance from (template, evidence, prior,
-    presentation, seed). Raises on unknown axis values or invariant failures."""
+    presentation, framing, seed). Raises on unknown axis values or invariant failures."""
     if template not in TEMPLATES:
         raise ValueError(f"unknown template {template!r}; options: {sorted(TEMPLATES)}")
     if evidence not in EVIDENCE_TABLE:
@@ -850,6 +898,8 @@ def build_instance(
         raise ValueError(
             f"unknown presentation {presentation!r}; options: {sorted(SUBFAMILY_BY_PRESENTATION)}"
         )
+    if framing not in FRAMINGS:
+        raise ValueError(f"unknown framing {framing!r}; options: {sorted(FRAMINGS)}")
 
     rng = random.Random(seed)
     vocab = TEMPLATES[template](rng)
@@ -936,6 +986,7 @@ def build_instance(
         evidence=evidence,
         prior_id=prior_id,
         presentation=presentation,
+        framing=framing,
         seed=seed,
         subfamily=SUBFAMILY_BY_PRESENTATION[presentation],
         vocab=vocab,
