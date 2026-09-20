@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import shutil
 import subprocess
@@ -456,6 +457,104 @@ def test_provider_error_is_not_reported_as_observed_control_failure(tmp_path, mo
     assert reflective["conditional_failed_control_n"] == 0
     assert reflective["conditional_api_error_control_n"] == 1
     assert result["summary"]["api_error_control_trajectory_cases"] == 1
+
+
+def test_trajectory_timeout_is_excluded_after_both_controls_pass(tmp_path, monkeypatch):
+    class TimeoutTrajectoryProviderClient:
+        last_retry_count = 0
+        last_attempts = []
+
+        def __init__(self, provider, api_key, **kwargs):
+            self.provider = provider
+
+        def complete(self, *, model, messages, max_tokens, temperature):
+            prompt = messages[-1]["content"]
+            if "Parsing control" in prompt:
+                answer = "same"
+            elif "after exactly 1 transition" in prompt:
+                answer = "B(0)"
+            else:
+                raise ProviderError(
+                    "Provider request timed out",
+                    body="timed out",
+                    retryable=True,
+                    attempts=1,
+                )
+            return Completion(
+                content=answer,
+                requested_model=model,
+                resolved_model=model,
+                finish_reason="stop",
+                usage={"prompt_tokens": 1, "completion_tokens": 1},
+                raw_response={"model": model},
+                latency_ms=1,
+                request_id="fake-request",
+                response_headers={},
+                provider=self.provider,
+            )
+
+    monkeypatch.setattr(trajectory_runner, "ProviderClient", TimeoutTrajectoryProviderClient)
+    result = run_trajectory(
+        TrajectoryOptions(
+            provider="custom",
+            model="fake/model",
+            out=tmp_path / "run",
+            representations=["flat"],
+            witnesses=["valid"],
+            queries=["parse_only", "one_step", "complete_return"],
+            horizons=[6],
+            relabelings=["canonical"],
+            syntax_noise=["clean"],
+            semantic_seeds=[0],
+            system_seeds=[0],
+            initial_state_seeds=[0],
+            presentation_seeds=[100],
+            api_key="fake-secret",
+            api_base="https://example.invalid/v1",
+            max_tokens=8,
+            max_calls=3,
+        )
+    )
+    summary = result["summary"]
+    assert summary["trajectory_attempts"] == 1
+    assert summary["trajectory_observed_cases"] == 0
+    assert summary["trajectory_api_error_cases"] == 1
+    assert summary["trajectory_parse_error_cases"] == 0
+    assert summary["trajectory_judge_error_cases"] == 0
+    assert summary["unconditional_trajectory_accuracy_observed"] is None
+    assert summary["conditional_trajectory_cases"] == 0
+    assert summary["conditional_trajectory_accuracy_observed"] is None
+    assert summary["api_error_control_trajectory_cases"] == 0
+    row = next(row for row in summary["groups"] if row["query_type"] == "complete_return")
+    assert row["parse_control_passed"] is True
+    assert row["one_step_control_passed"] is True
+    assert row["trajectory_api_error_cases"] == 1
+    assert row["conditional_n"] == 0
+    answer = json.loads((tmp_path / "run" / "answers.jsonl").read_text().splitlines()[-1])
+    assert answer["response_status"] == "api_error"
+    csv_text = (tmp_path / "run" / "summary.csv").read_text()
+    csv_rows = list(csv.DictReader(csv_text.splitlines()))
+    csv_trajectory = next(row for row in csv_rows if row["query_type"] == "complete_return")
+    assert csv_trajectory["trajectory_attempts"] == "1"
+    assert csv_trajectory["conditional_trajectory_accuracy_observed"] == ""
+    markdown = (tmp_path / "run" / "summary.md").read_text()
+    assert "trajectory_api_error_cases" in markdown
+    assert "`NA`" in markdown
+
+
+def test_response_status_and_control_error_contradictions_are_hardened(tmp_path):
+    assert trajectory_runner._control_status(
+        {"control_status": "passed", "response_status": "answered", "error": "timeout"}
+    ) == "api_error"
+    assert trajectory_runner._control_status(
+        {"control_status": "passed", "response_status": "parse_error"}
+    ) == "failed"
+    with pytest.raises(ValueError, match="invalid response_status"):
+        write_summary(
+            tmp_path / "invalid-status",
+            [{"event": "case_result", "response_status": "not-a-status", "case": {}}],
+            {},
+        )
 
 
 def test_control_replications_are_keyed_and_duplicate_controls_rejected(tmp_path):

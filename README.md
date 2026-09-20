@@ -496,6 +496,26 @@ truncated run remain `null`, not failures. Control status separates `passed`,
 `failed`, `missing`, and `api_error`; an empty conditional sample is reported
 as `null`/`NA`, not zero.
 
+Every answer record also has an exclusive `response_status`: `answered`,
+`api_error`, `parse_error`, or `judge_error`; an API failure, unparseable answer
+format, or scorer failure is not an observed answer. `trajectory_attempts` counts every
+trajectory request, while `trajectory_observed_cases` counts only `answered`
+responses. The summary reports separate API, parse, and judge error counts and
+uses `unconditional_trajectory_accuracy_observed` and
+`conditional_trajectory_accuracy_observed` for model accuracy; those rates have
+only observed, answerable cases in their denominators. `trajectory_success_per_attempt`
+is an operational availability metric, not model accuracy. The partition is
+applied in this order: trajectory-response error (`api_error`, then
+`parse_error`, then `judge_error`), control `api_error`, missing control,
+observed control failure, and finally included (both same-replication controls
+passed). Thus a trajectory API timeout is never relabeled as a missing or
+failed control, even if both controls passed. Provider error evidence takes
+precedence over a contradictory explicit `control_status`; malformed status
+values are rejected. Conditional accuracy remains accuracy among trials whose
+same-replication controls passed, not an automatic adjustment for parsing
+difficulty.
+
+
 Use `--judge host`, `--judge docker`, or `--judge both`. The latter fails if
 host and offline Docker judgments disagree. The optional
 `docker/Dockerfile.trajectory_judge` image evaluates private case/answer records

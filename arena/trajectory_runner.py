@@ -231,28 +231,66 @@ def _format_rate(value: object) -> str:
     return "NA" if value is None else f"{float(value):.3f}"
 
 
-def _control_status(record: dict[str, Any] | None) -> str:
+RESPONSE_STATUSES = {"answered", "api_error", "parse_error", "judge_error"}
+
+
+def _response_status(record: dict[str, Any] | None) -> str:
     if record is None:
-        return "missing"
-    explicit = record.get("control_status")
-    if explicit in {"passed", "failed", "missing", "api_error"}:
-        return str(explicit)
-    if (
+        return "api_error"
+    explicit = record.get("response_status")
+    if explicit is not None and (
+        not isinstance(explicit, str) or explicit not in RESPONSE_STATUSES
+    ):
+        raise ValueError(f"invalid response_status: {explicit!r}")
+    error_evidence = (
         record.get("error") is not None
         or record.get("error_status_code") is not None
         or record.get("error_attempts") is not None
-    ):
+    )
+    # Provider-error fields are authoritative even if an older or malformed
+    # record says that the request was answered (or labels it otherwise).
+    if error_evidence:
         return "api_error"
+    if record.get("judge_error") is not None:
+        return "judge_error"
+    if record.get("parse_error") is not None:
+        return "parse_error"
+    return str(explicit) if explicit is not None else "answered"
+
+
+def _control_status(record: dict[str, Any] | None) -> str:
+    if record is None:
+        return "missing"
+    response_status = _response_status(record)
+    if response_status in {"api_error", "judge_error"}:
+        return "api_error"
+    if response_status == "parse_error":
+        return "failed"
+    explicit = record.get("control_status")
+    valid_statuses = {"passed", "failed", "missing", "api_error"}
+    if explicit is not None and (
+        not isinstance(explicit, str) or explicit not in valid_statuses
+    ):
+        raise ValueError(f"invalid control_status: {explicit!r}")
+    if explicit is not None:
+        return explicit
     return "passed" if bool(record.get("correct")) else "failed"
 
 
 def _trajectory_control_bucket(record: dict[str, Any]) -> str:
+    response_status = _response_status(record)
+    if response_status == "api_error":
+        return "trajectory_api_error"
+    if response_status == "parse_error":
+        return "trajectory_parse_error"
+    if response_status == "judge_error":
+        return "trajectory_judge_error"
     statuses = (
         str(record.get("parse_control_status")),
         str(record.get("one_step_control_status")),
     )
     if "api_error" in statuses:
-        return "api_error"
+        return "control_api_error"
     if "missing" in statuses:
         return "missing"
     if statuses == ("passed", "passed"):
@@ -473,7 +511,16 @@ def write_summary(
             item for item in trajectory_items if _trajectory_control_bucket(item) == "failed"
         ]
         api_error_control_items = [
-            item for item in trajectory_items if _trajectory_control_bucket(item) == "api_error"
+            item for item in trajectory_items if _trajectory_control_bucket(item) == "control_api_error"
+        ]
+        trajectory_api_error_items = [
+            item for item in trajectory_items if _trajectory_control_bucket(item) == "trajectory_api_error"
+        ]
+        trajectory_parse_error_items = [
+            item for item in trajectory_items if _trajectory_control_bucket(item) == "trajectory_parse_error"
+        ]
+        trajectory_judge_error_items = [
+            item for item in trajectory_items if _trajectory_control_bucket(item) == "trajectory_judge_error"
         ]
 
         def consensus(selected: list[dict[str, Any]], field: str) -> bool | None:
@@ -483,10 +530,19 @@ def write_summary(
             return values[0]
 
         def status_consensus(selected: list[dict[str, Any]], field: str) -> str | None:
-            values = [str(item[field]) for item in selected if item.get(field) is not None]
+            if field == "response_status":
+                values = [_response_status(item) for item in selected]
+            else:
+                values = [str(item[field]) for item in selected if item.get(field) is not None]
             if not values or any(value != values[0] for value in values[1:]):
                 return None
             return values[0]
+
+        trajectory_observed_items = [
+            item for item in trajectory_items if _response_status(item) == "answered"
+        ]
+        trajectory_observed_correct = sum(bool(item.get("correct")) for item in trajectory_observed_items)
+        conditional_correct = sum(bool(item.get("correct")) for item in conditional_items)
 
         rows.append(
             {
@@ -517,15 +573,28 @@ def write_summary(
                 "parse_control_status": status_consensus(trajectory_items, "parse_control_status"),
                 "one_step_control_status": status_consensus(trajectory_items, "one_step_control_status"),
                 "conditional_n": len(conditional_items),
-                "conditional_correct": sum(bool(item.get("correct")) for item in conditional_items),
-                "conditional_accuracy": _rate(
-                    sum(bool(item.get("correct")) for item in conditional_items),
-                    len(conditional_items),
-                ),
+                "conditional_correct": conditional_correct,
+                "conditional_accuracy": _rate(conditional_correct, len(conditional_items)),
+                "conditional_accuracy_observed": _rate(conditional_correct, len(conditional_items)),
                 "conditional_excluded_n": len(trajectory_items) - len(conditional_items),
                 "conditional_missing_control_n": len(missing_control_items),
                 "conditional_failed_control_n": len(failed_control_items),
                 "conditional_api_error_control_n": len(api_error_control_items),
+                "trajectory_attempts": len(trajectory_items),
+                "trajectory_observed_cases": len(trajectory_observed_items),
+                "trajectory_api_error_cases": len(trajectory_api_error_items),
+                "trajectory_parse_error_cases": len(trajectory_parse_error_items),
+                "trajectory_judge_error_cases": len(trajectory_judge_error_items),
+                "trajectory_success_per_attempt": _rate(
+                    len(trajectory_observed_items), len(trajectory_items)
+                ),
+                "unconditional_trajectory_accuracy_observed": _rate(
+                    trajectory_observed_correct, len(trajectory_observed_items)
+                ),
+                "conditional_trajectory_accuracy_observed": _rate(
+                    conditional_correct, len(conditional_items)
+                ),
+                "response_status": status_consensus(trajectory_items, "response_status"),
             }
         )
     csv_path = run_dir / "summary.csv"
@@ -550,8 +619,24 @@ def write_summary(
         record for record in trajectory_records if _trajectory_control_bucket(record) == "failed"
     ]
     api_error_control_records = [
-        record for record in trajectory_records if _trajectory_control_bucket(record) == "api_error"
+        record for record in trajectory_records if _trajectory_control_bucket(record) == "control_api_error"
     ]
+    trajectory_api_error_records = [
+        record for record in trajectory_records if _trajectory_control_bucket(record) == "trajectory_api_error"
+    ]
+    trajectory_parse_error_records = [
+        record for record in trajectory_records if _trajectory_control_bucket(record) == "trajectory_parse_error"
+    ]
+    trajectory_judge_error_records = [
+        record for record in trajectory_records if _trajectory_control_bucket(record) == "trajectory_judge_error"
+    ]
+    trajectory_observed_records = [
+        record for record in trajectory_records if _response_status(record) == "answered"
+    ]
+    unconditional_observed_correct = sum(
+        bool(record.get("correct")) for record in trajectory_observed_records
+    )
+    conditional_correct = sum(bool(record.get("correct")) for record in conditional_records)
     summary = {
         "event": "summary",
         "track": "direct_answer_behavioral",
@@ -563,16 +648,26 @@ def write_summary(
         "group_count": len(rows),
         "groups": rows,
         "trajectory_cases": len(trajectory_records),
-        "unconditional_trajectory_correct": sum(bool(item.get("correct")) for item in trajectory_records),
+        "trajectory_attempts": len(trajectory_records),
+        "trajectory_observed_cases": len(trajectory_observed_records),
+        "trajectory_api_error_cases": len(trajectory_api_error_records),
+        "trajectory_parse_error_cases": len(trajectory_parse_error_records),
+        "trajectory_judge_error_cases": len(trajectory_judge_error_records),
+        "trajectory_success_per_attempt": _rate(
+            len(trajectory_observed_records), len(trajectory_records)
+        ),
+        "unconditional_trajectory_correct": unconditional_observed_correct,
         "unconditional_trajectory_accuracy": _rate(
-            sum(bool(item.get("correct")) for item in trajectory_records),
-            len(trajectory_records),
+            unconditional_observed_correct, len(trajectory_observed_records)
+        ),
+        "unconditional_trajectory_accuracy_observed": _rate(
+            unconditional_observed_correct, len(trajectory_observed_records)
         ),
         "conditional_trajectory_cases": len(conditional_records),
-        "conditional_trajectory_correct": sum(bool(item.get("correct")) for item in conditional_records),
-        "conditional_trajectory_accuracy": _rate(
-            sum(bool(item.get("correct")) for item in conditional_records),
-            len(conditional_records),
+        "conditional_trajectory_correct": conditional_correct,
+        "conditional_trajectory_accuracy": _rate(conditional_correct, len(conditional_records)),
+        "conditional_trajectory_accuracy_observed": _rate(
+            conditional_correct, len(conditional_records)
         ),
         "excluded_trajectory_cases": len(trajectory_records) - len(conditional_records),
         "missing_control_trajectory_cases": len(missing_control_records),
@@ -591,16 +686,26 @@ def write_summary(
         "",
         f"- Total logged results (including controls): `{summary['total_cases']}`",
         f"- All-case accuracy: `{summary['all_case_accuracy']}`",
-        f"- Unconditional trajectory accuracy: `{_format_rate(summary['unconditional_trajectory_accuracy'])}`",
-        f"- Conditional trajectory accuracy: `{_format_rate(summary['conditional_trajectory_accuracy'])}` "
+        f"- `trajectory_attempts`: `{summary['trajectory_attempts']}`; "
+        f"`trajectory_observed_cases`: `{summary['trajectory_observed_cases']}`; "
+        f"`trajectory_success_per_attempt`: `{_format_rate(summary['trajectory_success_per_attempt'])}`",
+        f"- `trajectory_api_error_cases`: `{summary['trajectory_api_error_cases']}`; "
+        f"`trajectory_parse_error_cases`: `{summary['trajectory_parse_error_cases']}`; "
+        f"`trajectory_judge_error_cases`: `{summary['trajectory_judge_error_cases']}`",
+        f"- `unconditional_trajectory_accuracy`: `{_format_rate(summary['unconditional_trajectory_accuracy'])}`; "
+        f"`unconditional_trajectory_accuracy_observed`: "
+        f"`{_format_rate(summary['unconditional_trajectory_accuracy_observed'])}`",
+        f"- `conditional_trajectory_accuracy`: `{_format_rate(summary['conditional_trajectory_accuracy'])}`; "
+        f"`conditional_trajectory_accuracy_observed`: "
+        f"`{_format_rate(summary['conditional_trajectory_accuracy_observed'])}` "
         f"(included `{summary['conditional_trajectory_cases']}`, "
         f"failed controls `{summary['failed_control_trajectory_cases']}`, "
         f"missing controls `{summary['missing_control_trajectory_cases']}`, "
-        f"API errors `{summary['api_error_control_trajectory_cases']}`)",
+        f"control API errors `{summary['api_error_control_trajectory_cases']}`)",
         "- Interpretation: behavioral sensitivity to named interventions; no internal depth claim.",
         "",
-        "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | parse passed | parse status | one-step passed | one-step status | conditional n | conditional accuracy | missing controls | failed controls | api errors | stale match |",
-        "|---:|---:|---|---|---|---:|---|---|---:|---:|---:|---:|---|---|---|---|---:|---:|---:|---:|---:|---:|",
+        "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | parse passed | parse status | one-step passed | one-step status | attempts | observed | API | parse | judge | unconditional observed | conditional n | conditional observed | missing controls | failed controls | control API errors | stale match |",
+        "|---:|---:|---|---|---|---:|---|---|---:|---:|---:|---:|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         markdown.append(
@@ -610,7 +715,12 @@ def write_summary(
             f"{_format_rate(row['parse_control_accuracy'])} | {_format_rate(row['one_step_control_accuracy'])} | "
             f"{row['parse_control_passed']} | {row['parse_control_status']} | "
             f"{row['one_step_control_passed']} | {row['one_step_control_status']} | "
-            f"{row['conditional_n']} | {_format_rate(row['conditional_accuracy'])} | "
+            f"{row['trajectory_attempts']} | {row['trajectory_observed_cases']} | "
+            f"{row['trajectory_api_error_cases']} | {row['trajectory_parse_error_cases']} | "
+            f"{row['trajectory_judge_error_cases']} | "
+            f"{_format_rate(row['unconditional_trajectory_accuracy_observed'])} | "
+            f"{row['conditional_n']} | "
+            f"{_format_rate(row['conditional_trajectory_accuracy_observed'])} | "
             f"{row['conditional_missing_control_n']} | {row['conditional_failed_control_n']} | "
             f"{row['conditional_api_error_control_n']} | {_format_rate(row['stale_witness_match_rate'])} |"
         )
@@ -795,6 +905,9 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                     error_attempts: int | None = None
                                     error_request_id: str | None = None
                                     error_response_headers: dict[str, str] = {}
+                                    parse_error: str | None = None
+                                    judge_error: str | None = None
+                                    response_status = "answered"
                                     completion = None
                                     try:
                                         completion = client.complete(
@@ -805,7 +918,11 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                         )
                                         raw = completion.content
                                         scored = score_answer(case, raw)
+                                        if not scored["format_valid"]:
+                                            response_status = "parse_error"
+                                            parse_error = "answer format was not parseable"
                                     except ProviderError as exc:
+                                        response_status = "api_error"
                                         scored = {
                                             "format_valid": False,
                                             "correct": False,
@@ -819,9 +936,41 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                         error_attempts = exc.attempts
                                         error_request_id = exc.request_id
                                         error_response_headers = exc.response_headers
+                                    except (AttributeError, KeyError, TypeError, ValueError):
+                                        # A malformed provider payload or an
+                                        # unexpected answer shape is a parse
+                                        # failure, not an observed incorrect
+                                        # answer.  Keep the persisted detail
+                                        # generic so exception text cannot
+                                        # accidentally expose credentials.
+                                        response_status = "parse_error"
+                                        parse_error = "answer parsing failed"
+                                        scored = {
+                                            "format_valid": False,
+                                            "correct": False,
+                                            "parsed_answer": "",
+                                            "expected_normalized": "",
+                                            "matched_stale_witness_prediction": False,
+                                        }
+                                    except Exception:
+                                        # A failure in the scorer/judge is a
+                                        # measurement infrastructure error,
+                                        # not a model answer.  Do not persist
+                                        # exception text because it could
+                                        # contain provider data.
+                                        response_status = "judge_error"
+                                        judge_error = "answer judging failed"
+                                        scored = {
+                                            "format_valid": False,
+                                            "correct": False,
+                                            "parsed_answer": "",
+                                            "expected_normalized": "",
+                                            "matched_stale_witness_prediction": False,
+                                        }
                                     control_status = (
                                         "api_error"
-                                        if error is not None
+                                        if response_status in {"api_error", "judge_error"}
+                                        else "failed" if response_status == "parse_error"
                                         else "passed" if bool(scored["correct"]) else "failed"
                                     )
                                     record = {
@@ -833,6 +982,9 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                         "messages": messages,
                                         "raw_model_output": raw,
                                         **scored,
+                                        "response_status": response_status,
+                                        "parse_error": parse_error,
+                                        "judge_error": judge_error,
                                         "control_status": control_status,
                                         "api_replication": replication,
                                         "request_started_at": request_started_at,
@@ -865,6 +1017,7 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                             "case_id": case.case_id,
                                             "api_replication": replication,
                                             "raw_model_output": raw,
+                                            "response_status": response_status,
                                             "raw_response": completion.raw_response if completion else {},
                                             "usage": completion.usage if completion else {},
                                             "latency_ms": completion.latency_ms if completion else None,
@@ -880,6 +1033,9 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                             "raw_model_output": raw,
                                             "parsed_answer": scored["parsed_answer"],
                                             "correct": scored["correct"],
+                                            "response_status": response_status,
+                                            "parse_error": parse_error,
+                                            "judge_error": judge_error,
                                             "control_status": control_status,
                                             "error": error,
                                         },
