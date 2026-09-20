@@ -223,6 +223,43 @@ def _record_key(record: dict[str, Any]) -> tuple[str, int]:
     )
 
 
+def _rate(correct: int, total: int) -> float | None:
+    return correct / total if total else None
+
+
+def _format_rate(value: object) -> str:
+    return "NA" if value is None else f"{float(value):.3f}"
+
+
+def _control_status(record: dict[str, Any] | None) -> str:
+    if record is None:
+        return "missing"
+    explicit = record.get("control_status")
+    if explicit in {"passed", "failed", "missing", "api_error"}:
+        return str(explicit)
+    if (
+        record.get("error") is not None
+        or record.get("error_status_code") is not None
+        or record.get("error_attempts") is not None
+    ):
+        return "api_error"
+    return "passed" if bool(record.get("correct")) else "failed"
+
+
+def _trajectory_control_bucket(record: dict[str, Any]) -> str:
+    statuses = (
+        str(record.get("parse_control_status")),
+        str(record.get("one_step_control_status")),
+    )
+    if "api_error" in statuses:
+        return "api_error"
+    if "missing" in statuses:
+        return "missing"
+    if statuses == ("passed", "passed"):
+        return "included"
+    return "failed"
+
+
 def _validate_analysis_scope(
     records: list[dict[str, Any]],
     manifest: dict[str, object],
@@ -308,7 +345,11 @@ def _attach_control_results(records: list[dict[str, Any]]) -> None:
             ("one_step", "one_step_control_passed"),
         ):
             control = matched.get(control_type)
-            record[field] = bool(control.get("correct")) if control is not None else None
+            status = _control_status(control)
+            record[f"{field.removesuffix('_passed')}_status"] = status
+            record[field] = (
+                True if status == "passed" else False if status == "failed" else None
+            )
             record[f"{field}_case_id"] = control.get("case_id") if control is not None else None
 
 
@@ -322,11 +363,19 @@ def _control_attachments(records: list[dict[str, Any]]) -> dict[str, dict[str, o
     attachments: dict[str, dict[str, object]] = {}
     for control_id, items in by_control.items():
         def query_stats(selected: list[dict[str, Any]]) -> dict[str, object]:
-            correct = sum(bool(item.get("correct")) for item in selected)
+            statuses = [_control_status(item) for item in selected]
+            passed = statuses.count("passed")
+            failed = statuses.count("failed")
+            api_errors = statuses.count("api_error")
+            observed = passed + failed
             return {
                 "n": len(selected),
-                "correct": correct,
-                "accuracy": correct / max(1, len(selected)),
+                "correct": passed,
+                "observed_n": observed,
+                "accuracy": _rate(passed, observed),
+                "passed_n": passed,
+                "failed_n": failed,
+                "api_error_n": api_errors,
             }
 
         attachments[control_id] = {
@@ -376,6 +425,8 @@ def _persist_control_fields(
                 for field in (
                     "parse_control_passed",
                     "one_step_control_passed",
+                    "parse_control_status",
+                    "one_step_control_status",
                     "parse_control_passed_case_id",
                     "one_step_control_passed_case_id",
                 ):
@@ -413,25 +464,26 @@ def write_summary(
             if (item.get("case") or {}).get("query_type") not in {"parse_only", "one_step"}
         ]
         conditional_items = [
-            item
-            for item in trajectory_items
-            if item.get("parse_control_passed") is True
-            and item.get("one_step_control_passed") is True
+            item for item in trajectory_items if _trajectory_control_bucket(item) == "included"
         ]
         missing_control_items = [
-            item
-            for item in trajectory_items
-            if item.get("parse_control_passed") is None
-            or item.get("one_step_control_passed") is None
+            item for item in trajectory_items if _trajectory_control_bucket(item) == "missing"
         ]
         failed_control_items = [
-            item
-            for item in trajectory_items
-            if item not in conditional_items and item not in missing_control_items
+            item for item in trajectory_items if _trajectory_control_bucket(item) == "failed"
+        ]
+        api_error_control_items = [
+            item for item in trajectory_items if _trajectory_control_bucket(item) == "api_error"
         ]
 
         def consensus(selected: list[dict[str, Any]], field: str) -> bool | None:
             values = [item[field] for item in selected if isinstance(item.get(field), bool)]
+            if not values or any(value != values[0] for value in values[1:]):
+                return None
+            return values[0]
+
+        def status_consensus(selected: list[dict[str, Any]], field: str) -> str | None:
+            values = [str(item[field]) for item in selected if item.get(field) is not None]
             if not values or any(value != values[0] for value in values[1:]):
                 return None
             return values[0]
@@ -462,15 +514,18 @@ def write_summary(
                 "one_step_control_accuracy": one_step_stats.get("accuracy", 0.0),
                 "parse_control_passed": consensus(trajectory_items, "parse_control_passed"),
                 "one_step_control_passed": consensus(trajectory_items, "one_step_control_passed"),
+                "parse_control_status": status_consensus(trajectory_items, "parse_control_status"),
+                "one_step_control_status": status_consensus(trajectory_items, "one_step_control_status"),
                 "conditional_n": len(conditional_items),
                 "conditional_correct": sum(bool(item.get("correct")) for item in conditional_items),
-                "conditional_accuracy": (
-                    sum(bool(item.get("correct")) for item in conditional_items)
-                    / max(1, len(conditional_items))
+                "conditional_accuracy": _rate(
+                    sum(bool(item.get("correct")) for item in conditional_items),
+                    len(conditional_items),
                 ),
                 "conditional_excluded_n": len(trajectory_items) - len(conditional_items),
                 "conditional_missing_control_n": len(missing_control_items),
                 "conditional_failed_control_n": len(failed_control_items),
+                "conditional_api_error_control_n": len(api_error_control_items),
             }
         )
     csv_path = run_dir / "summary.csv"
@@ -486,21 +541,16 @@ def write_summary(
         if (record.get("case") or {}).get("query_type") not in {"parse_only", "one_step"}
     ]
     conditional_records = [
-        record
-        for record in trajectory_records
-        if record.get("parse_control_passed") is True
-        and record.get("one_step_control_passed") is True
+        record for record in trajectory_records if _trajectory_control_bucket(record) == "included"
     ]
     missing_control_records = [
-        record
-        for record in trajectory_records
-        if record.get("parse_control_passed") is None
-        or record.get("one_step_control_passed") is None
+        record for record in trajectory_records if _trajectory_control_bucket(record) == "missing"
     ]
     failed_control_records = [
-        record
-        for record in trajectory_records
-        if record not in conditional_records and record not in missing_control_records
+        record for record in trajectory_records if _trajectory_control_bucket(record) == "failed"
+    ]
+    api_error_control_records = [
+        record for record in trajectory_records if _trajectory_control_bucket(record) == "api_error"
     ]
     summary = {
         "event": "summary",
@@ -514,19 +564,20 @@ def write_summary(
         "groups": rows,
         "trajectory_cases": len(trajectory_records),
         "unconditional_trajectory_correct": sum(bool(item.get("correct")) for item in trajectory_records),
-        "unconditional_trajectory_accuracy": (
-            sum(bool(item.get("correct")) for item in trajectory_records)
-            / max(1, len(trajectory_records))
+        "unconditional_trajectory_accuracy": _rate(
+            sum(bool(item.get("correct")) for item in trajectory_records),
+            len(trajectory_records),
         ),
         "conditional_trajectory_cases": len(conditional_records),
         "conditional_trajectory_correct": sum(bool(item.get("correct")) for item in conditional_records),
-        "conditional_trajectory_accuracy": (
-            sum(bool(item.get("correct")) for item in conditional_records)
-            / max(1, len(conditional_records))
+        "conditional_trajectory_accuracy": _rate(
+            sum(bool(item.get("correct")) for item in conditional_records),
+            len(conditional_records),
         ),
         "excluded_trajectory_cases": len(trajectory_records) - len(conditional_records),
         "missing_control_trajectory_cases": len(missing_control_records),
         "failed_control_trajectory_cases": len(failed_control_records),
+        "api_error_control_trajectory_cases": len(api_error_control_records),
         "control_match_policy": (
             "policy_3_unique_composite_control_result_key: "
             "(matched_control_id, api_replication, query_type); duplicate keys rejected"
@@ -540,26 +591,28 @@ def write_summary(
         "",
         f"- Total logged results (including controls): `{summary['total_cases']}`",
         f"- All-case accuracy: `{summary['all_case_accuracy']}`",
-        f"- Unconditional trajectory accuracy: `{summary['unconditional_trajectory_accuracy']}`",
-        f"- Conditional trajectory accuracy: `{summary['conditional_trajectory_accuracy']}` "
+        f"- Unconditional trajectory accuracy: `{_format_rate(summary['unconditional_trajectory_accuracy'])}`",
+        f"- Conditional trajectory accuracy: `{_format_rate(summary['conditional_trajectory_accuracy'])}` "
         f"(included `{summary['conditional_trajectory_cases']}`, "
         f"failed controls `{summary['failed_control_trajectory_cases']}`, "
-        f"missing controls `{summary['missing_control_trajectory_cases']}`)",
+        f"missing controls `{summary['missing_control_trajectory_cases']}`, "
+        f"API errors `{summary['api_error_control_trajectory_cases']}`)",
         "- Interpretation: behavioral sensitivity to named interventions; no internal depth claim.",
         "",
-        "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | parse passed | one-step passed | conditional n | conditional accuracy | missing controls | failed controls | stale match |",
-        "|---:|---:|---|---|---|---:|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|",
+        "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | parse passed | parse status | one-step passed | one-step status | conditional n | conditional accuracy | missing controls | failed controls | api errors | stale match |",
+        "|---:|---:|---|---|---|---:|---|---|---:|---:|---:|---:|---|---|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         markdown.append(
             f"| {row['system_seed']} | {row['initial_state_seed']} | {row['representation']} | "
             f"{row['benchmark_status']} | {row['query_type']} | {row['horizon']} | "
-            f"{row['relabeling']} | {row['syntax_noise']} | {row['n']} | {row['accuracy']:.3f} | "
-            f"{row['parse_control_accuracy']:.3f} | {row['one_step_control_accuracy']:.3f} | "
-            f"{row['parse_control_passed']} | {row['one_step_control_passed']} | "
-            f"{row['conditional_n']} | {row['conditional_accuracy']:.3f} | "
+            f"{row['relabeling']} | {row['syntax_noise']} | {row['n']} | {_format_rate(row['accuracy'])} | "
+            f"{_format_rate(row['parse_control_accuracy'])} | {_format_rate(row['one_step_control_accuracy'])} | "
+            f"{row['parse_control_passed']} | {row['parse_control_status']} | "
+            f"{row['one_step_control_passed']} | {row['one_step_control_status']} | "
+            f"{row['conditional_n']} | {_format_rate(row['conditional_accuracy'])} | "
             f"{row['conditional_missing_control_n']} | {row['conditional_failed_control_n']} | "
-            f"{row['stale_witness_match_rate']:.3f} |"
+            f"{row['conditional_api_error_control_n']} | {_format_rate(row['stale_witness_match_rate'])} |"
         )
     (run_dir / "summary.md").write_text("\n".join(markdown) + "\n", encoding="utf-8")
     return summary
@@ -766,6 +819,11 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                         error_attempts = exc.attempts
                                         error_request_id = exc.request_id
                                         error_response_headers = exc.response_headers
+                                    control_status = (
+                                        "api_error"
+                                        if error is not None
+                                        else "passed" if bool(scored["correct"]) else "failed"
+                                    )
                                     record = {
                                         "event": "case_result",
                                         "run_id": run_id,
@@ -775,6 +833,7 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                         "messages": messages,
                                         "raw_model_output": raw,
                                         **scored,
+                                        "control_status": control_status,
                                         "api_replication": replication,
                                         "request_started_at": request_started_at,
                                         "latency_ms": completion.latency_ms if completion else None,
@@ -821,6 +880,7 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                             "raw_model_output": raw,
                                             "parsed_answer": scored["parsed_answer"],
                                             "correct": scored["correct"],
+                                            "control_status": control_status,
                                             "error": error,
                                         },
                                         secret=api_key,

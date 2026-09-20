@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 import arena.trajectory_runner as trajectory_runner
-from arena.providers import Completion
+from arena.providers import Completion, ProviderError
 from arena.trajectory import make_messages, normalize_answer, score_answer
 from arena.trajectory_runner import (
     TrajectoryOptions,
@@ -335,6 +335,127 @@ def test_fake_provider_attaches_controls_and_excludes_only_failed_reflective_row
     }
     assert trace_trajectory["flat"]["parse_control_passed"] is True
     assert trace_trajectory["reflective"]["parse_control_passed"] is False
+
+
+def test_conditional_accuracy_is_nullable_and_not_zero_for_empty_sample(tmp_path):
+    certificate = certify_system_pair(0).as_dict()
+
+    def case(query: str, horizon: int):
+        return make_case(
+            system_seed=0,
+            initial_state_seed=0,
+            presentation_seed=100,
+            representation="flat",
+            witness_state="valid",
+            query_type=query,
+            horizon=horizon,
+            relabeling="canonical",
+            certification=certificate,
+        )
+
+    def result(case_value, correct: bool, replication: int = 0) -> dict[str, object]:
+        return {
+            "event": "case_result",
+            "case_id": case_value.case_id,
+            "case": case_value.as_dict(),
+            "api_replication": replication,
+            "correct": correct,
+            "format_valid": True,
+            "matched_stale_witness_prediction": False,
+        }
+
+    no_controls = [result(case("complete_return", 6), True)]
+    empty_summary = write_summary(tmp_path / "empty", no_controls, {})
+    assert empty_summary["conditional_trajectory_accuracy"] is None
+    assert empty_summary["groups"][0]["conditional_accuracy"] is None
+
+    def records_for(correct_trajectory: list[bool]) -> list[dict[str, object]]:
+        records = [result(case("parse_only", 0), True), result(case("one_step", 1), True)]
+        records.extend(
+            result(case("complete_return", horizon), correct)
+            for horizon, correct in zip((6, 30, 126), correct_trajectory, strict=True)
+        )
+        return records
+
+    zero_summary = write_summary(tmp_path / "zero", records_for([False, False, False]), {})
+    assert zero_summary["conditional_trajectory_cases"] == 3
+    assert zero_summary["conditional_trajectory_accuracy"] == 0.0
+
+    partial_summary = write_summary(tmp_path / "partial", records_for([True, True, False]), {})
+    assert partial_summary["conditional_trajectory_cases"] == 3
+    assert partial_summary["conditional_trajectory_accuracy"] == 2 / 3
+
+
+def test_provider_error_is_not_reported_as_observed_control_failure(tmp_path, monkeypatch):
+    class TimeoutProviderClient:
+        last_retry_count = 0
+        last_attempts = []
+
+        def __init__(self, provider, api_key, **kwargs):
+            self.provider = provider
+
+        def complete(self, *, model, messages, max_tokens, temperature):
+            prompt = messages[-1]["content"]
+            if "Parsing control" in prompt and "reflective-relay-v1" in prompt:
+                raise ProviderError(
+                    "Provider request timed out",
+                    body="timed out",
+                    retryable=True,
+                    attempts=1,
+                )
+            if "Parsing control" in prompt:
+                answer = "same"
+            elif "after exactly 1 transition" in prompt:
+                answer = "B(0)"
+            else:
+                answer = "yes"
+            return Completion(
+                content=answer,
+                requested_model=model,
+                resolved_model=model,
+                finish_reason="stop",
+                usage={"prompt_tokens": 1, "completion_tokens": 1},
+                raw_response={"model": model},
+                latency_ms=1,
+                request_id="fake-request",
+                response_headers={},
+                provider=self.provider,
+            )
+
+    monkeypatch.setattr(trajectory_runner, "ProviderClient", TimeoutProviderClient)
+    result = run_trajectory(
+        TrajectoryOptions(
+            provider="custom",
+            model="fake/model",
+            out=tmp_path / "run",
+            representations=["flat", "reflective"],
+            witnesses=["valid"],
+            queries=["parse_only", "one_step", "complete_return"],
+            horizons=[6],
+            relabelings=["canonical"],
+            syntax_noise=["clean"],
+            semantic_seeds=[0],
+            system_seeds=[0],
+            initial_state_seeds=[0],
+            presentation_seeds=[100],
+            api_key="fake-secret",
+            api_base="https://example.invalid/v1",
+            max_tokens=8,
+            max_calls=6,
+        )
+    )
+    reflective = next(
+        row
+        for row in result["summary"]["groups"]
+        if row["representation"] == "reflective" and row["query_type"] == "complete_return"
+    )
+    assert reflective["parse_control_status"] == "api_error"
+    assert reflective["parse_control_passed"] is None
+    assert reflective["conditional_n"] == 0
+    assert reflective["conditional_missing_control_n"] == 0
+    assert reflective["conditional_failed_control_n"] == 0
+    assert reflective["conditional_api_error_control_n"] == 1
+    assert result["summary"]["api_error_control_trajectory_cases"] == 1
 
 
 def test_control_replications_are_keyed_and_duplicate_controls_rejected(tmp_path):

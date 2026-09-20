@@ -492,7 +492,9 @@ siblings. Each trajectory result records `parse_control_passed` and
 table includes only rows where both controls passed and reports the
 unconditional trajectory estimand plus included, failed-control, missing-control,
 and excluded counts for the conditional estimand. Missing controls from a
-truncated run remain `null`, not failures.
+truncated run remain `null`, not failures. Control status separates `passed`,
+`failed`, `missing`, and `api_error`; an empty conditional sample is reported
+as `null`/`NA`, not zero.
 
 Use `--judge host`, `--judge docker`, or `--judge both`. The latter fails if
 host and offline Docker judgments disagree. The optional
