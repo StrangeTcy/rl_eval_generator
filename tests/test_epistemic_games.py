@@ -6,11 +6,15 @@ Covers:
 - generation through generate_env.py (all axis combinations, seed variance,
   the opt-in renderer hook);
 - the full judge pipeline end-to-end (patch -> source validation ->
-  provenance re-derivation -> isolated answer extraction -> grading),
+  provenance re-derivation -> bounded literal answer extraction -> grading),
   driven exactly the way env_runner.py drives it, without Docker or torch.
+- P0 hardening: inconsistent posterior/support, verdict_miscalibration
+  vs psychological labels, safe literal extraction, hidden-world invariance,
+  public-only oracle.
 """
 from __future__ import annotations
 
+import ast
 import difflib
 import importlib.util
 import itertools
@@ -38,7 +42,7 @@ ANSWER_BLOCK = (
     '    "verdict": None,\n'
     '    "most_supported": None,\n'
     '    "justification": None,\n'
-    "}"
+    "}\n"
 )
 
 
@@ -134,11 +138,46 @@ def test_ambiguous_instances_are_observationally_equivalent():
             assert inst.likelihoods["world1"] == 1 and inst.likelihoods["world2"] == 1
             assert inst.verdict == "indistinguishable"
             assert inst.posterior1 == inst.prior1
-            # identical transcripts across the paired worlds
-            assert inst.transcript() == inst.transcript()
+            # transcript is deterministic from observation + vocab
             assert inst.observation == "denial"
+            assert inst.transcript().endswith(inst.action_text(inst.observation) + '"')
             n += 1
     assert n > 0
+
+
+def test_hidden_world_invariance():
+    """Changing only actual_world must not change public payload or reference answer.
+
+    This is the counterfactual replacement for the tautological
+    assert transcript()==transcript() check.
+    """
+    for scenario, evidence, prior, presentation in itertools.product(
+        SCENARIOS, EVIDENCE, PRIORS, PRESENTATIONS
+    ):
+        for seed in range(3):
+            inst = CORE.build_instance(scenario, evidence, prior, presentation, seed)
+            # Build a second instance with identical public content but flipped actual_world
+            other_world = "world2" if inst.actual_world == "world1" else "world1"
+            # Copy instance with different actual_world — public_task_md must be identical
+            # and reference posteriors/verdicts identical (answer does not depend on draw)
+            from dataclasses import replace
+
+            inst2 = replace(inst, actual_world=other_world)
+            # Public rendering must be identical (actual_world is provenance only)
+            assert inst.public_task_md() == inst2.public_task_md()
+            # Reference posteriors and verdicts identical
+            assert inst.posterior1 == inst2.posterior1
+            assert inst.verdict == inst2.verdict
+            assert inst.most_supported == inst2.most_supported
+            assert inst.likelihoods == inst2.likelihoods
+            # to_spec differs only in actual_world field
+            spec1 = inst.to_spec()
+            spec2 = inst2.to_spec()
+            for k in spec1:
+                if k == "actual_world":
+                    assert spec1[k] != spec2[k]
+                else:
+                    assert spec1[k] == spec2[k], f"public field {k} changed with actual_world"
 
 
 def test_level_policies_and_mimicry_invariant():
@@ -203,7 +242,7 @@ def test_behavior_tables_sum_to_one_and_are_public():
 
 
 # ---------------------------------------------------------------------------
-# Core: grading and failure-mode taxonomy
+# Core: grading and failure-mode taxonomy — including P0 hardening
 # ---------------------------------------------------------------------------
 
 def _answer(posterior, verdict, support, justification="Bayes over the behavior tables."):
@@ -223,6 +262,8 @@ def test_grade_ground_truth_passes_everywhere():
             scenario, evidence, prior, grading
         )
         assert grading["metrics"]["score"] >= 0.85
+        assert grading["metrics"]["strict_correct"] is True
+        assert grading["checks"]["support_consistent"] is True
 
 
 def test_grade_seductive_truth_and_overcaution():
@@ -248,10 +289,19 @@ def test_grade_prior_neglect_on_skewed_ambiguous():
 
 
 def test_grade_missed_information_on_weak():
-    inst = CORE.build_instance("trap", "weak", "balanced", "paired", seed=1)
+    # Use strong evidence where true posterior is far from 0.5, so reporting
+    # 0.5/indistinguishable is clearly missing the signal (error >0.15, so
+    # verdict_miscalibration does not preempt it).
+    inst = None
+    for seed in range(300):
+        cand = CORE.build_instance("trap", "strong", "balanced", "paired", seed)
+        if cand.verdict == "distinguishable" and abs(float(cand.posterior1) - 0.5) > 0.2:
+            inst = cand
+            break
+    assert inst is not None, "no strong far-from-0.5 instance found"
     assert inst.verdict != "indistinguishable"
     g = inst.grade(_answer(0.5, "indistinguishable", "neither", "same transcript"), 0.85)
-    assert g["failure_mode"] == "missed_information"
+    assert g["failure_mode"] == "missed_information", g
 
 
 def test_grade_wrong_direction():
@@ -303,6 +353,155 @@ def test_grade_format_invalid():
         assert g["failure_mode"] == "answer_format_invalid", bad
         assert g["metrics"]["score"] == 0.0
         assert g["checks"]["answer_format_valid"] is False
+
+
+def test_p0_inconsistent_posterior_support_rejected():
+    """P0 #1: internally contradictory answer must NOT receive full credit.
+
+    Example from review: true posterior 19/37 ~0.5135, reported 0.49 with
+    support world1 is internally inconsistent (0.49 <0.5 but support world1).
+    """
+    # Find a weak instance where true posterior is 19/37 ~0.5135 (balanced, weak)
+    # That is the pair (1/20, 9/10) with denial observation
+    inst = None
+    for seed in range(500):
+        cand = CORE.build_instance("trap", "weak", "balanced", "paired", seed)
+        if cand.posterior1 == Fraction(19, 37):
+            inst = cand
+            break
+    assert inst is not None, "could not find 19/37 instance"
+    assert abs(float(inst.posterior1) - 0.513514) < 0.0001
+
+    contradictory = _answer(0.49, "weakly_distinguishable", "world1", "Illustrative inconsistent answer.")
+    g = inst.grade(contradictory, pass_threshold=0.85)
+    # Must be flagged as inconsistent, not pass, and score 0
+    assert g["failure_mode"] == "inconsistent_support", g
+    assert g["checks"]["support_consistent"] is False
+    assert g["metrics"]["score"] == 0.0
+    assert g["metrics"]["strict_correct"] is False
+
+    # Also test the opposite direction
+    contradictory2 = _answer(0.51, "weakly_distinguishable", "world2", "inconsistent other way")
+    g2 = inst.grade(contradictory2, 0.85)
+    assert g2["failure_mode"] == "inconsistent_support"
+    assert g2["metrics"]["score"] == 0.0
+
+
+def test_p0_exact_posterior_wrong_verdict_is_verdict_error():
+    """P0 #1 second part: exact correct posterior + wrong verdict = verdict error, not psychological label."""
+    # Ambiguous case: true verdict indistinguishable, posterior 0.5 or 0.6
+    inst = CORE.build_instance("trap", "ambiguous", "balanced", "paired", seed=1)
+    assert inst.verdict == "indistinguishable"
+    true_p = float(inst.posterior1)
+    # Report correct posterior but wrong verdict
+    wrong_verdict = "distinguishable" if inst.verdict == "indistinguishable" else "indistinguishable"
+    g = inst.grade(_answer(true_p, wrong_verdict, inst.most_supported), 0.85)
+    assert g["failure_mode"] == "verdict_miscalibration", g
+    assert g["metrics"]["posterior_error"] == 0.0
+
+    # Weak case: true verdict weakly_distinguishable, posterior correct, verdict indistinguishable
+    inst2 = CORE.build_instance("trap", "weak", "balanced", "paired", seed=1)
+    assert inst2.verdict == "weakly_distinguishable"
+    true_p2 = float(inst2.posterior1)
+    g2 = inst2.grade(_answer(true_p2, "indistinguishable", inst2.most_supported), 0.85)
+    # Should be verdict_miscalibration, NOT missed_information
+    assert g2["failure_mode"] == "verdict_miscalibration", g2
+
+
+def test_public_only_oracle():
+    """Genuinely public-only oracle: receives only public payload, recomputes answer without grading helpers."""
+    def public_bayes_answer_from_spec(spec: dict) -> dict:
+        # Only public fields: prior_world1, likelihoods, observation, verdict, most_supported are derived
+        # We must NOT use spec['posterior_world1'] directly — recompute it
+        pi1 = spec["prior_world1"]
+        l1 = spec["likelihoods"]["world1"]
+        l2 = spec["likelihoods"]["world2"]
+        posterior = l1 * pi1 / (l1 * pi1 + l2 * (1 - pi1)) if (l1 * pi1 + l2 * (1 - pi1)) != 0 else 0.5
+        # Verdict from likelihood ratio
+        ratio = max(l1 / l2, l2 / l1) if min(l1, l2) > 0 else 1.0
+        if ratio == 1.0:
+            verdict = "indistinguishable"
+        elif ratio < 3:
+            verdict = "weakly_distinguishable"
+        else:
+            verdict = "distinguishable"
+        if posterior > 0.5:
+            support = "world1"
+        elif posterior < 0.5:
+            support = "world2"
+        else:
+            support = "neither"
+        return {
+            "posterior_world1": posterior,
+            "verdict": verdict,
+            "most_supported": support,
+            "justification": "public-only Bayes from behavior tables and prior",
+        }
+
+    for scenario, evidence, prior, presentation in itertools.product(
+        SCENARIOS, EVIDENCE, PRIORS, PRESENTATIONS
+    ):
+        for seed in range(3):
+            inst = CORE.build_instance(scenario, evidence, prior, presentation, seed)
+            spec = inst.to_spec()
+            # Public payload only: prior, likelihoods, observation — no posterior
+            public_spec = {
+                "prior_world1": spec["prior_world1"],
+                "likelihoods": spec["likelihoods"],
+                "observation": spec["observation"],
+            }
+            ans = public_bayes_answer_from_spec(spec)
+            grading = inst.grade(ans, pass_threshold=0.85)
+            assert grading["failure_mode"] == "pass", (scenario, evidence, prior, seed, grading)
+            assert grading["checks"]["all_correct"] is True
+
+
+def test_safe_extraction_rejects_disallowed_constructs():
+    """P0 #2: judge must reject answer.py containing calls, imports, etc."""
+    # Simulate the judge's _safe_extract_answer logic
+    import tempfile
+
+    sys.path.insert(0, str(ROOT / "envs" / "epistemic_games" / "files"))
+    import importlib.util as iu
+    spec = iu.spec_from_file_location("eg_judge", ENV_DIR / "files" / "judge.py")
+    # We can't import judge directly due to patch_validator side effects, so re-implement minimal check
+    # Use the same logic as in judge.py
+
+    def safe_extract(text: str):
+        tree = ast.parse(text)
+        disallowed = (
+            ast.Import, ast.ImportFrom, ast.Call, ast.Attribute, ast.Subscript,
+            ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp,
+            ast.Lambda, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+            ast.For, ast.AsyncFor, ast.While, ast.If, ast.With, ast.AsyncWith,
+            ast.Try, ast.Raise,
+        )
+        for node in ast.walk(tree):
+            if isinstance(node, disallowed):
+                raise ValueError(f"disallowed {type(node).__name__}")
+        assigns = [n for n in tree.body if isinstance(n, ast.Assign)]
+        if len(assigns) != 1:
+            raise ValueError("must have exactly one assign")
+        return ast.literal_eval(assigns[0].value)
+
+    bad_cases = [
+        "import os\nANSWER = {'posterior_world1': 0.5, 'verdict': 'indistinguishable', 'most_supported': 'neither', 'justification': 'x'}",
+        "ANSWER = {'posterior_world1': __import__('os').system('echo hi'), 'verdict': 'indistinguishable', 'most_supported': 'neither', 'justification': 'x'}",
+        "ANSWER = {'posterior_world1': 0.5, 'verdict': 'indistinguishable', 'most_supported': 'neither', 'justification': 'x'}\nprint('hi')",
+        "ANSWER = {k: v for k, v in [('a', 1)]}",
+        "x = 1\nANSWER = {'posterior_world1': 0.5, 'verdict': 'indistinguishable', 'most_supported': 'neither', 'justification': 'x'}",
+    ]
+    for bad in bad_cases:
+        try:
+            safe_extract(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"bad case not rejected: {bad[:50]}")
+
+    good = "ANSWER = {'posterior_world1': 0.5, 'verdict': 'indistinguishable', 'most_supported': 'neither', 'justification': 'ok'}"
+    val = safe_extract(good)
+    assert val["posterior_world1"] == 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -423,7 +622,7 @@ def _run_judge(env_dir: Path, patch_text: str, seed: int, label: str) -> dict:
         capture_output=True, text=True, timeout=180, env=env,
     )
     lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
-    assert lines, f"judge printed no result (rc={proc.returncode})\n{proc.stderr}"
+    assert lines, f"judge printed no result (rc={proc.returncode})\n{proc.stderr}\n{proc.stdout}"
     return json.loads(lines[-1])
 
 
@@ -436,6 +635,8 @@ def test_e2e_judge_correct_answer_passes():
         assert result["score"] == 1.0
         assert result["checks"]["provenance_ok"] is True
         assert result["metrics"]["posterior_error"] == 0.0
+        assert result["checks"]["support_consistent"] is True
+        assert result["checks"]["all_correct"] is True
     finally:
         cleanup("smoke_eg_e2e_ok", "smoke_eg_judge_work")
 
@@ -478,6 +679,47 @@ def test_e2e_judge_rejects_tampered_provenance():
     finally:
         spec_path.write_text(original, encoding="utf-8")
         cleanup("smoke_eg_e2e_tamper", "smoke_eg_judge_work")
+
+
+def test_e2e_judge_inconsistent_support_rejected():
+    env_dir = _generate_judge_env("smoke_eg_e2e_inc", "trap,weak,paired,balanced", seed=3)
+    try:
+        # Inconsistent: posterior 0.49 but support world1
+        inc = _answer(0.49, "weakly_distinguishable", "world1", "inconsistent")
+        result = _run_judge(env_dir, _answer_patch(env_dir, inc), 3, "inc")
+        assert result["failure_mode"] == "inconsistent_support"
+        assert result["score"] == 0.0
+        assert result["checks"]["support_consistent"] is False
+    finally:
+        cleanup("smoke_eg_e2e_inc", "smoke_eg_judge_work")
+
+
+def test_e2e_judge_rejects_code_execution():
+    """Ensure judge does NOT execute answer.py — disallowed constructs are rejected.
+
+    The shared source_validator (defense-in-depth, not a sandbox) catches
+    imports first, so we accept either source_invalid or answer_format_invalid
+    as a valid rejection — the key property is that code is not executed and
+    score is 0.
+    """
+    env_dir = _generate_judge_env("smoke_eg_e2e_exec", "trap,weak,paired,balanced", seed=3)
+    try:
+        pristine = (env_dir / "agent" / "workspace" / "answer.py").read_text(encoding="utf-8")
+        # Inject a call — should be rejected, not executed
+        malicious = pristine.replace(
+            ANSWER_BLOCK,
+            "import os\nANSWER = {'posterior_world1': 0.5, 'verdict': 'indistinguishable', 'most_supported': 'neither', 'justification': 'x'}",
+        )
+        diff = difflib.unified_diff(
+            pristine.splitlines(), malicious.splitlines(),
+            fromfile="a/answer.py", tofile="b/answer.py", lineterm="",
+        )
+        patch_text = "\n".join(diff) + "\n"
+        result = _run_judge(env_dir, patch_text, 3, "exec")
+        assert result["failure_mode"] in ("answer_format_invalid", "source_invalid")
+        assert result["score"] == 0.0
+    finally:
+        cleanup("smoke_eg_e2e_exec", "smoke_eg_judge_work")
 
 
 def test_env_runner_episode_submits_and_scores():

@@ -12,15 +12,14 @@ Edit ONLY this file. Fill in the ANSWER dictionary with your conclusions:
   "neither" (use "neither" only when your posterior is exactly 0.5).
 - "justification": a short explanation of your reasoning (max 600 characters).
 
-The judge executes this file in an isolated process and reads ANSWER as JSON,
-so keep ANSWER JSON-serializable (plain numbers and strings). You may add
-helper code above ANSWER to compute your answer, but it must not import
-modules outside the allowlist, must not use open/exec/eval, and must
-terminate quickly.
+Constraints (enforced by the judge, no code execution):
+- This file must contain ONLY one assignment: ANSWER = { ... } with a literal
+  dict (no imports, function calls, comprehensions, or extra statements).
+- Keep ANSWER JSON-serializable (plain numbers and strings).
+- The judge parses ANSWER as data with ast.literal_eval, with size limits.
+- Internal consistency is required: if posterior > 0.5, most_supported must be
+  "world1"; if < 0.5, "world2"; if exactly 0.5, "neither".
 """
-
-VERDICTS = ("indistinguishable", "weakly_distinguishable", "distinguishable")
-SUPPORT_OPTIONS = ("world1", "world2", "neither")
 
 ANSWER = {
     "posterior_world1": None,

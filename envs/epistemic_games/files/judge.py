@@ -12,16 +12,23 @@ The judge never trusts the agent's narrative:
 3. re-derives the instance from (template, evidence, prior, presentation,
    seed) with core.py and requires the rebuilt specification to match the
    baked INSTANCE_SPEC exactly (provenance / anti-tamper check);
-4. executes the agent's answer.py in an isolated subprocess to extract
-   ANSWER as JSON (agent code can influence only the answer, nothing else);
+4. extracts ANSWER from answer.py as *data* (bounded literal, no code
+   execution) — one ``ANSWER = <literal dict>`` assignment, parsed with
+   ast.literal_eval, with size and AST-node limits;
 5. grades the answer with core (calibration vs the true posterior, verdict
-   band, direction) and emits a structured failure-mode diagnosis.
+   band, direction, internal consistency) and emits a structured failure-mode
+   diagnosis. Training reward (forgiving) is separated from strict correctness.
+
+Security note: the shared source_validator is explicitly not a sandbox.
+This judge does NOT import or execute answer.py; it parses it as data.
 """
+
+import ast
 import json
 import os
-import subprocess
 import sys
 import time
+from pathlib import Path
 
 JUDGE_DIR = os.path.dirname(os.path.abspath(__file__))
 if JUDGE_DIR not in sys.path:
@@ -39,7 +46,10 @@ PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
 PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
 PATCHABLE_FILES = %%PATCHABLE_FILES%%
 
-ANSWER_EXTRACT_SNIPPET = "import json, answer; print(json.dumps(answer.ANSWER))"
+# Bounded parsing limits (P0 #2)
+MAX_ANSWER_FILE_BYTES = 20_000
+MAX_AST_NODES = 500
+MAX_ANSWER_JSON_BYTES = 5_000
 
 
 def base_result() -> dict:
@@ -54,14 +64,124 @@ def base_result() -> dict:
             "provenance_ok": False,
             "answer_extracted": False,
             "answer_format_valid": False,
+            "support_consistent": False,
             "posterior_within_tolerance": False,
+            "posterior_within_strict_tolerance": False,
             "verdict_correct": False,
             "most_supported_correct": False,
+            "all_correct": False,
         },
         "metrics": {},
         "notes": [],
         "events": [],
     }
+
+
+def _safe_extract_answer(answer_path: Path) -> dict:
+    """Extract ANSWER as data, no code execution.
+
+    Allowed file shape:
+    - optional docstring Expr nodes (Constant str)
+    - exactly one Assign: ANSWER = <literal dict>
+    - no imports, calls, attribute access, comprehensions, etc.
+    - file size and AST node count bounded
+    - value parsed with ast.literal_eval (no execution)
+    """
+    if not answer_path.is_file():
+        raise ValueError(f"answer.py not found at {answer_path}")
+    size = answer_path.stat().st_size
+    if size > MAX_ANSWER_FILE_BYTES:
+        raise ValueError(f"answer.py too large: {size} bytes > {MAX_ANSWER_FILE_BYTES}")
+    text = answer_path.read_text(encoding="utf-8", errors="strict")
+    if len(text.encode("utf-8")) > MAX_ANSWER_FILE_BYTES:
+        raise ValueError("answer.py exceeds byte limit")
+
+    try:
+        tree = ast.parse(text, filename="answer.py")
+    except SyntaxError as exc:
+        raise ValueError(f"answer.py syntax error: {exc}") from exc
+
+    # Node-count bound
+    node_count = sum(1 for _ in ast.walk(tree))
+    if node_count > MAX_AST_NODES:
+        raise ValueError(f"answer.py AST too large: {node_count} nodes > {MAX_AST_NODES}")
+
+    # Disallowed constructs — any occurrence is a rejection
+    disallowed = (
+        ast.Import,
+        ast.ImportFrom,
+        ast.Call,
+        ast.Attribute,
+        ast.Subscript,
+        ast.ListComp,
+        ast.DictComp,
+        ast.SetComp,
+        ast.GeneratorExp,
+        ast.Lambda,
+        ast.FunctionDef,
+        ast.AsyncFunctionDef,
+        ast.ClassDef,
+        ast.For,
+        ast.AsyncFor,
+        ast.While,
+        ast.If,
+        ast.With,
+        ast.AsyncWith,
+        ast.Try,
+        ast.Raise,
+        ast.Delete,
+        ast.Global,
+        ast.Nonlocal,
+        ast.Await,
+        ast.Yield,
+        ast.YieldFrom,
+        ast.NamedExpr,
+    )
+    for node in ast.walk(tree):
+        if isinstance(node, disallowed):
+            raise ValueError(f"answer.py contains disallowed construct: {type(node).__name__}")
+
+    # Top-level shape: only Expr(docstring) and Assign allowed
+    assigns = []
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Expr):
+            # allow docstring (Constant str) only
+            if not (isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str)):
+                raise ValueError("answer.py may only contain a docstring and one ANSWER assignment")
+        elif isinstance(stmt, ast.Assign):
+            assigns.append(stmt)
+        else:
+            raise ValueError(f"answer.py contains disallowed statement: {type(stmt).__name__}")
+
+    if len(assigns) != 1:
+        raise ValueError(f"answer.py must contain exactly one ANSWER assignment, found {len(assigns)}")
+
+    assign = assigns[0]
+    # target must be exactly Name id=ANSWER
+    if len(assign.targets) != 1:
+        raise ValueError("ANSWER assignment must have single target")
+    target = assign.targets[0]
+    if not (isinstance(target, ast.Name) and target.id == "ANSWER"):
+        raise ValueError("assignment target must be ANSWER")
+
+    # Parse value as literal — no code execution
+    try:
+        value = ast.literal_eval(assign.value)
+    except Exception as exc:
+        raise ValueError(f"ANSWER is not a literal dict: {exc}") from exc
+
+    if not isinstance(value, dict):
+        raise ValueError(f"ANSWER must be a dict, got {type(value).__name__}")
+
+    # JSON-size bound on the extracted dict
+    try:
+        json_bytes = json.dumps(value).encode("utf-8")
+    except Exception as exc:
+        raise ValueError(f"ANSWER not JSON-serializable: {exc}") from exc
+    if len(json_bytes) > MAX_ANSWER_JSON_BYTES:
+        raise ValueError(f"ANSWER JSON too large: {len(json_bytes)} > {MAX_ANSWER_JSON_BYTES}")
+
+    return value
 
 
 def judge_event(result: dict, action: str, status: str = "ok", summary: str = "") -> None:
@@ -208,45 +328,39 @@ def main() -> None:
         "observation": instance.observation,
     }
 
-    # 5. Answer extraction: execute the agent's answer.py in isolation.
-    env = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": "/tmp",
-        "PYTHONDONTWRITEBYTECODE": "1",
-    }
-    proc = subprocess.run(
-        [sys.executable, "-c", ANSWER_EXTRACT_SNIPPET],
-        cwd=patched_dir,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env=env,
-    )
-    answer_payload = None
-    if proc.returncode != 0:
-        fail_early(result, "answer_format_invalid", f"answer.py failed to execute: {proc.stderr[-800:]}")
-    lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
-    if lines:
-        try:
-            answer_payload = json.loads(lines[-1])
-        except json.JSONDecodeError as exc:
-            fail_early(result, "answer_format_invalid", f"ANSWER is not valid JSON: {exc}")
-    else:
-        fail_early(result, "answer_format_invalid", "answer.py printed no answer")
+    # 5. Answer extraction: bounded literal parsing, no execution.
+    try:
+        answer_payload = _safe_extract_answer(Path(patched_dir) / "answer.py")
+    except Exception as exc:
+        fail_early(result, "answer_format_invalid", f"answer.py extraction failed: {exc}")
     result["checks"]["answer_extracted"] = True
     result["answer_extracted"] = True
-    judge_event(result, "answer_extracted", "ok")
+    judge_event(result, "answer_extracted", "ok", f"keys={sorted(answer_payload.keys())}")
 
     # 6. Grade (structured failure-mode diagnosis) and map to the final score.
+    #    Training reward (epistemic_score, forgiving) is separated from strict
+    #    correctness (all_correct requires verdict, support, consistency, and
+    #    posterior within 0.02). Final score is 1.0 only on strict correctness.
     grading = instance.grade(answer_payload, pass_threshold=PASS_THRESHOLD)
     result["checks"].update({k: bool(v) for k, v in grading["checks"].items()})
     result["metrics"].update(grading["metrics"])
     result["notes"].extend(grading["notes"])
     epistemic_score = float(grading["metrics"]["score"])
+    strict_correct = bool(grading["metrics"].get("strict_correct", False))
     result["raw_accuracy"] = epistemic_score
-    final_score = map_accuracy(epistemic_score, PASS_THRESHOLD, PARTIAL_THRESHOLD)
+    result["metrics"]["strict_correct"] = strict_correct
+
+    if strict_correct and grading["failure_mode"] == "pass":
+        final_score = 1.0
+    else:
+        # forgiving training reward, but never pass without strict correctness
+        final_score = map_accuracy(epistemic_score, PASS_THRESHOLD, PARTIAL_THRESHOLD)
+        if final_score >= 1.0:
+            final_score = 0.95  # cap: cannot pass without strict_correct
+
     if not required_ok:
         final_score = min(final_score, 0.95)
+
     result["score"] = round(final_score, 6)
     result["accuracy_bin"] = (
         "pass" if final_score >= 1.0 else ("partial" if final_score >= 0.5 else "fail")
@@ -256,7 +370,12 @@ def main() -> None:
         set_failure(result, "pass")
     else:
         set_failure(result, grading["failure_mode"])
-    judge_event(result, "scored", "ok", f"epistemic_score={epistemic_score} final_score={result['score']}")
+    judge_event(
+        result,
+        "scored",
+        "ok",
+        f"epistemic_score={epistemic_score} strict={strict_correct} final_score={result['score']} mode={result['failure_mode']}",
+    )
     emit(result)
 
 
