@@ -7,11 +7,14 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+import arena.trajectory_runner as trajectory_runner
+from arena.providers import Completion
 from arena.trajectory import make_messages, normalize_answer, score_answer
 from arena.trajectory_runner import (
     TrajectoryOptions,
     parse_seed_range,
     plan_for_options,
+    run_trajectory,
     write_summary,
 )
 from shared.trajectory_semantics import certify_system_pair, make_case
@@ -208,6 +211,126 @@ def test_summary_keeps_witness_siblings_separate_and_attaches_controls(tmp_path)
         "witness_broken",
     }
     assert all(row["parse_control_n"] == 0 for row in summary["groups"])
+
+
+def test_summary_keeps_syntax_and_resource_variants_separate(tmp_path):
+    certificate = certify_system_pair(0).as_dict()
+    cases = [
+        make_case(
+            system_seed=0,
+            initial_state_seed=0,
+            presentation_seed=100,
+            representation="flat",
+            witness_state="valid",
+            query_type="complete_return",
+            horizon=6,
+            relabeling="canonical",
+            syntax_noise=syntax_noise,
+            resource_protocol=resource_protocol,
+            certification=certificate,
+        )
+        for syntax_noise, resource_protocol in (("clean", "answer_only"), ("noisy", "external_scratchpad"))
+    ]
+    records = [
+        {
+            "event": "case_result",
+            "case_id": case.case_id,
+            "case": case.as_dict(),
+            "api_replication": 0,
+            "correct": True,
+            "format_valid": True,
+            "matched_stale_witness_prediction": False,
+        }
+        for case in cases
+    ]
+    summary = write_summary(tmp_path, records, {})
+    assert summary["group_count"] == 2
+    assert {
+        (row["syntax_noise"], row["resource_protocol"])
+        for row in summary["groups"]
+    } == {("clean", "answer_only"), ("noisy", "external_scratchpad")}
+
+
+def test_fake_provider_attaches_controls_and_excludes_only_failed_reflective_rows(
+    tmp_path, monkeypatch
+):
+    class FakeProviderClient:
+        last_retry_count = 0
+        last_attempts = []
+
+        def __init__(self, provider, api_key, **kwargs):
+            self.provider = provider
+
+        def complete(self, *, model, messages, max_tokens, temperature):
+            prompt = messages[-1]["content"]
+            if "Parsing control" in prompt:
+                answer = "flip" if "reflective-relay-v1" in prompt else "same"
+            elif "after exactly 1 transition" in prompt:
+                answer = "B(0)"
+            else:
+                answer = "yes"
+            return Completion(
+                content=answer,
+                requested_model=model,
+                resolved_model=model,
+                finish_reason="stop",
+                usage={"prompt_tokens": 1, "completion_tokens": 1},
+                raw_response={"model": model},
+                latency_ms=1,
+                request_id="fake-request",
+                response_headers={},
+                provider=self.provider,
+            )
+
+    monkeypatch.setattr(trajectory_runner, "ProviderClient", FakeProviderClient)
+    result = run_trajectory(
+        TrajectoryOptions(
+            provider="custom",
+            model="fake/model",
+            out=tmp_path / "run",
+            representations=["flat", "reflective"],
+            witnesses=["valid"],
+            queries=["parse_only", "one_step", "complete_return"],
+            horizons=[6],
+            relabelings=["canonical"],
+            syntax_noise=["clean"],
+            semantic_seeds=[0],
+            system_seeds=[0],
+            initial_state_seeds=[0],
+            presentation_seeds=[100],
+            api_key="fake-secret",
+            api_base="https://example.invalid/v1",
+            max_tokens=8,
+            max_calls=6,
+        )
+    )
+    trajectory_rows = {
+        row["representation"]: row
+        for row in result["summary"]["groups"]
+        if row["query_type"] == "complete_return"
+    }
+    assert trajectory_rows["flat"]["parse_control_passed"] is True
+    assert trajectory_rows["flat"]["one_step_control_passed"] is True
+    assert trajectory_rows["flat"]["conditional_n"] == 1
+    assert trajectory_rows["reflective"]["parse_control_passed"] is False
+    assert trajectory_rows["reflective"]["one_step_control_passed"] is True
+    assert trajectory_rows["reflective"]["conditional_n"] == 0
+    assert result["summary"]["conditional_trajectory_cases"] == 1
+    assert result["summary"]["excluded_trajectory_cases"] == 1
+
+    trace_records = [
+        json.loads(line)
+        for line in (tmp_path / "run" / "trace.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    trace_trajectory = {
+        record["case"]["representation"]: record
+        for record in trace_records
+        if record.get("event") == "case_result"
+        and record["case"]["query_type"] == "complete_return"
+    }
+    assert trace_trajectory["flat"]["parse_control_passed"] is True
+    assert trace_trajectory["reflective"]["parse_control_passed"] is False
 
 
 def test_trajectory_environments_generate_and_compile():

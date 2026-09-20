@@ -487,7 +487,10 @@ redaction. Controls are query-conditioned: parse-only cases use horizon `0`,
 one-step cases use horizon `1`, and only trajectory queries expand across the
 requested horizon list. `matched_control_id` joins parse and one-step controls
 to the same trajectory condition without pooling valid and witness-broken
-siblings.
+siblings. Each trajectory result records `parse_control_passed` and
+`one_step_control_passed` for the same API replication; the conditional summary
+table includes only rows where both controls passed and reports excluded rows
+separately. Missing controls from a truncated run remain `null`, not failures.
 
 Use `--judge host`, `--judge docker`, or `--judge both`. The latter fails if
 host and offline Docker judgments disagree. The optional

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .artifacts import append_jsonl, sha256_text, utc_now, write_json
+from .artifacts import append_jsonl, sanitize, sha256_text, utc_now, write_json
 from .docker_backend import DockerBackend, DockerBackendError
 from .providers import (
     ProviderClient,
@@ -223,6 +223,44 @@ def _record_key(record: dict[str, Any]) -> tuple[str, int]:
     )
 
 
+def _attach_control_results(records: list[dict[str, Any]]) -> None:
+    """Attach same-replication parse/one-step outcomes to trajectory records.
+
+    A control is matched by the case's ``matched_control_id`` and API
+    replication, never by a broad semantic group.  ``None`` means the control
+    was not present in a truncated run; ``False`` is an observed control
+    failure and must not be confused with missing data.
+    """
+
+    controls: dict[tuple[str, int], dict[str, dict[str, Any]]] = {}
+    for record in records:
+        case = record.get("case") or {}
+        query_type = case.get("query_type")
+        control_id = case.get("matched_control_id")
+        if query_type not in {"parse_only", "one_step"} or not control_id:
+            continue
+        key = (str(control_id), int(record.get("api_replication", 0)))
+        controls.setdefault(key, {})[str(query_type)] = record
+
+    for record in records:
+        case = record.get("case") or {}
+        query_type = case.get("query_type")
+        if query_type in {"parse_only", "one_step"}:
+            record["parse_control_passed"] = None
+            record["one_step_control_passed"] = None
+            continue
+        control_id = case.get("matched_control_id")
+        key = (str(control_id), int(record.get("api_replication", 0)))
+        matched = controls.get(key, {})
+        for control_type, field in (
+            ("parse_only", "parse_control_passed"),
+            ("one_step", "one_step_control_passed"),
+        ):
+            control = matched.get(control_type)
+            record[field] = bool(control.get("correct")) if control is not None else None
+            record[f"{field}_case_id"] = control.get("case_id") if control is not None else None
+
+
 def _control_attachments(records: list[dict[str, Any]]) -> dict[str, dict[str, object]]:
     by_control: dict[str, list[dict[str, Any]]] = {}
     for record in records:
@@ -256,11 +294,55 @@ def _control_attachments(records: list[dict[str, Any]]) -> dict[str, dict[str, o
     return attachments
 
 
+def _persist_control_fields(
+    run_dir: Path,
+    records: list[dict[str, Any]],
+    *,
+    secret: str | None = None,
+) -> None:
+    """Persist attached control fields on the corresponding trace records."""
+
+    trace_path = run_dir / "trace.jsonl"
+    if not trace_path.is_file():
+        return
+    by_key = {
+        _record_key(record): record
+        for record in records
+        if record.get("event") == "case_result"
+    }
+    rewritten: list[str] = []
+    for line in trace_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            rewritten.append(line)
+            continue
+        if isinstance(value, dict) and value.get("event") == "case_result":
+            matched = by_key.get(_record_key(value))
+            if matched is not None:
+                for field in (
+                    "parse_control_passed",
+                    "one_step_control_passed",
+                    "parse_control_passed_case_id",
+                    "one_step_control_passed_case_id",
+                ):
+                    if field in matched:
+                        value[field] = matched[field]
+        rewritten.append(json.dumps(sanitize(value, secret), ensure_ascii=False))
+    trace_path.write_text("\n".join(rewritten) + ("\n" if rewritten else ""), encoding="utf-8")
+
+
 def write_summary(
     run_dir: Path,
     records: list[dict[str, Any]],
     manifest: dict[str, object],
+    *,
+    secret: str | None = None,
 ) -> dict[str, Any]:
+    _attach_control_results(records)
+    _persist_control_fields(run_dir, records, secret=secret)
     groups: dict[tuple[object, ...], list[dict[str, Any]]] = {}
     for record in records:
         groups.setdefault(_group_key(record), []).append(record)
@@ -272,6 +354,24 @@ def write_summary(
         control = attachments.get(str(case.get("matched_control_id")), {})
         parse_stats = control.get("parse_only", {})
         one_step_stats = control.get("one_step", {})
+        trajectory_items = [
+            item
+            for item in items
+            if (item.get("case") or {}).get("query_type") not in {"parse_only", "one_step"}
+        ]
+        conditional_items = [
+            item
+            for item in trajectory_items
+            if item.get("parse_control_passed") is True
+            and item.get("one_step_control_passed") is True
+        ]
+
+        def consensus(selected: list[dict[str, Any]], field: str) -> bool | None:
+            values = [item[field] for item in selected if isinstance(item.get(field), bool)]
+            if not values or any(value != values[0] for value in values[1:]):
+                return None
+            return values[0]
+
         rows.append(
             {
                 "system_seed": key[0],
@@ -296,6 +396,15 @@ def write_summary(
                 "parse_control_accuracy": parse_stats.get("accuracy", 0.0),
                 "one_step_control_n": one_step_stats.get("n", 0),
                 "one_step_control_accuracy": one_step_stats.get("accuracy", 0.0),
+                "parse_control_passed": consensus(trajectory_items, "parse_control_passed"),
+                "one_step_control_passed": consensus(trajectory_items, "one_step_control_passed"),
+                "conditional_n": len(conditional_items),
+                "conditional_correct": sum(bool(item.get("correct")) for item in conditional_items),
+                "conditional_accuracy": (
+                    sum(bool(item.get("correct")) for item in conditional_items)
+                    / max(1, len(conditional_items))
+                ),
+                "conditional_excluded_n": len(trajectory_items) - len(conditional_items),
             }
         )
     csv_path = run_dir / "summary.csv"
@@ -305,6 +414,17 @@ def write_summary(
         writer.writeheader()
         writer.writerows(rows)
 
+    trajectory_records = [
+        record
+        for record in records
+        if (record.get("case") or {}).get("query_type") not in {"parse_only", "one_step"}
+    ]
+    conditional_records = [
+        record
+        for record in trajectory_records
+        if record.get("parse_control_passed") is True
+        and record.get("one_step_control_passed") is True
+    ]
     summary = {
         "event": "summary",
         "track": "direct_answer_behavioral",
@@ -314,6 +434,13 @@ def write_summary(
         "accuracy": sum(bool(item.get("correct")) for item in records) / max(1, len(records)),
         "group_count": len(rows),
         "groups": rows,
+        "conditional_trajectory_cases": len(conditional_records),
+        "conditional_trajectory_correct": sum(bool(item.get("correct")) for item in conditional_records),
+        "conditional_trajectory_accuracy": (
+            sum(bool(item.get("correct")) for item in conditional_records)
+            / max(1, len(conditional_records))
+        ),
+        "excluded_trajectory_cases": len(trajectory_records) - len(conditional_records),
         "matched_control_attachments": attachments,
         "interpretation_warning": "These are behavioral intervention results, not a serial-depth measurement.",
     }
@@ -325,8 +452,8 @@ def write_summary(
         f"- Accuracy: `{summary['accuracy']}`",
         "- Interpretation: behavioral sensitivity to named interventions; no internal depth claim.",
         "",
-        "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | stale match |",
-        "|---:|---:|---|---|---|---:|---|---|---:|---:|---:|---:|---:|",
+        "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | parse passed | one-step passed | conditional n | conditional accuracy | stale match |",
+        "|---:|---:|---|---|---|---:|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|",
     ]
     for row in rows:
         markdown.append(
@@ -334,6 +461,8 @@ def write_summary(
             f"{row['benchmark_status']} | {row['query_type']} | {row['horizon']} | "
             f"{row['relabeling']} | {row['syntax_noise']} | {row['n']} | {row['accuracy']:.3f} | "
             f"{row['parse_control_accuracy']:.3f} | {row['one_step_control_accuracy']:.3f} | "
+            f"{row['parse_control_passed']} | {row['one_step_control_passed']} | "
+            f"{row['conditional_n']} | {row['conditional_accuracy']:.3f} | "
             f"{row['stale_witness_match_rate']:.3f} |"
         )
     (run_dir / "summary.md").write_text("\n".join(markdown) + "\n", encoding="utf-8")
@@ -634,7 +763,7 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
         finally:
             if docker_report is not None:
                 write_json(run_dir / "docker_judge.json", docker_report, secret=api_key)
-    summary = write_summary(run_dir, records, manifest)
+    summary = write_summary(run_dir, records, manifest, secret=api_key)
     if docker_report is not None:
         summary["docker_judge"] = {
             "returncode": docker_report.get("returncode"),
