@@ -22,6 +22,7 @@ task information (they never see the ground truth):
   seductive      "they said it, so they must be the genuine type"
   overcautious   "if it is this clean, they must be strategic"
   narrative_match matches the transcript to the world whose narrative fits
+  framing_sensitive  oracle on bare_table, seductive on narrative (positive control)
 
 External answer sources (e.g. a cheap model such as Atria, or a frontier
 model later):
@@ -47,7 +48,7 @@ import itertools
 import json
 import math
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
@@ -147,6 +148,41 @@ def baseline_calibrated(public: dict, hidden) -> dict:
     return CORE.ground_truth_answer(hidden)
 
 
+def oracle_from_public(public: dict) -> dict:
+    """Public-only oracle: recompute posterior/verdict from behavior tables."""
+    p1 = public["prior_world1"]
+    obs = public["observation"]
+    b1 = public["behavior"]["world1"][obs]
+    b2 = public["behavior"]["world2"][obs]
+    denom = b1 * p1 + b2 * (1 - p1)
+    post = b1 * p1 / denom if denom != 0 else 0.5
+    # likelihood ratio
+    if b1 == 0 or b2 == 0:
+        ratio = float('inf') if b1 != b2 else 1.0
+    else:
+        ratio = max(b1 / b2, b2 / b1)
+    if abs(ratio - 1.0) < 1e-9:
+        verdict = "indistinguishable"
+    elif ratio < 3:
+        verdict = "weakly_distinguishable"
+    else:
+        verdict = "distinguishable"
+    if post > 0.5 + 1e-9:
+        support = "world1"
+    elif post < 0.5 - 1e-9:
+        support = "world2"
+    else:
+        support = "neither"
+    return make_answer(public, post, verdict, support, "oracle from public")
+
+
+def baseline_framing_sensitive(public: dict) -> dict:
+    """Positive control: oracle on bare_table, seductive on narrative."""
+    if public["framing"] == "bare_table":
+        return oracle_from_public(public)
+    return baseline_seductive(public)
+
+
 BASELINES: Dict[str, Callable[..., dict]] = {
     "uniform": baseline_uniform,
     "prior_anchored": baseline_prior_anchored,
@@ -154,6 +190,7 @@ BASELINES: Dict[str, Callable[..., dict]] = {
     "overcautious": baseline_overcautious,
     "narrative_match": baseline_narrative_match,
     "calibrated": baseline_calibrated,
+    "framing_sensitive": baseline_framing_sensitive,
 }
 
 
@@ -176,7 +213,7 @@ def load_external_answer_fn(module_spec: str) -> Callable[[dict], dict]:
 
 
 def wilson_interval(k: int, n: int, z: float = 1.96) -> Tuple[float, float]:
-    """Wilson score interval for binomial proportion."""
+    """Wilson score interval for binomial proportion. Handles k=0 correctly."""
     if n == 0:
         return (0.0, 1.0)
     p = k / n
@@ -186,6 +223,51 @@ def wilson_interval(k: int, n: int, z: float = 1.96) -> Tuple[float, float]:
     lower = (center - adj) / denom
     upper = (center + adj) / denom
     return (max(0.0, lower), min(1.0, upper))
+
+
+def exact_mcnemar_p(bare_only: int, narr_only: int) -> float | None:
+    """Exact two-sided binomial test for McNemar on discordant pairs.
+
+    Under H0, conditional on discordant pairs, bare_only ~ Bin(n_discordant, 0.5).
+    Returns p-value, or None if discordant=0 (undefined, not zero).
+    """
+    n = bare_only + narr_only
+    if n == 0:
+        return None
+    # Two-sided: sum of probabilities at least as extreme as observed
+    # Observed deviation from n/2
+    b = bare_only
+    # Use min tail
+    k = min(b, n - b)
+    prob = 0.0
+    for i in range(k + 1):
+        prob += math.comb(n, i) / (2 ** n)
+    p_two = min(1.0, 2 * prob)
+    # When b == n/2 and n even, prob includes half mass + middle term, doubling would exceed 1
+    # but capped at 1, which is correct for exact two-sided (p=1 when perfectly balanced)
+    return p_two
+
+
+def newcombe_paired_diff_interval(b: int, c: int, n: int, z: float = 1.96) -> Tuple[float, float]:
+    """Newcombe-style interval for paired difference (b-c)/n.
+
+    Uses Wilson intervals for b/n and c/n (method analogous to Newcombe 1998 for
+    difference of proportions). Handles b=c=0 correctly: interval is
+    [-Wilson(0/n).upper, +Wilson(0/n).upper] not [0,0].
+    """
+    if n == 0:
+        return (0.0, 0.0)
+    pb = b / n
+    pc = c / n
+    diff = pb - pc  # note: b=narr_only, c=bare_only => diff = (narr_only-bare_only)/n
+    # Wilson intervals for each discordant proportion
+    lb, ub = wilson_interval(b, n, z=z)
+    lc, uc = wilson_interval(c, n, z=z)
+    # Lower = diff - sqrt((pb-lb)^2 + (uc-pc)^2)
+    # Upper = diff + sqrt((ub-pb)^2 + (pc-lc)^2)
+    lower = diff - math.sqrt((pb - lb) ** 2 + (uc - pc) ** 2)
+    upper = diff + math.sqrt((ub - pb) ** 2 + (pc - lc) ** 2)
+    return (lower, upper)
 
 
 def mean_std(vals: List[float]) -> Tuple[float, float]:
@@ -285,45 +367,48 @@ def main() -> None:
     print(f"\npass: {passed}/{len(rows)}")
 
     # --- Paired framing analysis ---
-    # Pair key = identical instance except framing: (scenario,evidence,prior,presentation,seed,replication)
-    # This is the matched sibling design from test_bare_table_vs_narrative_matched_siblings.
-    pair_dict: Dict[Tuple, Dict[str, int]] = defaultdict(dict)  # pair_key -> framing -> pass 0/1
-    # For pooled stats and variance separation: group_key = (scenario,evidence,prior)
+    # Pairing is on instance (shared prior/likelihoods/observation), not on replication draw.
+    # instance_key = (scenario,evidence,prior,presentation,seed) — same Bayes problem
+    # For each instance, average pass rate over replications per framing, then d_i = p_narr - p_bare
+    # This averages out replication noise within each side before differencing.
+    instance_dict: Dict[Tuple, Dict[str, List[int]]] = defaultdict(lambda: defaultdict(list))
+    # For pooled stats: group_key = (scenario,evidence,prior) -> framing -> list of pass indicators (over all replications)
     grouped_pooled: Dict[Tuple, Dict[str, List[int]]] = defaultdict(lambda: defaultdict(list))
-    # For seed variance: group_key -> framing -> seed -> list of pass indicators (over presentation,replication)
+    # For seed variance: group_key -> framing -> seed -> list of pass (over presentation,replication)
     per_seed: Dict[Tuple, Dict[str, Dict[int, List[int]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(list))
     )
-    # For replication variance: group_key -> framing -> (seed,presentation) -> list of pass over replications
+    # For replication variance: group_key -> framing -> (seed,presentation) -> list over replications
     per_instance_repl: Dict[Tuple, Dict[str, Dict[Tuple[int, str], List[int]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(list))
     )
 
     for r in rows:
         group_key = (r["scenario"], r["evidence"], r["prior"])
-        pair_key = (r["scenario"], r["evidence"], r["prior"], r["presentation"], r["seed"], r["replication"])
+        inst_key = (r["scenario"], r["evidence"], r["prior"], r["presentation"], r["seed"])
         is_pass = 1 if r["failure_mode"] == "pass" else 0
-        pair_dict[pair_key][r["framing"]] = is_pass
+        instance_dict[inst_key][r["framing"]].append(is_pass)
         grouped_pooled[group_key][r["framing"]].append(is_pass)
         per_seed[group_key][r["framing"]][r["seed"]].append(is_pass)
         per_instance_repl[group_key][r["framing"]][(r["seed"], r["presentation"])].append(is_pass)
 
-    print("\n--- Narrative vs Bare-Table delta (paired by scenario,evidence,prior,presentation,seed,replication) ---")
-    print("Pooled Wilson 95% CI on pass count; paired d = pass_narr - pass_bare ∈ {-1,0,+1}")
-    print("Discordant: bare_only = (narr fail, bare pass) = seduction effect; narr_only = (narr pass, bare fail)")
+    print("\n--- Narrative vs Bare-Table delta (paired by instance: scenario,evidence,prior,presentation,seed) ---")
+    print("Pooled Wilson 95% CI on pass count; paired d_i = p̄_narr,i − p̄_bare,i averaged over replications")
+    print("Seduction rate = bare_only / n_pairs (narr fail, bare pass) with Wilson CI; handles 0/10 → [0.00,0.28]")
+    print("Exact McNemar p = exact binomial on discordant pairs; NA when b+c=0 (undefined, not zero)")
+    print("Newcombe paired-diff CI uses Wilson intervals for discordant proportions")
     print("Seed variance = std of per-seed means; Repl variance = mean within-instance std across replications\n")
 
-    overall_pairs = []
-    overall_d = []
+    overall_d: List[float] = []
     overall_bare_only = 0
     overall_narr_only = 0
+    overall_pairs = 0
 
     for gkey in sorted(grouped_pooled):
         scen, ev, prior = gkey
         narr_vals = grouped_pooled[gkey].get("narrative", [])
         bare_vals = grouped_pooled[gkey].get("bare_table", [])
 
-        # Pooled Wilson
         def pooled_stats(vals: List[int]):
             k = sum(vals)
             n = len(vals)
@@ -333,15 +418,12 @@ def main() -> None:
         k_narr, n_narr, lo_narr, hi_narr = pooled_stats(narr_vals)
         k_bare, n_bare, lo_bare, hi_bare = pooled_stats(bare_vals)
 
-        # Seed variance and replication variance per framing
         def variance_stats(framing: str):
-            # per-seed means
             seed_means = []
             for seed, v in per_seed[gkey][framing].items():
                 if v:
                     seed_means.append(sum(v) / len(v))
             _, seed_std = mean_std(seed_means)
-            # replication variance: for each (seed,presentation), std across replications
             repl_stds = []
             for inst_key, v in per_instance_repl[gkey][framing].items():
                 if len(v) > 1:
@@ -354,75 +436,102 @@ def main() -> None:
         seed_std_narr, repl_std_narr, n_seed_narr = variance_stats("narrative")
         seed_std_bare, repl_std_bare, n_seed_bare = variance_stats("bare_table")
 
-        # Paired stats: collect pairs belonging to this group_key
-        d_list = []
+        # Paired on instance, averaging over replications
+        d_list: List[float] = []
         both_pass = both_fail = narr_only = bare_only = 0
-        for pair_key, framings in pair_dict.items():
-            if pair_key[0] != scen or pair_key[1] != ev or pair_key[2] != prior:
+        # For deterministic case, d_list values are in {-1,0,+1}
+        for inst_key in sorted(instance_dict):
+            if inst_key[0] != scen or inst_key[1] != ev or inst_key[2] != prior:
                 continue
+            framings = instance_dict[inst_key]
             if "narrative" not in framings or "bare_table" not in framings:
                 continue
-            pn = framings["narrative"]
-            pb = framings["bare_table"]
-            d = pn - pb
-            d_list.append(d)
-            if pn == 1 and pb == 1:
+            # Average over replications per framing
+            p_narr = sum(framings["narrative"]) / len(framings["narrative"]) if framings["narrative"] else 0.0
+            p_bare = sum(framings["bare_table"]) / len(framings["bare_table"]) if framings["bare_table"] else 0.0
+            d_i = p_narr - p_bare
+            d_list.append(d_i)
+
+            # Discordance counts: for deterministic case, exact; for stochastic, count by sign of d_i
+            # Keep both_pass/both_fail for exact 0/1 case, otherwise use thresholded sign
+            if abs(p_narr - 1.0) < 1e-9 and abs(p_bare - 1.0) < 1e-9:
                 both_pass += 1
-            elif pn == 0 and pb == 0:
+            elif abs(p_narr) < 1e-9 and abs(p_bare) < 1e-9:
                 both_fail += 1
-            elif pn == 1 and pb == 0:
+            elif d_i > 1e-9:
                 narr_only += 1
-            else:
+            elif d_i < -1e-9:
                 bare_only += 1
+            else:
+                # d_i == 0 but not both 0/1 (e.g., both 0.5) — treat as tie, not discordant
+                pass
 
         n_pairs = len(d_list)
         if n_pairs:
             mean_d, std_d = mean_std(d_list)
-            se_d = std_d / math.sqrt(n_pairs) if n_pairs > 1 else 0.0
-            ci_low = mean_d - 1.96 * se_d
-            ci_high = mean_d + 1.96 * se_d
-            # McNemar (without continuity correction, as in fable note; report with correction note)
+            # Newcombe paired-diff interval using b=narr_only, c=bare_only
+            # Note: diff = (narr_only - bare_only)/n for deterministic, but for continuous d_i
+            # mean_d may differ slightly from (narr_only-bare_only)/n when p are fractional.
+            # We report both: mean_d and Newcombe interval for discordant counts.
+            newcombe_lo, newcombe_hi = newcombe_paired_diff_interval(narr_only, bare_only, n_pairs)
+            # Wilson intervals for seduction rates
+            lo_bare_only, hi_bare_only = wilson_interval(bare_only, n_pairs)
+            lo_narr_only, hi_narr_only = wilson_interval(narr_only, n_pairs)
+            # Exact McNemar p
+            p_exact = exact_mcnemar_p(bare_only, narr_only)
+            # McNemar chi2 approximations (for reference, unreliable <25 discordant)
             discordant = narr_only + bare_only
             if discordant > 0:
                 chi2 = (narr_only - bare_only) ** 2 / discordant
-                # with continuity correction: (|b-c|-1)^2/(b+c)
-                chi2_cc = (abs(narr_only - bare_only) - 1) ** 2 / discordant if discordant > 0 else 0.0
+                chi2_cc = (abs(narr_only - bare_only) - 1) ** 2 / discordant
             else:
-                chi2 = 0.0
-                chi2_cc = 0.0
+                chi2 = None
+                chi2_cc = None
         else:
-            mean_d = std_d = se_d = ci_low = ci_high = chi2 = chi2_cc = 0.0
+            mean_d = std_d = 0.0
+            newcombe_lo = newcombe_hi = 0.0
+            lo_bare_only = hi_bare_only = lo_narr_only = hi_narr_only = 0.0
+            p_exact = None
+            chi2 = chi2_cc = None
 
-        overall_pairs.extend([gkey] * n_pairs)
         overall_d.extend(d_list)
         overall_bare_only += bare_only
         overall_narr_only += narr_only
+        overall_pairs += n_pairs
+
+        chi2_str = f"{chi2:.2f}" if chi2 is not None else "NA"
+        chi2_cc_str = f"{chi2_cc:.2f}" if chi2_cc is not None else "NA"
+        p_str = f"{p_exact:.4f}" if p_exact is not None else "NA"
 
         print(
-            f"{scen},{ev},{prior}: n_pairs={n_pairs}\n"
+            f"{scen},{ev},{prior}: n_pairs={n_pairs} (instances, averaged over {args.replications} repl)\n"
             f"  pooled: narr {k_narr}/{n_narr} [{lo_narr:.2f},{hi_narr:.2f}] "
             f"(seed_std={seed_std_narr:.2f} n_seed={n_seed_narr} repl_std={repl_std_narr:.2f}) | "
             f"bare {k_bare}/{n_bare} [{lo_bare:.2f},{hi_bare:.2f}] "
             f"(seed_std={seed_std_bare:.2f} n_seed={n_seed_bare} repl_std={repl_std_bare:.2f})\n"
-            f"  paired: d=pass_narr-pass_bare mean={mean_d:+.2f} [{ci_low:+.2f},{ci_high:+.2f}] "
-            f"std={std_d:.2f} | both_pass={both_pass} both_fail={both_fail} "
-            f"narr_only={narr_only} bare_only={bare_only} (seduction) "
-            f"McNemar χ²={chi2:.2f} (cc={chi2_cc:.2f})"
+            f"  paired: mean d_i={mean_d:+.3f} std={std_d:.3f} Newcombe diff CI [{newcombe_lo:+.2f},{newcombe_hi:+.2f}] "
+            f"(diff=narr_only-bare_only)\n"
+            f"    discordant: both_pass={both_pass} both_fail={both_fail} "
+            f"narr_only={narr_only} [{lo_narr_only:.2f},{hi_narr_only:.2f}] "
+            f"bare_only={bare_only} (seduction) [{lo_bare_only:.2f},{hi_bare_only:.2f}] "
+            f"McNemar χ²={chi2_str} (cc={chi2_cc_str}) exact p={p_str}"
         )
 
-    # Overall summary
     if overall_d:
         mean_d_all, std_d_all = mean_std(overall_d)
-        se_all = std_d_all / math.sqrt(len(overall_d)) if len(overall_d) > 1 else 0.0
-        ci_low_all = mean_d_all - 1.96 * se_all
-        ci_high_all = mean_d_all + 1.96 * se_all
-        discordant_all = overall_narr_only + overall_bare_only
-        chi2_all = (overall_narr_only - overall_bare_only) ** 2 / discordant_all if discordant_all else 0.0
+        newcombe_lo_all, newcombe_hi_all = newcombe_paired_diff_interval(
+            overall_narr_only, overall_bare_only, overall_pairs
+        )
+        lo_bare_all, hi_bare_all = wilson_interval(overall_bare_only, overall_pairs)
+        p_all = exact_mcnemar_p(overall_bare_only, overall_narr_only)
+        chi2_all = (overall_narr_only - overall_bare_only) ** 2 / (overall_narr_only + overall_bare_only) if (overall_narr_only + overall_bare_only) > 0 else None
+        chi2_all_str = f"{chi2_all:.2f}" if chi2_all is not None else "NA"
+        p_all_str = f"{p_all:.4f}" if p_all is not None else "NA"
         print(
-            f"\nOverall: n_pairs={len(overall_d)} mean_d={mean_d_all:+.3f} "
-            f"[{ci_low_all:+.3f},{ci_high_all:+.3f}] "
-            f"bare_only (narr fail,bare pass)={overall_bare_only} "
-            f"narr_only={overall_narr_only} χ²={chi2_all:.2f}"
+            f"\nOverall: n_pairs={overall_pairs} mean_d={mean_d_all:+.3f} "
+            f"Newcombe [{newcombe_lo_all:+.3f},{newcombe_hi_all:+.3f}] "
+            f"bare_only (seduction)={overall_bare_only}/{overall_pairs} [{lo_bare_all:.2f},{hi_bare_all:.2f}] "
+            f"narr_only={overall_narr_only} χ²={chi2_all_str} exact p={p_all_str}"
         )
 
     if args.output:

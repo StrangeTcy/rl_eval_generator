@@ -335,3 +335,170 @@ def test_observation_drawn_from_declared_world_policy():
                 f"evidence={evidence} world={world} empirical denial {empirical_denial:.3f} "
                 f"vs avg expected {avg_expected:.3f} (n={total})"
             )
+
+
+def load_probe():
+    probe_path = ROOT / "tools" / "epistemic_probe.py"
+    spec = importlib.util.spec_from_file_location("epg_probe_inv", probe_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["epg_probe_inv"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+PROBE = load_probe()
+
+
+def test_wilson_and_exact_mcnemar_edge_cases():
+    """Paired CI fix: Wilson handles k=0, exact McNemar returns NA when discordant=0."""
+    # Wilson 0/10 should be [0.00, 0.28] not [0,0]
+    lo, hi = PROBE.wilson_interval(0, 10)
+    assert lo == 0.0
+    assert 0.25 < hi < 0.30, f"Wilson 0/10 expected ~0.28, got [{lo:.2f},{hi:.2f}]"
+    # Wilson 10/10 should be [0.72,1.00]
+    lo2, hi2 = PROBE.wilson_interval(10, 10)
+    assert hi2 == 1.0
+    assert 0.70 < lo2 < 0.75
+
+    # Exact McNemar: discordant=0 => None (NA, not zero)
+    assert PROBE.exact_mcnemar_p(0, 0) is None
+    # Balanced discordant => p=1
+    p_balanced = PROBE.exact_mcnemar_p(5, 5)
+    assert p_balanced is not None and abs(p_balanced - 1.0) < 1e-9
+    # Extreme discordant 10 vs 0 => p ~ 0.002
+    p_extreme = PROBE.exact_mcnemar_p(10, 0)
+    assert p_extreme is not None and p_extreme < 0.01, f"expected p<0.01 for 10 vs 0, got {p_extreme}"
+
+    # Newcombe paired diff interval should NOT collapse at zero discordance
+    lo_n, hi_n = PROBE.newcombe_paired_diff_interval(0, 0, 10)
+    assert lo_n < 0 and hi_n > 0, f"Newcombe 0,0,10 should straddle zero, got [{lo_n:.2f},{hi_n:.2f}]"
+    assert hi_n - lo_n > 0.4, "Newcombe interval at zero discordance should have width"
+
+
+def test_framing_sensitive_positive_control():
+    """Positive control: framing_sensitive baseline must produce bare_only ≈ n_pairs in ambiguous band.
+
+    This confirms the paired detector actually detects the effect it was built to measure.
+    Without this, a sign error, swapped labels, or CI that never widens would be invisible
+    (all deterministic baselines have zero discordance by construction).
+    """
+    # Use small seed count for speed, but enough to see signal
+    seeds = 10
+    # For each group (scenario,evidence,prior), collect instance-level pairing
+    # instance_key = (scenario,evidence,prior,presentation,seed)
+    instance_dict = {}  # inst_key -> framing -> pass 0/1
+    for scenario, evidence, prior, presentation in itertools.product(
+        SCENARIOS, ("ambiguous",), PRIORS, PRESENTATIONS
+    ):
+        for seed in range(seeds):
+            for framing in FRAMINGS:
+                inst = CORE.build_instance(scenario, evidence, prior, presentation, seed, framing=framing)
+                # public info
+                public = {
+                    "framing": framing,
+                    "prior_world1": float(inst.prior1),
+                    "observation": inst.observation,
+                    "behavior": {
+                        "world1": {a: float(p) for a, p in inst.hypotheses["world1"].behavior.items()},
+                        "world2": {a: float(p) for a, p in inst.hypotheses["world2"].behavior.items()},
+                    },
+                }
+                # framing_sensitive: oracle on bare_table, seductive on narrative
+                if framing == "bare_table":
+                    ans = PROBE.oracle_from_public(public)
+                else:
+                    ans = PROBE.baseline_seductive(public)
+                grading = inst.grade(ans, pass_threshold=0.85)
+                is_pass = 1 if grading["failure_mode"] == "pass" else 0
+                inst_key = (scenario, evidence, prior, presentation, seed)
+                instance_dict.setdefault(inst_key, {})[framing] = is_pass
+
+    # Now compute per-group stats for ambiguous band
+    from collections import defaultdict
+    grouped = defaultdict(list)  # group_key -> list of (p_narr, p_bare, d)
+    for inst_key, framings in instance_dict.items():
+        scen, ev, prior, pres, seed = inst_key
+        assert ev == "ambiguous"
+        group_key = (scen, ev, prior)
+        p_narr = framings.get("narrative")
+        p_bare = framings.get("bare_table")
+        assert p_narr is not None and p_bare is not None
+        d = p_narr - p_bare
+        grouped[group_key].append((p_narr, p_bare, d))
+
+    for gkey, vals in grouped.items():
+        scen, ev, prior = gkey
+        n_pairs = len(vals)
+        assert n_pairs == len(PRESENTATIONS) * seeds, f"expected {len(PRESENTATIONS)*seeds} pairs, got {n_pairs}"
+        # For ambiguous, oracle passes, seductive fails -> bare_only = n_pairs, narr_only=0
+        bare_only = sum(1 for pn, pb, d in vals if d < 0)
+        narr_only = sum(1 for pn, pb, d in vals if d > 0)
+        both_pass = sum(1 for pn, pb, d in vals if pn == 1 and pb == 1)
+        both_fail = sum(1 for pn, pb, d in vals if pn == 0 and pb == 0)
+        mean_d = sum(d for _, _, d in vals) / n_pairs
+
+        assert bare_only == n_pairs, f"{gkey}: expected bare_only==n_pairs ({n_pairs}), got {bare_only}"
+        assert narr_only == 0, f"{gkey}: expected narr_only==0, got {narr_only}"
+        assert both_pass == 0 and both_fail == 0
+        assert mean_d == -1.0, f"{gkey}: expected mean_d=-1.0, got {mean_d}"
+
+        # Wilson interval for bare_only/n should be high, not include 0
+        lo_bare, hi_bare = PROBE.wilson_interval(bare_only, n_pairs)
+        assert lo_bare > 0.7, f"{gkey}: Wilson for bare_only {bare_only}/{n_pairs} should have lo>0.7, got [{lo_bare:.2f},{hi_bare:.2f}]"
+
+        # Exact McNemar p should be significant
+        p_exact = PROBE.exact_mcnemar_p(bare_only, narr_only)
+        assert p_exact is not None and p_exact < 0.001, f"{gkey}: expected p<0.001, got {p_exact}"
+
+        # Newcombe diff CI should exclude zero and be negative
+        lo_new, hi_new = PROBE.newcombe_paired_diff_interval(narr_only, bare_only, n_pairs)
+        assert hi_new < 0, f"{gkey}: Newcombe CI should be entirely negative, got [{lo_new:.2f},{hi_new:.2f}]"
+
+
+def test_paired_on_instance_not_replication():
+    """Pairing is on instance (shared prior/likelihoods/observation), not replication draw.
+
+    With replications=3, n_pairs should be instances (presentations*seeds), not instances*replications.
+    d_i = p̄_narr,i − p̄_bare,i averaged over replications, so replication noise is averaged out
+    within each side before differencing.
+    """
+    seeds = 3
+    replications = 3
+    # Simulate instance_dict with replications
+    instance_repl = {}  # inst_key -> framing -> list of pass over replications
+    for scenario, evidence, prior, presentation in itertools.product(
+        ("trap",), ("weak",), ("balanced",), PRESENTATIONS
+    ):
+        for seed in range(seeds):
+            for repl in range(replications):
+                for framing in FRAMINGS:
+                    inst = CORE.build_instance(scenario, evidence, prior, presentation, seed, framing=framing)
+                    public = {
+                        "framing": framing,
+                        "prior_world1": float(inst.prior1),
+                        "observation": inst.observation,
+                        "behavior": {
+                            "world1": {a: float(p) for a, p in inst.hypotheses["world1"].behavior.items()},
+                            "world2": {a: float(p) for a, p in inst.hypotheses["world2"].behavior.items()},
+                        },
+                    }
+                    # Use deterministic baseline so replication variance=0
+                    ans = PROBE.baseline_seductive(public)
+                    grading = inst.grade(ans, pass_threshold=0.85)
+                    is_pass = 1 if grading["failure_mode"] == "pass" else 0
+                    inst_key = (scenario, evidence, prior, presentation, seed)
+                    instance_repl.setdefault(inst_key, {}).setdefault(framing, []).append(is_pass)
+
+    # n_pairs should be len(instance_repl) = presentations*seeds = 6, not 18
+    n_instances = len(instance_repl)
+    assert n_instances == len(PRESENTATIONS) * seeds
+    # Check d_i averaging
+    for inst_key, framings in instance_repl.items():
+        assert len(framings["narrative"]) == replications
+        assert len(framings["bare_table"]) == replications
+        p_narr = sum(framings["narrative"]) / replications
+        p_bare = sum(framings["bare_table"]) / replications
+        # For deterministic baseline, p_narr == p_bare (since framing ignored)
+        assert p_narr == p_bare, f"seductive baseline should ignore framing, got {p_narr} vs {p_bare}"
+
