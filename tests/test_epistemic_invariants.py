@@ -502,3 +502,110 @@ def test_paired_on_instance_not_replication():
         # For deterministic baseline, p_narr == p_bare (since framing ignored)
         assert p_narr == p_bare, f"seductive baseline should ignore framing, got {p_narr} vs {p_bare}"
 
+
+def test_wilcoxon_and_permutation_for_continuous_d():
+    """McNemar only valid for replications=1; for replications>1 use Wilcoxon/permutation on continuous d_i."""
+    # Binary case: 10 pairs all -1 (bare_only)
+    d_binary = [-1.0] * 10
+    Wpos, p_wilcox, n = PROBE.wilcoxon_signed_rank(d_binary)
+    assert n == 10
+    assert p_wilcox is not None and p_wilcox < 0.01
+    p_perm = PROBE.paired_permutation_p(d_binary, n_perm=2000, seed=0)
+    assert p_perm is not None and p_perm < 0.01
+
+    # Continuous case: 2/5 vs 5/5 => d=-0.6
+    d_cont = [-0.6, -0.6, 0.0, -1.0, 0.2]
+    # Should be counted as bare_only if thresholded, but Wilcoxon uses magnitude
+    Wpos2, p_wilcox2, n2 = PROBE.wilcoxon_signed_rank(d_cont)
+    assert n2 == 4  # zero filtered
+    assert p_wilcox2 is not None
+    p_perm2 = PROBE.paired_permutation_p(d_cont, n_perm=2000, seed=1)
+    assert p_perm2 is not None
+
+    # All zeros => None
+    assert PROBE.wilcoxon_signed_rank([0.0, 0.0, 0.0])[0] is None
+    assert PROBE.paired_permutation_p([0.0, 0.0]) is None
+
+    # Exact McNemar should be NA for continuous case conceptually, but function still works for counts
+    # For replications>1 we should NOT use exact_mcnemar_p on thresholded counts — test that probe prints NA message
+    # Here we just check that thresholding loses magnitude: 0.6 vs 1.0 both counted as bare_only
+    bare_only_thresh = sum(1 for d in d_cont if d < -1e-9)
+    assert bare_only_thresh == 3  # -0.6, -0.6, -1.0
+
+
+def test_seed_level_aggregation_avoids_overstating_n():
+    """Pairs within a seed may share same math problem (solo/paired). Seed-level aggregation avoids overstating n."""
+    seeds = 5
+    # Build instance_dict for one group
+    instance_dict = {}
+    seed_to_d = {}
+    for scenario, evidence, prior, presentation in itertools.product(
+        ("trap",), ("ambiguous",), ("balanced",), PRESENTATIONS
+    ):
+        for seed in range(seeds):
+            inst_key = (scenario, evidence, prior, presentation, seed)
+            # Simulate framing_sensitive: bare pass, narrative fail => d=-1
+            instance_dict[inst_key] = {"narrative": [0], "bare_table": [1]}
+            seed_to_d.setdefault(seed, []).append(-1.0)
+
+    # Instance-level n = presentations*seeds = 10
+    n_instances = len(instance_dict)
+    assert n_instances == len(PRESENTATIONS) * seeds
+
+    # Seed-level: mean over presentations per seed
+    seed_d_list = [sum(v) / len(v) for v in seed_to_d.values()]
+    assert len(seed_d_list) == seeds
+    assert all(d == -1.0 for d in seed_d_list)
+
+    # Instance-level Wilcoxon p for 10 pairs all -1: p~0.002
+    _, p_inst, _ = PROBE.wilcoxon_signed_rank([-1.0] * n_instances)
+    # Seed-level Wilcoxon p for 5 seeds all -1: p=0.0625 (2/32)
+    _, p_seed, _ = PROBE.wilcoxon_signed_rank(seed_d_list)
+    assert p_inst < p_seed, "seed-level should be more conservative than instance-level"
+    assert abs(p_seed - 0.0625) < 1e-9, f"expected p=0.0625 for 5 all same sign, got {p_seed}"
+
+
+def test_format_p_and_graded_controls():
+    """Small notes: print p<1e-4 not p=0.0000, graded controls for power check."""
+    assert PROBE.format_p(None) == "NA"
+    assert PROBE.format_p(0.00001) == "p<1e-4"
+    assert PROBE.format_p(0.00009) == "p<1e-4"
+    assert PROBE.format_p(0.0002) == "p=0.0002"
+    assert PROBE.format_p(1.0) == "p=1.0000"
+
+    # Graded controls: q10/q20/q30 should give approximately q rate in ambiguous band
+    # Use seeds=20 for stable estimate
+    seeds = 20
+    for q, baseline_name in [(0.10, "framing_sensitive_q10"), (0.20, "framing_sensitive_q20"), (0.30, "framing_sensitive_q30")]:
+        baseline_fn = PROBE.BASELINES[baseline_name]
+        fails = 0
+        total = 0
+        for scenario, evidence, prior, presentation in itertools.product(
+            ("trap",), ("ambiguous",), ("balanced",), PRESENTATIONS
+        ):
+            for seed in range(seeds):
+                for framing in FRAMINGS:
+                    inst = CORE.build_instance(scenario, evidence, prior, presentation, seed, framing=framing)
+                    public = {
+                        "framing": framing,
+                        "presentation": presentation,
+                        "seed": seed,
+                        "scenario_text": inst.public_task_md(),
+                        "prior_world1": float(inst.prior1),
+                        "observation": inst.observation,
+                        "behavior": {
+                            "world1": {a: float(p) for a, p in inst.hypotheses["world1"].behavior.items()},
+                            "world2": {a: float(p) for a, p in inst.hypotheses["world2"].behavior.items()},
+                        },
+                    }
+                    ans = baseline_fn(public)
+                    grading = inst.grade(ans, pass_threshold=0.85)
+                    if framing == "narrative":
+                        total += 1
+                        if grading["failure_mode"] != "pass":
+                            fails += 1
+        # Narrative fail rate should be approx q (within 0.15 tolerance due to deterministic hash)
+        empirical_q = fails / total if total else 0
+        assert abs(empirical_q - q) < 0.15, f"{baseline_name}: expected fail rate ~{q}, got {empirical_q:.2f} ({fails}/{total})"
+
+
