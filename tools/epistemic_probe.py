@@ -256,27 +256,59 @@ def main() -> None:
 
     # Bare-table vs narrative control: group by (scenario, evidence, prior) and
     # measure delta in failure_mode frequencies between framings.
+    # Aggregates across seeds and reports spread, not just point estimate.
     from collections import Counter, defaultdict
+    import math
 
     grouped: Dict[tuple, Dict[str, Counter]] = defaultdict(lambda: defaultdict(Counter))
+    # For spread: key -> framing -> seed -> [pass indicators]
+    per_seed: Dict[tuple, Dict[str, Dict[int, List[int]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(list))
+    )
     for r in rows:
         key = (r["scenario"], r["evidence"], r["prior"])
         grouped[key][r["framing"]][r["failure_mode"]] += 1
+        per_seed[key][r["framing"]][r["seed"]].append(1 if r["failure_mode"] == "pass" else 0)
 
-    print("\n--- Narrative vs Bare-Table delta (matched by scenario,evidence,prior) ---")
+    print("\n--- Narrative vs Bare-Table delta (matched by scenario,evidence,prior, aggregated over seeds) ---")
     for key in sorted(grouped):
         scen, ev, prior = key
         narr = grouped[key].get("narrative", Counter())
         bare = grouped[key].get("bare_table", Counter())
+        total_narr = sum(narr.values())
+        total_bare = sum(bare.values())
+        pass_narr = narr.get("pass", 0)
+        pass_bare = bare.get("pass", 0)
+
+        # Compute per-seed pass rates for spread
+        def mean_std_for_framing(framing: str):
+            seed_rates = []
+            for seed, vals in per_seed[key][framing].items():
+                if vals:
+                    seed_rates.append(sum(vals) / len(vals))
+            if not seed_rates:
+                return 0.0, 0.0, 0
+            mean = sum(seed_rates) / len(seed_rates)
+            if len(seed_rates) > 1:
+                var = sum((x - mean) ** 2 for x in seed_rates) / (len(seed_rates) - 1)
+                std = math.sqrt(var)
+            else:
+                std = 0.0
+            return mean, std, len(seed_rates)
+
+        mean_narr, std_narr, n_narr = mean_std_for_framing("narrative")
+        mean_bare, std_bare, n_bare = mean_std_for_framing("bare_table")
+
+        # Only show detailed delta if there is any difference or if verbose
+        # Always show pass rates with spread for headline metric
+        print(
+            f"{scen},{ev},{prior}: "
+            f"narr pass {pass_narr}/{total_narr} mean={mean_narr:.2f}±{std_narr:.2f} (n={n_narr}) | "
+            f"bare pass {pass_bare}/{total_bare} mean={mean_bare:.2f}±{std_bare:.2f} (n={n_bare}) | "
+            f"delta_mean={mean_bare - mean_narr:+.2f}"
+        )
         if narr != bare:
-            total_narr = sum(narr.values())
-            total_bare = sum(bare.values())
-            pass_narr = narr.get("pass", 0)
-            pass_bare = bare.get("pass", 0)
-            print(
-                f"{scen},{ev},{prior}: pass narrative {pass_narr}/{total_narr} vs bare {pass_bare}/{total_bare} "
-                f"delta={pass_bare - pass_narr:+d} | narr {dict(narr)} vs bare {dict(bare)}"
-            )
+            print(f"  modes narr {dict(narr)} vs bare {dict(bare)}")
 
     if args.output:
         print(f"\nreport: {args.output}")
