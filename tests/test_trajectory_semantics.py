@@ -7,6 +7,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 import arena.trajectory_runner as trajectory_runner
 from arena.providers import Completion
 from arena.trajectory import make_messages, normalize_answer, score_answer
@@ -331,6 +333,66 @@ def test_fake_provider_attaches_controls_and_excludes_only_failed_reflective_row
     }
     assert trace_trajectory["flat"]["parse_control_passed"] is True
     assert trace_trajectory["reflective"]["parse_control_passed"] is False
+
+
+def test_control_replications_are_keyed_and_duplicate_controls_rejected(tmp_path):
+    certificate = certify_system_pair(0).as_dict()
+    cases = {
+        query: make_case(
+            system_seed=0,
+            initial_state_seed=0,
+            presentation_seed=100,
+            representation="flat",
+            witness_state="valid",
+            query_type=query,
+            horizon=6,
+            relabeling="canonical",
+            certification=certificate,
+        )
+        for query in ("parse_only", "one_step", "complete_return")
+    }
+
+    def record(query: str, replication: int, correct: bool) -> dict[str, object]:
+        case = cases[query]
+        return {
+            "event": "case_result",
+            "case_id": case.case_id,
+            "case": case.as_dict(),
+            "api_replication": replication,
+            "correct": correct,
+            "format_valid": True,
+            "matched_stale_witness_prediction": False,
+        }
+
+    records = [
+        record("complete_return", 1, True),
+        record("parse_only", 1, False),
+        record("one_step", 1, True),
+        record("complete_return", 0, True),
+        record("parse_only", 0, True),
+        record("one_step", 0, True),
+    ]
+    summary = write_summary(tmp_path / "ordered", records, {})
+    trajectory_records = {
+        item["api_replication"]: item
+        for item in records
+        if item["case"]["query_type"] == "complete_return"
+    }
+    assert trajectory_records[0]["parse_control_passed"] is True
+    assert trajectory_records[1]["parse_control_passed"] is False
+    assert summary["conditional_trajectory_cases"] == 1
+    assert summary["failed_control_trajectory_cases"] == 1
+    assert summary["missing_control_trajectory_cases"] == 0
+
+    reversed_summary = write_summary(tmp_path / "reversed", list(reversed(records)), {})
+    assert reversed_summary["conditional_trajectory_cases"] == 1
+    assert reversed_summary["failed_control_trajectory_cases"] == 1
+
+    duplicate = record("parse_only", 0, False)
+    duplicate["case"] = {**duplicate["case"], "case_id": "duplicate-parse"}
+    duplicate["case_id"] = "duplicate-parse"
+    with pytest.raises(ValueError, match="duplicate control result"):
+        write_summary(tmp_path / "duplicate", records + [duplicate], {})
 
 
 def test_trajectory_environments_generate_and_compile():

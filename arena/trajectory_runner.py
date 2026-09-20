@@ -223,13 +223,58 @@ def _record_key(record: dict[str, Any]) -> tuple[str, int]:
     )
 
 
+def _validate_analysis_scope(
+    records: list[dict[str, Any]],
+    manifest: dict[str, object],
+) -> None:
+    """Reject duplicate results or mixed run/provider/model scopes."""
+
+    result_keys: set[tuple[str, int]] = set()
+    run_ids: set[str] = set()
+    providers: set[str] = set()
+    models: set[str] = set()
+    for record in records:
+        if record.get("event") not in {None, "case_result"}:
+            continue
+        key = _record_key(record)
+        if key in result_keys:
+            raise ValueError(
+                "duplicate trajectory result for case_id/api_replication: "
+                f"{key[0]}/{key[1]}"
+            )
+        result_keys.add(key)
+        if record.get("run_id") is not None:
+            run_ids.add(str(record["run_id"]))
+        if record.get("provider") is not None:
+            providers.add(str(record["provider"]))
+        if record.get("requested_model") is not None:
+            models.add(str(record["requested_model"]))
+
+    expected_run = manifest.get("run_id")
+    if len(run_ids) > 1 or (expected_run is not None and run_ids and run_ids != {str(expected_run)}):
+        raise ValueError("trajectory analysis cannot combine multiple run IDs")
+    expected_provider = manifest.get("provider")
+    if len(providers) > 1 or (
+        expected_provider is not None and providers and providers != {str(expected_provider)}
+    ):
+        raise ValueError("trajectory analysis cannot combine multiple providers")
+    expected_model = manifest.get("requested_model")
+    if len(models) > 1 or (
+        expected_model is not None and models and models != {str(expected_model)}
+    ):
+        raise ValueError("trajectory analysis cannot combine multiple requested models")
+
+
 def _attach_control_results(records: list[dict[str, Any]]) -> None:
     """Attach same-replication parse/one-step outcomes to trajectory records.
 
-    A control is matched by the case's ``matched_control_id`` and API
-    replication, never by a broad semantic group.  ``None`` means the control
-    was not present in a truncated run; ``False`` is an observed control
-    failure and must not be confused with missing data.
+    A control is matched by the composite key
+    ``(matched_control_id, api_replication, query_type)``. The replication is
+    deliberately kept outside the semantic control ID: it is an API noise
+    factor, not a different semantic condition. Duplicate control keys are
+    rejected instead of being resolved by iteration order. ``None`` means the
+    control was not present in a truncated run; ``False`` is an observed
+    control failure and must not be confused with missing data.
     """
 
     controls: dict[tuple[str, int], dict[str, dict[str, Any]]] = {}
@@ -240,7 +285,13 @@ def _attach_control_results(records: list[dict[str, Any]]) -> None:
         if query_type not in {"parse_only", "one_step"} or not control_id:
             continue
         key = (str(control_id), int(record.get("api_replication", 0)))
-        controls.setdefault(key, {})[str(query_type)] = record
+        by_query = controls.setdefault(key, {})
+        if str(query_type) in by_query:
+            raise ValueError(
+                "duplicate control result for matched_control_id/api_replication/query_type: "
+                f"{key[0]}/{key[1]}/{query_type}"
+            )
+        by_query[str(query_type)] = record
 
     for record in records:
         case = record.get("case") or {}
@@ -341,6 +392,8 @@ def write_summary(
     *,
     secret: str | None = None,
 ) -> dict[str, Any]:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _validate_analysis_scope(records, manifest)
     _attach_control_results(records)
     _persist_control_fields(run_dir, records, secret=secret)
     groups: dict[tuple[object, ...], list[dict[str, Any]]] = {}
@@ -364,6 +417,17 @@ def write_summary(
             for item in trajectory_items
             if item.get("parse_control_passed") is True
             and item.get("one_step_control_passed") is True
+        ]
+        missing_control_items = [
+            item
+            for item in trajectory_items
+            if item.get("parse_control_passed") is None
+            or item.get("one_step_control_passed") is None
+        ]
+        failed_control_items = [
+            item
+            for item in trajectory_items
+            if item not in conditional_items and item not in missing_control_items
         ]
 
         def consensus(selected: list[dict[str, Any]], field: str) -> bool | None:
@@ -405,6 +469,8 @@ def write_summary(
                     / max(1, len(conditional_items))
                 ),
                 "conditional_excluded_n": len(trajectory_items) - len(conditional_items),
+                "conditional_missing_control_n": len(missing_control_items),
+                "conditional_failed_control_n": len(failed_control_items),
             }
         )
     csv_path = run_dir / "summary.csv"
@@ -425,6 +491,17 @@ def write_summary(
         if record.get("parse_control_passed") is True
         and record.get("one_step_control_passed") is True
     ]
+    missing_control_records = [
+        record
+        for record in trajectory_records
+        if record.get("parse_control_passed") is None
+        or record.get("one_step_control_passed") is None
+    ]
+    failed_control_records = [
+        record
+        for record in trajectory_records
+        if record not in conditional_records and record not in missing_control_records
+    ]
     summary = {
         "event": "summary",
         "track": "direct_answer_behavioral",
@@ -441,6 +518,9 @@ def write_summary(
             / max(1, len(conditional_records))
         ),
         "excluded_trajectory_cases": len(trajectory_records) - len(conditional_records),
+        "missing_control_trajectory_cases": len(missing_control_records),
+        "failed_control_trajectory_cases": len(failed_control_records),
+        "control_match_policy": "matched_control_id + api_replication; duplicate control keys rejected",
         "matched_control_attachments": attachments,
         "interpretation_warning": "These are behavioral intervention results, not a serial-depth measurement.",
     }
@@ -452,8 +532,8 @@ def write_summary(
         f"- Accuracy: `{summary['accuracy']}`",
         "- Interpretation: behavioral sensitivity to named interventions; no internal depth claim.",
         "",
-        "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | parse passed | one-step passed | conditional n | conditional accuracy | stale match |",
-        "|---:|---:|---|---|---|---:|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|",
+        "| system | initial | representation | benchmark | query | T | relabeling | syntax | n | accuracy | parse control | one-step control | parse passed | one-step passed | conditional n | conditional accuracy | missing controls | failed controls | stale match |",
+        "|---:|---:|---|---|---|---:|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         markdown.append(
@@ -463,6 +543,7 @@ def write_summary(
             f"{row['parse_control_accuracy']:.3f} | {row['one_step_control_accuracy']:.3f} | "
             f"{row['parse_control_passed']} | {row['one_step_control_passed']} | "
             f"{row['conditional_n']} | {row['conditional_accuracy']:.3f} | "
+            f"{row['conditional_missing_control_n']} | {row['conditional_failed_control_n']} | "
             f"{row['stale_witness_match_rate']:.3f} |"
         )
     (run_dir / "summary.md").write_text("\n".join(markdown) + "\n", encoding="utf-8")
@@ -672,6 +753,7 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
                                         error_response_headers = exc.response_headers
                                     record = {
                                         "event": "case_result",
+                                        "run_id": run_id,
                                         "case_id": case.case_id,
                                         "case": case.as_dict(include_answer=True),
                                         "case_public": public_case(case),
