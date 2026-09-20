@@ -527,7 +527,10 @@ def write_summary(
         "excluded_trajectory_cases": len(trajectory_records) - len(conditional_records),
         "missing_control_trajectory_cases": len(missing_control_records),
         "failed_control_trajectory_cases": len(failed_control_records),
-        "control_match_policy": "matched_control_id + api_replication; duplicate control keys rejected",
+        "control_match_policy": (
+            "policy_3_unique_composite_control_result_key: "
+            "(matched_control_id, api_replication, query_type); duplicate keys rejected"
+        ),
         "matched_control_attachments": attachments,
         "interpretation_warning": "These are behavioral intervention results, not a serial-depth measurement.",
     }
