@@ -289,17 +289,22 @@ def test_observation_drawn_from_declared_world_policy():
             total += 1
 
         empirical = denial_count / total
+        # Tolerance calibration: for p=0.25, n=500, SE=sqrt(p(1-p)/n)≈0.019.
+        # 0.05 ≈2.6σ, 0.06 ≈3.1σ. Seeds are range(500) so deterministic today,
+        # but if sampling code changes RNG call order, 2.6σ gives ~1-2% spurious
+        # failure. Use 0.06 (≈3σ) to reduce flakiness while still catching label-swap.
         if force_world == "world1":
-            # Should be close to expected_w1_denial (~0.9), far from expected_w2
-            assert abs(empirical - expected_w1_denial) < 0.05, (
-                f"world1 empirical {empirical:.3f} vs expected {expected_w1_denial:.3f}"
+            assert abs(empirical - expected_w1_denial) < 0.06, (
+                f"world1 empirical {empirical:.3f} vs expected {expected_w1_denial:.3f} "
+                f"(SE≈0.019, tol 0.06≈3σ)"
             )
             assert abs(empirical - expected_w2_denial) > 0.3, (
                 f"world1 empirical {empirical:.3f} suspiciously close to world2 expected {expected_w2_denial:.3f}"
             )
         else:
-            assert abs(empirical - expected_w2_denial) < 0.05, (
-                f"world2 empirical {empirical:.3f} vs expected {expected_w2_denial:.3f}"
+            assert abs(empirical - expected_w2_denial) < 0.06, (
+                f"world2 empirical {empirical:.3f} vs expected {expected_w2_denial:.3f} "
+                f"(SE≈0.019, tol 0.06≈3σ)"
             )
             assert abs(empirical - expected_w1_denial) > 0.3, (
                 f"world2 empirical {empirical:.3f} suspiciously close to world1 expected {expected_w1_denial:.3f}"
