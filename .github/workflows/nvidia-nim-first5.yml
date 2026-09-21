@@ -1,0 +1,49 @@
+name: NVIDIA NIM first-five pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Prevent accidentally spending two bounded pilot budgets concurrently.
+concurrency:
+  group: nvidia-nim-first5
+  cancel-in-progress: false
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    # The controller enforces the two-hour pilot wall limit. This larger job
+    # limit leaves room for checkout, dependency installation, and artifacts.
+    timeout-minutes: 135
+    steps:
+      - name: Check out pinned evaluation code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install controller dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run bounded NVIDIA first-five pilot
+        env:
+          # The host controller resolves this value. It is not passed to
+          # Docker agent/judge containers or written into pilot artifacts.
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          python tools/first_experiment.py --out runs/nim_first5
+
+      - name: Upload pilot artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-nim-first5-${{ github.run_id }}
+          path: runs/nim_first5
+          if-no-files-found: warn
+          retention-days: 7
