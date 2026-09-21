@@ -57,6 +57,22 @@ These environments are designed to make that strategy less reliable:
 
 The goal is to test whether an agent can form and use a causal model of an ML system.
 
+## Evaluation target: structural awareness, not scalar intelligence
+
+This suite is not designed to produce a single intelligence score. A recurring
+target is **metis**: the ability to notice the structure generating the presented
+task, preserve invariants across representation changes, resist misleading
+frames, and exploit valid alternative formulations.
+
+The benchmark question is not only how hard a model pushes on the front door,
+but whether it notices the wall next to the lock. Controlled comparisons use
+same-semantics/different-syntax cases, narrative-versus-bare evidence,
+matched rollout controls, witness-valid versus witness-broken shortcuts, and
+explicit resource protocols. Results are behavioral sensitivities to named
+interventions, not direct measurements of scalar intelligence or hidden model
+architecture. See [`docs/metis.md`](docs/metis.md) for the taxonomy and
+interpretation rules.
+
 ---
 
 ## Included environments
