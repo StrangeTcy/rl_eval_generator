@@ -466,6 +466,10 @@ def run_suite(
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "max_api_calls"
             break
+        if max_tokens_total is not None and output_tokens_reserved + estimated_tokens > max_tokens_total:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_tokens_total"
+            break
         if max_output_tokens is not None and output_tokens_reserved + estimated_tokens > max_output_tokens:
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "max_output_tokens"
