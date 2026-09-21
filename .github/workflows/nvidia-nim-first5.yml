@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 135
     steps:
       - name: Check out pinned evaluation code
-        - uses: actions/checkout@v4
+        uses: actions/checkout@v4
         with:
            ref: ${{ inputs.ref }}
 
