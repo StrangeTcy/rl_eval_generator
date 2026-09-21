@@ -45,6 +45,7 @@ class TrajectoryOptions:
     api_key: str | None = None
     api_key_env: str | None = None
     api_base: str | None = None
+    secrets: Path | None = None
     limit: int | None = None
     judge: str = "host"
     docker_judge_image: str = "trajectory-judge:local"
@@ -144,7 +145,11 @@ def _manifest(
     certification_by_seed: dict[int, dict[str, object]],
     plan: TrajectoryPlan,
 ) -> dict[str, object]:
-    api_base = resolve_api_base(options.provider, options.api_base)
+    api_base = resolve_api_base(
+        options.provider,
+        options.api_base,
+        secret_path=options.secrets,
+    )
     return {
         "run_id": run_id,
         "started_at": utc_now(),
@@ -827,9 +832,17 @@ def run_trajectory(options: TrajectoryOptions) -> dict[str, Any]:
     if options.api_replications < 1:
         raise ValueError("api-replications must be positive")
     api_key, _ = resolve_credentials(
-        options.provider, api_key=options.api_key, api_key_env=options.api_key_env
+        options.provider,
+        api_key=options.api_key,
+        api_key_env=options.api_key_env,
+        api_base=options.api_base,
+        secret_path=options.secrets,
     )
-    api_base = resolve_api_base(options.provider, options.api_base)
+    api_base = resolve_api_base(
+        options.provider,
+        options.api_base,
+        secret_path=options.secrets,
+    )
     run_dir = Path(options.out)
     run_dir.mkdir(parents=True, exist_ok=False)
     run_id = _run_id()

@@ -26,6 +26,11 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from arena.secrets import resolve_provider  # noqa: E402
+
 PROVIDER_MARKERS = (
     "429",
     "rate limit",
@@ -104,7 +109,7 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
     if path.is_file():
         checkpoint = _read_json(path)
         previous = checkpoint.get("run", {})
-        immutable = ("manifest_commit", "provider", "model", "api_base", "sandbox")
+        immutable = ("manifest_commit", "provider", "model", "api_base", "sandbox", "secrets")
         for field in immutable:
             if previous.get(field) != metadata.get(field):
                 raise ValueError(
@@ -197,6 +202,7 @@ def _build_command(
     provider: str,
     model: str,
     api_key_env: str,
+    secrets: Path | None,
     api_base: str | None,
     sandbox: str,
     output_dir: Path,
@@ -216,6 +222,10 @@ def _build_command(
         model,
         "--api-key-env",
         api_key_env,
+    ]
+    if secrets:
+        command.extend(["--secrets", str(secrets)])
+    command.extend([
         "--env",
         str(case["environment"]),
         "--difficulty",
@@ -232,7 +242,7 @@ def _build_command(
         sandbox,
         "--out",
         str(output_dir),
-    ]
+    ])
     if api_base:
         command.extend(["--api-base", api_base])
     if keep_images:
@@ -249,6 +259,7 @@ def run_suite(
     provider: str,
     model: str,
     api_key_env: str,
+    secrets: Path | None = None,
     api_base: str | None = None,
     sandbox: str = "docker",
     max_steps: int = 30,
@@ -284,6 +295,7 @@ def run_suite(
         "api_base": api_base,
         "sandbox": sandbox,
         "api_key_env": api_key_env,
+        "secrets": str(secrets) if secrets else None,
         "max_steps": max_steps,
         "max_tokens": max_tokens,
         "invalid_retries": invalid_retries,
@@ -304,7 +316,15 @@ def run_suite(
     )
     output_tokens_reserved = api_calls_reserved * max_tokens
     completed_this_run = 0
-    secret = os.environ.get(api_key_env) if api_key_env else None
+    secret = None
+    if not dry_run:
+        credentials = resolve_provider(
+            provider,
+            api_key_env=api_key_env,
+            api_base=api_base,
+            secret_path=secrets,
+        )
+        secret = credentials.api_key
     for case in cases:
         case_id = str(case.get("case_id", ""))
         if not case_id or not case.get("environment"):
@@ -379,6 +399,7 @@ def run_suite(
             provider=provider,
             model=model,
             api_key_env=api_key_env,
+            secrets=secrets,
             api_base=api_base,
             sandbox=sandbox,
             output_dir=case_output,
@@ -473,6 +494,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--api-key-env", default="SUITE_API_KEY")
+    parser.add_argument("--secrets", type=Path, default=None)
     parser.add_argument("--api-base", default=None)
     parser.add_argument("--sandbox", choices=("docker", "local"), default="docker")
     parser.add_argument("--max-steps", type=int, default=30)
@@ -502,6 +524,7 @@ def main(argv: list[str] | None = None) -> int:
             provider=args.provider,
             model=args.model,
             api_key_env=args.api_key_env,
+            secrets=args.secrets,
             api_base=args.api_base,
             sandbox=args.sandbox,
             max_steps=args.max_steps,

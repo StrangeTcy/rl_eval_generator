@@ -587,7 +587,10 @@ python tools/run_suite.py \
 
 The key is read by the host controller only. The scheduler passes an environment
 variable name, never a literal key, and the existing controller removes
-provider-looking variables before invoking environment subprocesses. Use a new
+provider-looking variables before invoking environment subprocesses. Provider
+profiles and the optional local `secret_key.json` loader are documented in
+[`docs/secrets.md`](docs/secrets.md) and [`docs/free_providers.md`](docs/free_providers.md);
+run `tools/provider_preflight.py` before enabling a provider. Use a new
 output/checkpoint directory when changing provider, model, sandbox, or manifest;
 checkpoint metadata rejects accidental mixing. `coverage.json`, `coverage.csv`,
 and `coverage.md` distinguish scored, blocked, paused, and infrastructure cases.

@@ -69,6 +69,7 @@ def test_scheduler_command_contains_no_literal_secret():
         provider="custom",
         model="provider/model",
         api_key_env="SUITE_API_KEY",
+        secrets=None,
         api_base="https://example.invalid/v1",
         sandbox="docker",
         output_dir=Path("runs/test"),

@@ -15,5 +15,15 @@ test_*/
 .episodes/
 runs/
 
+# Local credentials — never commit
+secret_key.json
+secret_keys.json
+.env
+.env.*
+!.env.example
+!secret_key.example.json
+credentials/
+*.pem
+
 demo_*/
 _episode_env_*/

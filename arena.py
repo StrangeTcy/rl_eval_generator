@@ -64,6 +64,12 @@ def _common_provider_args(parser: argparse.ArgumentParser) -> None:
         help="API key (environment variables are safer than shell arguments).",
     )
     parser.add_argument("--api-key-env", default=None, help="Environment variable containing the API key.")
+    parser.add_argument(
+        "--secrets",
+        type=Path,
+        default=None,
+        help="Optional gitignored secret_key.json profile (environment variables still take precedence).",
+    )
     parser.add_argument("--api-base", default=None, help="OpenAI-compatible API base URL.")
 
 
@@ -185,6 +191,7 @@ def _run(args: argparse.Namespace) -> int:
         api_key=args.api_key,
         api_key_env=args.api_key_env,
         api_base=args.api_base,
+        secrets=args.secrets,
         env=args.env,
         difficulty=args.difficulty,
         seed=args.seed,
@@ -229,6 +236,7 @@ def _trajectory_options(args: argparse.Namespace, *, out: Path) -> TrajectoryOpt
         api_key=getattr(args, "api_key", None),
         api_key_env=getattr(args, "api_key_env", None),
         api_base=getattr(args, "api_base", None),
+        secrets=getattr(args, "secrets", None),
         out=out,
         representations=parse_values(args.representations),
         witnesses=parse_values(args.witnesses),
@@ -307,9 +315,17 @@ def _summarize(args: argparse.Namespace) -> int:
 
 def _review(args: argparse.Namespace) -> int:
     api_key, _ = resolve_credentials(
-        args.provider, api_key=args.api_key, api_key_env=args.api_key_env
+        args.provider,
+        api_key=args.api_key,
+        api_key_env=args.api_key_env,
+        api_base=args.api_base,
+        secret_path=args.secrets,
     )
-    api_base = resolve_api_base(args.provider, args.api_base)
+    api_base = resolve_api_base(
+        args.provider,
+        args.api_base,
+        secret_path=args.secrets,
+    )
     run_dir = args.run_dir
     pieces: list[str] = []
     for name, limit in (

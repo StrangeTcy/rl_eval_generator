@@ -68,6 +68,7 @@ class EpisodeOptions:
     api_key: str | None = None
     api_key_env: str | None = None
     api_base: str | None = None
+    secrets: Path | None = None
     invalid_retries: int = 2
     episode_id: str | None = None
     keep_images: bool = False
@@ -272,8 +273,14 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         options.provider,
         api_key=options.api_key,
         api_key_env=options.api_key_env,
+        api_base=options.api_base,
+        secret_path=options.secrets,
     )
-    api_base = resolve_api_base(options.provider, options.api_base)
+    api_base = resolve_api_base(
+        options.provider,
+        options.api_base,
+        secret_path=options.secrets,
+    )
     run_id = _new_run_id(options)
     artifacts = RunArtifacts(Path(options.out), run_id, secret=api_key)
     episode_id = options.episode_id or f"arena_{run_id.replace('-', '_')}"

@@ -13,23 +13,30 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+from .secrets import (
+    PROVIDER_DEFAULT_BASE,
+    PROVIDER_ENV,
+    ProviderCreds,
+    redact_text,
+    resolve_provider,
+)
+
 PROVIDERS: dict[str, dict[str, str | None]] = {
-    "openrouter": {
-        "api_base": "https://openrouter.ai/api/v1",
-        "key_env": "OPENROUTER_API_KEY",
-    },
-    "huggingface": {
-        "api_base": "https://router.huggingface.co/v1",
-        "key_env": "HF_TOKEN",
-    },
-    "custom": {
-        "api_base": None,
-        "key_env": "API_KEY",
-    },
+    name: {
+        "api_base": base,
+        "key_env": env_names[0],
+    }
+    for name, base in PROVIDER_DEFAULT_BASE.items()
+    for env_names in [PROVIDER_ENV[name]]
 }
+
+# Keep this alias available to callers that want the resolved profile type
+# without importing the secrets module directly.
+ResolvedProvider = ProviderCreds
 
 
 @dataclass
@@ -107,20 +114,7 @@ def utc_now() -> str:
 def _redact_text(text: str, secret: str | None = None, limit: int = 4000) -> str:
     """Return a bounded provider error body without credentials."""
 
-    value = text[:limit]
-    if secret:
-        value = value.replace(secret, "[REDACTED]")
-    # A few gateways echo credentials in error payloads.  Avoid attempting to
-    # parse arbitrary provider JSON here, but redact common bearer forms.
-    import re
-
-    value = re.sub(r"(?i)(bearer\s+)[^\s,\"}]+", r"\1[REDACTED]", value)
-    value = re.sub(
-        r"(?i)(api[_-]?key|token|authorization)(\s*[:=]\s*)\"?[^,\"}\s]+",
-        r"\1\2[REDACTED]",
-        value,
-    )
-    return value
+    return redact_text(text[:limit], [secret] if secret else None)
 
 
 def _safe_headers(headers: Mapping[str, str]) -> dict[str, str]:
@@ -137,29 +131,40 @@ def resolve_credentials(
     *,
     api_key: str | None = None,
     api_key_env: str | None = None,
+    api_base: str | None = None,
+    secret_path: Path | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> tuple[str, str]:
     """Resolve ``(api_key, environment_name)`` without ever printing it."""
 
-    if provider not in PROVIDERS:
-        raise ValueError(f"Unknown provider {provider!r}; choose from {', '.join(PROVIDERS)}")
     env = environ if environ is not None else __import__("os").environ
-    selected_env = api_key_env or str(PROVIDERS[provider]["key_env"])
-    value = api_key or env.get(selected_env, "")
-    if not value:
-        raise ValueError(
-            f"No API key supplied. Use --api-key or set the {selected_env} environment variable."
-        )
-    return value, selected_env
+    credentials = resolve_provider(
+        provider,
+        api_key=api_key,
+        api_key_env=api_key_env,
+        api_base=api_base,
+        secret_path=secret_path,
+        environ=env,
+    )
+    selected_env = api_key_env or PROVIDER_ENV[credentials.name][0]
+    return credentials.api_key, selected_env
 
 
-def resolve_api_base(provider: str, api_base: str | None = None) -> str:
-    if provider not in PROVIDERS:
-        raise ValueError(f"Unknown provider {provider!r}; choose from {', '.join(PROVIDERS)}")
-    chosen = api_base if api_base is not None else PROVIDERS[provider]["api_base"]
-    if not chosen:
-        raise ValueError("--api-base is required for the custom provider")
-    return str(chosen).rstrip("/")
+def resolve_api_base(
+    provider: str,
+    api_base: str | None = None,
+    *,
+    secret_path: Path | None = None,
+) -> str:
+    # require_key=False lets planning and review code resolve a file/profile
+    # endpoint without requiring a credential until the live request starts.
+    credentials = resolve_provider(
+        provider,
+        api_base=api_base,
+        secret_path=secret_path,
+        require_key=False,
+    )
+    return credentials.api_base
 
 
 def chat_completions_url(api_base: str) -> str:
