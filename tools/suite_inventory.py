@@ -192,8 +192,14 @@ def _compare_refs(root: Path, refs: list[str], config_paths: list[Path]) -> list
                 "only_in_checkout": only_in_checkout,
                 "missing_count": len(missing),
                 "only_in_checkout_count": len(only_in_checkout),
-                "status": "missing_from_checkout" if missing else "complete",
-                "clean": not missing,
+                "status": (
+                    "missing_from_checkout"
+                    if missing
+                    else "checkout_has_additional_configs"
+                    if only_in_checkout
+                    else "equal"
+                ),
+                "clean": not (missing or only_in_checkout),
             }
         )
     return comparisons
