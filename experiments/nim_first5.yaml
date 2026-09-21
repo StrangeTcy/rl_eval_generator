@@ -3,7 +3,7 @@
 name: nim_first5
 provider: nvidia
 api_base: https://integrate.api.nvidia.com/v1
-model: nvidia/nemotron-nano-3-30b-a3b
+model: nvidia/nemotron-3.5-lightning-30b-a3b
 api_key_env: NVIDIA_API_KEY
 concurrency: 1
 seed: 0
