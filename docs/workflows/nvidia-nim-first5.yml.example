@@ -2,6 +2,11 @@ name: NVIDIA NIM first-five pilot
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or full commit SHA containing the pinned pilot code"
+        required: true
+        default: "arena/01a0b10c-rl-eval-generator"
 
 permissions:
   contents: read
@@ -20,6 +25,8 @@ jobs:
     steps:
       - name: Check out pinned evaluation code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
