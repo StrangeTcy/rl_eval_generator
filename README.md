@@ -629,6 +629,11 @@ comparable. Keep direct-answer, solver-synthesis, recurrent-depth, and ML
 repair tracks separate in analysis, and distinguish “attempted every planned
 case” from “every case received a scored result.”
 
+For the bounded NVIDIA-first five-case handoff, use the exact profile and
+provider-free preparation path in [`docs/first_nvidia_pilot.md`](docs/first_nvidia_pilot.md).
+It does not make model-availability or free-entitlement claims and never
+switches providers automatically.
+
 ---
 
 ## Running tests

@@ -79,6 +79,7 @@ class EpisodeOptions:
     episode_id: str | None = None
     keep_images: bool = False
     keep_workspace: bool = False
+    max_retries: int = 3
 
 
 def clip(text: str, limit: int = MAX_OBS_CHARS) -> str:
@@ -272,6 +273,8 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         raise ValueError("max-steps and max-tokens must be positive")
     if options.invalid_retries < 0:
         raise ValueError("invalid-retries must not be negative")
+    if options.max_retries < 0:
+        raise ValueError("max-retries must not be negative")
     if not options.model.strip():
         raise ValueError("model must not be empty")
     request_extra = _request_extra(options.request_extra)
@@ -317,6 +320,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         options.provider,
         api_key,
         api_base=api_base,
+        max_retries=options.max_retries,
         error_logger=log_provider_error,
     )
     history: list[dict[str, str]] = []

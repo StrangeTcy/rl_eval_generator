@@ -128,6 +128,11 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
             "api_base",
             "sandbox",
             "secrets",
+            "max_steps",
+            "max_tokens",
+            "invalid_retries",
+            "max_retries",
+            "request_extra",
             "max_tokens_total",
             "floor_effect_after",
             "reasoning_effort",
@@ -238,7 +243,9 @@ def _build_command(
     invalid_retries: int,
     keep_images: bool,
     keep_workspace: bool,
+    max_retries: int = 3,
     reasoning_effort: str | None = None,
+    request_extra: dict[str, Any] | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -266,6 +273,8 @@ def _build_command(
         str(max_tokens),
         "--invalid-retries",
         str(invalid_retries),
+        "--max-retries",
+        str(max_retries),
         "--sandbox",
         sandbox,
         "--out",
@@ -273,11 +282,14 @@ def _build_command(
     ])
     if api_base:
         command.extend(["--api-base", api_base])
+    effective_extra = dict(request_extra or {})
     if reasoning_effort:
+        effective_extra["reasoning"] = {"effort": reasoning_effort}
+    if effective_extra:
         command.extend(
             [
                 "--request-extra",
-                json.dumps({"reasoning": {"effort": reasoning_effort}}, separators=(",", ":")),
+                json.dumps(effective_extra, separators=(",", ":")),
             ]
         )
     if keep_images:
@@ -300,6 +312,7 @@ def run_suite(
     max_steps: int = 30,
     max_tokens: int = 1024,
     invalid_retries: int = 2,
+    max_retries: int = 3,
     max_cases: int | None = None,
     max_api_calls: int | None = None,
     max_output_tokens: int | None = None,
@@ -308,6 +321,7 @@ def run_suite(
     min_interval_seconds: float = 0.0,
     floor_effect_after: int | None = 3,
     reasoning_effort: str | None = None,
+    request_extra: dict[str, Any] | None = None,
     checkpoint_path: Path | None = None,
     dry_run: bool = False,
     allow_config_drift: bool = False,
@@ -319,6 +333,8 @@ def run_suite(
         raise ValueError("manifest is not ready; fix inventory issues or pass --allow-config-drift explicitly")
     if not provider or not model:
         raise ValueError("provider and model are required")
+    if invalid_retries < 0 or max_retries < 0:
+        raise ValueError("invalid-retries and max-retries must not be negative")
     if not api_key_env and not dry_run:
         raise ValueError("api_key_env is required; do not pass a literal API key to the scheduler")
     if max_tokens_total is not None and max_tokens_total < 1:
@@ -369,10 +385,12 @@ def run_suite(
         "max_steps": max_steps,
         "max_tokens": max_tokens,
         "invalid_retries": invalid_retries,
+        "max_retries": max_retries,
         "max_tokens_total": max_tokens_total,
         "floor_effect_after": floor_effect_after,
         "reasoning_effort": reasoning_effort,
         "reasoning_enabled": reasoning_effort is not None,
+        "request_extra": dict(request_extra or {}),
         "estimated_case_api_calls": case_budget_calls,
         "estimated_case_output_tokens": case_budget_tokens,
         "oracle_preflight": {
@@ -511,11 +529,16 @@ def run_suite(
             max_steps=max_steps,
             max_tokens=max_tokens,
             invalid_retries=invalid_retries,
+            max_retries=max_retries,
             keep_images=keep_images,
             keep_workspace=keep_workspace,
             reasoning_effort=reasoning_effort,
+            request_extra=request_extra,
         )
         case_started = time.monotonic()
+        remaining_wall_seconds = None
+        if max_wall_seconds is not None:
+            remaining_wall_seconds = max(0.1, max_wall_seconds - (case_started - started))
         try:
             process = subprocess.run(
                 command,
@@ -523,7 +546,7 @@ def run_suite(
                 env=os.environ.copy(),
                 capture_output=True,
                 text=True,
-                timeout=max_wall_seconds if max_wall_seconds is not None else None,
+                timeout=remaining_wall_seconds,
             )
             stdout = _redact(process.stdout, secret)
             stderr = _redact(process.stderr, secret)
@@ -598,6 +621,11 @@ def run_suite(
         if result.get("status") == "paused_provider_error":
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "provider_error"
+        elif result.get("status") == "infrastructure_error":
+            # Docker/isolation/controller failures are not model answers. Stop
+            # before spending another request on a potentially unsafe runner.
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "infrastructure_error"
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
         if checkpoint.get("paused"):
@@ -623,6 +651,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-steps", type=int, default=30)
     parser.add_argument("--max-tokens", type=int, default=1024)
     parser.add_argument("--invalid-retries", type=int, default=2)
+    parser.add_argument("--max-retries", type=int, default=3)
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--max-api-calls", type=int, default=None)
     parser.add_argument("--max-output-tokens", type=int, default=None)
@@ -671,6 +700,7 @@ def main(argv: list[str] | None = None) -> int:
             max_steps=args.max_steps,
             max_tokens=args.max_tokens,
             invalid_retries=args.invalid_retries,
+            max_retries=args.max_retries,
             max_cases=args.max_cases,
             max_api_calls=args.max_api_calls,
             max_output_tokens=args.max_output_tokens,

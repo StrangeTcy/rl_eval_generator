@@ -92,6 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--sandbox", choices=("docker", "local"), default="docker")
     run.add_argument("--out", type=Path, default=Path("runs"), help="directory containing run directories")
     run.add_argument("--invalid-retries", type=int, default=2)
+    run.add_argument("--max-retries", type=int, default=3)
     run.add_argument("--keep-images", action="store_true")
     run.add_argument("--keep-workspace", action="store_true")
 
@@ -203,6 +204,7 @@ def _run(args: argparse.Namespace) -> int:
         sandbox=args.sandbox,
         out=args.out,
         invalid_retries=args.invalid_retries,
+        max_retries=args.max_retries,
         keep_images=args.keep_images,
         keep_workspace=args.keep_workspace,
     )

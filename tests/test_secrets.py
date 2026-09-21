@@ -7,6 +7,7 @@ from urllib.error import HTTPError
 
 import tools.provider_preflight as provider_preflight
 from arena.secrets import ensure_secret_file_safe, redact_text, resolve_provider
+from tools.configure_provider import main as configure_provider_main
 from tools.provider_preflight import run_preflight
 
 
@@ -27,6 +28,69 @@ def _write_profile(path: Path, key: str = "gsk_file_secret") -> None:
         encoding="utf-8",
     )
     path.chmod(0o600)
+
+
+def test_configure_provider_from_env_preserves_profile_and_redacts_output(tmp_path, monkeypatch, capsys):
+    profile = tmp_path / "secret_key.json"
+    profile.write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "groq": {"api_key": "unrelated", "notes": "keep this"}
+                },
+                "default_provider": "groq",
+                "metadata": {"pilot": "preserve"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    profile.chmod(0o600)
+    canary = "nvapi-fake-credential-for-test"
+    monkeypatch.setenv("NVIDIA_API_KEY", canary)
+    assert configure_provider_main(
+        [
+            "--provider",
+            "nvidia",
+            "--from-env",
+            "NVIDIA_API_KEY",
+            "--out",
+            str(profile),
+        ]
+    ) == 0
+    captured = capsys.readouterr()
+    assert canary not in captured.out
+    assert canary not in captured.err
+    loaded = json.loads(profile.read_text(encoding="utf-8"))
+    assert loaded["providers"]["groq"] == {"api_key": "unrelated", "notes": "keep this"}
+    assert loaded["metadata"] == {"pilot": "preserve"}
+    assert loaded["providers"]["nvidia"]["api_key"] == canary
+    assert (profile.stat().st_mode & 0o777) == 0o600
+
+
+def test_configure_provider_refuses_replacement_without_explicit_flag(tmp_path, monkeypatch, capsys):
+    profile = tmp_path / "secret_key.json"
+    _write_profile(profile, key="existing-fake-key")
+    monkeypatch.setenv("GROQ_API_KEY", "replacement-fake-key")
+    assert configure_provider_main(
+        [
+            "--provider",
+            "groq",
+            "--from-env",
+            "GROQ_API_KEY",
+            "--out",
+            str(profile),
+        ]
+    ) == 2
+    assert "replacement-fake-key" not in capsys.readouterr().err
+    assert "existing-fake-key" in profile.read_text(encoding="utf-8")
+
+
+def test_configure_provider_prompt_refuses_non_tty(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr("tools.configure_provider.sys.stdin.isatty", lambda: False)
+    assert configure_provider_main(
+        ["--provider", "nvidia", "--prompt", "--out", str(tmp_path / "secret_key.json")]
+    ) == 2
+    assert "credential" not in capsys.readouterr().out.lower()
 
 
 def test_provider_resolution_precedence_and_redaction(tmp_path):
