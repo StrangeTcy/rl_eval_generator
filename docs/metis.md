@@ -3,7 +3,9 @@
 This suite is not designed to produce a single intelligence score. A recurring
 target is **metis**: applied ingenuity that notices the structure generating the
 presented task, preserves invariants across representation changes, resists
-misleading frames, and finds valid alternative formulations.
+misleading frames, and finds valid alternative formulations. The motivating
+argument is developed in the blog post [Athena and Ares](https://akkartik.name/post/athena-ares);
+this document translates that argument into reproducible benchmark controls.
 
 The practical question is not only whether an agent can push harder on the
 presented problem. It is whether the agent notices the wall next to the lock:
@@ -43,6 +45,8 @@ longer internal computation or recurrent architecture.
 
 ### Trajectory semantics
 
+See the family guide [`docs/trajectory_semantics.md`](trajectory_semantics.md).
+
 The trajectory-relay family tests whether an agent can hold an invariant across
 representation changes and recognize when syntactically different cases share
 the same transition structure. Flat and reflective presentations,
@@ -52,6 +56,8 @@ in the [README](../README.md) and the execution contract in
 [`docs/suite_execution.md`](suite_execution.md).
 
 ### Epistemic games
+
+See the family guide [`docs/epistemic_games.md`](epistemic_games.md).
 
 The epistemic-games family tests whether an agent follows public evidence rather
 than allowing a narrative to become an unstated premise. Narrative and bare
