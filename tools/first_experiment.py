@@ -235,12 +235,15 @@ def _runtime_check() -> dict[str, Any]:
 
 def _optional_credentials(profile: Mapping[str, Any], secret_path: Path | None):
     try:
-        return resolve_provider(
+        credentials = resolve_provider(
             "nvidia",
             api_key_env="NVIDIA_API_KEY",
             api_base=str(profile["api_base"]),
             secret_path=secret_path,
         )
+        if credentials.api_base.rstrip("/") != str(profile["api_base"]).rstrip("/"):
+            raise ValueError("resolved provider endpoint differs from the pinned pilot endpoint")
+        return credentials
     except ValueError as exc:
         message = str(exc)
         if "No API key" in message:
