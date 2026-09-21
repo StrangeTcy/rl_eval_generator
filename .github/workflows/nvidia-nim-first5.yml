@@ -2,6 +2,10 @@ name: NVIDIA NIM first-five pilot
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        required: true
+        default: arena/01a0b10c-rl-eval-generator
 
 permissions:
   contents: read
@@ -19,7 +23,9 @@ jobs:
     timeout-minutes: 135
     steps:
       - name: Check out pinned evaluation code
-        uses: actions/checkout@v4
+        - uses: actions/checkout@v4
+        with:
+           ref: ${{ inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,3 +53,5 @@ jobs:
           path: runs/nim_first5
           if-no-files-found: warn
           retention-days: 7
+
+          
