@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from arena.artifacts import summarize_run
+from arena.artifacts import sanitize, summarize_run
 from arena.episode import EpisodeOptions, run_episode
 from arena.providers import (
     PROVIDERS,
@@ -337,7 +337,8 @@ def _review(args: argparse.Namespace) -> int:
     ):
         path = run_dir / name
         if path.is_file():
-            pieces.append(f"\n--- {name} ---\n{path.read_text(encoding='utf-8', errors='replace')[:limit]}")
+            text = path.read_text(encoding="utf-8", errors="replace")[:limit]
+            pieces.append(f"\n--- {name} ---\n{redact_text(text, [api_key])}")
     client = ProviderClient(args.provider, api_key, api_base=api_base)
     completion = client.complete(
         model=args.model,
@@ -356,7 +357,9 @@ def _review(args: argparse.Namespace) -> int:
         "latency_ms": completion.latency_ms,
         "review": safe_review,
     }
-    (run_dir / "review.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    (run_dir / "review.json").write_text(
+        json.dumps(sanitize(result, api_key), indent=2) + "\n", encoding="utf-8"
+    )
     print(json.dumps({"review": str(review_path), "review_json": str(run_dir / 'review.json')}, indent=2))
     return 0
 

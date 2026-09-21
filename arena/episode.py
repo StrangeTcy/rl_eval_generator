@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .artifacts import RunArtifacts, manifest_defaults, utc_now
+from .artifacts import RunArtifacts, manifest_defaults, sanitize, utc_now
 from .docker_backend import DockerBackend
 from .providers import (
     Completion,
@@ -605,7 +605,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         if not options.keep_workspace and episode_dir.exists():
             shutil.rmtree(episode_dir, ignore_errors=True)
 
-    return {"run_id": run_id, "run_dir": str(artifacts.root), "final": final}
+    return sanitize({"run_id": run_id, "run_dir": str(artifacts.root), "final": final}, api_key)
 
 
 __all__ = [
