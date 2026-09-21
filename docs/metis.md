@@ -3,8 +3,8 @@
 This suite is not designed to produce a single intelligence score. A recurring
 target is **metis**: applied ingenuity that notices the structure generating the
 presented task, preserves invariants across representation changes, resists
-misleading frames, and finds valid alternative formulations. The motivating
-argument is developed in the blog post [Athena and Ares](https://akkartik.name/post/athena-ares);
+misleading frames, and finds valid alternative formulations. The motivating argument is developed in the project post
+[Notes on Metis](https://strangetcy.github.io/2026/07/11/notes-on-metis.html);
 this document translates that argument into reproducible benchmark controls.
 
 The practical question is not only whether an agent can push harder on the
