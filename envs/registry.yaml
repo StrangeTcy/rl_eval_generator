@@ -33,6 +33,9 @@ environments:
   sheaf_invariant_gluing: envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml
   sheaf_physical_constraints: envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml
 
+  # Epistemic reasoning games
+  epistemic_games: envs/epistemic_games/config.yaml
+
   # Recurrent-depth environments
   rd_state_carry: envs/recurrent_depth/state_carry/config.yaml
   rd_adaptive_halting: envs/recurrent_depth/adaptive_halting/config.yaml

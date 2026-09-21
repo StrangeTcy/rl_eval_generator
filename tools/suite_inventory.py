@@ -39,11 +39,11 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _git_value(*args: str) -> str | None:
+def _git_value(root: Path, *args: str) -> str | None:
     try:
         result = subprocess.run(
             ["git", *args],
-            cwd=ROOT,
+            cwd=root,
             check=True,
             capture_output=True,
             text=True,
@@ -158,6 +158,47 @@ def _case_id(environment: str, difficulty: dict[str, str], seed: int) -> str:
     return f"{environment}__{safe}__seed-{seed}"
 
 
+def _ref_config_paths(ref: str, root: Path) -> list[str]:
+    try:
+        result = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", ref, "--", "envs"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError(f"cannot inspect comparison ref {ref!r}") from exc
+    return sorted(
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip().endswith("/config.yaml")
+    )
+
+
+def _compare_refs(root: Path, refs: list[str], config_paths: list[Path]) -> list[dict[str, Any]]:
+    local_paths = {path.relative_to(root).as_posix() for path in config_paths}
+    comparisons: list[dict[str, Any]] = []
+    for ref in refs:
+        ref_paths = set(_ref_config_paths(ref, root))
+        missing = sorted(ref_paths - local_paths)
+        only_in_checkout = sorted(local_paths - ref_paths)
+        comparisons.append(
+            {
+                "ref": ref,
+                "resolved_commit": _git_value(root, "rev-parse", ref),
+                "environment_count": len(ref_paths),
+                "missing_from_checkout": missing,
+                "only_in_checkout": only_in_checkout,
+                "missing_count": len(missing),
+                "only_in_checkout_count": len(only_in_checkout),
+                "status": "missing_from_checkout" if missing else "complete",
+                "clean": not missing,
+            }
+        )
+    return comparisons
+
+
 def _registry_audit(
     root: Path,
     registry: dict[str, str],
@@ -248,11 +289,17 @@ def build_manifest(
     seeds: list[int] | None = None,
     selected_levels: list[str] | None = None,
     preflight: bool = False,
+    compare_refs: list[str] | None = None,
+    dry_run: bool = True,
+    max_tokens_total: int | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
+    if max_tokens_total is not None and max_tokens_total < 1:
+        raise ValueError("max-tokens-total must be positive")
     registry = _load_registry(root)
     config_paths = sorted((root / "envs").rglob("config.yaml"))
     audit = _registry_audit(root, registry, config_paths)
+    branch_comparisons = _compare_refs(root, list(compare_refs or []), config_paths)
     environments: list[dict[str, Any]] = []
     cases: list[dict[str, Any]] = []
     seeds = list(seeds or [0])
@@ -298,26 +345,51 @@ def build_manifest(
     issues = [
         *audit["missing_registry_paths"],
         *audit["unregistered_config_paths"],
+        *[
+            f"{comparison['ref']}: missing config {path}"
+            for comparison in branch_comparisons
+            for path in comparison["missing_from_checkout"]
+        ],
         *[f"{path}: duplicate registry names {names}" for path, names in audit["duplicate_registry_paths"].items()],
         *[f"{env['environment']}: {issue}" for env in environments for issue in env["issues"]],
     ]
-    commit = _git_value("rev-parse", "HEAD")
-    dirty = _git_value("status", "--porcelain") or ""
+    commit = _git_value(root, "rev-parse", "HEAD")
+    dirty = _git_value(root, "status", "--porcelain") or ""
+    inventory_digest = hashlib.sha256(
+        "\n".join(
+            f"{path.relative_to(root).as_posix()}\t{_sha256(path)}"
+            for path in config_paths
+        ).encode("utf-8")
+    ).hexdigest()
     return {
         "schema_version": 1,
         "manifest_type": "rl_eval_generator_suite",
         "created_at": _utc_now(),
         "repository": {
             "commit": commit,
+            "pinned_revision": commit,
             "dirty": bool(dirty),
             "root": str(root),
+        },
+        "inventory": {
+            "config_paths_sha256": inventory_digest,
+            "comparison_refs": [
+                {
+                    "ref": comparison["ref"],
+                    "resolved_commit": comparison["resolved_commit"],
+                }
+                for comparison in branch_comparisons
+            ],
         },
         "selection": {
             "matrix": matrix,
             "seeds": seeds,
             "selected_levels": selected_levels or [],
+            "dry_run": dry_run,
+            "max_tokens_total": max_tokens_total,
         },
         "registry_audit": audit,
+        "branch_comparisons": branch_comparisons,
         "environment_count": len(environments),
         "case_count": len(cases),
         "environments": environments,
@@ -348,6 +420,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--seeds", default="0", help="comma-separated integer seeds")
     parser.add_argument("--levels", default="easy,medium,hard", help="preferred levels for representative mode")
+    parser.add_argument(
+        "--compare-ref",
+        action="append",
+        default=[],
+        help="Git ref to audit for environment configs missing from this checkout; repeatable",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="mark this inventory as planning-only (inventory never calls a provider)",
+    )
+    parser.add_argument(
+        "--max-tokens-total",
+        type=int,
+        default=None,
+        help="record an explicit estimated-token ceiling for a later all-matrix run",
+    )
     parser.add_argument("--preflight", action="store_true", help="generate and compile each case")
     return parser
 
@@ -363,6 +452,9 @@ def main(argv: list[str] | None = None) -> int:
             seeds=seeds,
             selected_levels=levels,
             preflight=args.preflight,
+            compare_refs=args.compare_ref,
+            dry_run=args.dry_run,
+            max_tokens_total=args.max_tokens_total,
         )
         write_json(args.out, manifest)
     except (OSError, RuntimeError, ValueError) as exc:
@@ -375,6 +467,7 @@ def main(argv: list[str] | None = None) -> int:
                 "environment_count": manifest["environment_count"],
                 "case_count": manifest["case_count"],
                 "registry_clean": manifest["registry_audit"]["clean"],
+                "branch_comparisons": manifest["branch_comparisons"],
                 "ready_for_scheduler": manifest["ready_for_scheduler"],
                 "issue_count": len(manifest["issues"]),
             },

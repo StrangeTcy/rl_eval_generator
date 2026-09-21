@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""Validate suite reference behavior without making provider/API calls.
+
+This is a release gate for a model sweep, not a model evaluation.  It generates
+one representative case per manifest environment, compiles the generated Python,
+and optionally applies a declared known-good patch.  Environments may also
+provide a deterministic reference self-test.  No provider module, credential,
+or network operation is used here.
+
+The report deliberately distinguishes a patch oracle from a judge-reference
+compile.  A compile check is not a claim that an unseen environment has a
+known-good solution; it only confirms that its configured trusted judge can be
+loaded before spending model calls.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.suite_inventory import _load_yaml, build_manifest  # noqa: E402
+
+# Additional environments can declare a path under
+# ``oracle.known_good_patch`` in their own config.yaml.  Do not infer that an
+# example patch is current merely because it exists; a declared patch must
+# apply cleanly to the pinned generated case.
+
+
+def _representative_difficulty(config: dict[str, Any], oracle: dict[str, Any]) -> str:
+    configured = oracle.get("difficulty")
+    if isinstance(configured, str) and configured.strip():
+        return configured
+    values: list[str] = []
+    for axis in config.get("axes", []):
+        levels = axis.get("levels", {}) if isinstance(axis, dict) else {}
+        names = list(levels) if isinstance(levels, dict) else []
+        if not names:
+            raise ValueError("oracle case cannot select a difficulty from an empty axis")
+        values.append("hard" if "hard" in names else names[0])
+    return ",".join(values)
+
+
+def _run(command: list[str], *, cwd: Path, timeout: float = 180) -> tuple[int, str]:
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return 124, f"timed out after {timeout:g}s: {exc}"
+    return result.returncode, (result.stdout + result.stderr)[-5000:]
+
+
+def _compile_generated(output: Path) -> tuple[bool, str]:
+    python_files = [str(path) for path in output.rglob("*.py")]
+    if not python_files:
+        return False, "generated case contains no Python files"
+    code, detail = _run([sys.executable, "-m", "py_compile", *python_files], cwd=output)
+    return code == 0, detail
+
+
+def _apply_known_good_patch(output: Path, patch_path: Path) -> tuple[bool, str]:
+    workspace = output / "agent" / "workspace"
+    if not workspace.is_dir():
+        return False, "generated case has no agent/workspace directory"
+    patch_file = output / ".oracle.patch"
+    shutil.copyfile(patch_path, patch_file)
+    code, detail = _run(
+        ["patch", "--dry-run", "-p1", "-i", str(patch_file)],
+        cwd=workspace,
+        timeout=30,
+    )
+    return code == 0, detail
+
+
+def _configured_self_test(root: Path, environment: str, oracle: dict[str, Any]) -> tuple[bool, str | None]:
+    kind = str(oracle.get("reference_behavior", "")).strip().lower()
+    if kind == "public_bayes_oracle" or environment == "epistemic_games":
+        code, detail = _run(
+            [sys.executable, str(root / "tools" / "public_bayes_oracle.py"), "--self-test"],
+            cwd=root,
+            timeout=60,
+        )
+        return code == 0, detail
+    # Every generated environment has a trusted judge.  Compiling it is the
+    # safe fallback when no deterministic public self-test is configured.
+    return True, None
+
+
+def validate_manifest_oracles(
+    manifest: dict[str, Any],
+    *,
+    root: Path = ROOT,
+) -> dict[str, Any]:
+    """Return a zero-call oracle report for the environments in ``manifest``."""
+
+    root = root.resolve()
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for environment in manifest.get("environments", []):
+        if not isinstance(environment, dict):
+            continue
+        name = str(environment.get("environment", ""))
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        config_path = root / str(environment.get("config_path", ""))
+        result: dict[str, Any] = {
+            "environment": name,
+            "config_path": str(config_path.relative_to(root)) if config_path.is_file() else None,
+            "status": "failed",
+            "api_calls": 0,
+            "provider_calls": 0,
+            "reference_behavior": "judge_reference_compile",
+        }
+        try:
+            config = _load_yaml(config_path)
+            oracle = config.get("oracle", {})
+            if not isinstance(oracle, dict):
+                raise ValueError("oracle must be a mapping when configured")
+            difficulty = _representative_difficulty(config, oracle)
+            temp_root = Path(tempfile.mkdtemp(prefix="oracle-preflight-", dir=root))
+            output_name = temp_root.name + "-generated"
+            output = root / output_name
+            generated_name = output_name
+            code, detail = _run(
+                [
+                    sys.executable,
+                    str(root / "generate_env.py"),
+                    "--env",
+                    name,
+                    "--name",
+                    generated_name,
+                    "--difficulty",
+                    difficulty,
+                    "--seed",
+                    str(int(oracle.get("seed", 0))),
+                ],
+                cwd=root,
+                timeout=180,
+            )
+            if code != 0:
+                raise RuntimeError(f"generation failed: {detail}")
+            compiled, compile_detail = _compile_generated(output)
+            if not compiled:
+                raise RuntimeError(f"generated Python did not compile: {compile_detail}")
+            result.update({"difficulty": difficulty, "generated": True, "judge_compiled": True})
+
+            patch_value = oracle.get("known_good_patch")
+            if patch_value:
+                patch_path = root / str(patch_value)
+                if not patch_path.is_file():
+                    raise FileNotFoundError(f"known-good patch not found: {patch_value}")
+                applied, patch_detail = _apply_known_good_patch(output, patch_path)
+                result["known_good_patch"] = str(patch_path.relative_to(root))
+                result["known_good_patch_applies"] = applied
+                if not applied:
+                    raise RuntimeError(f"known-good patch did not apply: {patch_detail}")
+                result["reference_behavior"] = "known_good_patch"
+
+            reference_kind = str(oracle.get("reference_behavior", "")).strip().lower()
+            if reference_kind == "public_bayes_oracle" or name == "epistemic_games":
+                result["reference_behavior"] = "public_bayes_oracle"
+            reference_ok, reference_detail = _configured_self_test(root, name, oracle)
+            result["reference_self_test"] = "passed" if reference_ok else "failed"
+            if reference_detail:
+                result["reference_detail"] = reference_detail
+            if not reference_ok:
+                raise RuntimeError("configured reference self-test failed")
+            result["status"] = "ready"
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            result["error"] = str(exc)[-5000:]
+        finally:
+            if "output" in locals():
+                shutil.rmtree(output, ignore_errors=True)
+                del output
+            if "temp_root" in locals():
+                shutil.rmtree(temp_root, ignore_errors=True)
+                del temp_root
+        results.append(result)
+
+    failures = [result for result in results if result.get("status") != "ready"]
+    return {
+        "schema_version": 1,
+        "event": "zero_api_oracle_preflight",
+        "api_calls": 0,
+        "provider_calls": 0,
+        "model_sweep_allowed": not failures,
+        "results": results,
+        "failure_count": len(failures),
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manifest", type=Path, default=None)
+    parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--out", type=Path, default=Path("runs/oracle_preflight.json"))
+    args = parser.parse_args(argv)
+    try:
+        manifest = (
+            json.loads(args.manifest.read_text(encoding="utf-8"))
+            if args.manifest
+            else build_manifest(root=args.root, matrix="representative", seeds=[0])
+        )
+        report = validate_manifest_oracles(manifest, root=args.root)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        print(f"oracle preflight failed: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+    return 0 if report["model_sweep_allowed"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

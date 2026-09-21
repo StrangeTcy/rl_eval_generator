@@ -105,11 +105,33 @@ def _current_config_hash(root: Path, case: dict[str, Any]) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _estimated_case_budget(max_steps: int, max_tokens: int, invalid_retries: int) -> tuple[int, int]:
+    if max_steps < 1 or max_tokens < 1 or invalid_retries < 0:
+        raise ValueError("max-steps and max-tokens must be positive; invalid-retries must not be negative")
+    calls = max_steps * (1 + invalid_retries)
+    return calls, calls * max_tokens
+
+
+def _is_zero_score(result: dict[str, Any]) -> bool:
+    score = result.get("score")
+    return result.get("status") == "scored" and isinstance(score, (int, float)) and float(score) == 0.0
+
+
 def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
     if path.is_file():
         checkpoint = _read_json(path)
         previous = checkpoint.get("run", {})
-        immutable = ("manifest_commit", "provider", "model", "api_base", "sandbox", "secrets")
+        immutable = (
+            "manifest_commit",
+            "provider",
+            "model",
+            "api_base",
+            "sandbox",
+            "secrets",
+            "max_tokens_total",
+            "floor_effect_after",
+            "reasoning_effort",
+        )
         for field in immutable:
             if previous.get(field) != metadata.get(field):
                 raise ValueError(
@@ -127,6 +149,8 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
         "updated_at": _utc_now(),
         "paused": False,
         "pause_reason": None,
+        "floor_effect": False,
+        "floor_effect_streak": 0,
         "results": [],
     }
 
@@ -150,6 +174,8 @@ def _write_coverage(output_dir: Path, checkpoint: dict[str, Any]) -> None:
             "updated_at": checkpoint.get("updated_at"),
             "paused": checkpoint.get("paused", False),
             "pause_reason": checkpoint.get("pause_reason"),
+            "floor_effect": checkpoint.get("floor_effect", False),
+            "floor_effect_streak": checkpoint.get("floor_effect_streak", 0),
             "counts": {
                 status: sum(row.get("status") == status for row in rows)
                 for status in sorted({str(row.get("status")) for row in rows})
@@ -183,6 +209,7 @@ def _write_coverage(output_dir: Path, checkpoint: dict[str, Any]) -> None:
         f"- Cases recorded: `{len(rows)}`",
         f"- Paused: `{checkpoint.get('paused', False)}`",
         f"- Pause reason: `{checkpoint.get('pause_reason') or 'none'}`",
+        f"- Floor effect: `{checkpoint.get('floor_effect', False)}`",
         "",
         "| environment | difficulty | seed | status | verdict | score | runtime (s) |",
         "|---|---|---:|---|---|---:|---:|",
@@ -211,6 +238,7 @@ def _build_command(
     invalid_retries: int,
     keep_images: bool,
     keep_workspace: bool,
+    reasoning_effort: str | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -245,6 +273,13 @@ def _build_command(
     ])
     if api_base:
         command.extend(["--api-base", api_base])
+    if reasoning_effort:
+        command.extend(
+            [
+                "--request-extra",
+                json.dumps({"reasoning": {"effort": reasoning_effort}}, separators=(",", ":")),
+            ]
+        )
     if keep_images:
         command.append("--keep-images")
     if keep_workspace:
@@ -268,8 +303,11 @@ def run_suite(
     max_cases: int | None = None,
     max_api_calls: int | None = None,
     max_output_tokens: int | None = None,
+    max_tokens_total: int | None = None,
     max_wall_seconds: float | None = None,
     min_interval_seconds: float = 0.0,
+    floor_effect_after: int | None = 3,
+    reasoning_effort: str | None = None,
     checkpoint_path: Path | None = None,
     dry_run: bool = False,
     allow_config_drift: bool = False,
@@ -283,11 +321,43 @@ def run_suite(
         raise ValueError("provider and model are required")
     if not api_key_env and not dry_run:
         raise ValueError("api_key_env is required; do not pass a literal API key to the scheduler")
+    if max_tokens_total is not None and max_tokens_total < 1:
+        raise ValueError("max-tokens-total must be positive")
+    if max_output_tokens is not None and max_output_tokens < 1:
+        raise ValueError("max-output-tokens must be positive")
+    if floor_effect_after is not None and floor_effect_after < 0:
+        raise ValueError("floor-effect-after must be positive, zero, or omitted")
+    if floor_effect_after == 0:
+        floor_effect_after = None
     if sandbox != "docker":
         raise ValueError("suite scheduler requires Docker isolation; use a separate local smoke test")
     output_dir.mkdir(parents=True, exist_ok=True)
+    oracle_report: dict[str, Any] | None = None
+    if not dry_run:
+        # This gate is intentionally local and provider-free.  It validates the
+        # pinned environment/reference behavior before resolving credentials or
+        # starting the first model request.
+        from tools.oracle_preflight import validate_manifest_oracles
+
+        oracle_report = validate_manifest_oracles(manifest, root=ROOT)
+        _write_json_atomic(output_dir / "oracle_preflight.json", oracle_report)
+        if not oracle_report.get("model_sweep_allowed", False):
+            raise ValueError(
+                "zero-API oracle preflight failed; inspect "
+                f"{output_dir / 'oracle_preflight.json'} before retrying"
+            )
     checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
     repository = manifest.get("repository", {})
+    selection = manifest.get("selection", {})
+    matrix = selection.get("matrix") if isinstance(selection, dict) else None
+    if matrix == "all" and not dry_run and max_tokens_total is None and max_output_tokens is None:
+        raise ValueError(
+            "all-matrix execution requires --dry-run or an explicit "
+            "--max-tokens-total/--max-output-tokens ceiling"
+        )
+    case_budget_calls, case_budget_tokens = _estimated_case_budget(
+        max_steps, max_tokens, invalid_retries
+    )
     metadata = {
         "manifest_commit": repository.get("commit"),
         "provider": provider,
@@ -299,15 +369,44 @@ def run_suite(
         "max_steps": max_steps,
         "max_tokens": max_tokens,
         "invalid_retries": invalid_retries,
+        "max_tokens_total": max_tokens_total,
+        "floor_effect_after": floor_effect_after,
+        "reasoning_effort": reasoning_effort,
+        "reasoning_enabled": reasoning_effort is not None,
+        "estimated_case_api_calls": case_budget_calls,
+        "estimated_case_output_tokens": case_budget_tokens,
+        "oracle_preflight": {
+            "api_calls": oracle_report.get("api_calls", 0) if oracle_report else None,
+            "failure_count": oracle_report.get("failure_count") if oracle_report else None,
+            "model_sweep_allowed": oracle_report.get("model_sweep_allowed") if oracle_report else None,
+        },
     }
     checkpoint = _load_checkpoint(checkpoint_path, manifest=manifest, metadata=metadata)
     checkpoint["run"].update(metadata)
     checkpoint["paused"] = False
     checkpoint["pause_reason"] = None
+    checkpoint["floor_effect"] = bool(checkpoint.get("floor_effect", False))
+    checkpoint["floor_effect_streak"] = int(checkpoint.get("floor_effect_streak", 0) or 0)
     result_by_case = _result_by_case(checkpoint)
     cases = list(manifest.get("cases", []))
     if max_cases is not None:
+        if max_cases < 1:
+            raise ValueError("max-cases must be positive")
         cases = cases[:max_cases]
+    estimated_total_tokens = len(cases) * case_budget_tokens
+    estimated_total_calls = len(cases) * case_budget_calls
+    checkpoint["run"].update(
+        {
+            "estimated_total_api_calls": estimated_total_calls,
+            "estimated_total_output_tokens": estimated_total_tokens,
+        }
+    )
+    if matrix == "all" and not dry_run and max_tokens_total is not None:
+        if estimated_total_tokens > max_tokens_total:
+            raise ValueError(
+                "all-matrix estimate exceeds --max-tokens-total: "
+                f"{estimated_total_tokens} > {max_tokens_total}; lower --max-cases or the per-case limits"
+            )
     started = time.monotonic()
     api_calls_reserved = sum(
         max_steps * (1 + invalid_retries)
@@ -332,11 +431,14 @@ def run_suite(
         existing = result_by_case.get(case_id)
         if existing and not retry_recorded and existing.get("status") in {
             "scored",
-            "planned",
             "generation_error",
             "compile_error",
             "blocked_config_drift",
         }:
+            continue
+        # A dry-run is a plan, not a completed API case.  It must be possible
+        # to resume the same checkpoint in live mode after reviewing its budget.
+        if existing and not retry_recorded and dry_run and existing.get("status") == "planned":
             continue
         if max_wall_seconds is not None and time.monotonic() - started >= max_wall_seconds:
             checkpoint["paused"] = True
@@ -359,8 +461,7 @@ def run_suite(
             _write_json_atomic(checkpoint_path, checkpoint)
             _write_coverage(output_dir, checkpoint)
             continue
-        estimated_calls = max_steps * (1 + invalid_retries)
-        estimated_tokens = estimated_calls * max_tokens
+        estimated_calls, estimated_tokens = case_budget_calls, case_budget_tokens
         if max_api_calls is not None and api_calls_reserved + estimated_calls > max_api_calls:
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "max_api_calls"
@@ -408,6 +509,7 @@ def run_suite(
             invalid_retries=invalid_retries,
             keep_images=keep_images,
             keep_workspace=keep_workspace,
+            reasoning_effort=reasoning_effort,
         )
         case_started = time.monotonic()
         try:
@@ -451,6 +553,7 @@ def run_suite(
                 "returncode": process.returncode,
                 "elapsed_seconds": round(time.monotonic() - case_started, 3),
                 "run_dir": parsed.get("run_dir") if parsed else None,
+                "reasoning_enabled": reasoning_effort is not None,
                 "error": error,
                 "stdout_tail": stdout,
                 "stderr_tail": stderr,
@@ -463,9 +566,25 @@ def run_suite(
                 "difficulty": case.get("difficulty"),
                 "seed": case.get("seed"),
                 "status": "infrastructure_error",
+                "reasoning_enabled": reasoning_effort is not None,
                 "error": "scheduler subprocess timed out",
                 "elapsed_seconds": round(time.monotonic() - case_started, 3),
             }
+        if not reasoning_effort and _is_zero_score(result):
+            checkpoint["floor_effect_streak"] = int(checkpoint.get("floor_effect_streak", 0) or 0) + 1
+        else:
+            checkpoint["floor_effect_streak"] = 0
+        if (
+            floor_effect_after is not None
+            and checkpoint["floor_effect_streak"] >= floor_effect_after
+            and not reasoning_effort
+            and _is_zero_score(result)
+        ):
+            result["floor_effect"] = True
+            checkpoint["floor_effect"] = True
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "floor_effect"
+        result["floor_effect_streak"] = checkpoint["floor_effect_streak"]
         result_by_case[case_id] = result
         checkpoint["results"] = list(result_by_case.values())
         checkpoint["updated_at"] = _utc_now()
@@ -503,8 +622,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--max-api-calls", type=int, default=None)
     parser.add_argument("--max-output-tokens", type=int, default=None)
+    parser.add_argument(
+        "--max-tokens-total",
+        type=int,
+        default=None,
+        help="required ceiling for live all-matrix execution (estimated output tokens)",
+    )
     parser.add_argument("--max-wall-seconds", type=float, default=None)
     parser.add_argument("--min-interval-seconds", type=float, default=0.0)
+    parser.add_argument(
+        "--floor-effect-after",
+        type=int,
+        default=3,
+        help="pause after this many consecutive non-reasoning scored zeros; use 0 to disable",
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=("low", "medium", "high"),
+        default=None,
+        help="opt into a provider reasoning request; floor-effect detection is disabled",
+    )
     parser.add_argument("--checkpoint", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-config-drift", action="store_true")
@@ -533,8 +670,11 @@ def main(argv: list[str] | None = None) -> int:
             max_cases=args.max_cases,
             max_api_calls=args.max_api_calls,
             max_output_tokens=args.max_output_tokens,
+            max_tokens_total=args.max_tokens_total,
             max_wall_seconds=args.max_wall_seconds,
             min_interval_seconds=args.min_interval_seconds,
+            floor_effect_after=args.floor_effect_after,
+            reasoning_effort=args.reasoning_effort,
             checkpoint_path=args.checkpoint,
             dry_run=args.dry_run,
             allow_config_drift=args.allow_config_drift,
@@ -551,6 +691,7 @@ def main(argv: list[str] | None = None) -> int:
                 "out": str(args.out),
                 "paused": checkpoint.get("paused", False),
                 "pause_reason": checkpoint.get("pause_reason"),
+                "floor_effect": checkpoint.get("floor_effect", False),
                 "recorded_cases": len(checkpoint.get("results", [])),
                 "manifest_cases": checkpoint.get("manifest_case_count"),
             },
