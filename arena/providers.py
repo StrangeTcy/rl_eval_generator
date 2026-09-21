@@ -146,7 +146,15 @@ def resolve_credentials(
         secret_path=secret_path,
         environ=env,
     )
-    selected_env = api_key_env or PROVIDER_ENV[credentials.name][0]
+    if api_key:
+        selected_env = api_key_env or PROVIDER_ENV[credentials.name][0]
+    elif api_key_env and env.get(api_key_env):
+        selected_env = api_key_env
+    else:
+        selected_env = next(
+            (name for name in PROVIDER_ENV[credentials.name] if env.get(name)),
+            api_key_env or PROVIDER_ENV[credentials.name][0],
+        )
     return credentials.api_key, selected_env
 
 

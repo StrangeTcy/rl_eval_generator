@@ -196,7 +196,9 @@ def resolve_provider(
     normalized = name.strip().lower()
     config, profile, loaded_path = provider_profile(normalized, secret_path)
     env = environ if environ is not None else os.environ
-    env_names = (api_key_env,) if api_key_env else PROVIDER_ENV[normalized]
+    env_names = list(PROVIDER_ENV[normalized])
+    if api_key_env:
+        env_names = [api_key_env] + [name for name in env_names if name != api_key_env]
     selected_env = env_names[0] if env_names else None
     key = api_key
     source = "cli"

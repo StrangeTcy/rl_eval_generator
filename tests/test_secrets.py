@@ -34,6 +34,13 @@ def test_provider_resolution_precedence_and_redaction(tmp_path):
     assert resolved.api_key == "gsk_environment_secret"
     assert resolved.api_base == "https://groq.example/v1"
     assert resolved.default_model == "test/model"
+    fallback = resolve_provider(
+        "groq",
+        api_key_env="MISSING_PROVIDER_KEY",
+        secret_path=profile,
+        environ=environment,
+    )
+    assert fallback.api_key == "gsk_environment_secret"
 
     explicit = resolve_provider(
         "groq",
