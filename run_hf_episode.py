@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from arena.episode import EpisodeOptions, format_messages, parse_action, run_episode
-from arena.providers import ProviderClient
+from arena.providers import ProviderClient, open_no_redirect, require_https
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_API_BASE = "https://router.huggingface.co/v1"
@@ -92,9 +92,10 @@ def post_json(
     import json as _json
     from urllib import request
 
+    require_https(url)
     data = _json.dumps(payload).encode("utf-8")
     req = request.Request(url, data=data, headers=hf_headers(token), method="POST")
-    with request.urlopen(req, timeout=timeout) as response:
+    with open_no_redirect(req, timeout=timeout) as response:
         loaded = _json.loads(response.read().decode("utf-8"))
     return loaded
 

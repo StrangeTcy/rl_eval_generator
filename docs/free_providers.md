@@ -97,8 +97,9 @@ python tools/provider_preflight.py \
   --out runs/provider_preflight.json
 ```
 
-The output contains provider names, endpoint, status, latency, status code, and
-model IDs. It does not contain keys or raw response bodies. A failed preflight
+The output contains only structured provider status, latency, status code,
+error type, optional request ID, and model IDs (plus aggregate run metadata). It
+does not contain endpoints, keys, or raw response bodies. A failed preflight
 is a reason to stop or change the declared provider configuration, not a reason
 to enable a paid fallback.
 

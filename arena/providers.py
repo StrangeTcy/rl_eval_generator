@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib import error, request
+from urllib.parse import urlsplit
 
 from .secrets import (
     PROVIDER_DEFAULT_BASE,
@@ -37,6 +38,35 @@ PROVIDERS: dict[str, dict[str, str | None]] = {
 # Keep this alias available to callers that want the resolved profile type
 # without importing the secrets module directly.
 ResolvedProvider = ProviderCreds
+
+
+class _RejectRedirectHandler(request.HTTPRedirectHandler):
+    """Do not forward authenticated requests to any redirected destination."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise error.HTTPError(req.full_url, code, "authenticated redirects are disabled", headers, None)
+
+
+_NO_REDIRECT_OPENER = request.build_opener(_RejectRedirectHandler)
+
+
+def open_no_redirect(req: request.Request, timeout: float):
+    """Open an authenticated request without following any HTTP redirect."""
+
+    return _NO_REDIRECT_OPENER.open(req, timeout=timeout)
+
+
+def require_https(url: str) -> None:
+    """Require an absolute HTTPS endpoint for provider traffic."""
+
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme.lower() != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError("provider endpoints must use an absolute HTTPS URL without URL credentials")
 
 
 @dataclass
@@ -117,10 +147,12 @@ def _redact_text(text: str, secret: str | None = None, limit: int = 4000) -> str
     return redact_text(text[:limit], [secret] if secret else None)
 
 
-def _safe_headers(headers: Mapping[str, str]) -> dict[str, str]:
+def _safe_headers(
+    headers: Mapping[str, str], secret: str | None = None
+) -> dict[str, str]:
     unsafe = {"authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key"}
     return {
-        str(key): str(value)
+        str(key): redact_text(str(value), [secret] if secret else None)
         for key, value in headers.items()
         if str(key).lower() not in unsafe and "token" not in str(key).lower()
     }
@@ -172,6 +204,7 @@ def resolve_api_base(
         secret_path=secret_path,
         require_key=False,
     )
+    require_https(credentials.api_base)
     return credentials.api_base
 
 
@@ -179,9 +212,9 @@ def chat_completions_url(api_base: str) -> str:
     """Normalize a base URL to the required OpenAI-compatible endpoint."""
 
     base = api_base.rstrip("/")
-    if base.endswith("/chat/completions"):
-        return base
-    return f"{base}/chat/completions"
+    url = base if base.endswith("/chat/completions") else f"{base}/chat/completions"
+    require_https(url)
+    return url
 
 
 def _content_from_message(message: Any) -> str:
@@ -253,7 +286,7 @@ class ProviderClient:
         self.backoff_base = max(0.0, float(backoff_base))
         self.backoff_max = max(0.0, float(backoff_max))
         self.jitter = max(0.0, float(jitter))
-        self.opener = opener or request.urlopen
+        self.opener = opener or open_no_redirect
         self.sleep = sleep
         self.random_fn = random_fn
         self.error_logger = error_logger
@@ -324,7 +357,9 @@ class ProviderClient:
                 req = request.Request(url, data=body, headers=headers, method="POST")
                 with self.opener(req, timeout=self.timeout) as response:
                     response_body = response.read().decode("utf-8", errors="replace")
-                    response_headers = _safe_headers(dict(response.headers.items()))
+                    response_headers = _safe_headers(
+                        dict(response.headers.items()), self.api_key
+                    )
                 data = json.loads(response_body)
                 if not isinstance(data, dict):
                     failure = ProviderAttempt(
@@ -382,9 +417,16 @@ class ProviderClient:
                     ),
                 )
             except error.HTTPError as exc:
-                response_body = exc.read().decode("utf-8", errors="replace")
+                try:
+                    response_body = exc.read().decode("utf-8", errors="replace")
+                except (AttributeError, OSError):
+                    response_body = ""
                 status = int(exc.code)
-                safe_headers = _safe_headers(dict(exc.headers.items())) if exc.headers else {}
+                safe_headers = (
+                    _safe_headers(dict(exc.headers.items()), self.api_key)
+                    if exc.headers
+                    else {}
+                )
                 request_id = _request_id(safe_headers, {})
                 retryable = status == 429 or 500 <= status <= 599
                 failure = ProviderAttempt(
@@ -518,7 +560,9 @@ __all__ = [
     "ProviderClient",
     "ProviderError",
     "chat_completions_url",
+    "open_no_redirect",
     "provider_metadata",
+    "require_https",
     "resolve_api_base",
     "resolve_credentials",
 ]

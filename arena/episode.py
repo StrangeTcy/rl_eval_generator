@@ -25,6 +25,7 @@ from .providers import (
     resolve_api_base,
     resolve_credentials,
 )
+from .secrets import redact_text
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_OBS_CHARS = 12000
@@ -49,6 +50,11 @@ Allowed actions:
 Do not use Markdown. Do not explain. Return only the action JSON.
 For code edits, prefer a small unified diff via apply_patch. Use apply_patch_base64 only for a base64-encoded unified diff; never encode JSON edit instructions as patch_base64.
 The current working directory for shell commands is the environment workspace.
+
+Read docs/secrets.md and secret_key.example.json if they are available to you.
+Never open, print, copy, or modify the live secret_key.json; the host credential
+loader consumes actual keys. Never put credentials in prompts, commands,
+traces, patches, or submissions.
 """
 
 
@@ -550,12 +556,13 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                 }
             )
     except Exception as exc:
-        final = _fallback_final("controller_error", str(exc))
+        safe_error = redact_text(str(exc), [api_key])
+        final = _fallback_final("controller_error", safe_error)
         artifacts.trace(
             {
                 "turn": turn,
                 "event": "controller_error",
-                "error": str(exc),
+                "error": safe_error,
                 "done": True,
             }
         )

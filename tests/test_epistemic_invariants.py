@@ -607,5 +607,3 @@ def test_format_p_and_graded_controls():
         # Narrative fail rate should be approx q (within 0.15 tolerance due to deterministic hash)
         empirical_q = fails / total if total else 0
         assert abs(empirical_q - q) < 0.15, f"{baseline_name}: expected fail rate ~{q}, got {empirical_q:.2f} ({fails}/{total})"
-
-

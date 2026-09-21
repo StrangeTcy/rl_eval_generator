@@ -685,7 +685,7 @@ def write_summary(
         "matched_control_attachments": attachments,
         "interpretation_warning": "These are behavioral intervention results, not a serial-depth measurement.",
     }
-    write_json(run_dir / "summary.json", summary)
+    write_json(run_dir / "summary.json", summary, secret=secret)
     markdown = [
         "# Trajectory-semantics summary",
         "",

@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from arena.providers import open_no_redirect, require_https  # noqa: E402
 from arena.secrets import load_secret_config, redact_text, resolve_provider  # noqa: E402
 
 
@@ -23,6 +25,7 @@ def _utc_now() -> str:
 
 
 def _models_url(base: str) -> str:
+    require_https(base)
     return base.rstrip("/") + "/models"
 
 
@@ -55,54 +58,92 @@ def _extract_models(payload: Any) -> list[str]:
     return ids
 
 
+def _request_id(headers: Mapping[str, Any] | None) -> str | None:
+    for key, value in (headers or {}).items():
+        if str(key).lower() in {"x-request-id", "request-id", "openrouter-request-id"}:
+            return str(value)
+    return None
+
+
+def _sanitize(value: Any) -> Any:
+    """Redact every serialized string as a final defense-in-depth pass."""
+
+    if isinstance(value, str):
+        return redact_text(value)
+    if isinstance(value, Mapping):
+        return {redact_text(str(key)): _sanitize(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize(item) for item in value]
+    return value
+
+
 def probe_provider(name: str, *, secret_path: Path | None, timeout: float) -> dict[str, Any]:
     started = time.monotonic()
     try:
         creds = resolve_provider(name, secret_path=secret_path)
-    except (OSError, ValueError) as exc:
+        url = _models_url(creds.api_base)
+    except (OSError, ValueError):
         return {
             "provider": name,
             "status": "credential_error",
-            "error": redact_text(str(exc)),
-            "elapsed_ms": round((time.monotonic() - started) * 1000),
+            "status_code": None,
+            "error_type": "credential_or_endpoint_error",
+            "model_ids": [],
+            "latency_ms": round((time.monotonic() - started) * 1000),
         }
-    url = _models_url(creds.api_base)
+
     try:
         req = request.Request(url, headers=_headers(creds.name, creds.api_key), method="GET")
-        with request.urlopen(req, timeout=timeout) as response:
+        # The authenticated opener rejects every redirect. In particular, it
+        # never copies Authorization to a different origin or downgraded URL.
+        with open_no_redirect(req, timeout=timeout) as response:
             body = response.read().decode("utf-8", errors="replace")
             status_code = int(response.status)
+            request_id = _request_id(getattr(response, "headers", None))
         payload = json.loads(body)
         model_ids = _extract_models(payload)
-        return {
+        result = {
             "provider": creds.name,
             "status": "reachable",
-            "api_base": creds.api_base,
-            "models_url": url,
             "status_code": status_code,
-            "model_count": len(model_ids),
             "model_ids": model_ids,
-            "elapsed_ms": round((time.monotonic() - started) * 1000),
+            "latency_ms": round((time.monotonic() - started) * 1000),
         }
+        if request_id is not None:
+            result["request_id"] = request_id
+        return result
     except error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        return {
+        result = {
             "provider": creds.name,
             "status": "http_error",
-            "api_base": creds.api_base,
-            "models_url": url,
-            "status_code": exc.code,
-            "error": redact_text(body or str(exc)),
-            "elapsed_ms": round((time.monotonic() - started) * 1000),
+            "status_code": int(exc.code),
+            "error_type": "http_error",
+            "model_ids": [],
+            "latency_ms": round((time.monotonic() - started) * 1000),
         }
-    except (OSError, TimeoutError, json.JSONDecodeError) as exc:
+        request_id = _request_id(exc.headers)
+        if request_id is not None:
+            result["request_id"] = request_id
+        return result
+    except json.JSONDecodeError:
+        return {
+            "provider": creds.name,
+            "status": "invalid_response",
+            "status_code": None,
+            "error_type": "invalid_json",
+            "model_ids": [],
+            "latency_ms": round((time.monotonic() - started) * 1000),
+        }
+    except (OSError, TimeoutError, ValueError):
         return {
             "provider": creds.name,
             "status": "request_error",
-            "api_base": creds.api_base,
-            "models_url": url,
-            "error": redact_text(str(exc)),
-            "elapsed_ms": round((time.monotonic() - started) * 1000),
+            "status_code": None,
+            "error_type": "request_error",
+            "model_ids": [],
+            "latency_ms": round((time.monotonic() - started) * 1000),
         }
 
 
@@ -117,20 +158,28 @@ def run_preflight(
     if providers:
         selected = providers
     elif isinstance(profile_map, dict):
-        selected = [str(name) for name, profile in profile_map.items() if isinstance(profile, dict) and profile.get("enabled", False)]
+        selected = [
+            str(name)
+            for name, profile in profile_map.items()
+            if isinstance(profile, dict) and profile.get("enabled", False)
+        ]
     else:
         selected = []
-    results = [probe_provider(name.lower(), secret_path=loaded_path or secret_path, timeout=timeout) for name in selected]
-    return {
-        "schema_version": 1,
-        "event": "provider_preflight",
-        "checked_at": _utc_now(),
-        "secret_profile": str(loaded_path) if loaded_path else None,
-        "paid_fallback": False,
-        "providers": results,
-        "reachable_count": sum(item["status"] == "reachable" for item in results),
-        "failure_count": sum(item["status"] != "reachable" for item in results),
-    }
+    results = [
+        probe_provider(name.lower(), secret_path=loaded_path or secret_path, timeout=timeout)
+        for name in selected
+    ]
+    return _sanitize(
+        {
+            "schema_version": 1,
+            "event": "provider_preflight",
+            "checked_at": _utc_now(),
+            "paid_fallback": False,
+            "providers": results,
+            "reachable_count": sum(item["status"] == "reachable" for item in results),
+            "failure_count": sum(item["status"] != "reachable" for item in results),
+        }
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -149,7 +198,16 @@ def main(argv: list[str] | None = None) -> int:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     except (OSError, ValueError, RuntimeError) as exc:
-        print(f"provider preflight failed: {redact_text(str(exc))}", file=sys.stderr)
+        print(
+            json.dumps(
+                {
+                    "event": "provider_preflight",
+                    "status": "preflight_error",
+                    "error_type": type(exc).__name__,
+                }
+            ),
+            file=sys.stderr,
+        )
         return 2
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result["failure_count"] == 0 else 1

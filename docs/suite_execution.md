@@ -67,3 +67,12 @@ does not infer an internal recurrent architecture.
 
 Provider execution remains opt-in. A failed quota, entitlement, model, or
 preflight check pauses or stops cleanly instead of trying a paid service.
+
+## GitHub Actions workflow template
+
+`docs/workflows/evaluate-suite.yml.example` is the reviewed manual-workflow
+template. To activate it, copy it to `.github/workflows/evaluate-suite.yml`
+using an authorized GitHub account with Workflows write permission. Store only
+an account-approved CI secret such as `SUITE_API_KEY` in GitHub Actions; do not
+upload a personal `secret_key.json`. A `workflow_dispatch` workflow must exist
+on the default branch before it can be triggered from the Actions UI.

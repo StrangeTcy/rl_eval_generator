@@ -14,6 +14,7 @@ from arena.providers import (
     PROVIDERS,
     ProviderClient,
     ProviderError,
+    redact_text,
     resolve_api_base,
     resolve_credentials,
 )
@@ -344,15 +345,16 @@ def _review(args: argparse.Namespace) -> int:
         max_tokens=args.max_tokens,
         temperature=args.temperature,
     )
+    safe_review = redact_text(completion.content, [api_key])
     review_path = run_dir / "review.md"
-    review_path.write_text(completion.content.rstrip() + "\n", encoding="utf-8")
+    review_path.write_text(safe_review.rstrip() + "\n", encoding="utf-8")
     result = {
         "model": args.model,
         "resolved_model": completion.resolved_model,
         "request_id": completion.request_id,
         "usage": completion.usage,
         "latency_ms": completion.latency_ms,
-        "review": completion.content,
+        "review": safe_review,
     }
     (run_dir / "review.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"review": str(review_path), "review_json": str(run_dir / 'review.json')}, indent=2))

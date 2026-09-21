@@ -110,9 +110,19 @@ def _git_check(path: Path, *args: str) -> bool:
 
 
 def ensure_secret_file_safe(path: Path) -> None:
-    """Reject tracked or broadly readable secret files in the repository."""
+    """Reject broadly readable secret files everywhere, and tracked/unignored repository files."""
 
     resolved = path.expanduser().resolve()
+    try:
+        mode = stat.S_IMODE(resolved.stat().st_mode)
+    except OSError as exc:
+        raise ValueError(f"cannot inspect secret file permissions: {resolved}") from exc
+    if mode & 0o077:
+        raise ValueError(f"secret file must be private (chmod 600): {resolved}")
+
+    # A profile outside the checkout cannot be checked by Git, but it still
+    # receives the same filesystem privacy check above. Repository profiles
+    # additionally must be both untracked and gitignored.
     try:
         resolved.relative_to(ROOT.resolve())
     except ValueError:
@@ -123,12 +133,6 @@ def ensure_secret_file_safe(path: Path) -> None:
         raise ValueError(
             f"secret file is not gitignored: {resolved}; add it to .gitignore before loading"
         )
-    try:
-        mode = stat.S_IMODE(resolved.stat().st_mode)
-    except OSError as exc:
-        raise ValueError(f"cannot inspect secret file permissions: {resolved}") from exc
-    if mode & 0o077:
-        raise ValueError(f"secret file must be private (chmod 600): {resolved}")
 
 
 def _secret_paths(explicit: Path | None) -> list[Path]:

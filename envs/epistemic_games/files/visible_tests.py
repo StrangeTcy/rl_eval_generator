@@ -75,4 +75,3 @@ def test_answer_consistency():
     # JSON-serializable and size-bounded
     data = json.dumps(a).encode("utf-8")
     assert len(data) <= 5000, f"ANSWER JSON too large: {len(data)} bytes"
-
