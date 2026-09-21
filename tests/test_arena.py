@@ -13,7 +13,9 @@ from urllib.error import HTTPError
 
 import pytest
 
+import arena.episode as episode_module
 from arena.docker_backend import DockerBackend
+from arena.episode import EpisodeOptions, run_episode
 from arena.providers import ProviderClient, ProviderError, chat_completions_url, open_no_redirect
 
 ROOT = Path(__file__).resolve().parents[1]  # noqa: E402
@@ -158,6 +160,57 @@ def test_provider_retries_429_but_not_bad_request():
     else:
         raise AssertionError("expected ProviderError")
     assert len(bad_attempts) == 1
+
+
+def test_episode_exception_traceback_canary_is_absent_from_artifacts(tmp_path, monkeypatch, capsys):
+    canary = "exception-header-credential-canary"
+    episode_dir = tmp_path / "episode"
+    episode_dir.mkdir()
+
+    class ExplodingProvider:
+        last_retry_count = 0
+        last_attempts = []
+
+        def __init__(self, provider, api_key, **kwargs):
+            self.provider = provider
+
+        def complete(self, **kwargs):
+            raise RuntimeError(
+                "upstream exception included Authorization: Bearer " + canary
+            )
+
+    def fake_env_runner(arguments):
+        assert arguments[0] == "reset"
+        return {
+            "observation": "initial observation",
+            "reward": 0.0,
+            "done": False,
+            "info": {"episode_dir": str(episode_dir)},
+        }
+
+    monkeypatch.setattr(episode_module, "ProviderClient", ExplodingProvider)
+    monkeypatch.setattr(episode_module, "_run_env_runner", fake_env_runner)
+    result = run_episode(
+        EpisodeOptions(
+            provider="custom",
+            model="test/model",
+            api_key=canary,
+            api_base="https://example.invalid/v1",
+            env="glyph",
+            difficulty="easy,easy,easy,easy,easy,easy",
+            sandbox="local",
+            out=tmp_path / "runs",
+            max_steps=1,
+        )
+    )
+
+    run_dir = Path(result["run_dir"])
+    captured = capsys.readouterr()
+    assert canary not in json.dumps(result)
+    assert canary not in captured.out + captured.err
+    for path in run_dir.rglob("*"):
+        if path.is_file():
+            assert canary not in path.read_text(encoding="utf-8", errors="replace")
 
 
 def test_docker_argv_has_no_network_or_api_key_environment(tmp_path):
