@@ -1,0 +1,541 @@
+#!/usr/bin/env python3
+"""Run a checkpointed suite manifest through the existing arena controller.
+
+The scheduler is intentionally provider-neutral.  It launches one
+``arena.py run`` process per manifest case, keeps the API key in the controller
+process environment, and never passes a literal key to Docker or an agent
+command.  A model failure is a scored result and does not stop the suite;
+provider/quota and infrastructure failures pause the run so a free allowance
+is not consumed by blind retries.
+
+The manifest is the experiment contract.  Build one first with
+``tools/suite_inventory.py`` and do not change provider/model/protocol halfway
+through a checkpoint.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+PROVIDER_MARKERS = (
+    "429",
+    "rate limit",
+    "rate_limit",
+    "quota",
+    "insufficient_quota",
+    "too many requests",
+    "api key",
+    "unauthorized",
+    "authentication",
+    "credit",
+)
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _safe_name(value: str) -> str:
+    return "".join(char if char.isalnum() or char in "._=-" else "_" for char in value)
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path}: expected a JSON object")
+    return value
+
+
+def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _extract_result(text: str) -> dict[str, Any] | None:
+    """Extract the largest JSON object containing a run result."""
+
+    decoder = json.JSONDecoder()
+    candidates: list[dict[str, Any]] = []
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            candidates.append(value)
+    scored = [item for item in candidates if "final" in item or "run_dir" in item]
+    return max(scored or candidates, key=lambda item: len(json.dumps(item))) if candidates else None
+
+
+def _redact(text: str, secret: str | None) -> str:
+    if secret:
+        text = text.replace(secret, "[REDACTED]")
+    return text[-4000:]
+
+
+def _provider_failure(text: str) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in PROVIDER_MARKERS)
+
+
+def _current_config_hash(root: Path, case: dict[str, Any]) -> str | None:
+    path = root / str(case.get("config_path", ""))
+    if not path.is_file():
+        return None
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+    if path.is_file():
+        checkpoint = _read_json(path)
+        previous = checkpoint.get("run", {})
+        immutable = ("manifest_commit", "provider", "model", "api_base", "sandbox")
+        for field in immutable:
+            if previous.get(field) != metadata.get(field):
+                raise ValueError(
+                    f"checkpoint metadata mismatch for {field}: "
+                    f"{previous.get(field)!r} != {metadata.get(field)!r}"
+                )
+        if checkpoint.get("manifest_case_count") != manifest.get("case_count"):
+            raise ValueError("manifest case count changed; use a new checkpoint")
+        return checkpoint
+    return {
+        "schema_version": 1,
+        "run": metadata,
+        "manifest_case_count": manifest.get("case_count", len(manifest.get("cases", []))),
+        "started_at": _utc_now(),
+        "updated_at": _utc_now(),
+        "paused": False,
+        "pause_reason": None,
+        "results": [],
+    }
+
+
+def _result_by_case(checkpoint: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {str(item["case_id"]): item for item in checkpoint.get("results", []) if item.get("case_id")}
+
+
+def _coverage_rows(checkpoint: dict[str, Any]) -> list[dict[str, Any]]:
+    return [dict(item) for item in checkpoint.get("results", [])]
+
+
+def _write_coverage(output_dir: Path, checkpoint: dict[str, Any]) -> None:
+    rows = _coverage_rows(checkpoint)
+    coverage_json = output_dir / "coverage.json"
+    _write_json_atomic(
+        coverage_json,
+        {
+            "schema_version": 1,
+            "run": checkpoint.get("run", {}),
+            "updated_at": checkpoint.get("updated_at"),
+            "paused": checkpoint.get("paused", False),
+            "pause_reason": checkpoint.get("pause_reason"),
+            "counts": {
+                status: sum(row.get("status") == status for row in rows)
+                for status in sorted({str(row.get("status")) for row in rows})
+            },
+            "rows": rows,
+        },
+    )
+    fields = [
+        "case_id",
+        "environment",
+        "track",
+        "difficulty",
+        "seed",
+        "status",
+        "verdict",
+        "score",
+        "failure_mode",
+        "returncode",
+        "elapsed_seconds",
+        "run_dir",
+        "error",
+    ]
+    with (output_dir / "coverage.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows({field: row.get(field) for field in fields} for row in rows)
+    lines = [
+        "# Suite coverage",
+        "",
+        f"- Cases in manifest: `{checkpoint.get('manifest_case_count', 0)}`",
+        f"- Cases recorded: `{len(rows)}`",
+        f"- Paused: `{checkpoint.get('paused', False)}`",
+        f"- Pause reason: `{checkpoint.get('pause_reason') or 'none'}`",
+        "",
+        "| environment | difficulty | seed | status | verdict | score | runtime (s) |",
+        "|---|---|---:|---|---|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row.get('environment')} | {row.get('difficulty')} | {row.get('seed')} | "
+            f"{row.get('status')} | {row.get('verdict', '')} | {row.get('score', '')} | "
+            f"{row.get('elapsed_seconds', '')} |"
+        )
+    (output_dir / "coverage.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _build_command(
+    case: dict[str, Any],
+    *,
+    provider: str,
+    model: str,
+    api_key_env: str,
+    api_base: str | None,
+    sandbox: str,
+    output_dir: Path,
+    max_steps: int,
+    max_tokens: int,
+    invalid_retries: int,
+    keep_images: bool,
+    keep_workspace: bool,
+) -> list[str]:
+    command = [
+        sys.executable,
+        str(ROOT / "arena.py"),
+        "run",
+        "--provider",
+        provider,
+        "--model",
+        model,
+        "--api-key-env",
+        api_key_env,
+        "--env",
+        str(case["environment"]),
+        "--difficulty",
+        str(case["difficulty"]),
+        "--seed",
+        str(case["seed"]),
+        "--max-steps",
+        str(max_steps),
+        "--max-tokens",
+        str(max_tokens),
+        "--invalid-retries",
+        str(invalid_retries),
+        "--sandbox",
+        sandbox,
+        "--out",
+        str(output_dir),
+    ]
+    if api_base:
+        command.extend(["--api-base", api_base])
+    if keep_images:
+        command.append("--keep-images")
+    if keep_workspace:
+        command.append("--keep-workspace")
+    return command
+
+
+def run_suite(
+    manifest: dict[str, Any],
+    *,
+    output_dir: Path,
+    provider: str,
+    model: str,
+    api_key_env: str,
+    api_base: str | None = None,
+    sandbox: str = "docker",
+    max_steps: int = 30,
+    max_tokens: int = 1024,
+    invalid_retries: int = 2,
+    max_cases: int | None = None,
+    max_api_calls: int | None = None,
+    max_output_tokens: int | None = None,
+    max_wall_seconds: float | None = None,
+    min_interval_seconds: float = 0.0,
+    checkpoint_path: Path | None = None,
+    dry_run: bool = False,
+    allow_config_drift: bool = False,
+    retry_recorded: bool = False,
+    keep_images: bool = False,
+    keep_workspace: bool = False,
+) -> dict[str, Any]:
+    if not manifest.get("ready_for_scheduler", False) and not allow_config_drift:
+        raise ValueError("manifest is not ready; fix inventory issues or pass --allow-config-drift explicitly")
+    if not provider or not model:
+        raise ValueError("provider and model are required")
+    if not api_key_env and not dry_run:
+        raise ValueError("api_key_env is required; do not pass a literal API key to the scheduler")
+    if sandbox != "docker":
+        raise ValueError("suite scheduler requires Docker isolation; use a separate local smoke test")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
+    repository = manifest.get("repository", {})
+    metadata = {
+        "manifest_commit": repository.get("commit"),
+        "provider": provider,
+        "model": model,
+        "api_base": api_base,
+        "sandbox": sandbox,
+        "api_key_env": api_key_env,
+        "max_steps": max_steps,
+        "max_tokens": max_tokens,
+        "invalid_retries": invalid_retries,
+    }
+    checkpoint = _load_checkpoint(checkpoint_path, manifest=manifest, metadata=metadata)
+    checkpoint["run"].update(metadata)
+    checkpoint["paused"] = False
+    checkpoint["pause_reason"] = None
+    result_by_case = _result_by_case(checkpoint)
+    cases = list(manifest.get("cases", []))
+    if max_cases is not None:
+        cases = cases[:max_cases]
+    started = time.monotonic()
+    api_calls_reserved = sum(
+        max_steps * (1 + invalid_retries)
+        for row in checkpoint.get("results", [])
+        if row.get("status") in {"scored", "infrastructure_error", "paused_provider_error"}
+    )
+    output_tokens_reserved = api_calls_reserved * max_tokens
+    completed_this_run = 0
+    secret = os.environ.get(api_key_env) if api_key_env else None
+    for case in cases:
+        case_id = str(case.get("case_id", ""))
+        if not case_id or not case.get("environment"):
+            raise ValueError("every manifest case needs case_id and environment")
+        existing = result_by_case.get(case_id)
+        if existing and not retry_recorded and existing.get("status") in {
+            "scored",
+            "planned",
+            "generation_error",
+            "compile_error",
+            "blocked_config_drift",
+        }:
+            continue
+        if max_wall_seconds is not None and time.monotonic() - started >= max_wall_seconds:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_wall_seconds"
+            break
+        current_hash = _current_config_hash(ROOT, case)
+        if current_hash != case.get("config_sha256") and not allow_config_drift:
+            result = {
+                "case_id": case_id,
+                "environment": case.get("environment"),
+                "track": case.get("track"),
+                "difficulty": case.get("difficulty"),
+                "seed": case.get("seed"),
+                "status": "blocked_config_drift",
+                "error": "config hash differs from the pinned inventory",
+            }
+            result_by_case[case_id] = result
+            checkpoint["results"] = list(result_by_case.values())
+            checkpoint["updated_at"] = _utc_now()
+            _write_json_atomic(checkpoint_path, checkpoint)
+            _write_coverage(output_dir, checkpoint)
+            continue
+        estimated_calls = max_steps * (1 + invalid_retries)
+        estimated_tokens = estimated_calls * max_tokens
+        if max_api_calls is not None and api_calls_reserved + estimated_calls > max_api_calls:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_api_calls"
+            break
+        if max_output_tokens is not None and output_tokens_reserved + estimated_tokens > max_output_tokens:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_output_tokens"
+            break
+        if dry_run:
+            result = {
+                "case_id": case_id,
+                "environment": case.get("environment"),
+                "track": case.get("track"),
+                "difficulty": case.get("difficulty"),
+                "seed": case.get("seed"),
+                "status": "planned",
+                "estimated_api_calls": estimated_calls,
+                "estimated_output_tokens": estimated_tokens,
+            }
+            result_by_case[case_id] = result
+            api_calls_reserved += estimated_calls
+            output_tokens_reserved += estimated_tokens
+            completed_this_run += 1
+            checkpoint["results"] = list(result_by_case.values())
+            checkpoint["updated_at"] = _utc_now()
+            _write_json_atomic(checkpoint_path, checkpoint)
+            _write_coverage(output_dir, checkpoint)
+            continue
+        if not secret:
+            raise ValueError(f"API key environment variable {api_key_env!r} is not set")
+        if min_interval_seconds > 0 and completed_this_run:
+            time.sleep(min_interval_seconds)
+        case_output = output_dir / "episodes" / _safe_name(case_id)
+        command = _build_command(
+            case,
+            provider=provider,
+            model=model,
+            api_key_env=api_key_env,
+            api_base=api_base,
+            sandbox=sandbox,
+            output_dir=case_output,
+            max_steps=max_steps,
+            max_tokens=max_tokens,
+            invalid_retries=invalid_retries,
+            keep_images=keep_images,
+            keep_workspace=keep_workspace,
+        )
+        case_started = time.monotonic()
+        try:
+            process = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=os.environ.copy(),
+                capture_output=True,
+                text=True,
+                timeout=max_wall_seconds if max_wall_seconds is not None else None,
+            )
+            stdout = _redact(process.stdout, secret)
+            stderr = _redact(process.stderr, secret)
+            parsed = _extract_result(process.stdout)
+            final = parsed.get("final", {}) if parsed else {}
+            if parsed and isinstance(final, dict) and final.get("failure_mode") == "api_error":
+                status = "paused_provider_error"
+                error = "provider or quota failure detected; resume only after checking the account"
+            elif parsed and isinstance(final, dict) and final.get("failure_mode") == "controller_error":
+                status = "infrastructure_error"
+                error = "arena controller failed before producing a score"
+            elif parsed and isinstance(final, dict) and "verdict" in final:
+                status = "scored"
+                error = None
+            elif _provider_failure(stdout + stderr):
+                status = "paused_provider_error"
+                error = "provider or quota failure detected; resume only after checking the account"
+            else:
+                status = "infrastructure_error"
+                error = "arena controller did not return a scored result"
+            result = {
+                "case_id": case_id,
+                "environment": case.get("environment"),
+                "track": case.get("track"),
+                "difficulty": case.get("difficulty"),
+                "seed": case.get("seed"),
+                "status": status,
+                "verdict": final.get("verdict") if isinstance(final, dict) else None,
+                "score": final.get("score") if isinstance(final, dict) else None,
+                "failure_mode": final.get("failure_mode") if isinstance(final, dict) else None,
+                "returncode": process.returncode,
+                "elapsed_seconds": round(time.monotonic() - case_started, 3),
+                "run_dir": parsed.get("run_dir") if parsed else None,
+                "error": error,
+                "stdout_tail": stdout,
+                "stderr_tail": stderr,
+            }
+        except subprocess.TimeoutExpired:
+            result = {
+                "case_id": case_id,
+                "environment": case.get("environment"),
+                "track": case.get("track"),
+                "difficulty": case.get("difficulty"),
+                "seed": case.get("seed"),
+                "status": "infrastructure_error",
+                "error": "scheduler subprocess timed out",
+                "elapsed_seconds": round(time.monotonic() - case_started, 3),
+            }
+        result_by_case[case_id] = result
+        checkpoint["results"] = list(result_by_case.values())
+        checkpoint["updated_at"] = _utc_now()
+        completed_this_run += 1
+        api_calls_reserved += estimated_calls
+        output_tokens_reserved += estimated_tokens
+        if result.get("status") == "paused_provider_error":
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "provider_error"
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+        if checkpoint.get("paused"):
+            break
+    if dry_run:
+        checkpoint["results"] = list(result_by_case.values())
+        checkpoint["updated_at"] = _utc_now()
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+    return checkpoint
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--out", type=Path, default=Path("runs/suite"))
+    parser.add_argument("--provider", required=True)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--api-key-env", default="SUITE_API_KEY")
+    parser.add_argument("--api-base", default=None)
+    parser.add_argument("--sandbox", choices=("docker", "local"), default="docker")
+    parser.add_argument("--max-steps", type=int, default=30)
+    parser.add_argument("--max-tokens", type=int, default=1024)
+    parser.add_argument("--invalid-retries", type=int, default=2)
+    parser.add_argument("--max-cases", type=int, default=None)
+    parser.add_argument("--max-api-calls", type=int, default=None)
+    parser.add_argument("--max-output-tokens", type=int, default=None)
+    parser.add_argument("--max-wall-seconds", type=float, default=None)
+    parser.add_argument("--min-interval-seconds", type=float, default=0.0)
+    parser.add_argument("--checkpoint", type=Path, default=None)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--allow-config-drift", action="store_true")
+    parser.add_argument("--retry-recorded", action="store_true")
+    parser.add_argument("--keep-images", action="store_true")
+    parser.add_argument("--keep-workspace", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        manifest = _read_json(args.manifest)
+        checkpoint = run_suite(
+            manifest,
+            output_dir=args.out,
+            provider=args.provider,
+            model=args.model,
+            api_key_env=args.api_key_env,
+            api_base=args.api_base,
+            sandbox=args.sandbox,
+            max_steps=args.max_steps,
+            max_tokens=args.max_tokens,
+            invalid_retries=args.invalid_retries,
+            max_cases=args.max_cases,
+            max_api_calls=args.max_api_calls,
+            max_output_tokens=args.max_output_tokens,
+            max_wall_seconds=args.max_wall_seconds,
+            min_interval_seconds=args.min_interval_seconds,
+            checkpoint_path=args.checkpoint,
+            dry_run=args.dry_run,
+            allow_config_drift=args.allow_config_drift,
+            retry_recorded=args.retry_recorded,
+            keep_images=args.keep_images,
+            keep_workspace=args.keep_workspace,
+        )
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"suite run failed: {exc}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(
+            {
+                "out": str(args.out),
+                "paused": checkpoint.get("paused", False),
+                "pause_reason": checkpoint.get("pause_reason"),
+                "recorded_cases": len(checkpoint.get("results", [])),
+                "manifest_cases": checkpoint.get("manifest_case_count"),
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

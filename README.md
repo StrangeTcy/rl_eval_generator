@@ -541,6 +541,77 @@ depth internally.
 
 ---
 
+## Suite inventory, checkpointed execution, and constrained notebooks
+
+The repository has two separate scales: an environment name is one declarative
+config, while a difficulty vector and seed are an evaluation case. The suite
+runner never silently treats one representative case as coverage of every
+variant. The current registry and config audit are written by
+`tools/suite_inventory.py`:
+
+```bash
+# No provider calls. One representative vector per environment.
+python tools/suite_inventory.py --out suite_manifest.json
+
+# Expand every declared difficulty-axis Cartesian product and two seeds.
+python tools/suite_inventory.py \
+  --out suite_all.json --matrix all --seeds 0,1
+
+# Also generate and compile every planned case, still without a model or Docker.
+python tools/suite_inventory.py \
+  --out suite_preflight.json --matrix all --seeds 0 --preflight
+```
+
+The manifest records the repository commit, dirty-worktree state, config hashes,
+tracks, axis levels, registry mismatches, and explicit cases. A clean audit is a
+precondition for scheduling. In this checkout the registry currently contains
+33 named config entries; use the generated manifest rather than assuming a
+number when newly authored environments are present.
+
+`tools/run_suite.py` wraps the existing `arena.py run` controller. It runs one
+case at a time, records model failures as scored results, pauses on provider or
+infrastructure failures, and atomically checkpoints after each completed case:
+
+```bash
+python tools/run_suite.py \
+  --manifest suite_all.json \
+  --out runs/suite-groq \
+  --provider custom \
+  --api-base https://provider.example/v1 \
+  --model provider/pinned-model \
+  --api-key-env SUITE_API_KEY \
+  --sandbox docker \
+  --max-cases 1 \
+  --max-api-calls 100
+```
+
+The key is read by the host controller only. The scheduler passes an environment
+variable name, never a literal key, and the existing controller removes
+provider-looking variables before invoking environment subprocesses. Use a new
+output/checkpoint directory when changing provider, model, sandbox, or manifest;
+checkpoint metadata rejects accidental mixing. `coverage.json`, `coverage.csv`,
+and `coverage.md` distinguish scored, blocked, paused, and infrastructure cases.
+`--dry-run` plans a bounded batch without requiring an API key.
+
+`tools/notebook_mode.py` reports dependency, Docker, memory, disk, GPU, and
+notebook-runtime capabilities without executing generated code. The notebook
+`notebooks/run_all_envs.ipynb` is a controller frontend, not a sandbox: it runs
+only inventory and preflight when Docker is unavailable. The canonical manual
+GitHub Actions workflow is `.github/workflows/evaluate-suite.yml`; it uses a
+standard Docker runner, a pinned model/provider supplied at dispatch, a bounded
+batch, and uploads only the manifest, checkpoint, capability report, and
+coverage summaries. Configure a `SUITE_API_KEY` repository secret for the host
+controller; it is not mounted into agent or judge containers. A workflow batch
+must be resumed with the same manifest/provider/model contract rather than
+rotating providers mid-experiment.
+
+This scheduler supports coverage accounting, not a claim that all tasks are
+comparable. Keep direct-answer, solver-synthesis, recurrent-depth, and ML
+repair tracks separate in analysis, and distinguish “attempted every planned
+case” from “every case received a scored result.”
+
+---
+
 ## Running tests
 
 ```bash
