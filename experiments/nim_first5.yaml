@@ -17,6 +17,7 @@ limits:
   max_tokens: 8192
   invalid_retries: 1
   max_retries: 5
+  # Physical-attempt worst case: 1 models + 6 compatibility + 5*20*2*6 episodes.
   max_http_attempts: 1207
   max_wall_seconds: 7200
   floor_effect_after: 0

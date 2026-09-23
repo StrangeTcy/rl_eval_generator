@@ -65,6 +65,7 @@ def test_openrouter_completion_uses_chat_endpoint_and_safe_headers():
     assert calls[0][1]["Authorization"] == "Bearer SECRET"
     assert calls[0][1]["X-openrouter-title"] == "rl_eval_generator arena"
     assert calls[0][2]["model"] == "requested/model"
+    assert calls[0][2]["stream"] is False
     assert completion.resolved_model == "provider/model-version"
     assert completion.usage["completion_tokens"] == 3
 
@@ -201,8 +202,23 @@ def test_provider_retries_only_429_503_504_and_logs_each_attempt():
     assert len(calls) == 4
     assert all(payload["temperature"] == 1.0 for payload in calls)
     assert all(payload["top_p"] == 0.95 for payload in calls)
+    assert all(payload["stream"] is False for payload in calls)
     assert calls[0]["chat_template_kwargs"]["enable_thinking"] is False
     assert sleeps == [1.25, 1.25, 1.25]
+
+    with pytest.raises(ValueError, match="stream"):
+        ProviderClient(
+            "custom",
+            "SECRET",
+            api_base="https://example.invalid/v1",
+            opener=opener,
+        ).complete(
+            model="m",
+            messages=[],
+            max_tokens=1,
+            temperature=1.0,
+            request_extra={"stream": True},
+        )
     assert [record["status_code"] for record in logs] == [503, 504, 429, 200]
     assert all(isinstance(record["elapsed_ms"], int) for record in logs)
 

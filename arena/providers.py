@@ -275,6 +275,7 @@ def _validate_request_extra(extra: Mapping[str, Any] | None) -> dict[str, Any]:
         "messages",
         "authorization",
         "headers",
+        "stream",
         "temperature",
         "top_p",
         "max_tokens",
@@ -429,6 +430,7 @@ class ProviderClient:
             "messages": messages,
             "max_tokens": int(max_tokens),
             "temperature": float(temperature),
+            "stream": False,
         }
         if top_p is not None:
             if not 0.0 < float(top_p) <= 1.0:
@@ -439,6 +441,7 @@ class ProviderClient:
         # explicit assignment also protects callers that pass a strange Mapping.
         payload["model"] = model
         payload["messages"] = messages
+        payload["stream"] = False
 
         self.last_attempts = []
         self.last_attempt_logs = []
