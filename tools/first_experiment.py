@@ -43,6 +43,7 @@ from tools.suite_inventory import (  # noqa: E402
 )
 
 PROFILE_DEFAULT = ROOT / "experiments" / "nim_first5.yaml"
+APPROVED_MODEL = "nvidia/nemotron-3-super-120b-a12b"
 EXPECTED_CASES = [
     ("regex_state_machine", "easy,easy"),
     ("epistemic_games", "trap,ambiguous,paired,balanced,bare_table"),
@@ -54,7 +55,7 @@ REQUIRED_LIMITS = {
     "max_steps": 20,
     "max_tokens": 8192,
     "invalid_retries": 1,
-    "max_retries": 0,
+    "max_retries": 5,
     "max_http_attempts": 250,
     "max_wall_seconds": 7200,
     "floor_effect_after": 0,
@@ -107,14 +108,20 @@ def _validate_profile(path: Path) -> dict[str, Any]:
     model = profile.get("model")
     if not isinstance(model, str) or not model.strip():
         raise ValueError("pilot profile model must be a non-empty exact model ID")
+    if model != APPROVED_MODEL:
+        raise ValueError(f"pilot model must be exactly {APPROVED_MODEL}")
     if profile.get("api_key_env") != "NVIDIA_API_KEY":
         raise ValueError("pilot profile must use NVIDIA_API_KEY for private environment resolution")
     if profile.get("concurrency") != 1:
         raise ValueError("pilot concurrency must be exactly 1")
     if profile.get("seed") != 0:
         raise ValueError("pilot seed must be exactly 0")
+    if profile.get("temperature") != 1.0 or profile.get("top_p") != 0.95:
+        raise ValueError("pilot sampling must be temperature 1.0 and top_p 0.95")
     request_extra = profile.get("request_extra", {})
     _validate_request_extra(request_extra)
+    if request_extra != {"chat_template_kwargs": {"enable_thinking": False}}:
+        raise ValueError("pilot must explicitly disable thinking through chat_template_kwargs")
     limits = profile.get("limits")
     if not isinstance(limits, Mapping):
         raise ValueError("pilot profile limits must be a mapping")
@@ -289,8 +296,13 @@ def _initial_checkpoint(
             "secrets": str(secret_path) if secret_path else None,
             "max_steps": limits["max_steps"],
             "max_tokens": limits["max_tokens"],
+            "temperature": profile["temperature"],
+            "top_p": profile["top_p"],
             "invalid_retries": limits["invalid_retries"],
             "max_retries": limits["max_retries"],
+            "max_http_attempts": None,
+            "max_http_attempts_total": limits["max_http_attempts"],
+            "max_http_attempts_per_case": None,
             "request_extra": dict(profile.get("request_extra", {})),
             "max_tokens_total": None,
             "floor_effect_after": None,
@@ -372,16 +384,19 @@ def _compatibility_check(
         "api_base": profile["api_base"],
         "model": profile["model"],
         "messages": "compatibility_probe_v1",
-        "max_tokens": min(64, int(limits["max_tokens"])),
-        "temperature": 0.0,
+        "max_tokens": min(128, int(limits["max_tokens"])),
+        "temperature": profile["temperature"],
+        "top_p": profile["top_p"],
         "request_extra": request_extra,
         "max_retries": limits["max_retries"],
+        "max_attempts": int(limits["max_retries"]) + 1,
     }
     client = ProviderClient(
         "nvidia",
         credentials.api_key,
         api_base=str(profile["api_base"]),
         max_retries=int(limits["max_retries"]),
+        max_http_attempts=int(limits["max_retries"]) + 1,
     )
     try:
         completion: Completion = client.complete(
@@ -391,7 +406,8 @@ def _compatibility_check(
                 {"role": "user", "content": "Reply with the single word READY."},
             ],
             max_tokens=effective["max_tokens"],
-            temperature=0.0,
+            temperature=float(profile["temperature"]),
+            top_p=float(profile["top_p"]),
             request_extra=request_extra,
         )
     except ProviderError as exc:
@@ -403,7 +419,33 @@ def _compatibility_check(
             "request_id": exc.request_id,
             "attempts": exc.attempts,
             "retry_count": client.last_retry_count,
+            "attempt_logs": getattr(client, "last_attempt_logs", []),
             "diagnostic_body": redact_text(exc.body)[:2000],
+        }
+        _write(output, failure, secret=credentials.api_key)
+        return failure
+    attempts = getattr(client, "http_attempts_used", 0)
+    if (
+        completion.status_code is None
+        or not 200 <= completion.status_code < 300
+        or completion.finish_reason != "stop"
+        or not completion.content.strip()
+    ):
+        failure = {
+            "status": "failed",
+            "effective_request": effective,
+            "error_type": "invalid_compatibility_completion",
+            "requested_model": completion.requested_model,
+            "resolved_model": completion.resolved_model,
+            "status_code": completion.status_code,
+            "finish_reason": completion.finish_reason,
+            "usage": completion.usage,
+            "response_chars": len(completion.content),
+            "content_length": len(completion.content),
+            "reasoning_content_length": completion.reasoning_content_length,
+            "attempts": attempts,
+            "attempt_logs": getattr(client, "last_attempt_logs", []),
+            "retry_count": client.last_retry_count,
         }
         _write(output, failure, secret=credentials.api_key)
         return failure
@@ -412,11 +454,16 @@ def _compatibility_check(
         "effective_request": effective,
         "requested_model": completion.requested_model,
         "resolved_model": completion.resolved_model,
+        "status_code": completion.status_code,
         "finish_reason": completion.finish_reason,
         "usage": completion.usage,
         "response_chars": len(completion.content),
+        "content_length": len(completion.content),
+        "reasoning_content_length": completion.reasoning_content_length,
         "response_sha256": hashlib.sha256(completion.content.encode("utf-8")).hexdigest(),
-        "attempts": len(client.last_attempts) + 1,
+        "elapsed_ms": completion.latency_ms,
+        "attempts": attempts,
+        "attempt_logs": getattr(client, "last_attempt_logs", []),
         "retry_count": client.last_retry_count,
     }
     _write(output, result, secret=credentials.api_key)
@@ -595,9 +642,16 @@ def main(argv: list[str] | None = None) -> int:
             return 7
         limits = profile["limits"]
         episode_calls = int(limits["max_steps"]) * (1 + int(limits["invalid_retries"]))
-        http_budget = 2 + len(manifest["cases"]) * episode_calls * (1 + int(limits["max_retries"]))
-        if http_budget > int(limits["max_http_attempts"]):
-            raise ValueError("pilot HTTP-attempt budget exceeds the configured maximum")
+        configured_http_budget = int(limits["max_http_attempts"])
+        preflight_http_attempts = 1  # the bounded /models probe
+        compatibility_http_attempts = int(compatibility.get("attempts", 0) or 0)
+        reserved_http_attempts = preflight_http_attempts + compatibility_http_attempts
+        if reserved_http_attempts >= configured_http_budget:
+            raise ValueError("preflight and compatibility exhausted the pilot HTTP-attempt budget")
+        episode_http_budget = configured_http_budget - reserved_http_attempts
+        baseline_episode_attempts = episode_calls * len(manifest["cases"])
+        if baseline_episode_attempts > episode_http_budget:
+            raise ValueError("baseline five-case HTTP-attempt budget exceeds the configured maximum")
         remaining_wall_seconds = max(
             0.1,
             float(limits["max_wall_seconds"]) - (time.monotonic() - pilot_started),
@@ -613,8 +667,11 @@ def main(argv: list[str] | None = None) -> int:
             sandbox="docker",
             max_steps=int(limits["max_steps"]),
             max_tokens=int(limits["max_tokens"]),
+            temperature=float(profile["temperature"]),
+            top_p=float(profile["top_p"]),
             invalid_retries=int(limits["invalid_retries"]),
             max_retries=int(limits["max_retries"]),
+            max_http_attempts=episode_http_budget,
             max_cases=5,
             max_api_calls=250,
             max_wall_seconds=remaining_wall_seconds,
@@ -630,12 +687,15 @@ def main(argv: list[str] | None = None) -> int:
             {
                 **_report(manifest, status=status, reason=checkpoint.get("pause_reason"), checkpoint=checkpoint),
                 "http_attempt_budget": {
-                    "provider_preflight_models": 1,
-                    "compatibility": 1,
+                    "provider_preflight_models": preflight_http_attempts,
+                    "compatibility": compatibility_http_attempts,
+                    "episode_http_budget": episode_http_budget,
+                    "baseline_episode_attempts": baseline_episode_attempts,
                     "episode_completion_calls": episode_calls * len(manifest["cases"]),
                     "max_retries": int(limits["max_retries"]),
-                    "worst_case_attempts": http_budget,
-                    "configured_max": int(limits["max_http_attempts"]),
+                    "per_logical_call_max_attempts": int(limits["max_retries"]) + 1,
+                    "configured_max": configured_http_budget,
+                    "reserved_before_episodes": reserved_http_attempts,
                 },
             },
             secret=credentials.api_key,

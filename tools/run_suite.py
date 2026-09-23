@@ -33,6 +33,8 @@ from arena.secrets import resolve_provider  # noqa: E402
 
 PROVIDER_MARKERS = (
     "429",
+    "503",
+    "504",
     "rate limit",
     "rate_limit",
     "quota",
@@ -130,14 +132,22 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
             "secrets",
             "max_steps",
             "max_tokens",
+            "temperature",
+            "top_p",
             "invalid_retries",
             "max_retries",
+            "max_http_attempts",
             "request_extra",
             "max_tokens_total",
             "floor_effect_after",
             "reasoning_effort",
         )
         for field in immutable:
+            if field == "max_http_attempts" and previous.get(field) is None:
+                # A preflight checkpoint may intentionally leave the live
+                # episode allocation unset until compatibility has consumed its
+                # bounded attempts.
+                continue
             if previous.get(field) != metadata.get(field):
                 raise ValueError(
                     f"checkpoint metadata mismatch for {field}: "
@@ -200,6 +210,8 @@ def _write_coverage(output_dir: Path, checkpoint: dict[str, Any]) -> None:
         "failure_mode",
         "returncode",
         "elapsed_seconds",
+        "http_attempts",
+        "http_attempt_ceiling",
         "run_dir",
         "error",
     ]
@@ -243,6 +255,9 @@ def _build_command(
     invalid_retries: int,
     keep_images: bool,
     keep_workspace: bool,
+    temperature: float = 0.0,
+    top_p: float | None = None,
+    max_http_attempts: int | None = None,
     max_retries: int = 3,
     reasoning_effort: str | None = None,
     request_extra: dict[str, Any] | None = None,
@@ -271,10 +286,18 @@ def _build_command(
         str(max_steps),
         "--max-tokens",
         str(max_tokens),
+        "--temperature",
+        str(temperature),
         "--invalid-retries",
         str(invalid_retries),
         "--max-retries",
         str(max_retries),
+    ])
+    if top_p is not None:
+        command.extend(["--top-p", str(top_p)])
+    if max_http_attempts is not None:
+        command.extend(["--max-http-attempts", str(max_http_attempts)])
+    command.extend([
         "--sandbox",
         sandbox,
         "--out",
@@ -311,8 +334,11 @@ def run_suite(
     sandbox: str = "docker",
     max_steps: int = 30,
     max_tokens: int = 1024,
+    temperature: float = 0.0,
+    top_p: float | None = None,
     invalid_retries: int = 2,
     max_retries: int = 3,
+    max_http_attempts: int | None = None,
     max_cases: int | None = None,
     max_api_calls: int | None = None,
     max_output_tokens: int | None = None,
@@ -333,8 +359,12 @@ def run_suite(
         raise ValueError("manifest is not ready; fix inventory issues or pass --allow-config-drift explicitly")
     if not provider or not model:
         raise ValueError("provider and model are required")
-    if invalid_retries < 0 or max_retries < 0:
-        raise ValueError("invalid-retries and max-retries must not be negative")
+    if invalid_retries < 0 or max_retries < 0 or max_retries > 5:
+        raise ValueError("invalid-retries must not be negative and max-retries must be between 0 and 5")
+    if top_p is not None and not 0.0 < top_p <= 1.0:
+        raise ValueError("top-p must be greater than 0 and at most 1")
+    if max_http_attempts is not None and max_http_attempts < 1:
+        raise ValueError("max-http-attempts must be positive when provided")
     if not api_key_env and not dry_run:
         raise ValueError("api_key_env is required; do not pass a literal API key to the scheduler")
     if max_tokens_total is not None and max_tokens_total < 1:
@@ -384,8 +414,11 @@ def run_suite(
         "secrets": str(secrets) if secrets else None,
         "max_steps": max_steps,
         "max_tokens": max_tokens,
+        "temperature": temperature,
+        "top_p": top_p,
         "invalid_retries": invalid_retries,
         "max_retries": max_retries,
+        "max_http_attempts": max_http_attempts,
         "max_tokens_total": max_tokens_total,
         "floor_effect_after": floor_effect_after,
         "reasoning_effort": reasoning_effort,
@@ -432,6 +465,13 @@ def run_suite(
         if row.get("status") in {"scored", "infrastructure_error", "paused_provider_error"}
     )
     output_tokens_reserved = api_calls_reserved * max_tokens
+    http_attempts_reserved = sum(
+        int(row.get("http_attempts", row.get("http_attempt_ceiling", 0)) or 0)
+        for row in checkpoint.get("results", [])
+        if row.get("status") in {"scored", "infrastructure_error", "paused_provider_error"}
+    )
+    if max_http_attempts is not None and http_attempts_reserved > max_http_attempts:
+        raise ValueError("recorded HTTP attempts exceed the configured bounded budget")
     completed_this_run = 0
     secret = None
     if not dry_run:
@@ -492,6 +532,20 @@ def run_suite(
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "max_output_tokens"
             break
+        case_http_attempt_ceiling: int | None = None
+        if max_http_attempts is not None:
+            remaining_http_attempts = max_http_attempts - http_attempts_reserved
+            if remaining_http_attempts < 1:
+                checkpoint["paused"] = True
+                checkpoint["pause_reason"] = "max_http_attempts"
+                break
+            # The ceiling is shared by every logical completion in this
+            # subprocess. ProviderClient still caps each logical call at six
+            # attempts; this outer ceiling counts all HTTP attempts globally.
+            case_http_attempt_ceiling = min(
+                remaining_http_attempts,
+                estimated_calls * (max_retries + 1),
+            )
         if dry_run:
             result = {
                 "case_id": case_id,
@@ -502,10 +556,13 @@ def run_suite(
                 "status": "planned",
                 "estimated_api_calls": estimated_calls,
                 "estimated_output_tokens": estimated_tokens,
+                "http_attempt_ceiling": case_http_attempt_ceiling,
             }
             result_by_case[case_id] = result
             api_calls_reserved += estimated_calls
             output_tokens_reserved += estimated_tokens
+            if max_http_attempts is not None:
+                http_attempts_reserved += int(case_http_attempt_ceiling or 0)
             completed_this_run += 1
             checkpoint["results"] = list(result_by_case.values())
             checkpoint["updated_at"] = _utc_now()
@@ -528,7 +585,10 @@ def run_suite(
             output_dir=case_output,
             max_steps=max_steps,
             max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
             invalid_retries=invalid_retries,
+            max_http_attempts=case_http_attempt_ceiling,
             max_retries=max_retries,
             keep_images=keep_images,
             keep_workspace=keep_workspace,
@@ -552,7 +612,15 @@ def run_suite(
             stderr = _redact(process.stderr, secret)
             parsed = _extract_result(process.stdout)
             final = parsed.get("final", {}) if parsed else {}
-            if parsed and isinstance(final, dict) and final.get("failure_mode") == "api_error":
+            reported_http_attempts = (
+                parsed.get("http_attempts")
+                if isinstance(parsed, dict) and isinstance(parsed.get("http_attempts"), int)
+                else None
+            )
+            if parsed and isinstance(final, dict) and final.get("failure_mode") in {
+                "api_error",
+                "provider_transient",
+            }:
                 status = "paused_provider_error"
                 error = "provider or quota failure detected; resume only after checking the account"
             elif parsed and isinstance(final, dict) and final.get("failure_mode") == "controller_error":
@@ -579,6 +647,12 @@ def run_suite(
                 "failure_mode": final.get("failure_mode") if isinstance(final, dict) else None,
                 "returncode": process.returncode,
                 "elapsed_seconds": round(time.monotonic() - case_started, 3),
+                "http_attempts": (
+                    reported_http_attempts
+                    if reported_http_attempts is not None
+                    else case_http_attempt_ceiling
+                ),
+                "http_attempt_ceiling": case_http_attempt_ceiling,
                 "run_dir": parsed.get("run_dir") if parsed else None,
                 "reasoning_enabled": reasoning_effort is not None,
                 "error": error,
@@ -594,6 +668,8 @@ def run_suite(
                 "seed": case.get("seed"),
                 "status": "infrastructure_error",
                 "reasoning_enabled": reasoning_effort is not None,
+                "http_attempts": case_http_attempt_ceiling,
+                "http_attempt_ceiling": case_http_attempt_ceiling,
                 "error": "scheduler subprocess timed out",
                 "elapsed_seconds": round(time.monotonic() - case_started, 3),
             }
@@ -618,6 +694,11 @@ def run_suite(
         completed_this_run += 1
         api_calls_reserved += estimated_calls
         output_tokens_reserved += estimated_tokens
+        http_attempts_used = int(result.get("http_attempts", 0) or 0)
+        if max_http_attempts is not None:
+            if http_attempts_used > int(case_http_attempt_ceiling or 0):
+                raise ValueError("episode exceeded its bounded HTTP-attempt ceiling")
+            http_attempts_reserved += http_attempts_used
         if result.get("status") == "paused_provider_error":
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "provider_error"
@@ -626,6 +707,9 @@ def run_suite(
             # before spending another request on a potentially unsafe runner.
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "infrastructure_error"
+        elif max_http_attempts is not None and http_attempts_reserved >= max_http_attempts:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_http_attempts"
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
         if checkpoint.get("paused"):
@@ -650,8 +734,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sandbox", choices=("docker", "local"), default="docker")
     parser.add_argument("--max-steps", type=int, default=30)
     parser.add_argument("--max-tokens", type=int, default=1024)
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--top-p", type=float, default=None)
     parser.add_argument("--invalid-retries", type=int, default=2)
     parser.add_argument("--max-retries", type=int, default=3)
+    parser.add_argument("--max-http-attempts", type=int, default=None)
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--max-api-calls", type=int, default=None)
     parser.add_argument("--max-output-tokens", type=int, default=None)
@@ -699,8 +786,11 @@ def main(argv: list[str] | None = None) -> int:
             sandbox=args.sandbox,
             max_steps=args.max_steps,
             max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            top_p=args.top_p,
             invalid_retries=args.invalid_retries,
             max_retries=args.max_retries,
+            max_http_attempts=args.max_http_attempts,
             max_cases=args.max_cases,
             max_api_calls=args.max_api_calls,
             max_output_tokens=args.max_output_tokens,

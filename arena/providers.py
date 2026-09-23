@@ -12,6 +12,7 @@ import socket
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -82,6 +83,8 @@ class Completion:
     latency_ms: int
     request_id: str | None
     response_headers: dict[str, str]
+    status_code: int | None = None
+    reasoning_content_length: int | None = None
     provider: str = ""
     upstream_provider: str | None = None
 
@@ -124,6 +127,7 @@ class ProviderAttempt:
     request_id: str | None
     retryable: bool
     attempt: int
+    elapsed_ms: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -134,6 +138,7 @@ class ProviderAttempt:
             "request_id": self.request_id,
             "retryable": self.retryable,
             "attempt": self.attempt,
+            "elapsed_ms": self.elapsed_ms,
         }
 
 
@@ -235,6 +240,23 @@ def _content_from_message(message: Any) -> str:
     return str(content)
 
 
+def _reasoning_content_length(message: Any) -> int | None:
+    """Return the length of provider reasoning content when it is exposed."""
+
+    if not isinstance(message, dict):
+        return None
+    for key in ("reasoning_content", "reasoning", "thinking"):
+        value = message.get(key)
+        if value is None:
+            continue
+        if isinstance(value, str):
+            return len(value)
+        if isinstance(value, list):
+            return len(_content_from_message({"content": value}))
+        return len(str(value))
+    return None
+
+
 def _request_id(headers: Mapping[str, str], data: Mapping[str, Any]) -> str | None:
     for key, value in headers.items():
         if key.lower() in {"x-request-id", "request-id", "openrouter-request-id"}:
@@ -248,7 +270,15 @@ def _validate_request_extra(extra: Mapping[str, Any] | None) -> dict[str, Any]:
         return {}
     if not isinstance(extra, Mapping):
         raise ValueError("request-extra must be a JSON object")
-    forbidden = {"model", "messages", "authorization", "headers"}
+    forbidden = {
+        "model",
+        "messages",
+        "authorization",
+        "headers",
+        "temperature",
+        "top_p",
+        "max_tokens",
+    }
     blocked = sorted(str(key) for key in extra if str(key).lower() in forbidden)
     if blocked:
         raise ValueError(
@@ -271,6 +301,7 @@ class ProviderClient:
         backoff_base: float = 0.5,
         backoff_max: float = 8.0,
         jitter: float = 0.25,
+        max_http_attempts: int | None = None,
         opener: Any = None,
         sleep: Callable[[float], None] = time.sleep,
         random_fn: Callable[[], float] = random.random,
@@ -283,6 +314,14 @@ class ProviderClient:
         self.api_base = resolve_api_base(provider, api_base)
         self.timeout = timeout
         self.max_retries = max(0, int(max_retries))
+        if self.max_retries > 5:
+            raise ValueError("max_retries must be at most 5 (six attempts maximum)")
+        if max_http_attempts is not None and int(max_http_attempts) < 1:
+            raise ValueError("max_http_attempts must be positive when provided")
+        self.max_http_attempts = (
+            int(max_http_attempts) if max_http_attempts is not None else None
+        )
+        self.http_attempts_used = 0
         self.backoff_base = max(0.0, float(backoff_base))
         self.backoff_max = max(0.0, float(backoff_max))
         self.jitter = max(0.0, float(jitter))
@@ -292,6 +331,8 @@ class ProviderClient:
         self.error_logger = error_logger
         self.last_retry_count = 0
         self.last_attempts: list[ProviderAttempt] = []
+        self.last_attempt_logs: list[dict[str, Any]] = []
+        self.last_http_attempts = 0
 
     def headers(self) -> dict[str, str]:
         headers = {
@@ -307,17 +348,66 @@ class ProviderClient:
             )
         return headers
 
+    def _log_attempt(self, record: dict[str, Any]) -> None:
+        self.last_attempt_logs.append(dict(record))
+        if self.error_logger:
+            self.error_logger(record)
+
     def _record_failure(self, attempt: ProviderAttempt) -> None:
         self.last_attempts.append(attempt)
-        if self.error_logger:
-            self.error_logger(attempt.as_dict())
+        self._log_attempt(attempt.as_dict())
 
-    def _backoff(self, retry_number: int) -> None:
-        delay = min(self.backoff_max, self.backoff_base * (2 ** max(0, retry_number - 1)))
-        if self.jitter:
-            delay = min(self.backoff_max, delay + self.jitter * self.random_fn())
+    def _record_success(
+        self,
+        *,
+        status_code: int | None,
+        request_id: str | None,
+        attempt: int,
+        elapsed_ms: int,
+    ) -> None:
+        self._log_attempt(
+            {
+                "attempted_at": utc_now(),
+                "status_code": status_code,
+                "error_type": "success",
+                "body": "",
+                "request_id": request_id,
+                "retryable": False,
+                "attempt": attempt,
+                "elapsed_ms": elapsed_ms,
+            }
+        )
+
+    def _backoff(self, retry_number: int, retry_after: float | None = None) -> None:
+        if retry_after is not None:
+            # Retry-After is an explicit provider instruction; do not add
+            # jitter or silently shorten it.
+            delay = retry_after
+        else:
+            delay = min(self.backoff_max, self.backoff_base * (2 ** max(0, retry_number - 1)))
+            if self.jitter:
+                delay = min(self.backoff_max, delay + self.jitter * self.random_fn())
         if delay > 0:
             self.sleep(delay)
+
+    @staticmethod
+    def _retry_after_seconds(headers: Mapping[str, Any] | None) -> float | None:
+        value = next(
+            (str(item) for key, item in (headers or {}).items() if str(key).lower() == "retry-after"),
+            None,
+        )
+        if value is None:
+            return None
+        try:
+            return max(0.0, float(value))
+        except (TypeError, ValueError, OverflowError):
+            try:
+                date = parsedate_to_datetime(value)
+                if date.tzinfo is None:
+                    date = date.replace(tzinfo=UTC)
+                return max(0.0, (date - datetime.now(UTC)).total_seconds())
+            except (TypeError, ValueError, OverflowError):
+                return None
 
     def complete(
         self,
@@ -326,6 +416,7 @@ class ProviderClient:
         messages: list[dict[str, Any]],
         max_tokens: int,
         temperature: float,
+        top_p: float | None = None,
         request_extra: Mapping[str, Any] | None = None,
     ) -> Completion:
         """Make a completion request, retrying only explicitly transient errors."""
@@ -339,6 +430,10 @@ class ProviderClient:
             "max_tokens": int(max_tokens),
             "temperature": float(temperature),
         }
+        if top_p is not None:
+            if not 0.0 < float(top_p) <= 1.0:
+                raise ValueError("top_p must be greater than 0 and at most 1")
+            payload["top_p"] = float(top_p)
         payload.update(extra)
         # Protected keys are checked above, and are assigned before extras.  The
         # explicit assignment also protects callers that pass a strange Mapping.
@@ -346,16 +441,40 @@ class ProviderClient:
         payload["messages"] = messages
 
         self.last_attempts = []
+        self.last_attempt_logs = []
         self.last_retry_count = 0
+        self.last_http_attempts = 0
         url = chat_completions_url(self.api_base)
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = self.headers()
 
         for attempt_number in range(1, self.max_retries + 2):
+            if self.max_http_attempts is not None and self.http_attempts_used >= self.max_http_attempts:
+                failure = ProviderAttempt(
+                    attempted_at=utc_now(),
+                    status_code=None,
+                    error_type="attempt_budget_exhausted",
+                    body="provider HTTP attempt budget exhausted",
+                    request_id=None,
+                    retryable=False,
+                    attempt=attempt_number,
+                    elapsed_ms=0,
+                )
+                self._log_attempt(failure.as_dict())
+                raise ProviderError(
+                    "Provider HTTP attempt budget exhausted",
+                    body=failure.body,
+                    retryable=False,
+                    attempts=self.http_attempts_used,
+                )
+            self.http_attempts_used += 1
+            self.last_http_attempts += 1
             started = time.monotonic()
+            response_status_code: int | None = None
             try:
                 req = request.Request(url, data=body, headers=headers, method="POST")
                 with self.opener(req, timeout=self.timeout) as response:
+                    response_status_code = int(getattr(response, "status", 200))
                     response_body = response.read().decode("utf-8", errors="replace")
                     response_headers = _safe_headers(
                         dict(response.headers.items()), self.api_key
@@ -364,12 +483,13 @@ class ProviderClient:
                 if not isinstance(data, dict):
                     failure = ProviderAttempt(
                         attempted_at=utc_now(),
-                        status_code=None,
+                        status_code=response_status_code,
                         error_type="invalid_response",
                         body=_redact_text(response_body, self.api_key),
                         request_id=None,
                         retryable=False,
                         attempt=attempt_number,
+                        elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
                     )
                     self._record_failure(failure)
                     raise ProviderError(
@@ -382,12 +502,13 @@ class ProviderClient:
                     request_id = _request_id(response_headers, data)
                     failure = ProviderAttempt(
                         attempted_at=utc_now(),
-                        status_code=None,
+                        status_code=response_status_code,
                         error_type="invalid_response",
                         body=_redact_text(response_body, self.api_key),
                         request_id=request_id,
                         retryable=False,
                         attempt=attempt_number,
+                        elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
                     )
                     self._record_failure(failure)
                     raise ProviderError(
@@ -401,6 +522,17 @@ class ProviderClient:
                 message = choice.get("message", {})
                 finish_reason = choice.get("finish_reason")
                 usage = data.get("usage")
+                reasoning_length = _reasoning_content_length(message)
+                if reasoning_length is None:
+                    reasoning_length = _reasoning_content_length(choice)
+                latency_ms = max(0, int(round((time.monotonic() - started) * 1000)))
+                request_id = _request_id(response_headers, data)
+                self._record_success(
+                    status_code=response_status_code,
+                    request_id=request_id,
+                    attempt=attempt_number,
+                    elapsed_ms=latency_ms,
+                )
                 return Completion(
                     content=_content_from_message(message),
                     requested_model=model,
@@ -408,9 +540,11 @@ class ProviderClient:
                     finish_reason=str(finish_reason) if finish_reason is not None else None,
                     usage=dict(usage) if isinstance(usage, dict) else {},
                     raw_response=dict(data),
-                    latency_ms=max(0, int(round((time.monotonic() - started) * 1000))),
-                    request_id=_request_id(response_headers, data),
+                    latency_ms=latency_ms,
+                    request_id=request_id,
                     response_headers=response_headers,
+                    status_code=response_status_code,
+                    reasoning_content_length=reasoning_length,
                     provider=self.provider,
                     upstream_provider=(
                         str(data["provider"]) if data.get("provider") is not None else None
@@ -428,7 +562,8 @@ class ProviderClient:
                     else {}
                 )
                 request_id = _request_id(safe_headers, {})
-                retryable = status == 429 or 500 <= status <= 599
+                retryable = status in {429, 503, 504}
+                elapsed_ms = max(0, int(round((time.monotonic() - started) * 1000)))
                 failure = ProviderAttempt(
                     attempted_at=utc_now(),
                     status_code=status,
@@ -437,11 +572,22 @@ class ProviderClient:
                     request_id=request_id,
                     retryable=retryable,
                     attempt=attempt_number,
+                    elapsed_ms=elapsed_ms,
                 )
                 self._record_failure(failure)
-                if retryable and attempt_number <= self.max_retries:
+                if (
+                    retryable
+                    and attempt_number <= self.max_retries
+                    and (
+                        self.max_http_attempts is None
+                        or self.http_attempts_used < self.max_http_attempts
+                    )
+                ):
                     self.last_retry_count += 1
-                    self._backoff(attempt_number)
+                    self._backoff(
+                        attempt_number,
+                        self._retry_after_seconds(dict(exc.headers) if exc.headers else None),
+                    )
                     continue
                 raise ProviderError(
                     f"Provider HTTP {status}",
@@ -461,9 +607,16 @@ class ProviderClient:
                     request_id=None,
                     retryable=True,
                     attempt=attempt_number,
+                    elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
                 )
                 self._record_failure(failure)
-                if attempt_number <= self.max_retries:
+                if (
+                    attempt_number <= self.max_retries
+                    and (
+                        self.max_http_attempts is None
+                        or self.http_attempts_used < self.max_http_attempts
+                    )
+                ):
                     self.last_retry_count += 1
                     self._backoff(attempt_number)
                     continue
@@ -484,9 +637,17 @@ class ProviderClient:
                     request_id=None,
                     retryable=is_timeout,
                     attempt=attempt_number,
+                    elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
                 )
                 self._record_failure(failure)
-                if is_timeout and attempt_number <= self.max_retries:
+                if (
+                    is_timeout
+                    and attempt_number <= self.max_retries
+                    and (
+                        self.max_http_attempts is None
+                        or self.http_attempts_used < self.max_http_attempts
+                    )
+                ):
                     self.last_retry_count += 1
                     self._backoff(attempt_number)
                     continue
@@ -501,12 +662,13 @@ class ProviderClient:
                 # transient network failure and must not be retried.
                 failure = ProviderAttempt(
                     attempted_at=utc_now(),
-                    status_code=None,
+                    status_code=response_status_code,
                     error_type="invalid_json",
                     body=_redact_text(response_body, self.api_key),
                     request_id=None,
                     retryable=False,
                     attempt=attempt_number,
+                    elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
                 )
                 self._record_failure(failure)
                 raise ProviderError("Provider returned invalid JSON", body=failure.body) from exc
@@ -523,6 +685,7 @@ class ProviderClient:
                     request_id=None,
                     retryable=False,
                     attempt=attempt_number,
+                    elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
                 )
                 self._record_failure(failure)
                 raise ProviderError("Provider request failed", body=failure.body) from exc

@@ -162,6 +162,73 @@ def test_provider_retries_429_but_not_bad_request():
     assert len(bad_attempts) == 1
 
 
+def test_provider_retries_only_429_503_504_and_logs_each_attempt():
+    statuses = [503, 504, 429]
+    calls = []
+    sleeps = []
+    logs = []
+
+    def opener(req, timeout):
+        calls.append(json.loads(req.data))
+        status = statuses.pop(0) if statuses else 200
+        if status != 200:
+            raise HTTPError(
+                req.full_url,
+                status,
+                "transient",
+                {"Retry-After": "1.25"},
+                io.BytesIO(b"transient"),
+            )
+        return _Response()
+
+    completion = ProviderClient(
+        "custom",
+        "SECRET",
+        api_base="https://example.invalid/v1",
+        max_retries=5,
+        opener=opener,
+        sleep=sleeps.append,
+        error_logger=logs.append,
+    ).complete(
+        model="nvidia/nemotron-3-super-120b-a12b",
+        messages=[],
+        max_tokens=8,
+        temperature=1.0,
+        top_p=0.95,
+        request_extra={"chat_template_kwargs": {"enable_thinking": False}},
+    )
+    assert completion.status_code == 200
+    assert len(calls) == 4
+    assert all(payload["temperature"] == 1.0 for payload in calls)
+    assert all(payload["top_p"] == 0.95 for payload in calls)
+    assert calls[0]["chat_template_kwargs"]["enable_thinking"] is False
+    assert sleeps == [1.25, 1.25, 1.25]
+    assert [record["status_code"] for record in logs] == [503, 504, 429, 200]
+    assert all(isinstance(record["elapsed_ms"], int) for record in logs)
+
+
+def test_provider_http_budget_is_shared_across_logical_calls():
+    calls = []
+
+    def opener(req, timeout):
+        calls.append(1)
+        return _Response()
+
+    client = ProviderClient(
+        "custom",
+        "SECRET",
+        api_base="https://example.invalid/v1",
+        max_retries=0,
+        max_http_attempts=1,
+        opener=opener,
+    )
+    client.complete(model="m", messages=[], max_tokens=1, temperature=0)
+    with pytest.raises(ProviderError, match="attempt budget"):
+        client.complete(model="m", messages=[], max_tokens=1, temperature=0)
+    assert len(calls) == 1
+    assert client.http_attempts_used == 1
+
+
 def test_episode_exception_traceback_canary_is_absent_from_artifacts(tmp_path, monkeypatch, capsys):
     canary = "exception-header-credential-canary"
     episode_dir = tmp_path / "episode"

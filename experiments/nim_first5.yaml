@@ -3,16 +3,20 @@
 name: nim_first5
 provider: nvidia
 api_base: https://integrate.api.nvidia.com/v1
-model: nvidia/nemotron-3.5-lightning-30b-a3b
+model: nvidia/nemotron-3-super-120b-a12b
 api_key_env: NVIDIA_API_KEY
 concurrency: 1
+temperature: 1.0
+top_p: 0.95
 seed: 0
-request_extra: {}
+request_extra:
+  chat_template_kwargs:
+    enable_thinking: false
 limits:
   max_steps: 20
   max_tokens: 8192
   invalid_retries: 1
-  max_retries: 0
+  max_retries: 5
   max_http_attempts: 250
   max_wall_seconds: 7200
   floor_effect_after: 0

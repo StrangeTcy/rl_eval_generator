@@ -80,6 +80,8 @@ class EpisodeOptions:
     keep_images: bool = False
     keep_workspace: bool = False
     max_retries: int = 3
+    max_http_attempts: int | None = None
+    top_p: float | None = None
 
 
 def clip(text: str, limit: int = MAX_OBS_CHARS) -> str:
@@ -273,8 +275,12 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         raise ValueError("max-steps and max-tokens must be positive")
     if options.invalid_retries < 0:
         raise ValueError("invalid-retries must not be negative")
-    if options.max_retries < 0:
-        raise ValueError("max-retries must not be negative")
+    if options.max_retries < 0 or options.max_retries > 5:
+        raise ValueError("max-retries must be between 0 and 5")
+    if options.max_http_attempts is not None and options.max_http_attempts < 1:
+        raise ValueError("max-http-attempts must be positive when provided")
+    if options.top_p is not None and not 0.0 < options.top_p <= 1.0:
+        raise ValueError("top-p must be greater than 0 and at most 1")
     if not options.model.strip():
         raise ValueError("model must not be empty")
     request_extra = _request_extra(options.request_extra)
@@ -308,8 +314,11 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         max_steps=options.max_steps,
         max_tokens=options.max_tokens,
         temperature=options.temperature,
+        top_p=options.top_p,
         request_extra=request_extra,
         system_prompt=SYSTEM_PROMPT,
+        max_retries=options.max_retries,
+        max_http_attempts=options.max_http_attempts,
     )
     artifacts.write_manifest(manifest)
 
@@ -321,6 +330,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         api_key,
         api_base=api_base,
         max_retries=options.max_retries,
+        max_http_attempts=options.max_http_attempts,
         error_logger=log_provider_error,
     )
     history: list[dict[str, str]] = []
@@ -378,6 +388,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                         messages=messages,
                         max_tokens=options.max_tokens,
                         temperature=options.temperature,
+                        top_p=options.top_p,
                         request_extra=request_extra,
                     )
                 except ProviderError as exc:
@@ -385,14 +396,15 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                         {
                             "attempted_at": utc_now(),
                             "status_code": exc.status_code,
-                            "error_type": "provider_error",
+                            "error_type": "provider_transient" if exc.retryable else "provider_error",
                             "body": exc.body,
                             "request_id": exc.request_id,
                             "retryable": exc.retryable,
                             "attempt": exc.attempts,
+                            "elapsed_ms": None,
                         }
                     )
-                    parse_error = "provider request failed"
+                    parse_error = "provider transient failure after bounded retries" if exc.retryable else "provider request failed"
                     artifacts.trace(
                         {
                             "turn": turn,
@@ -400,8 +412,13 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                             "latency_ms": None,
                             "requested_model": options.model,
                             "resolved_model": None,
+                            "status_code": exc.status_code,
                             "finish_reason": None,
                             "usage": {},
+                            "reasoning_content_length": None,
+                            "attempt_count": getattr(client, "last_http_attempts", 0),
+                            "http_attempts_used": getattr(client, "http_attempts_used", 0),
+                            "attempt_logs": getattr(client, "last_attempt_logs", []),
                             "provider_metadata": {},
                             "raw_model_output": "",
                             "parsed_action": None,
@@ -414,7 +431,10 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                         }
                     )
                     done = True
-                    final = _fallback_final("api_error", exc.body or str(exc))
+                    final = _fallback_final(
+                        "provider_transient" if exc.retryable else "api_error",
+                        exc.body or str(exc),
+                    )
                     break
                 last_completion = completion
                 if completion.resolved_model is not None:
@@ -429,13 +449,19 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                         "resolved_model": completion.resolved_model,
                         "provider": completion.provider,
                         "upstream_provider": completion.upstream_provider,
+                        "status_code": completion.status_code,
                         "finish_reason": completion.finish_reason,
                         "usage": completion.usage,
                         "latency_ms": completion.latency_ms,
+                        "reasoning_content_length": completion.reasoning_content_length,
+                        "attempt_count": getattr(client, "last_http_attempts", 0),
+                        "http_attempts_used": getattr(client, "http_attempts_used", 0),
+                        "attempt_logs": getattr(client, "last_attempt_logs", []),
                         "request_id": completion.request_id,
                         "response_headers": completion.response_headers,
                         "raw_response": completion.raw_response,
                         "raw_model_output": completion.content,
+                        "content_length": len(completion.content),
                         "retry_count": client.last_retry_count,
                     }
                 )
@@ -463,10 +489,16 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                         "latency_ms": completion.latency_ms if completion else None,
                         "requested_model": options.model,
                         "resolved_model": completion.resolved_model if completion else None,
+                        "status_code": completion.status_code if completion else None,
                         "finish_reason": completion.finish_reason if completion else None,
                         "usage": completion.usage if completion else {},
+                        "reasoning_content_length": completion.reasoning_content_length if completion else None,
+                        "attempt_count": getattr(client, "last_http_attempts", 0) if completion else 0,
+                        "http_attempts_used": getattr(client, "http_attempts_used", 0),
+                        "attempt_logs": getattr(client, "last_attempt_logs", []),
                         "provider_metadata": provider_metadata(completion) if completion else {},
                         "raw_model_output": model_output,
+                        "content_length": len(model_output),
                         "parsed_action": None,
                         "parse_error": parse_error,
                         "retry_count": client.last_retry_count,
@@ -497,10 +529,16 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                     "latency_ms": completion.latency_ms if completion else None,
                     "requested_model": options.model,
                     "resolved_model": completion.resolved_model if completion else None,
+                    "status_code": completion.status_code if completion else None,
                     "finish_reason": completion.finish_reason if completion else None,
                     "usage": completion.usage if completion else {},
+                    "reasoning_content_length": completion.reasoning_content_length if completion else None,
+                    "attempt_count": getattr(client, "last_http_attempts", 0) if completion else 0,
+                    "http_attempts_used": getattr(client, "http_attempts_used", 0),
+                    "attempt_logs": getattr(client, "last_attempt_logs", []),
                     "provider_metadata": provider_metadata(completion) if completion else {},
                     "raw_model_output": model_output,
+                    "content_length": len(model_output),
                     "parsed_action": action,
                     "parse_error": None,
                     "retry_count": client.last_retry_count,
@@ -526,7 +564,11 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
 
         # A model normally submits explicitly.  The controller submits once at
         # the end as well, so max-step exhaustion still yields a judge result.
-        if not submitted and final.get("failure_mode") not in {"api_error", "invalid_action"}:
+        if not submitted and final.get("failure_mode") not in {
+            "api_error",
+            "provider_transient",
+            "invalid_action",
+        }:
             submit_response = _run_env_runner(
                 ["submit", "--episode", episode_id, "--confirm"]
             )
@@ -574,7 +616,8 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         if episode_dir is None:
             episode_dir = ROOT / ".episodes" / episode_id
         manifest_updates: dict[str, Any] = {
-            "resolved_model": final.get("resolved_model") or resolved_model_seen
+            "resolved_model": final.get("resolved_model") or resolved_model_seen,
+            "http_attempts_used": getattr(client, "http_attempts_used", 0),
         }
         # The generated state is the authoritative source for image IDs when the
         # reset response came from an older env_runner.
@@ -609,7 +652,16 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         if not options.keep_workspace and episode_dir.exists():
             shutil.rmtree(episode_dir, ignore_errors=True)
 
-    return sanitize({"run_id": run_id, "run_dir": str(artifacts.root), "final": final}, api_key)
+    return sanitize(
+        {
+            "run_id": run_id,
+            "run_dir": str(artifacts.root),
+            "final": final,
+            "http_attempts": getattr(client, "http_attempts_used", 0),
+            "max_http_attempts": options.max_http_attempts,
+        },
+        api_key,
+    )
 
 
 __all__ = [
