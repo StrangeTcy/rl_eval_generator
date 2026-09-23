@@ -153,7 +153,7 @@ class DockerBackend:
         """Build both images from the generated environment directory."""
 
         self.check_available()
-        safe_id = "".join(ch if ch.isalnum() or ch in "_.-" else "_" for ch in episode_id)
+        safe_id = "".join(ch if ch.isalnum() or ch in "_.-" else "_" for ch in episode_id).lower()
         agent_name = f"rl-eval-{safe_id}-agent"
         judge_name = f"rl-eval-{safe_id}-judge"
         agent = self.build_image(

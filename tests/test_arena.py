@@ -213,6 +213,35 @@ def test_episode_exception_traceback_canary_is_absent_from_artifacts(tmp_path, m
             assert canary not in path.read_text(encoding="utf-8", errors="replace")
 
 
+def test_docker_image_tags_are_lowercase_for_timestamped_episode_ids(tmp_path):
+    commands = []
+
+    def runner(command, **kwargs):
+        commands.append(command)
+        if command[1] == "version":
+            return subprocess.CompletedProcess(command, 0, stdout="28.0.0\n", stderr="")
+        if command[1] == "build":
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[1] == "image":
+            return subprocess.CompletedProcess(
+                command, 0, stdout=json.dumps({"Id": "sha256:test"}), stderr=""
+            )
+        raise AssertionError(f"unexpected Docker command: {command}")
+
+    (tmp_path / "agent").mkdir()
+    (tmp_path / "judge").mkdir()
+    backend = DockerBackend(command_runner=runner)
+    agent, judge = backend.build_environment(
+        tmp_path,
+        "arena_regex_state_machine_20260923T084312Z_accc8832",
+    )
+    assert agent.name == agent.name.lower()
+    assert judge.name == judge.name.lower()
+    assert "20260923t084312z" in agent.name
+    assert "20260923t084312z" in judge.name
+    assert all("-t" not in command or command[command.index("-t") + 1] == command[command.index("-t") + 1].lower() for command in commands)
+
+
 def test_docker_argv_has_no_network_or_api_key_environment(tmp_path):
     backend = DockerBackend()
     argv = backend.agent_command("agent-image", ROOT / ".episodes", ROOT / "shared", "echo hi")
