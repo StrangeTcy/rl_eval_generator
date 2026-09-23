@@ -17,7 +17,7 @@ limits:
   max_tokens: 8192
   invalid_retries: 1
   max_retries: 5
-  max_http_attempts: 250
+  max_http_attempts: 1207
   max_wall_seconds: 7200
   floor_effect_after: 0
   sandbox: docker

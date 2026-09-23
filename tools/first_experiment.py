@@ -56,7 +56,7 @@ REQUIRED_LIMITS = {
     "max_tokens": 8192,
     "invalid_retries": 1,
     "max_retries": 5,
-    "max_http_attempts": 250,
+    "max_http_attempts": 1207,
     "max_wall_seconds": 7200,
     "floor_effect_after": 0,
     "sandbox": "docker",
@@ -643,9 +643,23 @@ def main(argv: list[str] | None = None) -> int:
         limits = profile["limits"]
         episode_calls = int(limits["max_steps"]) * (1 + int(limits["invalid_retries"]))
         configured_http_budget = int(limits["max_http_attempts"])
+        per_logical_call_max_attempts = int(limits["max_retries"]) + 1
         preflight_http_attempts = 1  # the bounded /models probe
         compatibility_http_attempts = int(compatibility.get("attempts", 0) or 0)
         reserved_http_attempts = preflight_http_attempts + compatibility_http_attempts
+        worst_case_episode_attempts = (
+            episode_calls * len(manifest["cases"]) * per_logical_call_max_attempts
+        )
+        worst_case_attempts = (
+            preflight_http_attempts
+            + per_logical_call_max_attempts
+            + worst_case_episode_attempts
+        )
+        if worst_case_attempts > configured_http_budget:
+            raise ValueError(
+                "pilot worst-case HTTP-attempt budget exceeds the configured maximum: "
+                f"{worst_case_attempts} > {configured_http_budget}"
+            )
         if reserved_http_attempts >= configured_http_budget:
             raise ValueError("preflight and compatibility exhausted the pilot HTTP-attempt budget")
         episode_http_budget = configured_http_budget - reserved_http_attempts
@@ -693,7 +707,9 @@ def main(argv: list[str] | None = None) -> int:
                     "baseline_episode_attempts": baseline_episode_attempts,
                     "episode_completion_calls": episode_calls * len(manifest["cases"]),
                     "max_retries": int(limits["max_retries"]),
-                    "per_logical_call_max_attempts": int(limits["max_retries"]) + 1,
+                    "per_logical_call_max_attempts": per_logical_call_max_attempts,
+                    "worst_case_episode_attempts": worst_case_episode_attempts,
+                    "worst_case_attempts": worst_case_attempts,
                     "configured_max": configured_http_budget,
                     "reserved_before_episodes": reserved_http_attempts,
                 },

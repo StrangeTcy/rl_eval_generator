@@ -95,11 +95,15 @@ def test_nvidia_first5_uses_one_bounded_http_budget():
     profile = _validate_profile(PROFILE_DEFAULT)
     limits = profile["limits"]
     episode_calls = limits["max_steps"] * (1 + limits["invalid_retries"])
-    # The baseline five-case plan is 202 HTTP attempts. Retries are capped at
-    # six attempts per logical call, but the scheduler allocates the remaining
-    # shared 250-attempt budget across cases and never exceeds it.
+    # The baseline five-case plan is 202 HTTP attempts. The configured ceiling
+    # also covers the six-attempt worst case for every logical call, including
+    # the /models probe and compatibility gate.
+    per_logical_call = limits["max_retries"] + 1
     baseline = 2 + 5 * episode_calls
+    worst_case = 1 + per_logical_call + 5 * episode_calls * per_logical_call
     assert baseline == 202
-    assert limits["max_retries"] + 1 == 6
-    assert limits["max_http_attempts"] == 250
+    assert per_logical_call == 6
+    assert worst_case == 1207
+    assert worst_case <= limits["max_http_attempts"]
+    assert limits["max_http_attempts"] == 1207
     assert Path(PROFILE_DEFAULT).is_file()
