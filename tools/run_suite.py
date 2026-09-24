@@ -137,6 +137,7 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
             "invalid_retries",
             "max_retries",
             "max_http_attempts",
+            "provider_min_interval_seconds",
             "max_api_calls",
             "request_extra",
             "max_tokens_total",
@@ -259,6 +260,7 @@ def _build_command(
     temperature: float = 0.0,
     top_p: float | None = None,
     max_http_attempts: int | None = None,
+    provider_min_interval_seconds: float = 0.0,
     max_retries: int = 3,
     reasoning_effort: str | None = None,
     request_extra: dict[str, Any] | None = None,
@@ -298,6 +300,10 @@ def _build_command(
         command.extend(["--top-p", str(top_p)])
     if max_http_attempts is not None:
         command.extend(["--max-http-attempts", str(max_http_attempts)])
+    if provider_min_interval_seconds > 0:
+        command.extend(
+            ["--provider-min-interval-seconds", str(provider_min_interval_seconds)]
+        )
     command.extend([
         "--sandbox",
         sandbox,
@@ -340,6 +346,7 @@ def run_suite(
     invalid_retries: int = 2,
     max_retries: int = 3,
     max_http_attempts: int | None = None,
+    provider_min_interval_seconds: float = 0.0,
     max_cases: int | None = None,
     max_api_calls: int | None = None,
     max_output_tokens: int | None = None,
@@ -366,6 +373,8 @@ def run_suite(
         raise ValueError("top-p must be greater than 0 and at most 1")
     if max_http_attempts is not None and max_http_attempts < 1:
         raise ValueError("max-http-attempts must be positive when provided")
+    if provider_min_interval_seconds < 0:
+        raise ValueError("provider-min-interval-seconds must not be negative")
     if not api_key_env and not dry_run:
         raise ValueError("api_key_env is required; do not pass a literal API key to the scheduler")
     if max_tokens_total is not None and max_tokens_total < 1:
@@ -420,6 +429,7 @@ def run_suite(
         "invalid_retries": invalid_retries,
         "max_retries": max_retries,
         "max_http_attempts": max_http_attempts,
+        "provider_min_interval_seconds": provider_min_interval_seconds,
         "max_api_calls": max_api_calls,
         "max_tokens_total": max_tokens_total,
         "floor_effect_after": floor_effect_after,
@@ -591,6 +601,7 @@ def run_suite(
             top_p=top_p,
             invalid_retries=invalid_retries,
             max_http_attempts=case_http_attempt_ceiling,
+            provider_min_interval_seconds=provider_min_interval_seconds,
             max_retries=max_retries,
             keep_images=keep_images,
             keep_workspace=keep_workspace,
@@ -741,6 +752,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--invalid-retries", type=int, default=2)
     parser.add_argument("--max-retries", type=int, default=3)
     parser.add_argument("--max-http-attempts", type=int, default=None)
+    parser.add_argument("--provider-min-interval-seconds", type=float, default=0.0)
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--max-api-calls", type=int, default=None)
     parser.add_argument("--max-output-tokens", type=int, default=None)
@@ -793,6 +805,7 @@ def main(argv: list[str] | None = None) -> int:
             invalid_retries=args.invalid_retries,
             max_retries=args.max_retries,
             max_http_attempts=args.max_http_attempts,
+            provider_min_interval_seconds=args.provider_min_interval_seconds,
             max_cases=args.max_cases,
             max_api_calls=args.max_api_calls,
             max_output_tokens=args.max_output_tokens,

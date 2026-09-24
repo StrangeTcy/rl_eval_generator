@@ -249,6 +249,7 @@ def manifest_defaults(
     top_p: float | None = None,
     max_retries: int | None = None,
     max_http_attempts: int | None = None,
+    provider_min_interval_seconds: float | None = None,
     agent_image_id: str | None = None,
     judge_image_id: str | None = None,
 ) -> dict[str, Any]:
@@ -270,6 +271,7 @@ def manifest_defaults(
         "top_p": top_p,
         "max_retries": max_retries,
         "max_http_attempts": max_http_attempts,
+        "provider_min_interval_seconds": provider_min_interval_seconds,
         "request_extra": dict(request_extra),
         "system_prompt_sha256": sha256_text(system_prompt),
         "agent_image_id": agent_image_id,

@@ -1,0 +1,61 @@
+name: Atria Dawn Preview first-five pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or full commit SHA containing the pinned Atria pilot code"
+        required: true
+        default: "arena/01a0b10c-rl-eval-generator"
+
+permissions:
+  contents: read
+
+# Prevent two account-wide 60 RPM pilot budgets from running concurrently.
+concurrency:
+  group: atria-first5
+  cancel-in-progress: false
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    # The controller enforces the two-hour pilot wall limit. This larger job
+    # limit leaves room for checkout, dependencies, Docker, and artifacts.
+    timeout-minutes: 135
+    steps:
+      - name: Check out pinned evaluation code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install controller dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run only the bounded Atria first-five profile
+        env:
+          # The host controller reads this value. It is never placed in a
+          # Docker agent/judge environment, command argument, or artifact.
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          python tools/atria_first_experiment.py \
+            --profile experiments/atria_first5.yaml \
+            --out runs/atria_first5
+
+      - name: Upload non-secret pilot artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atria-first5-${{ github.run_id }}
+          path: |
+            runs/atria_first5/**
+            !runs/atria_first5/**/secret_key.json
+            !secret_key.json
+          if-no-files-found: warn
+          retention-days: 7

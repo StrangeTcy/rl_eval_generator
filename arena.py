@@ -95,6 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--invalid-retries", type=int, default=2)
     run.add_argument("--max-retries", type=int, default=3)
     run.add_argument("--max-http-attempts", type=int, default=None)
+    run.add_argument("--provider-min-interval-seconds", type=float, default=0.0)
     run.add_argument("--keep-images", action="store_true")
     run.add_argument("--keep-workspace", action="store_true")
 
@@ -209,6 +210,7 @@ def _run(args: argparse.Namespace) -> int:
         invalid_retries=args.invalid_retries,
         max_retries=args.max_retries,
         max_http_attempts=args.max_http_attempts,
+        provider_min_interval_seconds=args.provider_min_interval_seconds,
         keep_images=args.keep_images,
         keep_workspace=args.keep_workspace,
     )

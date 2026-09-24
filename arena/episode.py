@@ -82,6 +82,7 @@ class EpisodeOptions:
     max_retries: int = 3
     max_http_attempts: int | None = None
     top_p: float | None = None
+    provider_min_interval_seconds: float = 0.0
 
 
 def clip(text: str, limit: int = MAX_OBS_CHARS) -> str:
@@ -279,6 +280,8 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         raise ValueError("max-retries must be between 0 and 5")
     if options.max_http_attempts is not None and options.max_http_attempts < 1:
         raise ValueError("max-http-attempts must be positive when provided")
+    if options.provider_min_interval_seconds < 0:
+        raise ValueError("provider-min-interval-seconds must not be negative")
     if options.top_p is not None and not 0.0 < options.top_p <= 1.0:
         raise ValueError("top-p must be greater than 0 and at most 1")
     if not options.model.strip():
@@ -319,6 +322,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         system_prompt=SYSTEM_PROMPT,
         max_retries=options.max_retries,
         max_http_attempts=options.max_http_attempts,
+        provider_min_interval_seconds=options.provider_min_interval_seconds,
     )
     artifacts.write_manifest(manifest)
 
@@ -331,6 +335,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         api_base=api_base,
         max_retries=options.max_retries,
         max_http_attempts=options.max_http_attempts,
+        min_interval_seconds=options.provider_min_interval_seconds,
         error_logger=log_provider_error,
     )
     history: list[dict[str, str]] = []
@@ -399,6 +404,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                             "error_type": "provider_transient" if exc.retryable else "provider_error",
                             "body": exc.body,
                             "request_id": exc.request_id,
+                            "response_headers": exc.response_headers,
                             "retryable": exc.retryable,
                             "attempt": exc.attempts,
                             "elapsed_ms": None,
@@ -419,6 +425,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                             "attempt_count": getattr(client, "last_http_attempts", 0),
                             "http_attempts_used": getattr(client, "http_attempts_used", 0),
                             "attempt_logs": getattr(client, "last_attempt_logs", []),
+                            "response_headers": exc.response_headers,
                             "provider_metadata": {},
                             "raw_model_output": "",
                             "parsed_action": None,

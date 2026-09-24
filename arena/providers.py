@@ -128,6 +128,7 @@ class ProviderAttempt:
     retryable: bool
     attempt: int
     elapsed_ms: int = 0
+    response_headers: dict[str, str] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -139,6 +140,7 @@ class ProviderAttempt:
             "retryable": self.retryable,
             "attempt": self.attempt,
             "elapsed_ms": self.elapsed_ms,
+            "response_headers": dict(self.response_headers or {}),
         }
 
 
@@ -303,6 +305,7 @@ class ProviderClient:
         backoff_max: float = 8.0,
         jitter: float = 0.25,
         max_http_attempts: int | None = None,
+        min_interval_seconds: float = 0.0,
         opener: Any = None,
         sleep: Callable[[float], None] = time.sleep,
         random_fn: Callable[[], float] = random.random,
@@ -322,6 +325,11 @@ class ProviderClient:
         self.max_http_attempts = (
             int(max_http_attempts) if max_http_attempts is not None else None
         )
+        if float(min_interval_seconds) < 0:
+            raise ValueError("min_interval_seconds must not be negative")
+        self.min_interval_seconds = float(min_interval_seconds)
+        self._last_request_started_at: float | None = None
+        self._rate_limit_pause_until = 0.0
         self.http_attempts_used = 0
         self.backoff_base = max(0.0, float(backoff_base))
         self.backoff_max = max(0.0, float(backoff_max))
@@ -365,6 +373,7 @@ class ProviderClient:
         request_id: str | None,
         attempt: int,
         elapsed_ms: int,
+        response_headers: Mapping[str, str] | None = None,
     ) -> None:
         self._log_attempt(
             {
@@ -376,8 +385,57 @@ class ProviderClient:
                 "retryable": False,
                 "attempt": attempt,
                 "elapsed_ms": elapsed_ms,
+                "response_headers": dict(response_headers or {}),
             }
         )
+
+    @staticmethod
+    def _header_value(headers: Mapping[str, Any] | None, name: str) -> str | None:
+        for key, value in (headers or {}).items():
+            if str(key).lower() == name.lower():
+                return str(value)
+        return None
+
+    def _observe_rate_limit_headers(
+        self, headers: Mapping[str, Any] | None, *, status_code: int | None
+    ) -> None:
+        limit_text = self._header_value(headers, "x-rpm-limit")
+        try:
+            limit = float(limit_text) if limit_text is not None else 0.0
+        except (TypeError, ValueError):
+            limit = 0.0
+        if limit > 0:
+            self.min_interval_seconds = max(self.min_interval_seconds, 60.0 / limit)
+        remaining_text = self._header_value(headers, "x-rpm-remaining")
+        try:
+            remaining = int(float(remaining_text)) if remaining_text is not None else None
+        except (TypeError, ValueError):
+            remaining = None
+        if remaining is not None and remaining <= 0 and status_code is not None and 200 <= status_code < 300:
+            # Atria documents a fixed minute boundary. Without a Retry-After
+            # header on a successful response, reserve the next minute before
+            # issuing another request.
+            self._rate_limit_pause_until = max(
+                self._rate_limit_pause_until, time.monotonic() + 60.0
+            )
+
+    def _wait_for_request_slot(self) -> None:
+        now = time.monotonic()
+        wait = max(0.0, self._rate_limit_pause_until - now)
+        if self._last_request_started_at is not None:
+            wait = max(
+                wait,
+                self.min_interval_seconds - (now - self._last_request_started_at),
+            )
+        if wait > 0:
+            self.sleep(wait)
+            # The injected sleeper used by offline tests may not advance the
+            # monotonic clock; treat the requested wait as honored rather than
+            # repeatedly scheduling the same pause.
+            self._rate_limit_pause_until = min(
+                self._rate_limit_pause_until, time.monotonic()
+            )
+        self._last_request_started_at = time.monotonic()
 
     def _backoff(self, retry_number: int, retry_after: float | None = None) -> None:
         if retry_after is not None:
@@ -390,6 +448,12 @@ class ProviderClient:
                 delay = min(self.backoff_max, delay + self.jitter * self.random_fn())
         if delay > 0:
             self.sleep(delay)
+        # Retry-After is measured from the failed response. When it already
+        # exceeds the adaptive RPM interval, do not add a second pacing sleep
+        # before the next attempt (this also keeps injected/fake sleepers
+        # deterministic in offline tests).
+        if retry_after is not None and retry_after >= self.min_interval_seconds:
+            self._last_request_started_at = time.monotonic() - self.min_interval_seconds
 
     @staticmethod
     def _retry_after_seconds(headers: Mapping[str, Any] | None) -> float | None:
@@ -470,6 +534,7 @@ class ProviderClient:
                     retryable=False,
                     attempts=self.http_attempts_used,
                 )
+            self._wait_for_request_slot()
             self.http_attempts_used += 1
             self.last_http_attempts += 1
             started = time.monotonic()
@@ -479,9 +544,11 @@ class ProviderClient:
                 with self.opener(req, timeout=self.timeout) as response:
                     response_status_code = int(getattr(response, "status", 200))
                     response_body = response.read().decode("utf-8", errors="replace")
-                    response_headers = _safe_headers(
-                        dict(response.headers.items()), self.api_key
+                    raw_response_headers = dict(response.headers.items())
+                    self._observe_rate_limit_headers(
+                        raw_response_headers, status_code=response_status_code
                     )
+                    response_headers = _safe_headers(raw_response_headers, self.api_key)
                 data = json.loads(response_body)
                 if not isinstance(data, dict):
                     failure = ProviderAttempt(
@@ -493,11 +560,13 @@ class ProviderClient:
                         retryable=False,
                         attempt=attempt_number,
                         elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
+                        response_headers=response_headers,
                     )
                     self._record_failure(failure)
                     raise ProviderError(
                         "Provider returned a non-object JSON response",
                         body=failure.body,
+                        response_headers=response_headers,
                         attempts=attempt_number,
                     )
                 choices = data.get("choices")
@@ -535,6 +604,7 @@ class ProviderClient:
                     request_id=request_id,
                     attempt=attempt_number,
                     elapsed_ms=latency_ms,
+                    response_headers=response_headers,
                 )
                 return Completion(
                     content=_content_from_message(message),
@@ -559,11 +629,9 @@ class ProviderClient:
                 except (AttributeError, OSError):
                     response_body = ""
                 status = int(exc.code)
-                safe_headers = (
-                    _safe_headers(dict(exc.headers.items()), self.api_key)
-                    if exc.headers
-                    else {}
-                )
+                raw_error_headers = dict(exc.headers.items()) if exc.headers else {}
+                self._observe_rate_limit_headers(raw_error_headers, status_code=status)
+                safe_headers = _safe_headers(raw_error_headers, self.api_key)
                 request_id = _request_id(safe_headers, {})
                 retryable = status in {429, 503, 504}
                 elapsed_ms = max(0, int(round((time.monotonic() - started) * 1000)))
@@ -576,6 +644,7 @@ class ProviderClient:
                     retryable=retryable,
                     attempt=attempt_number,
                     elapsed_ms=elapsed_ms,
+                    response_headers=safe_headers,
                 )
                 self._record_failure(failure)
                 if (
