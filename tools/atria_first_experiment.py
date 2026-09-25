@@ -24,16 +24,16 @@ from arena.artifacts import write_json  # noqa: E402
 from arena.docker_backend import DockerBackendError  # noqa: E402
 from arena.providers import Completion, ProviderClient, ProviderError, require_https  # noqa: E402
 from arena.secrets import redact_text, resolve_provider  # noqa: E402
+from tools.atria_modality import inventory_selected_modalities  # noqa: E402
 from tools.first_experiment import (  # noqa: E402
     EXPECTED_CASES,
     _generation_preflight,
     _runtime_check,
     _select_manifest,
 )
+from tools.oracle_preflight import validate_manifest_oracles  # noqa: E402
 from tools.run_suite import run_suite  # noqa: E402
 from tools.suite_inventory import _load_yaml  # noqa: E402
-from tools.oracle_preflight import validate_manifest_oracles  # noqa: E402
-from tools.atria_modality import inventory_selected_modalities  # noqa: E402
 
 PROFILE_DEFAULT = ROOT / "experiments" / "atria_first5.yaml"
 APPROVED_MODEL = "Atria-Dawn-Preview"
@@ -418,6 +418,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--keep-images", action="store_true")
     parser.add_argument("--keep-workspace", action="store_true")
+    parser.add_argument(
+        "--allow-compile-only-oracles", action="store_true",
+        help="explicitly accept unverified judge behavior; otherwise block before any provider call",
+    )
     args = parser.parse_args(argv)
     output = args.out.expanduser()
     try:
@@ -465,20 +469,31 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Atria pilot prepared but blocked by generation preflight: {output}")
             return 2
         oracle = validate_manifest_oracles(manifest, root=ROOT)
+        oracle["operator_compile_only_override"] = bool(
+            args.allow_compile_only_oracles and not oracle.get("behavioral_coverage_complete", False)
+        )
         _write(output / "oracle_preflight.json", oracle)
-        if not oracle.get("model_sweep_allowed", False):
+        oracle_reason = (
+            "oracle_preflight_failed"
+            if not oracle.get("model_sweep_allowed", False)
+            else "behavioral_oracle_coverage_incomplete"
+            if not oracle.get("behavioral_coverage_complete", False)
+            and not args.allow_compile_only_oracles
+            else None
+        )
+        if oracle_reason:
             checkpoint = _initial_checkpoint(
-                manifest, profile, "oracle_preflight_failed", quota_ceiling_tokens=quota
+                manifest, profile, oracle_reason, quota_ceiling_tokens=quota
             )
             _write(output / "suite_checkpoint.json", checkpoint)
             _write(output / "pilot_report.json", _report(
                 manifest,
                 "blocked",
-                "oracle_preflight_failed",
+                oracle_reason,
                 checkpoint,
                 quota_ceiling_tokens=quota,
             ))
-            print(f"Atria pilot prepared but blocked by oracle preflight: {output}")
+            print(f"Atria pilot blocked before provider access: {oracle_reason}; inspect {output}")
             return 2
         runtime = _runtime_check()
         _write(output / "runtime.json", runtime)
@@ -621,6 +636,7 @@ def main(argv: list[str] | None = None) -> int:
             floor_effect_after=0,
             request_extra={},
             checkpoint_path=output / "suite_checkpoint.json",
+            allow_compile_only_oracles=args.allow_compile_only_oracles,
             keep_images=args.keep_images,
             keep_workspace=args.keep_workspace,
         )

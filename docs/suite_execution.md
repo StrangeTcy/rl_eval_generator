@@ -52,7 +52,18 @@ configured deterministic reference self-test and applies a declared
 `oracle.known_good_patch` only as a clean-application check. These static checks
 do not prove grading correctness. The report is written to
 `oracle_preflight.json`; a failure stops the sweep before credentials are
-resolved for a provider request.
+resolved for a provider request. The report now marks compile-only cases
+`reference_self_test: not_configured` and lists them in `unverified_environments`
+instead of calling their absent self-test "passed." A live suite or pilot with
+incomplete behavioral reference coverage **blocks before any provider call**.
+The explicit `--allow-compile-only-oracles` override records this risk in
+`oracle_preflight.json`; use it only after independently exercising the selected
+judges against known-good and failing submissions. It does not create evidence.
+
+With PyTorch installed, `pytest tests/test_judge_behavior.py` runs real offline
+known-good submissions for state-carry, RoPE, and MoCo. Without PyTorch those
+tests are skipped; normal `pytest` and judge compilation are not equivalent to
+a behavioral oracle for every environment, including glyph.
 
 The `epistemic_games` environment uses the public-only Bayes oracle self-test.
 That oracle is a consistency check for the configured reference behavior, not a

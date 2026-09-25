@@ -116,6 +116,37 @@ def test_zero_api_oracle_preflight_is_model_free():
     epistemic = next(item for item in report["results"] if item["environment"] == "epistemic_games")
     assert epistemic["reference_behavior"] == "public_bayes_oracle"
     assert epistemic["reference_self_test"] == "passed"
+    assert epistemic["behavioral_reference_executed"] is True
+    state_carry = next(item for item in report["results"] if item["environment"] == "rd_state_carry")
+    assert state_carry["reference_behavior"] == "judge_reference_compile"
+    assert state_carry["reference_self_test"] == "not_configured"
+    assert state_carry["behavioral_reference_executed"] is False
+    assert report["behavioral_coverage_complete"] is False
+    assert "rd_state_carry" in report["unverified_environments"]
+
+
+def test_live_scheduler_blocks_compile_only_judges_before_credentials_or_provider(tmp_path):
+    manifest = build_manifest(root=ROOT, matrix="representative", seeds=[0])
+    manifest["environments"] = [
+        item for item in manifest["environments"] if item["environment"] == "glyph"
+    ]
+    manifest["cases"] = [item for item in manifest["cases"] if item["environment"] == "glyph"]
+    manifest["case_count"] = 1
+    try:
+        run_suite(
+            manifest,
+            output_dir=tmp_path / "blocked",
+            provider="custom", model="offline/pinned", api_key_env="MISSING_API_KEY",
+            api_base="https://example.invalid/v1", max_steps=1, max_tokens=7,
+            invalid_retries=0,
+        )
+    except ValueError as exc:
+        assert "behavioral oracle coverage is incomplete" in str(exc)
+    else:
+        raise AssertionError("compile-only judges must not silently reach a paid provider")
+    oracle = json.loads((tmp_path / "blocked" / "oracle_preflight.json").read_text())
+    assert oracle["unverified_environments"] == ["glyph"]
+    assert oracle["operator_compile_only_override"] is False
 
 
 def test_all_matrix_live_scheduler_requires_explicit_token_ceiling(tmp_path):
@@ -139,6 +170,7 @@ def test_all_matrix_live_scheduler_requires_explicit_token_ceiling(tmp_path):
             max_steps=1,
             max_tokens=7,
             invalid_retries=0,
+            allow_compile_only_oracles=True,
         )
     except ValueError as exc:
         assert "all-matrix" in str(exc)
@@ -178,6 +210,7 @@ def test_floor_effect_pauses_after_consecutive_zero_scores(tmp_path, monkeypatch
         max_tokens=7,
         invalid_retries=0,
         floor_effect_after=2,
+        allow_compile_only_oracles=True,  # no environments in this mocked scheduler test
     )
     assert checkpoint["paused"] is True
     assert checkpoint["pause_reason"] == "floor_effect"
@@ -227,6 +260,7 @@ def test_judge_scoring_exception_pauses_suite_instead_of_counting_as_model_failu
         max_tokens=7,
         invalid_retries=0,
         floor_effect_after=0,
+        allow_compile_only_oracles=True,  # no environments in this mocked scheduler test
     )
     assert len(calls) == 1  # stop before sending the next case to the provider
     assert checkpoint["pause_reason"] == "infrastructure_error"

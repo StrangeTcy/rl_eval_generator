@@ -373,6 +373,7 @@ def run_suite(
     checkpoint_path: Path | None = None,
     dry_run: bool = False,
     allow_config_drift: bool = False,
+    allow_compile_only_oracles: bool = False,
     retry_recorded: bool = False,
     keep_images: bool = False,
     keep_workspace: bool = False,
@@ -410,11 +411,20 @@ def run_suite(
         from tools.oracle_preflight import validate_manifest_oracles
 
         oracle_report = validate_manifest_oracles(manifest, root=ROOT)
+        oracle_report["operator_compile_only_override"] = bool(
+            allow_compile_only_oracles and not oracle_report.get("behavioral_coverage_complete", False)
+        )
         _write_json_atomic(output_dir / "oracle_preflight.json", oracle_report)
         if not oracle_report.get("model_sweep_allowed", False):
             raise ValueError(
                 "zero-API oracle preflight failed; inspect "
                 f"{output_dir / 'oracle_preflight.json'} before retrying"
+            )
+        if not oracle_report.get("behavioral_coverage_complete", False) and not allow_compile_only_oracles:
+            raise ValueError(
+                "behavioral oracle coverage is incomplete; inspect "
+                f"{output_dir / 'oracle_preflight.json'} and verify the judges "
+                "before paid calls (or explicitly pass --allow-compile-only-oracles)"
             )
     checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
     repository = manifest.get("repository", {})
@@ -798,6 +808,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--checkpoint", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-config-drift", action="store_true")
+    parser.add_argument(
+        "--allow-compile-only-oracles", action="store_true",
+        help="explicitly allow paid calls with judges that have no behavioral reference self-test",
+    )
     parser.add_argument("--retry-recorded", action="store_true")
     parser.add_argument("--keep-images", action="store_true")
     parser.add_argument("--keep-workspace", action="store_true")
@@ -836,6 +850,7 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint_path=args.checkpoint,
             dry_run=args.dry_run,
             allow_config_drift=args.allow_config_drift,
+            allow_compile_only_oracles=args.allow_compile_only_oracles,
             retry_recorded=args.retry_recorded,
             keep_images=args.keep_images,
             keep_workspace=args.keep_workspace,

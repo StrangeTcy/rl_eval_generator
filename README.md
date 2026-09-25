@@ -610,7 +610,11 @@ run `tools/provider_preflight.py` before enabling a provider. Use a new
 output/checkpoint directory when changing provider, model, sandbox, or manifest;
 checkpoint metadata rejects accidental mixing. `coverage.json`, `coverage.csv`,
 and `coverage.md` distinguish scored, blocked, paused, and infrastructure cases.
-`--dry-run` plans a bounded batch without requiring an API key.
+`--dry-run` plans a bounded batch without requiring an API key. Live runs now
+block before provider access if the oracle report lists unverified judges:
+compiling a judge is not proof that it grades correctly. See
+[`docs/suite_execution.md`](docs/suite_execution.md) for offline behavioral
+checks and the explicit, risk-accepting `--allow-compile-only-oracles` override.
 
 `tools/notebook_mode.py` reports dependency, Docker, memory, disk, GPU, and
 notebook-runtime capabilities without executing generated code. The notebook

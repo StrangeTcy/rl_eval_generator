@@ -168,7 +168,7 @@ def main() -> None:
         emit(result)
 
     try:
-        outputs = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=False, map_location="cpu")
+        outputs = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True, map_location="cpu")
         if not isinstance(outputs, dict) or "checks" not in outputs:
             raise RuntimeError("probe did not produce a checks dict")
         checks = {str(k): bool(v) for k, v in outputs["checks"].items()}

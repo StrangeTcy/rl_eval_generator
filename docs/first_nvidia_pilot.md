@@ -41,6 +41,13 @@ config hashes, and checks Docker availability:
 python tools/first_experiment.py --out runs/nim_first5
 ```
 
+A compile-only oracle is not a behavioral verification. Until every selected
+judge has a configured, executed reference self-test, this command blocks
+**before provider access**. The explicit `--allow-compile-only-oracles` flag
+records an operator's decision to proceed without that evidence; see
+[`suite_execution.md`](suite_execution.md) and do not treat the override as a
+judge fix.
+
 With a clean checkout, a private credential, a working Docker daemon, and an
 account preflight that lists the configured model, the same command then does
 exactly one bounded completion compatibility check and runs the five cases

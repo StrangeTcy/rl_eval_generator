@@ -478,6 +478,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", type=Path, default=Path("runs/nim_first5"))
     parser.add_argument("--keep-images", action="store_true")
     parser.add_argument("--keep-workspace", action="store_true")
+    parser.add_argument(
+        "--allow-compile-only-oracles", action="store_true",
+        help="explicitly accept unverified judge behavior; otherwise block before any provider call",
+    )
     return parser
 
 
@@ -514,21 +518,32 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Pilot prepared but blocked by generation preflight; inspect {output}")
             return 2
         oracle = validate_manifest_oracles(manifest, root=ROOT)
+        oracle["operator_compile_only_override"] = bool(
+            args.allow_compile_only_oracles and not oracle.get("behavioral_coverage_complete", False)
+        )
         _write(output / "oracle_preflight.json", oracle)
-        if not oracle.get("model_sweep_allowed", False):
-            checkpoint = _initial_checkpoint(manifest, profile, reason="oracle_preflight_failed", secret_path=secret_path)
+        oracle_reason = (
+            "oracle_preflight_failed"
+            if not oracle.get("model_sweep_allowed", False)
+            else "behavioral_oracle_coverage_incomplete"
+            if not oracle.get("behavioral_coverage_complete", False)
+            and not args.allow_compile_only_oracles
+            else None
+        )
+        if oracle_reason:
+            checkpoint = _initial_checkpoint(manifest, profile, reason=oracle_reason, secret_path=secret_path)
             _write(output / "suite_checkpoint.json", checkpoint)
             _write(
                 output / "pilot_report.json",
                 _report(
                     manifest,
                     status="blocked",
-                    reason="oracle_preflight_failed",
+                    reason=oracle_reason,
                     checkpoint=checkpoint,
-                    unfinished_reason="oracle_preflight_failed",
+                    unfinished_reason=oracle_reason,
                 ),
             )
-            print(f"Pilot prepared but blocked by oracle preflight; inspect {output}")
+            print(f"Pilot blocked before provider access: {oracle_reason}; inspect {output}")
             return 2
         runtime = _runtime_check()
         _write(output / "runtime.json", runtime)
@@ -693,6 +708,7 @@ def main(argv: list[str] | None = None) -> int:
             floor_effect_after=0,
             request_extra=dict(profile.get("request_extra", {})),
             checkpoint_path=output / "suite_checkpoint.json",
+            allow_compile_only_oracles=args.allow_compile_only_oracles,
             keep_images=args.keep_images,
             keep_workspace=args.keep_workspace,
         )

@@ -64,6 +64,49 @@ def test_rope_probe_is_invoked_once_with_its_required_arguments():
     assert all(f"sys.argv[{n}]" in source for n in (1, 2, 3))
 
 
+def test_rope_judge_does_not_unpickle_agent_controlled_probe_output():
+    source = (ROOT / "envs" / "rope" / "files" / "judge.py").read_text(encoding="utf-8")
+    assert 'torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True' in source
+    assert "weights_only=False" not in source
+
+
+def test_preflight_rejects_unsafe_torch_load_in_judge_and_deferred_script(tmp_path):
+    judge = tmp_path / "judge.py"
+    judge.write_text('import torch\ntorch.load("output.pt", weights_only=False)\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="torch.load must specify weights_only=True"):
+        validate_generated_judge(judge)
+    judge.write_text(
+        'import torch\neval_script = "/tmp/probe.py"\n'
+        'with open(eval_script, "w") as f:\n'
+        '    f.write("import torch\\ntorch.load(\\"output.pt\\")\\n")\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="torch.load must specify weights_only=True"):
+        validate_generated_judge(judge)
+
+
+def test_preflight_rejects_deferred_probe_missing_argv_even_after_valid_call(tmp_path):
+    judge = tmp_path / "judge.py"
+    source = '''import sys
+PROBE_MODULE_TEMPLATE = "import sys\\nvalue = sys.argv[3]\\n"
+
+def run(command):
+    return command
+
+def main():
+    probe_path = "/tmp/probe.py"
+    with open(probe_path, "w") as f:
+        f.write(PROBE_MODULE_TEMPLATE)
+    run([sys.executable, probe_path, "a", "b", "c"])
+    run([sys.executable, probe_path])
+'''
+    judge.write_text(source, encoding="utf-8")
+    with pytest.raises(ValueError, match="probe_path needs 3 argv arguments, run provides 0"):
+        validate_generated_judge(judge)
+    judge.write_text(source.replace('    run([sys.executable, probe_path])\n', ''), encoding="utf-8")
+    assert validate_generated_judge(judge) == 1
+
+
 def test_judge_preflight_rejects_missing_globals_in_both_processes(tmp_path):
     judge = tmp_path / "judge.py"
     judge.write_text("def score():\n    return json.loads('{}')\n", encoding="utf-8")

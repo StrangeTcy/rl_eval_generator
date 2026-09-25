@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Validate suite reference behavior without making provider/API calls.
 
-This is a release gate for a model sweep, not a model evaluation.  It generates
-one representative case per manifest environment, compiles the generated Python,
-checks judge globals and deferred evaluation scripts, and optionally applies a
-declared known-good patch. Environments may also provide a deterministic
-reference self-test. No provider module, credential, or network operation is
-used here.
+This static gate generates one representative case per manifest environment,
+compiles the generated Python, checks judge globals and deferred scripts, and
+optionally checks that a known-good patch applies. Configured reference
+self-tests are executed separately. No provider module, credential, or network
+operation is used here.
 
-The report deliberately distinguishes a patch oracle from a judge-reference
-compile.  A compile check is not a claim that an unseen environment has a
-known-good solution; it only confirms that its configured trusted judge can be
-loaded before spending model calls.
+A patch applying, or a judge compiling, does NOT establish that it grades a
+correct submission correctly. ``model_sweep_allowed`` is the legacy static
+readiness field; live schedulers additionally require behavioral reference
+coverage or an explicit operator override before any provider calls.
 """
 from __future__ import annotations
 
@@ -94,7 +93,7 @@ def _apply_known_good_patch(output: Path, patch_path: Path) -> tuple[bool, str]:
     return code == 0, detail
 
 
-def _configured_self_test(root: Path, environment: str, oracle: dict[str, Any]) -> tuple[bool, str | None]:
+def _configured_self_test(root: Path, environment: str, oracle: dict[str, Any]) -> tuple[bool | None, str | None]:
     kind = str(oracle.get("reference_behavior", "")).strip().lower()
     if kind == "public_bayes_oracle" or environment == "epistemic_games":
         code, detail = _run(
@@ -103,9 +102,8 @@ def _configured_self_test(root: Path, environment: str, oracle: dict[str, Any]) 
             timeout=60,
         )
         return code == 0, detail
-    # Every generated environment has a trusted judge.  Compiling it is the
-    # safe fallback when no deterministic public self-test is configured.
-    return True, None
+    # Compilation is not a behavioral self-test. Do not label it "passed".
+    return None, None
 
 
 def validate_manifest_oracles(
@@ -183,10 +181,14 @@ def validate_manifest_oracles(
             if reference_kind == "public_bayes_oracle" or name == "epistemic_games":
                 result["reference_behavior"] = "public_bayes_oracle"
             reference_ok, reference_detail = _configured_self_test(root, name, oracle)
-            result["reference_self_test"] = "passed" if reference_ok else "failed"
+            result["reference_self_test"] = (
+                "not_configured" if reference_ok is None else "passed" if reference_ok else "failed"
+            )
+            # A patch merely *applying* is not proof its judge would pass it.
+            result["behavioral_reference_executed"] = reference_ok is not None
             if reference_detail:
                 result["reference_detail"] = reference_detail
-            if not reference_ok:
+            if reference_ok is False:
                 raise RuntimeError("configured reference self-test failed")
             result["status"] = "ready"
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
@@ -201,12 +203,20 @@ def validate_manifest_oracles(
         results.append(result)
 
     failures = [result for result in results if result.get("status") != "ready"]
+    unverified = [
+        result["environment"] for result in results
+        if not result.get("behavioral_reference_executed", False)
+    ]
     return {
         "schema_version": 1,
         "event": "zero_api_oracle_preflight",
         "api_calls": 0,
         "provider_calls": 0,
+        # Legacy readiness reports that the static checks completed, not that
+        # the judge has passed a known-good submission on every selected case.
         "model_sweep_allowed": not failures,
+        "behavioral_coverage_complete": bool(results) and not unverified,
+        "unverified_environments": unverified,
         "results": results,
         "failure_count": len(failures),
     }

@@ -18,6 +18,18 @@ _WORKDIR = "/tmp/judge-preflight"
 def _check_python(source: str, filename: str) -> ast.Module:
     tree = ast.parse(source, filename=filename)
     compile(tree, filename, "exec")
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "torch"
+            and node.func.attr == "load"
+        ):
+            continue
+        safe = next((kw.value for kw in node.keywords if kw.arg == "weights_only"), None)
+        if not isinstance(safe, ast.Constant) or safe.value is not True:
+            raise ValueError(f"{filename}: torch.load must specify weights_only=True")
     table = symtable.symtable(source, filename, "exec")
     bound = {
         symbol.get_name()
@@ -81,6 +93,53 @@ def _render_literal(node: ast.expr, constants: dict[str, str]) -> str:
     raise ValueError(f"unsupported eval-script string expression: {type(node).__name__}")
 
 
+def _required_argv_count(script: ast.Module) -> int:
+    """Highest positional ``sys.argv`` index a deferred script reads."""
+    return max(
+        (
+            node.slice.value
+            for node in ast.walk(script)
+            if isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Attribute)
+            and isinstance(node.value.value, ast.Name)
+            and node.value.value.id == "sys"
+            and node.value.attr == "argv"
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, int)
+            and node.slice.value > 0
+        ),
+        default=0,
+    )
+
+
+def _check_script_invocations(
+    judge: ast.Module, script_name: str, required_args: int, filename: str
+) -> None:
+    """Check every run of a deferred script, not just its first invocation."""
+    calls = []
+    for node in ast.walk(judge):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "run"
+            and node.args
+            and isinstance(node.args[0], ast.List)
+        ):
+            continue
+        command = node.args[0].elts
+        for index, element in enumerate(command):
+            if isinstance(element, ast.Name) and element.id == script_name:
+                calls.append(len(command) - index - 1)
+    if required_args and not calls:
+        raise ValueError(f"{filename}: {script_name} needs {required_args} argv arguments but is never run")
+    for provided in calls:
+        if provided < required_args:
+            raise ValueError(
+                f"{filename}: {script_name} needs {required_args} argv arguments, "
+                f"run provides {provided}"
+            )
+
+
 def validate_generated_judge(path: Path) -> int:
     """Check judge globals, render its eval script(s), and check their globals.
 
@@ -110,7 +169,7 @@ def validate_generated_judge(path: Path) -> int:
                 and opened.func.id == "open"
                 and opened.args
                 and isinstance(opened.args[0], ast.Name)
-                and opened.args[0].id == "eval_script"
+                and opened.args[0].id in {"eval_script", "probe_path"}
                 and isinstance(item.optional_vars, ast.Name)
             ):
                 continue
@@ -128,11 +187,16 @@ def validate_generated_judge(path: Path) -> int:
                 ):
                     continue
                 rendered = _render_literal(call.args[0], constants)
-                _check_python(rendered, f"{path}:_eval_runner.py")
+                script_tree = _check_python(rendered, f"{path}:_eval_runner.py")
+                _check_script_invocations(
+                    tree, opened.args[0].id, _required_argv_count(script_tree), str(path)
+                )
                 scripts += 1
     if any(
-        isinstance(node, ast.Name) and node.id == "eval_script" and isinstance(node.ctx, ast.Store)
+        isinstance(node, ast.Name)
+        and node.id in {"eval_script", "probe_path"}
+        and isinstance(node.ctx, ast.Store)
         for node in ast.walk(tree)
     ) and not scripts:
-        raise ValueError(f"{path}: eval_script declared but no eval script was checked")
+        raise ValueError(f"{path}: deferred script declared but no script was checked")
     return scripts

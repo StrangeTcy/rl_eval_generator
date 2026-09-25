@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -38,6 +39,22 @@ def test_nvidia_first5_profile_and_selected_manifest_are_pinned():
         environment for environment, _ in EXPECTED_CASES
     }
     assert profile["limits"] == REQUIRED_LIMITS
+
+
+def test_nvidia_pilot_blocks_compile_only_oracles_before_provider_access(tmp_path, monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("provider/runtime setup must not be reached")
+
+    monkeypatch.setattr(first_experiment, "_runtime_check", forbidden)
+    monkeypatch.setattr(first_experiment, "_optional_credentials", forbidden)
+    output = tmp_path / "blocked_pilot"
+    assert first_experiment.main(["--out", str(output)]) == 2
+    report = json.loads((output / "pilot_report.json").read_text(encoding="utf-8"))
+    oracle = json.loads((output / "oracle_preflight.json").read_text(encoding="utf-8"))
+    assert report["status"] == "blocked"
+    assert report["reason"] == "behavioral_oracle_coverage_incomplete"
+    assert oracle["behavioral_coverage_complete"] is False
+    assert oracle["operator_compile_only_override"] is False
 
 
 def test_compatibility_fake_requires_stop_and_records_effective_request(tmp_path, monkeypatch):
