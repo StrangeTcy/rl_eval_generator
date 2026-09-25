@@ -17,6 +17,7 @@ def test_regex_judge_escapes_nested_fstring_object_literal():
     judge_template = (
         ROOT / "envs" / "weird_machine" / "regex_state_machine" / "files" / "judge.py"
     ).read_text(encoding="utf-8")
+    assert "import sys, random, ast, json" in judge_template
     assert "forensics = {{" in judge_template
     assert '"boundary_collapse": boundary_fail,' in judge_template
     assert "                }}" in judge_template

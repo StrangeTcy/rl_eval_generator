@@ -21,7 +21,7 @@ def main() -> None:
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
         f.write(f"""
-import sys, random, ast
+import sys, random, ast, json
 sys.path.insert(0, {workdir!r})
 from regex_machine import %%MODEL_CLASS%%
 
