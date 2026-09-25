@@ -636,9 +636,12 @@ def run_suite(
             }:
                 status = "paused_provider_error"
                 error = "provider or quota failure detected; resume only after checking the account"
-            elif parsed and isinstance(final, dict) and final.get("failure_mode") == "controller_error":
+            elif parsed and isinstance(final, dict) and final.get("failure_mode") in {
+                "controller_error",
+                "judge_runtime_error",
+            }:
                 status = "infrastructure_error"
-                error = "arena controller failed before producing a score"
+                error = "arena controller or judge failed before producing a valid score"
             elif parsed and isinstance(final, dict) and "verdict" in final:
                 status = "scored"
                 error = None

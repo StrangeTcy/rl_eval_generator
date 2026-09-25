@@ -13,6 +13,15 @@ def run(*args, check=True):
     return subprocess.run([sys.executable, *args], cwd=ROOT, text=True, capture_output=True, check=check)
 
 
+def test_regex_judge_escapes_nested_fstring_object_literal():
+    judge_template = (
+        ROOT / "envs" / "weird_machine" / "regex_state_machine" / "files" / "judge.py"
+    ).read_text(encoding="utf-8")
+    assert "forensics = {{" in judge_template
+    assert '"boundary_collapse": boundary_fail,' in judge_template
+    assert "                }}" in judge_template
+
+
 def test_configs_parse():
     for path in (ROOT / "envs").rglob("config.yaml"):
         yaml.safe_load(path.read_text())

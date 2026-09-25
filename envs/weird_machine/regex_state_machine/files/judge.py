@@ -103,10 +103,10 @@ try:
                         elif i == len(s) - 1:
                             boundary_fail = "right boundary neighborhood"
             if forensics is None:
-                forensics = {
+                forensics = {{
                     "failed_rules": sorted(failed_neighborhoods),
                     "boundary_collapse": boundary_fail,
-                }
+                }}
     checks["length_preservation"] = length_ok
     checks["randomized_accuracy"] = all_ok
     checks["forensics"] = forensics

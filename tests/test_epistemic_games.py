@@ -643,6 +643,32 @@ def test_e2e_judge_correct_answer_passes():
         cleanup("smoke_eg_e2e_ok", "smoke_eg_judge_work")
 
 
+def test_e2e_judge_bare_table_provenance_rebuilds_with_framing():
+    env_dir = _generate_judge_env(
+        "smoke_eg_e2e_bare_table",
+        "trap,ambiguous,paired,balanced,bare_table",
+        seed=11,
+    )
+    try:
+        inst = CORE.build_instance(
+            "trap",
+            "ambiguous",
+            "balanced",
+            "paired",
+            seed=11,
+            framing="bare_table",
+        )
+        result = _run_judge(
+            env_dir,
+            _answer_patch(env_dir, CORE.ground_truth_answer(inst)),
+            11,
+            "bare_table",
+        )
+        assert result["checks"]["provenance_ok"] is True
+    finally:
+        cleanup("smoke_eg_e2e_bare_table", "smoke_eg_judge_work")
+
+
 def test_e2e_judge_seductive_answer_diagnosed():
     env_dir = _generate_judge_env("smoke_eg_e2e_sed", "trap,ambiguous,paired,balanced,narrative", seed=7)
     try:

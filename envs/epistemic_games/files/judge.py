@@ -297,6 +297,7 @@ def main() -> None:
             evidence=INSTANCE_SPEC["evidence"],
             prior_id=INSTANCE_SPEC["prior_id"],
             presentation=INSTANCE_SPEC["presentation"],
+            framing=INSTANCE_SPEC["framing"],
             seed=INSTANCE_SPEC["seed"],
         )
         rebuilt = instance.to_spec()
