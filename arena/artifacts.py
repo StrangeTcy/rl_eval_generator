@@ -146,12 +146,15 @@ def _diff_directories(original: Path, current: Path) -> str:
         for path in current.rglob("*")
         if path.is_file()
     } if current.is_dir() else set()
+    def _read_text(path: Path) -> list[str]:
+        if not path.is_file():
+            return []
+        return path.read_text(encoding="utf-8", errors="replace").splitlines()
+
     chunks: list[str] = []
     for rel in sorted(original_files | current_files):
-        before_path = original / rel
-        after_path = current / rel
-        before = before_path.read_text(encoding="utf-8", errors="replace").splitlines()
-        after = after_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        before = _read_text(original / rel)
+        after = _read_text(current / rel)
         if before != after:
             chunks.extend(
                 difflib.unified_diff(

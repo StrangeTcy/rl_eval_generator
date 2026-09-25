@@ -14,6 +14,7 @@ from urllib.error import HTTPError
 import pytest
 
 import arena.episode as episode_module
+from arena.artifacts import _diff_directories
 from arena.docker_backend import DockerBackend
 from arena.episode import EpisodeOptions, run_episode
 from arena.providers import ProviderClient, ProviderError, chat_completions_url, open_no_redirect
@@ -344,6 +345,25 @@ def test_docker_argv_has_no_network_or_api_key_environment(tmp_path):
     assert "--read-only" in judge_argv
     assert "--tmpfs" in judge_argv
     assert not any("API_KEY" in part or "TOKEN" in part for part in judge_argv)
+
+
+def test_workspace_diff_handles_added_and_deleted_files(tmp_path):
+    original = tmp_path / "original"
+    current = tmp_path / "current"
+    original.mkdir()
+    current.mkdir()
+    (original / "kept.txt").write_text("before\n", encoding="utf-8")
+    (original / "deleted.txt").write_text("removed\n", encoding="utf-8")
+    (current / "kept.txt").write_text("after\n", encoding="utf-8")
+    (current / "added.txt").write_text("new\n", encoding="utf-8")
+
+    diff = _diff_directories(original, current)
+
+    assert "before/added.txt" in diff
+    assert "after/added.txt" in diff
+    assert "before/deleted.txt" in diff
+    assert "after/deleted.txt" in diff
+    assert "before/kept.txt" in diff
 
 
 def test_recurrent_depth_generation_is_registered():
