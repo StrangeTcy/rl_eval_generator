@@ -57,6 +57,22 @@ These environments are designed to make that strategy less reliable:
 
 The goal is to test whether an agent can form and use a causal model of an ML system.
 
+## Evaluation target: structural awareness, not scalar intelligence
+
+This suite is not designed to produce a single intelligence score. A recurring
+target is **metis**: the ability to notice the structure generating the presented
+task, preserve invariants across representation changes, resist misleading
+frames, and exploit valid alternative formulations.
+
+The benchmark question is not only how hard a model pushes on the front door,
+but whether it notices the wall next to the lock. Controlled comparisons use
+same-semantics/different-syntax cases, narrative-versus-bare evidence,
+matched rollout controls, witness-valid versus witness-broken shortcuts, and
+explicit resource protocols. Results are behavioral sensitivities to named
+interventions, not direct measurements of scalar intelligence or hidden model
+architecture. See [`docs/metis.md`](docs/metis.md) for the taxonomy and
+interpretation rules.
+
 ---
 
 ## Included environments
@@ -159,6 +175,10 @@ A specialized suite of 17 environments targeting compositional reasoning, algebr
     16. `sheaf_invariant_gluing`: Constructing compositional data-preprocessing boundaries that resist out-of-distribution cascades.
     17. `sheaf_physical_constraints`: Building a distributed network-topology traffic scheduler that respects global backbone bandwidth constraints.
 
+### Recurrent-depth environments (`envs/recurrent_depth/`)
+
+The `rd_state_carry`, `rd_adaptive_halting`, and `rd_gradient_credit` families test behavioral invariants under increasing recurrence depth. They exercise state reuse, per-example halting masks, and autograd credit assignment with tiny CPU tensors. These are black-box behavioral tasks: a score at depth 64 does **not** establish that a model used recurrent computation internally.
+
 ### Latent Substrate & Weird Machine Environments (`envs/weird_machine/`)
 
 A suite of 6 environments targeting unintended expressivity and cross-substrate compilation. These environments test whether an agent can infer and exploit latent computational structure in substrates whose surface semantics present them as non-programming artifacts:
@@ -190,6 +210,10 @@ rl_eval_generator/
 │   ├── batchnorm_ema/
 │   ├── moco/
 │   ├── rope/
+│   ├── recurrent_depth/
+│   │   ├── state_carry/
+│   │   ├── adaptive_halting/
+│   │   └── gradient_credit/
 │   ├── cat_theo/
 │   │   ├── <individual_ct_envs>/
 │   │   ├── semiring/
@@ -266,7 +290,7 @@ The judge then applies the patch, validates it, trains/evaluates, and emits JSON
 
 ---
 
-## Gym-like environment runner
+## Stateful environment runner
 
 The repository includes a minimal `reset` / `step` interface for driving generated
 environments as interaction loops:
@@ -305,11 +329,13 @@ Core action types: `shell`/`run` (`{"cmd": "..."}`), `read_file`, `write_file`,
 The runner is intentionally lightweight. It stores episodes under `.episodes/`
 and uses the persistent filesystem as environment state. `submit` grades the
 current episode workspace non-interactively: it diffs the workspace against the
-pristine sources and runs the generated judge in-process, returning the score as
-JSON. It does not require the interactive `run_eval.sh` flow.
+pristine sources and runs the generated judge either locally (`--sandbox local`)
+or in the generated no-network judge image (`--sandbox docker`). It does not
+require the interactive `run_eval.sh` flow.
 
-Rewards are terminal and the local runner is single-session; Docker resource
-limits apply when scoring through the generated `run_eval.sh`.
+Rewards are terminal and the local runner is single-session. The Docker mode
+uses the same read-only root, dropped-capability, no-network, PID, memory, CPU,
+and tmpfs restrictions as the automated arena.
 
 ---
 
@@ -391,6 +417,222 @@ patterns (e.g. swapping flatten for global pooling in `glyph`) that interacting
 bugs and naming abstraction discourage but cannot fully eliminate. The default
 Dockerfiles use CPU-only PyTorch. For GPU acceleration, use `shared/Dockerfile.gpu`
 which installs CUDA-enabled PyTorch via a build argument (`ARG TORCH_INDEX`).
+
+---
+
+## Provider-neutral automated arena
+
+`arena.py` keeps the model controller on the host and runs generated environment
+commands in a no-network Docker container. OpenRouter, Hugging Face Inference
+Providers, and custom OpenAI-compatible endpoints all use `POST
+{api_base}/chat/completions`.
+
+```bash
+export OPENROUTER_API_KEY="..."
+python arena.py run \
+  --provider openrouter \
+  --model openai/gpt-5.6-sol \
+  --env rd_state_carry \
+  --difficulty hard,hard,hard,hard,hard \
+  --seed 42 \
+  --max-steps 40 \
+  --max-tokens 2048 \
+  --temperature 0 \
+  --sandbox docker \
+  --out runs/
+```
+
+Use `--provider huggingface --model openai/gpt-oss-120b` with `HF_TOKEN` for
+Hugging Face, or `--provider custom --api-base URL --api-key-env API_KEY` for a
+compatible endpoint. `--api-key` is supported for automation, but environment
+variables are safer because shell arguments can appear in history and process
+listings. Keys are not put into traces, manifests, Docker environment variables,
+or container command lines.
+
+Each run directory contains `manifest.json`, `trace.jsonl`,
+`model_responses.jsonl`, `api_errors.jsonl`, `submission.patch`,
+`workspace.diff`, judge stdout/stderr, and the final judge JSON. Summarize a run
+with:
+
+```bash
+python arena.py summarize runs/<run-id>
+```
+
+The legacy `run_hf_episode.py` flags remain available as a wrapper, but it now
+uses the same chat-completions path and no longer makes an implicit legacy HF
+fallback request.
+
+### Trajectory-semantics direct-answer benchmark
+
+The primary relay benchmark is a host-side direct-answer evaluation, not a task
+where the model writes a solver. It keeps rollout horizon, query-specific
+computation, representation, query-specific witness status, and the answer-only
+versus external-scratchpad resource protocol as separate metadata. It includes
+flat and operationally reflective relay presentations, parse-only/one-step/
+state-at-horizon/template-return/complete-state-return controls, semantic
+relabelings, format-only variants, and matched horizons such as `6, 30, 126,
+510`. Its summaries report behavioral accuracy and stale-witness diagnostics;
+they do not produce an aggregate depth score or an internal-algorithm claim.
+
+```bash
+export OPENROUTER_API_KEY="..."
+python arena.py trajectory \
+  --provider openrouter \
+  --model openai/gpt-5.6-sol \
+  --out runs/trajectory-demo \
+  --system-seeds 0:3 \
+  --initial-state-seeds 0:0,0,0,0 \
+  --presentation-seeds 1000:1003 \
+  --resource-protocol answer_only \
+  --max-calls 1632
+
+# Or inspect the exact request budget before resolving credentials.
+python arena.py trajectory-plan \
+  --provider openrouter --model openai/gpt-5.6-sol \
+  --system-seeds 0:3 --initial-state-seeds 0:0,0,0,0 \
+  --max-tokens 64 --confirm-calls 1632
+
+python arena.py trajectory-analyze runs/trajectory-demo
+```
+
+The controller and API key stay on the host. `cases.jsonl` is the private case
+record, while `trace.jsonl`, `answers.jsonl`, `model_responses.jsonl`, and
+`api_errors.jsonl` retain prompts, raw outputs, parsed answers, correctness,
+retry/error information, latency, usage, and provider metadata with secret
+redaction. Controls are query-conditioned: parse-only cases use horizon `0`,
+one-step cases use horizon `1`, and only trajectory queries expand across the
+requested horizon list. `matched_control_id` joins parse and one-step controls
+to the same trajectory condition without pooling valid and witness-broken
+siblings. Each trajectory result records `parse_control_passed` and
+`one_step_control_passed` for the same API replication; the conditional summary
+table includes only rows where both controls passed and reports the
+unconditional trajectory estimand plus included, failed-control, missing-control,
+and excluded counts for the conditional estimand. Missing controls from a
+truncated run remain `null`, not failures. Control status separates `passed`,
+`failed`, `missing`, and `api_error`; an empty conditional sample is reported
+as `null`/`NA`, not zero.
+
+Every answer record also has an exclusive `response_status`: `answered`,
+`api_error`, `parse_error`, or `judge_error`; an API failure, unparseable answer
+format, or scorer failure is not an observed answer. `trajectory_attempts` counts every
+trajectory request, while `trajectory_observed_cases` counts only `answered`
+responses. The summary reports separate API, parse, and judge error counts and
+uses `unconditional_trajectory_accuracy_observed` and
+`conditional_trajectory_accuracy_observed` for model accuracy; those rates have
+only observed, answerable cases in their denominators. `trajectory_success_per_attempt`
+is an operational availability metric, not model accuracy. The partition is
+applied in this order: trajectory-response error (`api_error`, then
+`parse_error`, then `judge_error`), control `api_error`, missing control,
+observed control failure, and finally included (both same-replication controls
+passed). Thus a trajectory API timeout is never relabeled as a missing or
+failed control, even if both controls passed. Provider error evidence takes
+precedence over a contradictory explicit `control_status`; malformed status
+values are rejected. Conditional accuracy remains accuracy among trials whose
+same-replication controls passed, not an automatic adjustment for parsing
+difficulty.
+
+
+Use `--judge host`, `--judge docker`, or `--judge both`. The latter fails if
+host and offline Docker judgments disagree. The optional
+`docker/Dockerfile.trajectory_judge` image evaluates private case/answer records
+offline with `--network none`; it has no provider client and never receives an
+API key. `trajectory-plan` estimates calls and maximum output-token budget
+without resolving credentials, and a live trajectory run requires either
+`--max-calls` or an exact `--confirm-calls` guard.
+
+The `ts_parse_only`, `ts_one_step`, and `ts_trajectory` generated environments
+are a separate solver-synthesis/debugging track. Their judge scores must remain
+separate from direct-answer results and are not evidence that a model used
+recurrent internal computation.
+
+For a depth comparison, keep the model version, prompt, output-token limit,
+maximum tool steps, judge budget, and environment seeds fixed while varying only
+the recurrence-depth axis. Use multiple seeds and report invalid-action failures
+separately from incorrect repairs. Useful derived metrics include
+`pass_rate_by_depth`, `mean_score_by_depth`, `maximum_reliably_solved_depth`,
+`output_tokens_per_score`, `tool_steps_per_score`, `latency_per_score`, and a
+failure-mode distribution. These tasks measure behavioral robustness and cost or
+latency scaling; a black-box result cannot prove that the model used recurrent
+depth internally.
+
+---
+
+## Suite inventory, checkpointed execution, and constrained notebooks
+
+The repository has two separate scales: an environment name is one declarative
+config, while a difficulty vector and seed are an evaluation case. The suite
+runner never silently treats one representative case as coverage of every
+variant. The current registry and config audit are written by
+`tools/suite_inventory.py`:
+
+```bash
+# No provider calls. One representative vector per environment.
+python tools/suite_inventory.py --out suite_manifest.json
+
+# Expand every declared difficulty-axis Cartesian product and two seeds.
+python tools/suite_inventory.py \
+  --out suite_all.json --matrix all --seeds 0,1
+
+# Also generate and compile every planned case, still without a model or Docker.
+python tools/suite_inventory.py \
+  --out suite_preflight.json --matrix all --seeds 0 --preflight
+```
+
+The manifest records the repository commit, dirty-worktree state, config hashes,
+tracks, axis levels, registry mismatches, and explicit cases. A clean audit is a
+precondition for scheduling. In this checkout the registry currently contains
+33 named config entries; use the generated manifest rather than assuming a
+number when newly authored environments are present.
+
+`tools/run_suite.py` wraps the existing `arena.py run` controller. It runs one
+case at a time, records model failures as scored results, pauses on provider or
+infrastructure failures, and atomically checkpoints after each completed case:
+
+```bash
+python tools/run_suite.py \
+  --manifest suite_all.json \
+  --out runs/suite-groq \
+  --provider custom \
+  --api-base https://provider.example/v1 \
+  --model provider/pinned-model \
+  --api-key-env SUITE_API_KEY \
+  --sandbox docker \
+  --max-cases 1 \
+  --max-api-calls 100
+```
+
+The key is read by the host controller only. The scheduler passes an environment
+variable name, never a literal key, and the existing controller removes
+provider-looking variables before invoking environment subprocesses. Provider
+profiles and the optional local `secret_key.json` loader are documented in
+[`docs/secrets.md`](docs/secrets.md) and [`docs/free_providers.md`](docs/free_providers.md);
+run `tools/provider_preflight.py` before enabling a provider. Use a new
+output/checkpoint directory when changing provider, model, sandbox, or manifest;
+checkpoint metadata rejects accidental mixing. `coverage.json`, `coverage.csv`,
+and `coverage.md` distinguish scored, blocked, paused, and infrastructure cases.
+`--dry-run` plans a bounded batch without requiring an API key.
+
+`tools/notebook_mode.py` reports dependency, Docker, memory, disk, GPU, and
+notebook-runtime capabilities without executing generated code. The notebook
+`notebooks/run_all_envs.ipynb` is a controller frontend, not a sandbox: it runs
+only inventory and preflight when Docker is unavailable. The canonical manual
+GitHub Actions workflow is `.github/workflows/evaluate-suite.yml`; it uses a
+standard Docker runner, a pinned model/provider supplied at dispatch, a bounded
+batch, and uploads only the manifest, checkpoint, capability report, and
+coverage summaries. Configure a `SUITE_API_KEY` repository secret for the host
+controller; it is not mounted into agent or judge containers. A workflow batch
+must be resumed with the same manifest/provider/model contract rather than
+rotating providers mid-experiment.
+
+This scheduler supports coverage accounting, not a claim that all tasks are
+comparable. Keep direct-answer, solver-synthesis, recurrent-depth, and ML
+repair tracks separate in analysis, and distinguish “attempted every planned
+case” from “every case received a scored result.”
+
+For the bounded NVIDIA-first five-case handoff, use the exact profile and
+provider-free preparation path in [`docs/first_nvidia_pilot.md`](docs/first_nvidia_pilot.md).
+It does not make model-availability or free-entitlement claims and never
+switches providers automatically.
 
 ---
 

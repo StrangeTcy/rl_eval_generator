@@ -1,0 +1,8 @@
+# Optional offline judge for private trajectory case/answer records.
+# Build with: docker build -f docker/Dockerfile.trajectory_judge -t trajectory-judge:local .
+# Run with --network none; this image has no provider client or API credentials.
+FROM python:3.11-slim
+
+COPY docker/trajectory_judge.py /trajectory_judge.py
+
+ENTRYPOINT ["python", "/trajectory_judge.py"]

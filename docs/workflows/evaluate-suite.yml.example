@@ -1,0 +1,138 @@
+name: Evaluate suite (manual, checkpointed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Provider key understood by arena.py (use custom for any OpenAI-compatible endpoint)"
+        required: true
+        default: "custom"
+      api_base:
+        description: "OpenAI-compatible API base URL"
+        required: false
+        default: ""
+      model:
+        description: "Pinned provider model identifier"
+        required: true
+      matrix:
+        description: "Difficulty matrix: representative or all"
+        required: true
+        default: "representative"
+        type: choice
+        options:
+          - representative
+          - all
+      seeds:
+        description: "Comma-separated semantic seeds"
+        required: true
+        default: "0"
+      max_cases:
+        description: "Maximum cases for this checkpointed batch"
+        required: true
+        default: "1"
+      max_steps:
+        description: "Maximum controller steps per episode"
+        required: true
+        default: "30"
+      max_tokens:
+        description: "Maximum output tokens per controller request"
+        required: true
+        default: "1024"
+      max_api_calls:
+        description: "Conservative API-call budget for this batch"
+        required: true
+        default: "100"
+      max_tokens_total:
+        description: "Required explicit estimated-output-token ceiling for an all-matrix run; zero means unset"
+        required: false
+        default: "0"
+      floor_effect_after:
+        description: "Pause after this many consecutive non-reasoning score-zero cases"
+        required: true
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      # The scheduler and host controller see this variable.  It is never
+      # passed as a Docker argument or mounted into an agent/judge container.
+      SUITE_API_KEY: ${{ secrets.SUITE_API_KEY }}
+    steps:
+      - name: Check out pinned evaluation code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install controller dependencies
+        run: pip install -r requirements.txt
+
+      - name: Inspect notebook/runner capabilities
+        run: python tools/notebook_mode.py --out capabilities.json
+
+      - name: Build the suite manifest
+        env:
+          MATRIX: ${{ inputs.matrix }}
+          SEEDS: ${{ inputs.seeds }}
+        run: python tools/suite_inventory.py --out suite_manifest.json --matrix "$MATRIX" --seeds "$SEEDS"
+
+      - name: Run a resumable suite batch
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          API_BASE: ${{ inputs.api_base }}
+          MODEL: ${{ inputs.model }}
+          MAX_CASES: ${{ inputs.max_cases }}
+          MAX_STEPS: ${{ inputs.max_steps }}
+          MAX_TOKENS: ${{ inputs.max_tokens }}
+          MAX_API_CALLS: ${{ inputs.max_api_calls }}
+          MAX_TOKENS_TOTAL: ${{ inputs.max_tokens_total }}
+          FLOOR_EFFECT_AFTER: ${{ inputs.floor_effect_after }}
+        run: |
+          set -euo pipefail
+          api_base_args=()
+          token_budget_args=()
+          if [[ -n "$API_BASE" ]]; then
+            api_base_args=(--api-base "$API_BASE")
+          fi
+          if [[ "$MAX_TOKENS_TOTAL" != "0" ]]; then
+            token_budget_args=(--max-tokens-total "$MAX_TOKENS_TOTAL")
+          fi
+          python tools/run_suite.py \
+            --manifest suite_manifest.json \
+            --out runs/github-suite \
+            --provider "$PROVIDER" \
+            --model "$MODEL" \
+            --api-key-env SUITE_API_KEY \
+            "${api_base_args[@]}" \
+            --sandbox docker \
+            --max-cases "$MAX_CASES" \
+            --max-steps "$MAX_STEPS" \
+            --max-tokens "$MAX_TOKENS" \
+            --max-api-calls "$MAX_API_CALLS" \
+            --floor-effect-after "$FLOOR_EFFECT_AFTER" \
+            "${token_budget_args[@]}" \
+            --checkpoint runs/github-suite/suite_checkpoint.json
+
+      - name: Upload coverage and resumable checkpoint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-coverage-${{ github.run_id }}
+          path: |
+            capabilities.json
+            suite_manifest.json
+            runs/github-suite/coverage.json
+            runs/github-suite/coverage.csv
+            runs/github-suite/coverage.md
+            runs/github-suite/oracle_preflight.json
+            runs/github-suite/suite_checkpoint.json
+          if-no-files-found: warn
+          retention-days: 7

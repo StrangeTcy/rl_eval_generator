@@ -1,0 +1,15 @@
+# Keep host credentials and run artifacts out of any root-context build.
+.git
+.venv
+venv
+runs
+.episodes
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+**/*secret*
+**/*credential*
+**/*token*

@@ -13,4 +13,4 @@ RUN chmod -R a+rX /originals /tools /agent_entrypoint.sh \
     && chmod +x /tools/submit.py /agent_entrypoint.sh
 
 WORKDIR /workspace
-CMD ["/agent_entrypoint.sh"]
+ENTRYPOINT ["/agent_entrypoint.sh"]

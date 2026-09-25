@@ -13,6 +13,26 @@ smoke_*/
 test_*/
 .DS_Store
 .episodes/
+runs/
+
+# Local credentials — never commit
+secret_key.json
+secret_keys.json
+.env
+.env.*
+!.env.example
+!secret_key.example.json
+credentials/
+secret_keys/
+secrets/
+.secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
 
 demo_*/
 _episode_env_*/

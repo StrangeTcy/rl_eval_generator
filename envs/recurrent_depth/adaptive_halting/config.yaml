@@ -1,0 +1,105 @@
+axes:
+  - id: recurrence_depth
+    description: "Maximum number of transitions and held-out depth"
+    levels:
+      easy:
+        "%%TRAIN_DEPTH%%": "4"
+        "%%HIDDEN_DEPTH%%": "8"
+      medium:
+        "%%TRAIN_DEPTH%%": "16"
+        "%%HIDDEN_DEPTH%%": "32"
+      hard:
+        "%%TRAIN_DEPTH%%": "32"
+        "%%HIDDEN_DEPTH%%": "64"
+
+  - id: clue_clarity
+    description: "How directly per-example halting is described"
+    levels:
+      easy:
+        "%%CLUE%%": "halt_after is a count for each batch element, not one count for the whole batch."
+      medium:
+        "%%CLUE%%": "A halted row must be frozen while active rows continue."
+      hard:
+        "%%CLUE%%": ""
+
+  - id: visible_tests
+    description: "Visible halting examples"
+    levels:
+      easy:
+        "%%VISIBLE_TESTS%%": |
+          def test_zero_and_one_steps():
+              block = AdaptiveHaltingBlock(4, 4)
+              x = torch.randn(2, 4)
+              out = block(x, torch.tensor([0, 1]))
+              assert torch.equal(out[0], x[0])
+              assert out.shape == x.shape
+      medium:
+        "%%VISIBLE_TESTS%%": |
+          def test_zero_and_one_steps():
+              block = AdaptiveHaltingBlock(4, 4)
+              x = torch.randn(2, 4)
+              out = block(x, torch.tensor([0, 1]))
+              assert torch.equal(out[0], x[0])
+              assert out.shape == x.shape
+
+          def test_different_halts():
+              block = AdaptiveHaltingBlock(4, 4)
+              x = torch.randn(3, 4)
+              assert not torch.equal(block(x, torch.tensor([1, 2, 3]))[0], block(x, torch.tensor([3, 3, 3]))[0])
+      hard:
+        "%%VISIBLE_TESTS%%": |
+          def test_shape():
+              block = AdaptiveHaltingBlock(4, 4)
+              assert block(torch.randn(5, 4), torch.arange(5)).shape == (5, 4)
+
+  - id: implementation_obfuscation
+    description: "Irrelevant stopping terminology in the task"
+    levels:
+      easy:
+        "%%IMPLEMENTATION_NOTE%%": "# Use a boolean mask with one entry per batch row."
+      medium:
+        "%%IMPLEMENTATION_NOTE%%": "# The maximum halt count bounds the loop."
+      hard:
+        "%%IMPLEMENTATION_NOTE%%": ""
+
+  - id: batching_complexity
+    description: "Batch size in the visible examples"
+    levels:
+      easy:
+        "%%BATCH_SIZE%%": "2"
+      medium:
+        "%%BATCH_SIZE%%": "5"
+      hard:
+        "%%BATCH_SIZE%%": "9"
+
+scoring:
+  mode: check_fraction
+  total_checks: 5
+
+constants:
+  "%%PATCHABLE_FILES%%": '["halting.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"halting"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/halting.py: halting.py
+  agent/workspace/train.py: train.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  judge/judge.py: judge.py
+
+  run_eval.sh: shared/run_eval.sh

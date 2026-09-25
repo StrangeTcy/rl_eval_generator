@@ -160,6 +160,14 @@ def validate_config(config: dict, files_dir: Path, env_name: str) -> None:
                         "value must be a mapping or null"
                     )
 
+    renderer_name = config.get("renderer")
+    if renderer_name:
+        renderer_path = files_dir / str(renderer_name)
+        if not renderer_path.is_file():
+            errors.append(f"renderer: file not found: '{renderer_name}'")
+        elif renderer_path.is_symlink():
+            errors.append(f"renderer: file is a symlink: '{renderer_name}'")
+
     layout = config.get("layout", {})
     if not isinstance(layout, dict):
         errors.append("'layout' must be a mapping")
@@ -205,6 +213,56 @@ def parse_difficulty(levels_str: str, axes_def: list) -> Dict[str, str]:
             print(f"ERROR: '{lv}' not valid for axis '{ax['id']}'. Options: {valid}")
             sys.exit(1)
     return {ax["id"]: lv for ax, lv in zip(axes_def, levels)}
+
+
+# ---------------------------------------------------------------------------
+# Renderer hooks
+# ---------------------------------------------------------------------------
+
+def _run_renderer(files_dir: Path, renderer_name: str, subs: Dict[str, str]) -> Dict[str, str]:
+    """Run an environment-specific deterministic renderer hook.
+
+    Opt-in via ``renderer: <file>`` in the environment config (path relative
+    to the env's ``files/`` directory). The hook module must define
+    ``render(subs: dict) -> dict``; the returned mapping is merged into the
+    placeholder table (values may themselves contain placeholders, resolved
+    by the normal recursive pass).
+
+    The hook must be a pure function of ``subs`` (seeded randomness only):
+    its output is baked into generated instances, and judges may re-derive
+    it to check provenance.
+    """
+    import importlib.util
+
+    renderer_path = files_dir / renderer_name
+    if not renderer_path.is_file():
+        raise FileNotFoundError(f"renderer not found: {renderer_path}")
+    if renderer_path.is_symlink():
+        raise ValueError(f"renderer is a symlink: {renderer_path}")
+    spec = importlib.util.spec_from_file_location(
+        f"env_renderer_{renderer_path.stem}", renderer_path
+    )
+    if spec is None or spec.loader is None:
+        raise ValueError(f"cannot load renderer module: {renderer_path}")
+    module = importlib.util.module_from_spec(spec)
+    # Allow the renderer to import sibling modules (e.g. the env's core).
+    sys.path.insert(0, str(files_dir))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.pop(0)
+    if not hasattr(module, "render"):
+        raise ValueError(f"renderer module {renderer_name!r} must define render(subs)")
+    rendered = module.render(dict(subs))
+    if not isinstance(rendered, dict):
+        raise ValueError("renderer must return a dict of placeholder mappings")
+    for key in rendered:
+        if not re.fullmatch(r"[A-Z0-9_]+", str(key)):
+            raise ValueError(
+                f"renderer returned invalid placeholder name {key!r} "
+                "(keys must match [A-Z0-9_]+)"
+            )
+    return {str(k): str(v) for k, v in rendered.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +368,15 @@ def generate_env(
             str(v), subs, source_hint=f"constant '{k}'", strict=False
         )
         subs[key] = resolved
+
+    # Opt-in renderer hook: deterministic, seed-driven placeholder values
+    # (e.g. procedurally generated instance content). Merged before the
+    # recursive resolution pass so composed values keep working.
+    renderer_name = config.get("renderer")
+    if renderer_name:
+        rendered = _run_renderer(files_dir, str(renderer_name), subs)
+        for key, value in rendered.items():
+            subs[key] = value
 
     # Resolve placeholders inside substitution values themselves. This is
     # required for composed values such as %%TEMP_Q%% containing %%Q_VAR%%,
