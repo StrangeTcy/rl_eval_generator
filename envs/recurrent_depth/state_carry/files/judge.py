@@ -11,7 +11,7 @@ from judge_lib import (
     base_result,
     emit,
     make_workdir,
-    mark_check,
+    score_from_checks,
     require_changed_files,
     set_failure,
     validate_submission,
@@ -73,16 +73,13 @@ def main() -> None:
         # accidentally shared across the batch dimension.
         rows = [x[i : i + 1] for i in range(x.shape[0])]
         separate = torch.cat([block(row, depth=HIDDEN_DEPTH) for row in rows], dim=0)
-        checks["batch_independence"] = torch.equal(
-            block(x, depth=HIDDEN_DEPTH), separate
+        # Batched matmul and one-row matmul need not be bit-identical even for
+        # independent examples: allow only floating-point roundoff here.
+        checks["batch_independence"] = torch.allclose(
+            block(x, depth=HIDDEN_DEPTH), separate, rtol=1e-5, atol=1e-6
         )
 
-        passed = 0
-        for name, value in checks.items():
-            mark_check(result, name, bool(value))
-            passed += int(bool(value))
-        result["passed_checks"] = passed
-        result["score"] = passed / TOTAL_CHECKS
+        score_from_checks(result, checks, TOTAL_CHECKS)
     except Exception as exc:
         set_failure(result, "RUNTIME_ERROR", str(exc))
         result["score"] = 0.0

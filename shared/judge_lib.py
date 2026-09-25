@@ -335,6 +335,40 @@ def score_from_accuracy(
     mark_check(result, "anti_gaming_passed", anti_gaming_passed)
 
 
+def score_from_checks(result: dict, checks: dict[str, bool], total_checks: int) -> None:
+    """Score an all-or-nothing check suite with consistent verdict metadata.
+
+    A partial check fraction is a scored model failure, not an unknown judge
+    outcome. Keep the raw check fraction even when required edits cap the final
+    reward, just as score_from_accuracy does for continuous tasks.
+    """
+    if total_checks < 1 or len(checks) != total_checks:
+        # A misconfigured judge is not an agent failure. The suite treats this
+        # failure mode as unscored infrastructure and stops further model calls.
+        set_metric(result, "configured_total_checks", total_checks)
+        set_metric(result, "actual_total_checks", len(checks))
+        set_failure(result, "judge_runtime_error", f"judge expected {total_checks} checks, got {len(checks)}")
+        return
+    passed = 0
+    for name, value in checks.items():
+        mark_check(result, name, bool(value))
+        passed += int(bool(value))
+    accuracy = passed / total_checks
+    required_ok = bool(result.get("_required_files_ok", True))
+    result["passed_checks"] = passed
+    result["raw_accuracy"] = accuracy
+    set_metric(result, "trusted_score", round(accuracy, 6))
+    mark_check(result, "hidden_metric_passed", passed == total_checks)
+    mark_check(result, "anti_gaming_passed", required_ok)
+    result["score"] = min(accuracy, 0.95) if not required_ok else accuracy
+    if passed == total_checks and required_ok:
+        set_failure(result, FAILURE_PASS)
+    elif not required_ok:
+        set_failure(result, FAILURE_OVERFIT_VISIBLE)
+    else:
+        set_failure(result, FAILURE_UNDERFIT)
+
+
 def changed_files_from_patch() -> set[str]:
     """Return normalized file paths touched by the submitted patch."""
     changed: set[str] = set()

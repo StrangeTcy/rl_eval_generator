@@ -160,10 +160,9 @@ def main() -> None:
     with open(probe_path, "w", encoding="utf-8") as f:
         f.write(PROBE_MODULE_TEMPLATE)
     ep = run([
-        sys.executable, probe_path, workdir, 
-        str(JUDGE_SEED + SEED_OFFSET), str(HIDDEN_LONG_SEQ)
+        sys.executable, probe_path, workdir,
+        str(JUDGE_SEED + SEED_OFFSET), str(HIDDEN_LONG_SEQ),
     ], workdir, 180, eval_env())
-    ep = run([sys.executable, probe_path], workdir, 180, eval_env())
     if ep.returncode != 0:
         set_failure(result, FAILURE_RUNTIME_ERROR, "Behavioral probe failed:\n" + ep.stderr[-1000:])
         emit(result)

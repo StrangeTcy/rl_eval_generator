@@ -9,7 +9,7 @@ from judge_lib import (
     base_result,
     emit,
     make_workdir,
-    mark_check,
+    score_from_checks,
     require_changed_files,
     set_failure,
     validate_submission,
@@ -110,12 +110,7 @@ def main() -> None:
                 for template, payload in all_states(task.SPEC_TEXT)
             ),
         }
-        passed = 0
-        for name, value in checks.items():
-            mark_check(result, name, bool(value))
-            passed += int(bool(value))
-        result["passed_checks"] = passed
-        result["score"] = passed / TOTAL_CHECKS
+        score_from_checks(result, checks, TOTAL_CHECKS)
         result["metrics"] = {"query_type": "one_step", "track": "solver_synthesis_debugging"}
     except Exception as exc:
         set_failure(result, "runtime_error", str(exc))

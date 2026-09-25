@@ -9,7 +9,7 @@ from judge_lib import (
     base_result,
     emit,
     make_workdir,
-    mark_check,
+    score_from_checks,
     require_changed_files,
     set_failure,
     validate_submission,
@@ -69,12 +69,7 @@ def main() -> None:
             (outputs[0] == "same") if task.WITNESS_STATUS == "valid" else (outputs[0] != "same")
         )
         checks["format_only_does_not_change_answer"] = outputs[0] == outputs[1]
-        passed = 0
-        for name, value in checks.items():
-            mark_check(result, name, bool(value))
-            passed += int(bool(value))
-        result["passed_checks"] = passed
-        result["score"] = passed / TOTAL_CHECKS
+        score_from_checks(result, checks, TOTAL_CHECKS)
         result["metrics"] = {"query_type": "parse_only", "track": "solver_synthesis_debugging"}
     except Exception as exc:
         set_failure(result, "runtime_error", str(exc))

@@ -1,6 +1,7 @@
 """Provider-free checks of generated judge code, not just template syntax."""
 from __future__ import annotations
 
+import ast
 import contextlib
 import io
 import shutil
@@ -42,6 +43,27 @@ def test_exact_atria_pilot_vectors_preflight_before_compatibility():
     assert all(report["status"] == "ready" for report in reports), reports
 
 
+def test_rope_probe_is_invoked_once_with_its_required_arguments():
+    source = (ROOT / "envs" / "rope" / "files" / "judge.py").read_text(encoding="utf-8")
+    for token, value in (("SCORING_TOTAL_CHECKS", "5"), ("HIDDEN_LONG_SEQ", "128"), ("HIDDEN_OFFSET", "32")):
+        source = source.replace(f"%%{token}%%", value)
+    tree = ast.parse(source)
+    main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+    probe_runs = [
+        node for node in ast.walk(main)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name) and node.func.id == "run"
+        and node.args and isinstance(node.args[0], ast.List)
+        and any(isinstance(arg, ast.Name) and arg.id == "probe_path" for arg in node.args[0].elts)
+    ]
+    assert len(probe_runs) == 1
+    assert [ast.unparse(arg) for arg in probe_runs[0].args[0].elts] == [
+        "sys.executable", "probe_path", "workdir",
+        "str(JUDGE_SEED + SEED_OFFSET)", "str(HIDDEN_LONG_SEQ)",
+    ]
+    assert all(f"sys.argv[{n}]" in source for n in (1, 2, 3))
+
+
 def test_judge_preflight_rejects_missing_globals_in_both_processes(tmp_path):
     judge = tmp_path / "judge.py"
     judge.write_text("def score():\n    return json.loads('{}')\n", encoding="utf-8")
@@ -73,7 +95,8 @@ def test_judge_preflight_rejects_accidental_outer_fstring_interpolation(tmp_path
 
 
 def _run_real_local_judge(
-    env: str, model_file: str, solution: str, tmp_path: Path, monkeypatch
+    env: str, model_file: str, solution: str, tmp_path: Path, monkeypatch,
+    *, expected_score: float | None = 1.0,
 ) -> dict:
     """Exercise patch validation, the generated judge, and its child process.
 
@@ -87,7 +110,7 @@ def _run_real_local_judge(
     args = SimpleNamespace(
         episode_id=episode_id,
         env=env,
-        difficulty="easy,easy",
+        difficulty=",".join(_levels(env).values()),
         seed=0,
         max_steps=5,
         sandbox="local",
@@ -103,8 +126,28 @@ def _run_real_local_judge(
     (Path(state["workspace"]) / model_file).write_text(solution, encoding="utf-8")
     _observation, score, done, info = env_runner._submit(state, {"confirm": True})
     assert done and "judge_result" in info, info
-    assert score == 1.0, info["judge_result"]
+    if expected_score is not None:
+        assert score == expected_score, info["judge_result"]
     return info["judge_result"]
+
+
+def test_check_fraction_judge_reports_partial_scores_without_unknown_failure(tmp_path, monkeypatch):
+    result = _run_real_local_judge(
+        "ts_parse_only",
+        "solution.py",
+        'def solve(spec_text, query):\n    return "not an operation"\n',
+        tmp_path,
+        monkeypatch,
+        expected_score=None,
+    )
+    assert result["verdict"] == "FAIL"
+    assert result["failure_mode"] == "underfit"
+    assert 0 < result["passed_checks"] < result["total_checks"]
+    assert result["score"] == result["raw_accuracy"] == (
+        result["passed_checks"] / result["total_checks"]
+    )
+    assert result["checks"]["hidden_metric_passed"] is False
+    assert result["checks"]["anti_gaming_passed"] is True
 
 
 def test_regex_judge_grades_correct_regex_solution(tmp_path, monkeypatch):
