@@ -27,6 +27,10 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.judge_preflight import validate_generated_judge  # noqa: E402
 
 
 def _utc_now() -> str:
@@ -236,7 +240,7 @@ def _registry_audit(
 
 
 def _preflight_case(case: dict[str, Any], root: Path) -> dict[str, Any]:
-    """Generate and compile one case without starting Docker or a provider."""
+    """Generate and check a case, including deferred judge scripts, without API calls."""
 
     temp_dir = Path(tempfile.mkdtemp(prefix="suite-preflight-", dir=root))
     output_name = temp_dir.name + "-generated"
@@ -280,7 +284,15 @@ def _preflight_case(case: dict[str, Any], root: Path) -> dict[str, Any]:
                 "status": "compile_error",
                 "error": (compiled.stdout + compiled.stderr)[-4000:],
             }
-        return {"status": "ready", "generated_file_count": sum(1 for _ in output_dir.rglob("*"))}
+        try:
+            eval_scripts = validate_generated_judge(output_dir / "judge" / "judge.py")
+        except (OSError, ValueError, SyntaxError) as exc:
+            return {"status": "judge_template_error", "error": str(exc)[-4000:]}
+        return {
+            "status": "ready",
+            "generated_file_count": sum(1 for _ in output_dir.rglob("*")),
+            "eval_scripts_checked": eval_scripts,
+        }
     except subprocess.TimeoutExpired:
         return {"status": "preflight_timeout", "error": "generation or compilation timed out"}
     finally:
@@ -443,7 +455,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="record an explicit estimated-token ceiling for a later all-matrix run",
     )
-    parser.add_argument("--preflight", action="store_true", help="generate and compile each case")
+    parser.add_argument(
+        "--preflight", action="store_true",
+        help="generate, compile, and check deferred judge scripts for each case",
+    )
     return parser
 
 

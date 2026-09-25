@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Judge for regex_state_machine environment."""
+import json
 import os
 import sys
 import torch
@@ -21,6 +22,7 @@ def main() -> None:
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
         f.write(f"""
+import os
 import sys, random, ast, json
 sys.path.insert(0, {workdir!r})
 from regex_machine import %%MODEL_CLASS%%
@@ -115,7 +117,6 @@ except Exception:
     checks["randomized_accuracy"] = False
     checks["forensics"] = None
 
-import json
 with open("eval_outputs.json", "w") as f_out:
     json.dump(checks, f_out)
 """)

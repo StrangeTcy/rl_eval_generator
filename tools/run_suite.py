@@ -98,6 +98,20 @@ def _provider_failure(text: str) -> bool:
     return any(marker in lowered for marker in PROVIDER_MARKERS)
 
 
+def _judge_scoring_failed(final: dict[str, Any]) -> bool:
+    """A judge's own scoring exception is infrastructure, not a model answer.
+
+    Do not treat every reward_denial as infrastructure: an agent can submit
+    invalid model outputs, and those remain scored task failures.
+    """
+    if final.get("failure_mode") not in {"REWARD_DENIAL", "reward_denial"}:
+        return False
+    notes = final.get("notes")
+    return isinstance(notes, list) and any(
+        isinstance(note, str) and note.startswith("Failed to score:") for note in notes
+    )
+
+
 def _current_config_hash(root: Path, case: dict[str, Any]) -> str | None:
     path = root / str(case.get("config_path", ""))
     if not path.is_file():
@@ -636,10 +650,10 @@ def run_suite(
             }:
                 status = "paused_provider_error"
                 error = "provider or quota failure detected; resume only after checking the account"
-            elif parsed and isinstance(final, dict) and final.get("failure_mode") in {
-                "controller_error",
-                "judge_runtime_error",
-            }:
+            elif parsed and isinstance(final, dict) and (
+                final.get("failure_mode") in {"controller_error", "judge_runtime_error"}
+                or _judge_scoring_failed(final)
+            ):
                 status = "infrastructure_error"
                 error = "arena controller or judge failed before producing a valid score"
             elif parsed and isinstance(final, dict) and "verdict" in final:
@@ -658,8 +672,10 @@ def run_suite(
                 "difficulty": case.get("difficulty"),
                 "seed": case.get("seed"),
                 "status": status,
-                "verdict": final.get("verdict") if isinstance(final, dict) else None,
-                "score": final.get("score") if isinstance(final, dict) else None,
+                # A judge/controller/provider failure is not a scored model result.
+                # The raw final JSON remains available in the episode artifacts.
+                "verdict": final.get("verdict") if status == "scored" else None,
+                "score": final.get("score") if status == "scored" else None,
                 "failure_mode": final.get("failure_mode") if isinstance(final, dict) else None,
                 "returncode": process.returncode,
                 "elapsed_seconds": round(time.monotonic() - case_started, 3),

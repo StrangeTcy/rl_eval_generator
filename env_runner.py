@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from arena.docker_backend import DockerBackend, DockerBackendError
+from arena.episode_id import validate_episode_id
 
 ROOT = Path(__file__).resolve().parent
 EPISODES_DIR = ROOT / ".episodes"
@@ -40,15 +41,20 @@ def _safe_join(root: Path, rel: str) -> Path:
     return candidate
 
 
+def _episode_dir(episode_id: str) -> Path:
+    """Never let an external episode ID escape the runner's data directory."""
+    return EPISODES_DIR / validate_episode_id(episode_id)
+
+
 def _load_state(episode_id: str) -> dict[str, Any]:
-    path = EPISODES_DIR / episode_id / "state.json"
+    path = _episode_dir(episode_id) / "state.json"
     if not path.is_file():
         raise SystemExit(f"Unknown episode: {episode_id}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _save_state(state: dict[str, Any]) -> None:
-    path = EPISODES_DIR / state["episode_id"] / "state.json"
+    path = _episode_dir(state["episode_id"]) / "state.json"
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
@@ -116,9 +122,9 @@ def reset(args: argparse.Namespace) -> None:
     sandbox = getattr(args, "sandbox", "local")
     keep_images = bool(getattr(args, "keep_images", False))
     keep_workspace = bool(getattr(args, "keep_workspace", False))
-    EPISODES_DIR.mkdir(exist_ok=True)
     episode_id = args.episode_id or f"{args.env}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
-    episode_dir = EPISODES_DIR / episode_id
+    episode_dir = _episode_dir(episode_id)
+    EPISODES_DIR.mkdir(exist_ok=True)
     if episode_dir.exists():
         shutil.rmtree(episode_dir)
     episode_dir.mkdir(parents=True)

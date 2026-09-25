@@ -46,10 +46,13 @@ ceiling. There is no automatic paid fallback or top-up.
 Before a live sweep, `tools/run_suite.py` runs
 `tools/oracle_preflight.py` on the manifest. This gate makes **zero API calls**.
 It generates one representative case per environment, compiles the generated
-Python and trusted judge, runs any configured deterministic reference self-test,
-and applies a declared `oracle.known_good_patch` only as a clean-application
-check. The report is written to `oracle_preflight.json`; a failure stops the
-sweep before credentials are resolved for a provider request.
+Python, checks judge imports/globals, and renders and checks deferred evaluation
+scripts (which plain compilation of `judge.py` cannot inspect). It also runs any
+configured deterministic reference self-test and applies a declared
+`oracle.known_good_patch` only as a clean-application check. These static checks
+do not prove grading correctness. The report is written to
+`oracle_preflight.json`; a failure stops the sweep before credentials are
+resolved for a provider request.
 
 The `epistemic_games` environment uses the public-only Bayes oracle self-test.
 That oracle is a consistency check for the configured reference behavior, not a

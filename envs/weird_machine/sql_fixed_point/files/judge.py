@@ -66,7 +66,7 @@ try:
     rows = set(cur.fetchall())
     expected = {{(1, 3), (1, 1), (2, 1)}}
     checks["cycle_handling"] = bool(rows == expected)
-    checks["cycle_error"] = None if rows == expected else f"Expected {expected}, got {rows}"
+    checks["cycle_error"] = None if rows == expected else f"Expected {{expected}}, got {{rows}}"
     conn.close()
 except Exception as e:
     checks["cycle_handling"] = False
@@ -74,7 +74,7 @@ except Exception as e:
     if "recursion" in err_str or "limit" in err_str or "loop" in err_str:
         checks["cycle_error"] = "INFINITE_RECURSION: query failed to terminate on cyclic graph"
     else:
-        checks["cycle_error"] = f"SQL Execution Error on cycle: {e}"
+        checks["cycle_error"] = f"SQL Execution Error on cycle: {{e}}"
 
 # 3. Reflexive vs Strictly Positive 1+ Hop Reachability Check
 try:

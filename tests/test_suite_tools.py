@@ -6,7 +6,7 @@ from pathlib import Path
 
 from tools.notebook_mode import detect_capabilities
 from tools.oracle_preflight import validate_manifest_oracles
-from tools.run_suite import _build_command, run_suite
+from tools.run_suite import _build_command, _judge_scoring_failed, run_suite
 from tools.suite_inventory import build_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -183,3 +183,63 @@ def test_floor_effect_pauses_after_consecutive_zero_scores(tmp_path, monkeypatch
     assert checkpoint["pause_reason"] == "floor_effect"
     assert checkpoint["floor_effect"] is True
     assert checkpoint["results"][-1]["floor_effect"] is True
+
+
+def test_judge_scoring_exception_pauses_suite_instead_of_counting_as_model_failure(
+    tmp_path, monkeypatch
+):
+    manifest = build_manifest(root=ROOT, matrix="representative", seeds=[0])
+    manifest["cases"] = manifest["cases"][:2]
+    manifest["case_count"] = 2
+    manifest["environments"] = []  # no oracle declared; the subprocess is mocked
+    monkeypatch.setenv("OFFLINE_SUITE_API_KEY", "test-secret")
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(
+                {
+                    "run_dir": "runs/offline",
+                    "http_attempts": 1,
+                    "final": {
+                        "verdict": "FAIL",
+                        "score": 0.0,
+                        "failure_mode": "REWARD_DENIAL",
+                        "notes": ["Failed to score: name 'json' is not defined"],
+                    },
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr("tools.run_suite.subprocess.run", fake_run)
+    checkpoint = run_suite(
+        manifest,
+        output_dir=tmp_path / "judge_error",
+        provider="custom",
+        model="offline/pinned",
+        api_key_env="OFFLINE_SUITE_API_KEY",
+        api_base="https://example.invalid/v1",
+        max_steps=1,
+        max_tokens=7,
+        invalid_retries=0,
+        floor_effect_after=0,
+    )
+    assert len(calls) == 1  # stop before sending the next case to the provider
+    assert checkpoint["pause_reason"] == "infrastructure_error"
+    assert checkpoint["results"][0]["status"] == "infrastructure_error"
+    assert checkpoint["results"][0]["score"] is None
+    assert checkpoint["results"][0]["verdict"] is None
+    assert checkpoint["floor_effect_streak"] == 0
+
+
+def test_agent_invalid_outputs_are_still_scored_failures():
+    assert not _judge_scoring_failed(
+        {"failure_mode": "reward_denial", "notes": ["Failed to score outputs: invalid logits"]}
+    )
+    assert not _judge_scoring_failed(
+        {"failure_mode": "underfit", "notes": ["Failed to score: data is incorrect"]}
+    )

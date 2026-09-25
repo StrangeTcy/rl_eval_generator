@@ -3,9 +3,10 @@
 
 This is a release gate for a model sweep, not a model evaluation.  It generates
 one representative case per manifest environment, compiles the generated Python,
-and optionally applies a declared known-good patch.  Environments may also
-provide a deterministic reference self-test.  No provider module, credential,
-or network operation is used here.
+checks judge globals and deferred evaluation scripts, and optionally applies a
+declared known-good patch. Environments may also provide a deterministic
+reference self-test. No provider module, credential, or network operation is
+used here.
 
 The report deliberately distinguishes a patch oracle from a judge-reference
 compile.  A compile check is not a claim that an unseen environment has a
@@ -27,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools.judge_preflight import validate_generated_judge  # noqa: E402
 from tools.suite_inventory import _load_yaml, build_manifest  # noqa: E402
 
 # Additional environments can declare a path under
@@ -69,7 +71,13 @@ def _compile_generated(output: Path) -> tuple[bool, str]:
     if not python_files:
         return False, "generated case contains no Python files"
     code, detail = _run([sys.executable, "-m", "py_compile", *python_files], cwd=output)
-    return code == 0, detail
+    if code != 0:
+        return False, detail
+    try:
+        validate_generated_judge(output / "judge" / "judge.py")
+    except (OSError, ValueError, SyntaxError) as exc:
+        return False, f"judge template check failed: {exc}"
+    return True, detail
 
 
 def _apply_known_good_patch(output: Path, patch_path: Path) -> tuple[bool, str]:

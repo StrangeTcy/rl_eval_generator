@@ -17,6 +17,7 @@ from typing import Any
 
 from .artifacts import RunArtifacts, manifest_defaults, sanitize, utc_now
 from .docker_backend import DockerBackend
+from .episode_id import validate_episode_id
 from .providers import (
     Completion,
     ProviderClient,
@@ -270,6 +271,8 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     into an environment, subprocess argument, or artifact.
     """
 
+    if options.episode_id is not None:
+        validate_episode_id(options.episode_id)
     if options.sandbox not in {"local", "docker"}:
         raise ValueError("sandbox must be local or docker")
     if options.max_steps < 1 or options.max_tokens < 1:
@@ -300,8 +303,8 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         secret_path=options.secrets,
     )
     run_id = _new_run_id(options)
+    episode_id = validate_episode_id(options.episode_id or f"arena_{run_id.replace('-', '_')}")
     artifacts = RunArtifacts(Path(options.out), run_id, secret=api_key)
-    episode_id = options.episode_id or f"arena_{run_id.replace('-', '_')}"
     episode_dir: Path | None = None
     final: dict[str, Any] = _fallback_final("not_submitted", "Episode did not reach submission.")
     manifest = manifest_defaults(
