@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import subprocess
@@ -45,6 +46,11 @@ PROVIDER_MARKERS = (
     "authentication",
     "credit",
 )
+
+
+def _sleep(seconds: float) -> None:
+    """Indirection so tests can observe provider-outage backoff without waiting."""
+    time.sleep(seconds)
 
 
 def _utc_now() -> str:
@@ -377,11 +383,27 @@ def run_suite(
     retry_recorded: bool = False,
     keep_images: bool = False,
     keep_workspace: bool = False,
+    provider_outage_patience_seconds: float = 0.0,
+    provider_outage_backoff_seconds: float = 60.0,
+    unreferenced_compile_only: bool = False,
+    gate_context_sha: str | None = None,
+    stop_after_gates: bool = False,
 ) -> dict[str, Any]:
     if not manifest.get("ready_for_scheduler", False) and not allow_config_drift:
         raise ValueError("manifest is not ready; fix inventory issues or pass --allow-config-drift explicitly")
     if not provider or not model:
         raise ValueError("provider and model are required")
+    if provider_outage_patience_seconds < 0:
+        raise ValueError("provider-outage-patience-seconds must not be negative")
+    if provider_outage_backoff_seconds <= 0:
+        raise ValueError("provider-outage-backoff-seconds must be positive")
+    if unreferenced_compile_only and not allow_compile_only_oracles:
+        raise ValueError(
+            "unreferenced-compile-only requires allow-compile-only-oracles; "
+            "the weaker guarantee must be an explicit operator choice"
+        )
+    if stop_after_gates and dry_run:
+        raise ValueError("stop-after-gates requires a live run; a dry run skips the gates")
     if invalid_retries < 0 or max_retries < 0 or max_retries > 5:
         raise ValueError("invalid-retries must not be negative and max-retries must be between 0 and 5")
     if top_p is not None and not 0.0 < top_p <= 1.0:
@@ -403,7 +425,10 @@ def run_suite(
     if sandbox != "docker":
         raise ValueError("suite scheduler requires Docker isolation; use a separate local smoke test")
     output_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
+    referenced_envs: set[str] = set()
     oracle_report: dict[str, Any] | None = None
+    gate_record: dict[str, Any] | None = None
     if not dry_run:
         # This gate is intentionally local and provider-free.  It validates the
         # pinned environment/reference behavior before resolving credentials or
@@ -414,6 +439,7 @@ def run_suite(
         oracle_report["operator_compile_only_override"] = bool(
             allow_compile_only_oracles and not oracle_report.get("behavioral_coverage_complete", False)
         )
+        oracle_report["unreferenced_compile_only"] = unreferenced_compile_only
         _write_json_atomic(output_dir / "oracle_preflight.json", oracle_report)
         if not oracle_report.get("model_sweep_allowed", False):
             raise ValueError(
@@ -424,14 +450,69 @@ def run_suite(
         # a paid case. Require a correct reference, empty no-op, and valid-but-
         # wrong patch to grade as expected at *each selected vector and seed*.
         # The legacy compile-only override cannot bypass this hard gate.
-        from tools.instance_oracle_gate import validate_manifest_instances
+        from tools.instance_oracle_gate import REFERENCES, validate_manifest_instances
 
+        referenced_envs = set(REFERENCES)
         selected_cases = list(manifest.get("cases", []))
         if max_cases is not None:
             selected_cases = selected_cases[:max_cases]
-        instance_report = validate_manifest_instances(
-            {"cases": selected_cases}, root=ROOT, include_slow=True
-        )
+        if unreferenced_compile_only:
+            # Explicit campaign mode: environments without any configured
+            # reference run under compile-only validation and are labeled as
+            # such on every result row; every environment WITH a reference
+            # still passes the full four-variant gate before any paid call.
+            gated_cases = [
+                case for case in selected_cases
+                if str(case.get("environment", "")) in referenced_envs
+            ]
+            compile_only_cases = [
+                case for case in selected_cases
+                if str(case.get("environment", "")) not in referenced_envs
+            ]
+        else:
+            gated_cases = selected_cases
+            compile_only_cases = []
+        gated_manifest = {"cases": gated_cases}
+        gated_manifest_sha = hashlib.sha256(
+            json.dumps(gated_manifest, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        # A resumed campaign may carry a previously completed gate pass
+        # instead of re-running the (CPU-hours) exact-instance validation.
+        # The carry is only accepted when the gated case list and the caller's
+        # code context (e.g. the deployed git SHA) are byte-identical; any
+        # drift re-runs the full gate.
+        carried = None
+        if checkpoint_path.is_file():
+            try:
+                carried = json.loads(
+                    checkpoint_path.read_text(encoding="utf-8")
+                ).get("instance_gate")
+            except (OSError, json.JSONDecodeError):
+                carried = None
+        if (
+            isinstance(carried, dict)
+            and carried.get("passed") is True
+            and carried.get("gated_manifest_sha256") == gated_manifest_sha
+            and carried.get("gate_context_sha") == gate_context_sha
+            and isinstance(carried.get("report"), dict)
+            and carried["report"].get("instance_coverage_complete") is True
+        ):
+            instance_report = dict(carried["report"])
+            instance_report["carried_from_checkpoint"] = True
+        else:
+            instance_report = validate_manifest_instances(
+                gated_manifest, root=ROOT, include_slow=True
+            )
+        if compile_only_cases:
+            instance_report = dict(instance_report)
+            instance_report["compile_only_cases"] = [
+                str(case.get("case_id")) for case in compile_only_cases
+            ]
+            instance_report["compile_only_guarantee"] = (
+                "these cases run with compile-only judge validation: no "
+                "behavioral reference exists for their environments, so their "
+                "verdicts do not carry the exact-instance oracle guarantee"
+            )
         _write_json_atomic(output_dir / "instance_oracles.json", instance_report)
         if not instance_report["instance_coverage_complete"]:
             raise ValueError(
@@ -441,14 +522,27 @@ def run_suite(
             )
         oracle_report["instance_coverage_complete"] = True
         _write_json_atomic(output_dir / "oracle_preflight.json", oracle_report)
-    checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
+        gate_record = {
+            "passed": True,
+            "gated_manifest_sha256": gated_manifest_sha,
+            "gate_context_sha": gate_context_sha,
+            "gated_case_count": len(gated_cases),
+            "compile_only_case_count": len(compile_only_cases),
+            "recorded_at": _utc_now(),
+            "report": instance_report,
+        }
     repository = manifest.get("repository", {})
     selection = manifest.get("selection", {})
     matrix = selection.get("matrix") if isinstance(selection, dict) else None
-    if matrix == "all" and not dry_run and max_tokens_total is None and max_output_tokens is None:
+    if (
+        matrix in {"all", "covering"}
+        and not dry_run
+        and max_tokens_total is None
+        and max_output_tokens is None
+    ):
         raise ValueError(
-            "all-matrix execution requires --dry-run or an explicit "
-            "--max-tokens-total/--max-output-tokens ceiling"
+            "all-matrix or covering-matrix execution requires --dry-run or an "
+            "explicit --max-tokens-total/--max-output-tokens ceiling"
         )
     case_budget_calls, case_budget_tokens = _estimated_case_budget(
         max_steps, max_tokens, invalid_retries
@@ -486,6 +580,8 @@ def run_suite(
     }
     checkpoint = _load_checkpoint(checkpoint_path, manifest=manifest, metadata=metadata)
     checkpoint["run"].update(metadata)
+    if gate_record is not None:
+        checkpoint["instance_gate"] = gate_record
     checkpoint["paused"] = False
     checkpoint["pause_reason"] = None
     checkpoint["floor_effect"] = bool(checkpoint.get("floor_effect", False))
@@ -511,6 +607,15 @@ def run_suite(
                 f"{estimated_total_tokens} > {max_tokens_total}; lower --max-cases or the per-case limits"
             )
     started = time.monotonic()
+    if stop_after_gates:
+        # Provider-free validation phase complete (compile preflight plus the
+        # exact-instance gate, or a carried pass).  The campaign wrapper runs
+        # its paid compatibility probe here and then re-enters the scheduler
+        # with identical parameters; the recorded gate pass is carried over.
+        checkpoint["provider_free_validation_complete"] = True
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+        return checkpoint
     api_calls_reserved = sum(
         max_steps * (1 + invalid_retries)
         for row in checkpoint.get("results", [])
@@ -534,8 +639,19 @@ def run_suite(
             secret_path=secrets,
         )
         secret = credentials.api_key
-    for case in cases:
+    case_index = 0
+    retry_case_id: str | None = None
+    case_attempts_spent = 0
+    case_try_count = 0
+    outage_waited = 0.0
+    outage_retries = 0
+    while case_index < len(cases):
+        case = cases[case_index]
         case_id = str(case.get("case_id", ""))
+        if case_id != retry_case_id:
+            retry_case_id = case_id
+            case_attempts_spent = 0
+            case_try_count = 0
         if not case_id or not case.get("environment"):
             raise ValueError("every manifest case needs case_id and environment")
         existing = result_by_case.get(case_id)
@@ -545,10 +661,12 @@ def run_suite(
             "compile_error",
             "blocked_config_drift",
         }:
+            case_index += 1
             continue
         # A dry-run is a plan, not a completed API case.  It must be possible
         # to resume the same checkpoint in live mode after reviewing its budget.
         if existing and not retry_recorded and dry_run and existing.get("status") == "planned":
+            case_index += 1
             continue
         if max_wall_seconds is not None and time.monotonic() - started >= max_wall_seconds:
             checkpoint["paused"] = True
@@ -570,6 +688,7 @@ def run_suite(
             checkpoint["updated_at"] = _utc_now()
             _write_json_atomic(checkpoint_path, checkpoint)
             _write_coverage(output_dir, checkpoint)
+            case_index += 1
             continue
         estimated_calls, estimated_tokens = case_budget_calls, case_budget_tokens
         if max_api_calls is not None and api_calls_reserved + estimated_calls > max_api_calls:
@@ -620,6 +739,7 @@ def run_suite(
             checkpoint["updated_at"] = _utc_now()
             _write_json_atomic(checkpoint_path, checkpoint)
             _write_coverage(output_dir, checkpoint)
+            case_index += 1
             continue
         if not secret:
             raise ValueError(f"API key environment variable {api_key_env!r} is not set")
@@ -734,6 +854,74 @@ def run_suite(
                 "error": "scheduler subprocess timed out",
                 "elapsed_seconds": round(time.monotonic() - case_started, 3),
             }
+        # Every attempt is individually bounded by the per-case HTTP-attempt
+        # ceiling; a retried case may legitimately total more, and the global
+        # ceiling below still bounds total spend.
+        raw_try_attempts = int(result.get("http_attempts", 0) or 0)
+        if (
+            max_http_attempts is not None
+            and case_http_attempt_ceiling is not None
+            and raw_try_attempts > int(case_http_attempt_ceiling)
+        ):
+            raise ValueError("episode exceeded its bounded HTTP-attempt ceiling")
+        if (
+            result.get("status") == "paused_provider_error"
+            and provider_outage_patience_seconds > 0
+        ):
+            # Resilient-campaign mode: a provider outage is waited out inside
+            # the run with exponential backoff instead of pausing the suite,
+            # bounded by the patience window, the remaining wall budget, and
+            # the remaining global HTTP-attempt budget.
+            case_try_count += 1
+            budget_left = (
+                max_http_attempts - http_attempts_reserved - case_attempts_spent - raw_try_attempts
+                if max_http_attempts is not None
+                else None
+            )
+            backoff = min(
+                provider_outage_backoff_seconds * (2 ** (case_try_count - 1)),
+                600.0,
+            )
+            remaining_patience = provider_outage_patience_seconds - outage_waited
+            wall_left = (
+                max_wall_seconds - (time.monotonic() - started)
+                if max_wall_seconds is not None
+                else None
+            )
+            if (
+                backoff < remaining_patience
+                and (wall_left is None or backoff < wall_left)
+                and (budget_left is None or budget_left >= 1)
+            ):
+                case_attempts_spent += raw_try_attempts
+                outage_waited += backoff
+                outage_retries += 1
+                checkpoint["provider_outage"] = {
+                    "waited_seconds": round(outage_waited, 1),
+                    "retries": outage_retries,
+                    "last_backoff_seconds": round(backoff, 1),
+                    "last_case_id": case_id,
+                    "updated_at": _utc_now(),
+                }
+                _write_json_atomic(checkpoint_path, checkpoint)
+                _sleep(backoff)
+                continue
+            # Patience, wall, or attempt budget is exhausted: record this
+            # attempt as the case result and let the pause logic below stop
+            # the suite for the supervisor to resume later.
+        if case_attempts_spent:
+            result["http_attempts"] = raw_try_attempts + case_attempts_spent
+        if case_try_count:
+            result["provider_outage_retries"] = case_try_count
+        result["judge_guarantee"] = (
+            "compile_only"
+            if unreferenced_compile_only
+            and str(case.get("environment", "")) not in referenced_envs
+            else "behavioral_reference"
+        )
+        if result.get("status") != "paused_provider_error":
+            outage_waited = 0.0
+            outage_retries = 0
         if not reasoning_effort and _is_zero_score(result):
             checkpoint["floor_effect_streak"] = int(checkpoint.get("floor_effect_streak", 0) or 0) + 1
         else:
@@ -757,8 +945,6 @@ def run_suite(
         output_tokens_reserved += estimated_tokens
         http_attempts_used = int(result.get("http_attempts", 0) or 0)
         if max_http_attempts is not None:
-            if http_attempts_used > int(case_http_attempt_ceiling or 0):
-                raise ValueError("episode exceeded its bounded HTTP-attempt ceiling")
             http_attempts_reserved += http_attempts_used
         if result.get("status") == "paused_provider_error":
             checkpoint["paused"] = True
@@ -775,6 +961,7 @@ def run_suite(
         _write_coverage(output_dir, checkpoint)
         if checkpoint.get("paused"):
             break
+        case_index += 1
     if dry_run:
         checkpoint["results"] = list(result_by_case.values())
         checkpoint["updated_at"] = _utc_now()
@@ -834,6 +1021,49 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retry-recorded", action="store_true")
     parser.add_argument("--keep-images", action="store_true")
     parser.add_argument("--keep-workspace", action="store_true")
+    parser.add_argument(
+        "--provider-outage-patience-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "wait out provider outages inside the run with exponential backoff "
+            "up to this many total seconds per outage before pausing (0 keeps "
+            "the fail-closed pause-on-first-provider-error behaviour)"
+        ),
+    )
+    parser.add_argument(
+        "--provider-outage-backoff-seconds",
+        type=float,
+        default=60.0,
+        help="initial provider-outage backoff; doubles per retry, capped at 600s",
+    )
+    parser.add_argument(
+        "--unreferenced-compile-only",
+        action="store_true",
+        help=(
+            "allow environments without a configured behavioral reference to "
+            "run under compile-only judge validation (requires "
+            "--allow-compile-only-oracles; result rows are labeled "
+            "judge_guarantee=compile_only)"
+        ),
+    )
+    parser.add_argument(
+        "--gate-context-sha",
+        default=None,
+        help=(
+            "code context (e.g. deployed git SHA) recorded with the "
+            "exact-instance gate pass; a resumed checkpoint with a different "
+            "context re-runs the full gate"
+        ),
+    )
+    parser.add_argument(
+        "--stop-after-gates",
+        action="store_true",
+        help=(
+            "run the provider-free validation phase, write the checkpoint "
+            "with the carry-able gate record, and stop before any episode"
+        ),
+    )
     return parser
 
 
@@ -873,6 +1103,10 @@ def main(argv: list[str] | None = None) -> int:
             retry_recorded=args.retry_recorded,
             keep_images=args.keep_images,
             keep_workspace=args.keep_workspace,
+            provider_outage_patience_seconds=args.provider_outage_patience_seconds,
+            provider_outage_backoff_seconds=args.provider_outage_backoff_seconds,
+            unreferenced_compile_only=args.unreferenced_compile_only,
+            gate_context_sha=args.gate_context_sha,
         )
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"suite run failed: {exc}", file=sys.stderr)

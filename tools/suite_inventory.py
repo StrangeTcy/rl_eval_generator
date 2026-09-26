@@ -9,6 +9,7 @@ runs generated code unless ``--preflight`` is requested.
 Examples:
     python tools/suite_inventory.py --out suite_manifest.json
     python tools/suite_inventory.py --out suite_all.json --matrix all --seeds 0,1
+    python tools/suite_inventory.py --out suite_covering.json --matrix covering --seeds 0
     python tools/suite_inventory.py --out suite_preflight.json --matrix all --preflight
 """
 from __future__ import annotations
@@ -142,18 +143,40 @@ def _difficulty_vectors(
         return []
     if matrix == "all":
         choices = [axis["levels"] for axis in axes]
-    elif matrix == "representative":
+        return [
+            {axis["id"]: level for axis, level in zip(axes, combination, strict=True)}
+            for combination in itertools.product(*choices)
+        ]
+    if matrix == "covering":
+        # Minimal deterministic set that exercises every level of every axis
+        # at least once: a base vector at each axis's first (sorted) level,
+        # then one additional vector per remaining level varying a single
+        # axis.  Count: 1 + sum(len(levels) - 1) per environment, versus the
+        # full cartesian product above.
+        base = [axis["levels"][0] for axis in axes]
+        vectors = [
+            {axis["id"]: level for axis, level in zip(axes, base, strict=True)}
+        ]
+        for index, axis in enumerate(axes):
+            for level in axis["levels"][1:]:
+                combination = list(base)
+                combination[index] = level
+                vectors.append(
+                    {a["id"]: level for a, level in zip(axes, combination, strict=True)}
+                )
+        return vectors
+    if matrix == "representative":
         choices = []
         for axis in axes:
             levels = axis["levels"]
             preferred = [level for level in selected_levels or [] if level in levels]
             choices.append(preferred[:1] or [levels[0]])
-    else:  # pragma: no cover - argparse constrains this
-        raise ValueError(f"unknown matrix {matrix!r}")
-    return [
-        {axis["id"]: level for axis, level in zip(axes, combination, strict=True)}
-        for combination in itertools.product(*choices)
-    ]
+        return [
+            {axis["id"]: level for axis, level in zip(axes, combination, strict=True)}
+            for combination in itertools.product(*choices)
+        ]
+    # pragma: no cover - argparse constrains this
+    raise ValueError(f"unknown matrix {matrix!r}")
 
 
 def _case_id(environment: str, difficulty: dict[str, str], seed: int) -> str:
@@ -432,9 +455,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", type=Path, default=Path("suite_manifest.json"))
     parser.add_argument(
         "--matrix",
-        choices=("representative", "all"),
+        choices=("representative", "covering", "all"),
         default="representative",
-        help="representative selects the first level per axis; all expands the Cartesian product",
+        help=(
+            "representative selects the first level per axis; covering exercises "
+            "every level of every axis with a minimal vector set; all expands "
+            "the full Cartesian product"
+        ),
     )
     parser.add_argument("--seeds", default="0", help="comma-separated integer seeds")
     parser.add_argument("--levels", default="easy,medium,hard", help="preferred levels for representative mode")
