@@ -194,6 +194,30 @@ def _report_from_checkpoint(
     return report
 
 
+def _order_cases_referenced_first(manifest: dict) -> None:
+    """Sort cases so environments with an exact-instance oracle reference run
+    before compile-only ones, preserving the deterministic order inside each
+    group.  Rationale: budget and floor-effect pauses are non-resumable, so
+    if the campaign is cut short, the cut must land on compile-only cases —
+    whose verdicts are already labeled unvalidated — never on validated
+    ones."""
+    from tools.instance_oracle_gate import REFERENCES  # lazy: needs torch
+
+    referenced_envs = set(REFERENCES)
+    manifest["cases"] = sorted(
+        manifest["cases"],
+        key=lambda case: str(case.get("environment")) not in referenced_envs,
+    )
+    manifest["campaign_case_ordering"] = {
+        "policy": "referenced_environments_first",
+        "reason": "non-resumable pauses must cut compile-only cases, not validated ones",
+        "referenced_case_count": sum(
+            1 for case in manifest["cases"]
+            if str(case.get("environment")) in referenced_envs
+        ),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", type=Path, default=ROOT / "experiments" / "atria_campaign.yaml")
@@ -242,6 +266,10 @@ def main(argv: list[str] | None = None) -> int:
             }
             write_json(output / "pilot_manifest.json", manifest)
             modality = inventory_selected_modalities(manifest, root=ROOT)
+        # Budget exhaustion and floor effects pause non-resuably, so the
+        # validated cases must complete before the compile-only ones.
+        _order_cases_referenced_first(manifest)
+        write_json(output / "pilot_manifest.json", manifest)
         write_json(output / "modality_inventory.json", modality)
         if not modality["all_selected_cases_text_only_compatible"]:
             write_json(output / "campaign_report.json", {

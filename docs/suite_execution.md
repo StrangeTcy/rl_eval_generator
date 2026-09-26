@@ -252,13 +252,18 @@ operator choices recorded in the calibration decision list:
    The carry is keyed on the gated case list and the deployed code SHA and
    is only accepted when both match byte-for-byte; any drift re-runs the
    full gate. The first dispatch still pays the full gate cost, which can
-   consume most of a 6-hour job (the Glyph, MoCo, and RoPE reference
-   families dominate); if a dispatch is killed before any checkpoint
+   consume most of a 6-hour job (the Glyph and MoCo reference families
+   dominate); if a dispatch is killed before any checkpoint
    exists, the supervisor restarts it once from the recorded ref, and a
    repeat pre-checkpoint death means the gate phase must be split by hand.
 
 Budget ceilings for the campaign are pinned in
-`experiments/atria_campaign.yaml` (52,386 HTTP attempts, 10,900 logical API
-calls, 71.5 M output tokens — the theoretical bound plus margin for 218
+`experiments/atria_campaign.yaml` (48,306 HTTP attempts, 10,050 logical API
+calls, 66 M output tokens — the theoretical bound plus margin for 201 served
 cases) and are hard: reaching one ends the campaign for an operator, not the
-supervisor.
+supervisor. Because those pauses are non-resumable, the wrapper orders the
+case list **referenced-environments-first** (79 validated cases, then the
+122 compile-only ones, deterministic order preserved inside each group): a
+campaign cut short by a ceiling loses compile-only rows, never validated
+verdicts. The provider's actual free quota should be checked against the
+66 M-token ceiling before dispatch — the ceiling is a cap, not a plan.

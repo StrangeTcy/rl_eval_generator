@@ -345,3 +345,30 @@ def test_gate_pass_carries_across_resume_with_matching_context(tmp_path, monkeyp
     )
     assert len(gate_calls) == 1
     assert third["instance_gate"]["gate_context_sha"] == "def456"
+
+
+def test_order_cases_referenced_first_puts_validated_envs_before_compile_only():
+    from tools.atria_campaign import _order_cases_referenced_first
+
+    referenced = sorted(REFERENCES)[:2]
+    assert len(referenced) == 2
+    input_order = ["unreferenced_env_x", referenced[0], "unreferenced_env_y",
+                   referenced[1], "unreferenced_env_x"]
+    cases = [{"case_id": f"{env}-1", "environment": env} for env in input_order]
+    manifest = {"cases": [dict(case) for case in cases]}
+    _order_cases_referenced_first(manifest)
+    envs = [case["environment"] for case in manifest["cases"]]
+    assert set(envs[:2]) == set(referenced)
+    assert set(envs[2:]) == {"unreferenced_env_x", "unreferenced_env_y"}
+    # Stable: relative order preserved inside each group.
+    assert [e for e in envs if e not in referenced] == [
+        e for e in input_order if e not in referenced]
+    assert [e for e in envs if e in referenced] == [
+        e for e in input_order if e in referenced]
+    ordering = manifest["campaign_case_ordering"]
+    assert ordering["policy"] == "referenced_environments_first"
+    assert ordering["referenced_case_count"] == 2
+    # Deterministic: same input, same output.
+    again = {"cases": [dict(case) for case in cases]}
+    _order_cases_referenced_first(again)
+    assert [c["case_id"] for c in again["cases"]] == [c["case_id"] for c in manifest["cases"]]

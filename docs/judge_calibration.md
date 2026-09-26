@@ -164,11 +164,12 @@ Recorded here for completeness; details and evidence live in
    metadata-keyed carry-over within one campaign's checkpoint chain: it
    cannot leak across manifests, code versions, or independent runs.
 7. **Gate-phase cost can approach the 6-hour GitHub job cap** (2026-09-26).
-   The covering matrix's Glyph/MoCo/RoPE reference families dominate the
+   The covering matrix's Glyph and MoCo reference families dominate the
    first dispatch's provider-free validation; a job killed before any
    checkpoint exists loses the gate work (the supervisor restarts once from
    the recorded ref). If that repeats, the gate phase must be split by hand
-   or given a dedicated long-running machine.
+   or given a dedicated long-running machine — e.g. a separate pre-run job
+   that publishes the gate pass as an artifact.
 
 ## Validation environments for this pass
 
@@ -180,3 +181,9 @@ Recorded here for completeness; details and evidence live in
   `RUN_SLOW_JUDGE_ORACLES=1` — **255 passed, 0 skipped**, including the slow
   Glyph oracle, all 24 weird_machine quadruples, and the batchnorm no-op
   fail-closed check.
+- torch 2.5.1+cu124 / torchvision 0.20.1 / numpy 2.1.2 (Python 3.11.2,
+  2 CPU cores), 2026-09-26 campaign pass: full suite on the campaign code
+  — **250 passed, 1 opt-in skip** (slow Glyph oracle left off; the live
+  gate smoke over the covering matrix exercises the same oracle family).
+  This is the first full-torch execution of the campaign/scheduler tests;
+  they also pass torch-less (stub-based) in the 26-test local run.
