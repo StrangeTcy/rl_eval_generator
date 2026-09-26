@@ -49,7 +49,7 @@ from tools.atria_first_experiment import (  # noqa: E402
 )
 from tools.atria_modality import inventory_selected_modalities  # noqa: E402
 from tools.first_experiment import _generation_preflight, _runtime_check  # noqa: E402
-from tools.run_suite import run_suite  # noqa: E402
+from tools.run_suite import GateWallExceeded, run_suite  # noqa: E402
 from tools.suite_inventory import _load_yaml, build_manifest  # noqa: E402
 
 RESUMABLE_PAUSE_REASONS = {
@@ -343,8 +343,45 @@ def main(argv: list[str] | None = None) -> int:
         }
 
         # Phase 1: provider-free validation only.  Writes the checkpoint with
-        # the carry-able gate record and touches no provider.
-        checkpoint = run_suite(manifest, stop_after_gates=True, **scheduler_kwargs)
+        # the carry-able gate record and touches no provider.  The gate can
+        # cost more CPU-hours than one job, so it is bounded by the same job
+        # clock with an explicit upload reserve: when the budget runs out
+        # mid-gate the banked rows pause resumably instead of being killed by
+        # the runner's job-level cancellation before the state upload.
+        gate_wall_seconds = max(
+            60.0, job_seconds - 900.0 - (time.monotonic() - started)
+        )
+        try:
+            checkpoint = run_suite(
+                manifest, stop_after_gates=True,
+                gate_wall_seconds=gate_wall_seconds, **scheduler_kwargs,
+            )
+        except GateWallExceeded as exc:
+            partial_path = output / "instance_oracles_partial.json"
+            banked = 0
+            try:
+                banked = len(json.loads(
+                    partial_path.read_text(encoding="utf-8")
+                ).get("rows") or {})
+            except (OSError, json.JSONDecodeError):
+                banked = 0
+            write_json(output / "campaign_report.json", {
+                "status": "paused",
+                "pause_reason": "max_wall_seconds",
+                "resumable": True,
+                "note": "gate_in_progress",
+                "gate_rows_banked": banked,
+                "detail": redact_text(str(exc)),
+                "compile_only_disclaimer": (
+                    "compile_only rows are graded by judges without a "
+                    "behavioral reference on that exact instance; they do "
+                    "not carry the exact-instance oracle guarantee and must "
+                    "not be read as validated model verdicts"
+                ),
+            })
+            print(f"Campaign paused mid-gate ({banked} rows banked); "
+                  f"inspect {output}")
+            return 7
         write_json(output / "gate_phase_checkpoint.json", {
             "provider_free_validation_complete": True,
             "gate_context_sha": gate_context_sha,

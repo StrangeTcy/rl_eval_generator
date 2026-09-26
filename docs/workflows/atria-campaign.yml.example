@@ -81,10 +81,20 @@ jobs:
             exit 0
           fi
           ARTIFACT_ID=$(echo "$LATEST" | jq -r '.id')
-          mkdir -p runs/atria_campaign
-          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > state.zip
-          unzip -q state.zip -d runs/atria_campaign
-          CHECKPOINT=runs/atria_campaign/suite_checkpoint.json
+          # Stage the previous state under RUNNER_TEMP, OUTSIDE the checkout
+          # destination: actions/checkout clears the workspace when it does
+          # not contain the expected repository, so state restored into the
+          # workspace before checkout would be deleted.  The restore into
+          # runs/atria_campaign happens after checkout (see the
+          # "Restore previous campaign state" step).
+          STATE_STAGE="$RUNNER_TEMP/atria_state"
+          echo "state_staged=true" >> "$GITHUB_OUTPUT"
+          rm -rf "$STATE_STAGE"
+          mkdir -p "$STATE_STAGE"
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
+            > "$RUNNER_TEMP/state.zip"
+          unzip -q "$RUNNER_TEMP/state.zip" -d "$STATE_STAGE"
+          CHECKPOINT="$STATE_STAGE/suite_checkpoint.json"
           if [ ! -f "$CHECKPOINT" ]; then
             # The last dispatch died before any checkpoint existed (e.g.
             # inside the gate phase). Restart from the recorded ref. The
@@ -95,7 +105,7 @@ jobs:
             # death before the FIRST gated case completes makes no
             # progress (the operator sees a state artifact with neither
             # checkpoint nor partial rows).
-            REF=$(cat runs/atria_campaign/campaign_ref.txt 2>/dev/null || true)
+            REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
             if [ -n "$REF" ]; then
               echo "mode=fresh" >> "$GITHUB_OUTPUT"
               echo "ref=$REF" >> "$GITHUB_OUTPUT"
@@ -149,7 +159,7 @@ jobs:
           fi
           REF=$(echo "$DECISION" | cut -d'|' -f3)
           if [ -z "$REF" ]; then
-            REF=$(cat runs/atria_campaign/campaign_ref.txt 2>/dev/null || true)
+            REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
           fi
           if [ -z "$REF" ]; then
             echo "mode=none" >> "$GITHUB_OUTPUT"
@@ -191,6 +201,17 @@ jobs:
           python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
           python -m pip install jinja2
 
+      - name: Restore previous campaign state after checkout
+        if: steps.mode.outputs.mode != 'none' && steps.mode.outputs.state_staged == 'true'
+        run: |
+          set -euo pipefail
+          # runs/ was NOT populated before checkout (that is the point of
+          # the RUNNER_TEMP staging), so restore the staged state now.
+          mkdir -p runs/atria_campaign
+          cp -a "$RUNNER_TEMP/atria_state/." runs/atria_campaign/
+          echo "restored previous campaign state:"
+          ls -la runs/atria_campaign | head -20
+
       - name: Record the dispatched code ref for future resumes
         if: steps.mode.outputs.mode != 'none'
         run: |
@@ -199,6 +220,13 @@ jobs:
 
       - name: Run the covering campaign (fresh or resumed)
         if: steps.mode.outputs.mode != 'none'
+        # Step-level deadline below the 350-minute job cap: if the campaign
+        # process itself ever hangs, this step fails while the job still has
+        # time for the always() state upload below. Normally the campaign
+        # wrapper pauses itself well before this (job clock minus a 15-minute
+        # upload reserve), including mid-gate via --gate-wall-seconds-equivalent
+        # phase-1 bounding.
+        timeout-minutes: 340
         env:
           # The host controller reads this value. It is never placed in a
           # Docker agent/judge environment, command argument, or artifact.

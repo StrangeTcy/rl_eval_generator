@@ -192,6 +192,16 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
     }
 
 
+class GateWallExceeded(RuntimeError):
+    """The per-case exact-instance gate ran out of wall budget mid-gate.
+
+    Completed rows are already banked atomically in
+    instance_oracles_partial.json; the caller must treat this as a
+    resumable pause (not a failure) so a supervisor job can continue
+    gating the remaining cases later.
+    """
+
+
 def _result_by_case(checkpoint: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {str(item["case_id"]): item for item in checkpoint.get("results", []) if item.get("case_id")}
 
@@ -388,6 +398,7 @@ def run_suite(
     unreferenced_compile_only: bool = False,
     gate_context_sha: str | None = None,
     stop_after_gates: bool = False,
+    gate_wall_seconds: float | None = None,
 ) -> dict[str, Any]:
     if not manifest.get("ready_for_scheduler", False) and not allow_config_drift:
         raise ValueError("manifest is not ready; fix inventory issues or pass --allow-config-drift explicitly")
@@ -520,6 +531,8 @@ def run_suite(
                     partial_rows = {}
             gate_rows: list[dict[str, Any]] = []
             gate_rows_reused = 0
+            gate_fresh_validations = 0
+            gate_started_at = time.monotonic()
             for gate_case in gated_cases:
                 gate_case_id = str(gate_case.get("case_id"))
                 gate_case_sha = hashlib.sha256(
@@ -534,6 +547,22 @@ def run_suite(
                     gate_rows.append(dict(entry["row"]))
                     gate_rows_reused += 1
                     continue
+                if (
+                    gate_wall_seconds is not None
+                    and gate_fresh_validations >= 1
+                    and time.monotonic() - gate_started_at >= gate_wall_seconds
+                ):
+                    # Banked rows are safe in the partial file; stop gating
+                    # before the runner's job deadline so the state upload
+                    # still happens.  Only pause once at least one fresh
+                    # validation completed this dispatch, so a resume always
+                    # makes forward progress.
+                    raise GateWallExceeded(
+                        "gate wall budget exhausted mid-gate; "
+                        f"{gate_rows_reused} rows reused and "
+                        f"{gate_fresh_validations} fresh rows banked to "
+                        f"{partial_path}; resume to continue gating"
+                    )
                 case_report = validate_manifest_instances(
                     {"cases": [gate_case]}, root=ROOT, include_slow=True
                 )
@@ -543,6 +572,7 @@ def run_suite(
                         f"exact-instance gate returned no row for {gate_case_id}"
                     )
                 gate_rows.append(case_rows[0])
+                gate_fresh_validations += 1
                 partial_rows[gate_case_id] = {
                     "case_sha256": gate_case_sha,
                     "row": case_rows[0],
@@ -1133,6 +1163,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--gate-wall-seconds",
+        type=float,
+        default=None,
+        help=(
+            "pause the per-case exact-instance gate resumably once this wall "
+            "budget is exhausted mid-gate (banked rows are carried in "
+            "instance_oracles_partial.json)"
+        ),
+    )
+    parser.add_argument(
         "--stop-after-gates",
         action="store_true",
         help=(
@@ -1183,6 +1223,7 @@ def main(argv: list[str] | None = None) -> int:
             provider_outage_backoff_seconds=args.provider_outage_backoff_seconds,
             unreferenced_compile_only=args.unreferenced_compile_only,
             gate_context_sha=args.gate_context_sha,
+            gate_wall_seconds=args.gate_wall_seconds,
         )
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"suite run failed: {exc}", file=sys.stderr)

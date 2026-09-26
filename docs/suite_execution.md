@@ -262,7 +262,14 @@ operator choices recorded in the calibration decision list:
    mid-gate has its completed rows carried forward by the supervisor, so
    repeated 6-hour dispatches make forward progress through the gate until
    it completes; rows are accepted only under the same case content hash
-   and deployed-code context, and any drift re-gates that case.
+   and deployed-code context, and any drift re-gates that case. The
+   supervisor transports that state safely across runners: it stages the
+   previous artifact outside the checkout destination and restores it
+   only after checkout (checkout clears a workspace that is not the
+   expected repository), and the campaign step self-pauses before the job
+   deadline — including mid-gate via a gate wall budget with an explicit
+   upload reserve — so the state upload always runs instead of being cut
+   off by job-level cancellation.
 
 Budget ceilings for the campaign are pinned in
 `experiments/atria_campaign.yaml` (48,306 HTTP attempts, 10,050 logical API

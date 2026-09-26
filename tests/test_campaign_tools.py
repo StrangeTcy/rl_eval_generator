@@ -714,3 +714,166 @@ def test_partial_gate_rows_require_matching_context(tmp_path, monkeypatch):
     ) == sorted(str(c["case_id"]) for c in manifest["cases"])  # all revalidated
     assert second["instance_gate"]["report"]["gate_rows_reused_from_partial"] == 0
     assert second["instance_gate"]["gate_context_sha"] == "ctx-new"
+
+
+def test_gate_wall_pause_banks_rows_and_raises_resumably(tmp_path, monkeypatch):
+    """The gate phase is bounded by the job clock: when its wall budget runs
+    out mid-gate, banked rows stay in the partial file and the caller gets a
+    dedicated resumable exception instead of a runner job-level kill."""
+    import time as _time
+
+    from tools.run_suite import GateWallExceeded
+
+    assert "glyph" in REFERENCES and "regex_state_machine" in REFERENCES
+    manifest = _manifest_with("glyph", "regex_state_machine")
+
+    def _row(case):
+        return {
+            "case_id": case["case_id"], "environment": case["environment"],
+            "status": "passed", "provider_calls": 0, "variants": [],
+        }
+
+    calls: list[str] = []
+
+    def _gate_slow(manifest, **kwargs):
+        _time.sleep(0.05)  # consume wall budget per validation
+        case = manifest["cases"][0]
+        calls.append(str(case["case_id"]))
+        return {
+            "schema_version": 1, "provider_calls": 0,
+            "instance_coverage_complete": True, "cases": [_row(case)],
+        }
+
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances", _gate_slow)
+    with pytest.raises(GateWallExceeded, match="resume to continue gating"):
+        _run(tmp_path, monkeypatch, manifest,
+              unreferenced_compile_only=True, gate_context_sha="ctx-w",
+              gate_wall_seconds=0.02)
+    # Case 1 validated and banked; case 2 never started.
+    assert calls == [manifest["cases"][0]["case_id"]]
+    partial = json.loads(
+        (tmp_path / "suite" / "instance_oracles_partial.json").read_text("utf-8"))
+    assert len(partial["rows"]) == 1
+    # The gate is incomplete, so no suite checkpoint may exist yet.
+    assert not (tmp_path / "suite" / "suite_checkpoint.json").exists()
+
+
+def test_partial_gate_survives_artifact_transport_to_fresh_runner(tmp_path, monkeypatch):
+    """The cross-job handoff, end to end, provider-free: a dispatch dies
+    mid-gate; its partial file is 'uploaded' (copied to staging), a fresh
+    runner 'downloads and restores' it after checkout, and the resume
+    revalidates only the missing case."""
+    assert "glyph" in REFERENCES and "regex_state_machine" in REFERENCES
+    manifest = _manifest_with("glyph", "regex_state_machine")
+
+    def _row(case):
+        return {
+            "case_id": case["case_id"], "environment": case["environment"],
+            "status": "passed", "provider_calls": 0, "variants": [],
+        }
+
+    # Runner A: the gate completes case 1, then the job dies.
+    def _gate_dying(manifest, **kwargs):
+        case = manifest["cases"][0]
+        if dying_calls:
+            raise RuntimeError("simulated runner death mid-gate")
+        dying_calls.append(str(case["case_id"]))
+        return {
+            "schema_version": 1, "provider_calls": 0,
+            "instance_coverage_complete": True, "cases": [_row(case)],
+        }
+
+    dying_calls: list[str] = []
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances", _gate_dying)
+    runner_a = tmp_path / "runner_a" / "suite"
+    with pytest.raises(RuntimeError, match="simulated runner death"):
+        _run(tmp_path / "runner_a", monkeypatch, manifest,
+             unreferenced_compile_only=True, gate_context_sha="ctx-t")
+    assert (runner_a / "instance_oracles_partial.json").is_file()
+
+    # Artifact upload: the state artifact carries runs/atria_campaign/** —
+    # here represented by staging the partial file outside both runners,
+    # exactly what the workflow stages under RUNNER_TEMP.
+    staging = tmp_path / "artifact_stage"
+    staging.mkdir()
+    (staging / "instance_oracles_partial.json").write_text(
+        (runner_a / "instance_oracles_partial.json").read_text("utf-8"),
+        encoding="utf-8")
+
+    # Fresh runner B: empty workspace, state restored AFTER checkout.
+    runner_b = tmp_path / "runner_b" / "suite"
+    runner_b.mkdir(parents=True)
+    (runner_b / "instance_oracles_partial.json").write_text(
+        (staging / "instance_oracles_partial.json").read_text("utf-8"),
+        encoding="utf-8")
+
+    resumed_calls: list[str] = []
+
+    def _gate_healthy(manifest, **kwargs):
+        case = manifest["cases"][0]
+        resumed_calls.append(str(case["case_id"]))
+        return {
+            "schema_version": 1, "provider_calls": 0,
+            "instance_coverage_complete": True, "cases": [_row(case)],
+        }
+
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances", _gate_healthy)
+    monkeypatch.setattr(
+        "tools.run_suite.subprocess.run",
+        lambda command, **kwargs: _scored_episode(),
+    )
+    second = _run(tmp_path / "runner_b", monkeypatch, manifest,
+                  unreferenced_compile_only=True, gate_context_sha="ctx-t")
+    assert resumed_calls == [manifest["cases"][1]["case_id"]]
+    assert second["instance_gate"]["report"]["gate_rows_reused_from_partial"] == 1
+    assert len(second["results"]) == 2
+    assert all(row["status"] == "scored" for row in second["results"])
+
+
+def test_campaign_wrapper_pauses_resumably_when_gate_wall_exhausts(tmp_path, monkeypatch):
+    """The wrapper converts a mid-gate wall exhaustion into a resumable
+    campaign pause (exit 7) with the banked-row count in the report, so the
+    job ends normally and the state upload still happens."""
+    import tools.atria_campaign as campaign
+    from tools.run_suite import GateWallExceeded
+
+    monkeypatch.setattr(
+        campaign, "build_manifest",
+        lambda **kwargs: {
+            "cases": [{"case_id": "case-1", "environment": "glyph"}],
+            "case_count": 1,
+        })
+    monkeypatch.setattr(
+        campaign, "inventory_selected_modalities",
+        lambda manifest, **kwargs: {
+            "all_selected_cases_text_only_compatible": True,
+            "unsupported_case_ids": [], "selected_case_count": 1,
+        })
+    monkeypatch.setattr(
+        campaign, "_generation_preflight", lambda manifest: [])
+    monkeypatch.setattr(campaign, "_gate_context_sha", lambda: "ctx-w")
+    partial = tmp_path / "out" / "instance_oracles_partial.json"
+    partial.parent.mkdir(parents=True, exist_ok=True)
+    partial.write_text(json.dumps({
+        "gate_context_sha": "ctx-w", "rows": {f"case-{i}": {} for i in range(12)},
+    }), encoding="utf-8")
+
+    def _raise_gate_wall(*args, **kwargs):
+        raise GateWallExceeded("gate wall budget exhausted mid-gate")
+
+    monkeypatch.setattr(campaign, "run_suite", _raise_gate_wall)
+    code = campaign.main([
+        "--profile", str(ROOT / "experiments" / "atria_campaign.yaml"),
+        "--out", str(tmp_path / "out"),
+    ])
+    assert code == 7
+    report = json.loads(
+        (tmp_path / "out" / "campaign_report.json").read_text("utf-8"))
+    assert report["status"] == "paused"
+    assert report["pause_reason"] == "max_wall_seconds"
+    assert report["resumable"] is True
+    assert report["note"] == "gate_in_progress"
+    assert report["gate_rows_banked"] == 12
