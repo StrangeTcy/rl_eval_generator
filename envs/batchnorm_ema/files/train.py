@@ -33,7 +33,10 @@ class SyntheticCIFARDataset(Dataset):
         self.data = torch.zeros(num_samples, 3, 32, 32)
         for i, label in enumerate(self.labels.tolist()):
             row = (label * 7) % 24
-            col = (label * 11) % 24
+            # The row repeats every 24 labels. Encode the higher class group
+            # too; otherwise hard mode (100 classes) contains identical images
+            # with different labels and cannot reach its pass threshold.
+            col = (label * 11 + 5 * (label // 24)) % 24
             channel = label % 3
             self.data[i, channel, row:row + 8, col:col + 8] = 1.0
             self.data[i, (channel + 1) % 3, 4:12, (label * 3) % 24:(label * 3) % 24 + 8] = 0.5

@@ -84,8 +84,11 @@ def judge_event(result: dict, action: str, status: str = "ok", summary: str = ""
 
 
 def emit(result: dict, pass_score: float = 1.0) -> None:
-    if result.get("score", 0.0) >= pass_score and result.get("failure_mode") in (None, FAILURE_UNKNOWN):
-        result["failure_mode"] = FAILURE_PASS
+    if result.get("failure_mode") in (None, FAILURE_UNKNOWN):
+        # An unclassified grade is a judge defect, not a zero-scored model
+        # answer (or an implicit PASS, even if a score was already assigned).
+        result["score"] = 0.0
+        set_failure(result, "judge_runtime_error", "Judge emitted a verdict without a failure mode")
     result["verdict"] = "PASS" if result.get("score", 0.0) >= pass_score else "FAIL"
     print(json.dumps(result, indent=2))
     sys.exit(0 if result["verdict"] == "PASS" else 1)
@@ -370,21 +373,15 @@ def score_from_checks(result: dict, checks: dict[str, bool], total_checks: int) 
 
 
 def changed_files_from_patch() -> set[str]:
-    """Return normalized file paths touched by the submitted patch."""
-    changed: set[str] = set()
+    """Use the same hunk-aware file parser that validated the patch."""
     if not os.path.isfile(PATCH_PATH):
-        return changed
+        return set()
+    # Import lazily: the source template is also executed in isolation by
+    # scorer unit tests; generated judges always include patch_validator.py.
+    from patch_validator import modified_files_from_patch
+
     with open(PATCH_PATH, encoding="utf-8") as f:
-        for line in f:
-            if not (line.startswith("--- ") or line.startswith("+++ ")):
-                continue
-            path = line[4:].split("\t", 1)[0].strip()
-            if path == "/dev/null":
-                continue
-            if path.startswith("a/") or path.startswith("b/"):
-                path = path[2:]
-            changed.add(path)
-    return changed
+        return modified_files_from_patch(f.read())
 
 
 def require_changed_files(result: dict, required: Iterable[str]) -> bool:

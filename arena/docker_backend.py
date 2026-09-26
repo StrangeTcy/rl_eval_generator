@@ -32,12 +32,14 @@ class ContainerResult:
     stderr: str
     returncode: int
     command: list[str]
+    backend_error: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "stdout": self.stdout,
             "stderr": self.stderr,
             "returncode": self.returncode,
+            "backend_error": self.backend_error,
         }
 
 
@@ -229,8 +231,15 @@ class DockerBackend:
         try:
             proc = self._exec(argv, timeout=self.agent_timeout)
         except DockerBackendError as exc:
-            return ContainerResult("", str(exc), 125, argv)
-        return ContainerResult(proc.stdout or "", proc.stderr or "", proc.returncode, argv)
+            return ContainerResult("", str(exc), 125, argv, backend_error=True)
+        docker_stderr = (proc.stderr or "").lstrip()
+        docker_failed = proc.returncode == 125 and docker_stderr.startswith(
+            ("docker:", "Error response from daemon:")
+        )
+        return ContainerResult(
+            proc.stdout or "", proc.stderr or "", proc.returncode, argv,
+            backend_error=docker_failed,
+        )
 
     def judge_command(self, image: str, submission_dir: Path, seed: int) -> list[str]:
         """Return the restricted judge invocation.
@@ -272,7 +281,7 @@ class DockerBackend:
         try:
             proc = self._exec(argv, timeout=self.judge_timeout)
         except DockerBackendError as exc:
-            return ContainerResult("", str(exc), 125, argv)
+            return ContainerResult("", str(exc), 125, argv, backend_error=True)
         return ContainerResult(proc.stdout or "", proc.stderr or "", proc.returncode, argv)
 
     def trajectory_judge_command(
@@ -332,7 +341,7 @@ class DockerBackend:
         try:
             proc = self._exec(argv, timeout=self.judge_timeout)
         except DockerBackendError as exc:
-            return ContainerResult("", str(exc), 125, argv)
+            return ContainerResult("", str(exc), 125, argv, backend_error=True)
         return ContainerResult(proc.stdout or "", proc.stderr or "", proc.returncode, argv)
 
     def remove_images(self, *images: str | None) -> list[str]:

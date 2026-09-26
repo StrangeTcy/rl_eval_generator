@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 import sys
@@ -18,8 +19,27 @@ from types import SimpleNamespace
 import pytest
 
 import env_runner
+from tools.instance_oracle_gate import validate_case
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("environment,difficulty,failed_check", [
+    ("rd_state_carry", "easy,easy,easy,easy,easy", "hidden_depth_exact"),
+    ("rope", "easy,easy,easy,easy,easy,easy,easy,easy", "rope_pairing"),
+    ("moco", "easy,easy,easy,easy,easy,easy", "temperature_sensitive"),
+])
+def test_plausible_wrong_patch_rejected_on_exact_pilot_judge(environment, difficulty, failed_check):
+    pytest.importorskip("torch")
+    result = validate_case({"case_id": "offline-negative", "environment": environment,
+                            "difficulty": difficulty, "seed": 0})
+    assert result["status"] == "passed", result
+    no_op, wrong, reference = result["variants"]
+    assert no_op["score"] == 0 and no_op["failure_mode"] == "patch_invalid"
+    assert wrong["checks"]["patch_valid"] is True
+    assert wrong["checks"][failed_check] is False
+    assert wrong["score"] < 1 and wrong["verdict"] == "FAIL"
+    assert reference["score"] == 1 and reference["verdict"] == "PASS"
 
 
 def test_known_good_state_carry_patch_passes_real_judge(tmp_path, monkeypatch):
@@ -53,6 +73,59 @@ def test_known_good_state_carry_patch_passes_real_judge(tmp_path, monkeypatch):
     assert result["passed_checks"] == result["total_checks"] == 5
     assert result["raw_accuracy"] == 1.0
     assert result["failure_mode"] == "pass"
+
+
+def test_known_good_glyph_patch_passes_real_judge_when_slow_oracles_enabled(tmp_path, monkeypatch):
+    if os.environ.get("RUN_SLOW_JUDGE_ORACLES") != "1":
+        pytest.skip("Opt-in ~8 minute CPU judge oracle: RUN_SLOW_JUDGE_ORACLES=1")
+    pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    monkeypatch.setattr(env_runner, "EPISODES_DIR", tmp_path / "episodes")
+    args = SimpleNamespace(
+        episode_id=f"oracle_glyph_{uuid.uuid4().hex[:8]}", env="glyph",
+        difficulty="easy,easy,easy,easy,easy,easy", seed=0,
+        max_steps=1, sandbox="local", keep_images=False, keep_workspace=True,
+    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        env_runner.reset(args)
+    state = env_runner._load_state(args.episode_id)
+    workspace = Path(state["workspace"])
+    model = workspace / "model.py"
+    source = model.read_text(encoding="utf-8")
+    assert "nn.MaxPool2d(2),\n        )" in source
+    source = source.replace(
+        "nn.MaxPool2d(2),\n        )",
+        "nn.MaxPool2d(2),\n            nn.Conv2d(64, 128, kernel_size=3, padding=1),\n"
+        "            nn.ReLU(),\n        )", 1,
+    )
+    start = source.index("self.classifier = nn.Sequential(")
+    end = source.index("\n\n    def forward", start)
+    classifier = (
+        "self.classifier = nn.Sequential(\n"
+        "            nn.AdaptiveAvgPool2d((1, 1)),\n"
+        "            nn.Flatten(),\n"
+        "            nn.Linear(128, 128),\n"
+        "            nn.ReLU(),\n"
+        "            nn.Linear(128, num_classes)\n"
+        "        )"
+    )
+    model.write_text(source[:start] + classifier + source[end:], encoding="utf-8")
+    train = workspace / "train.py"
+    source = train.read_text(encoding="utf-8")
+    assert "optimizer = optim.SGD(model.parameters(), lr=1e-5)" in source
+    assert "EPOCHS = 10" in source
+    train.write_text(
+        source.replace(
+            "optimizer = optim.SGD(model.parameters(), lr=1e-5)",
+            "optimizer = optim.Adam(model.parameters(), lr=1e-3)",
+        ).replace("EPOCHS = 10", "EPOCHS = 18\ntorch.manual_seed(0)"), encoding="utf-8",
+    )
+    _observation, score, done, info = env_runner._submit(state, {"confirm": True})
+    assert done and score == 1.0, info
+    result = info["judge_result"]
+    assert result["failure_mode"] == "pass"
+    assert result["raw_accuracy"] >= 0.85
+    assert result["checks"]["spatial_invariance_learned"] is True
 
 
 def test_known_good_rope_patch_passes_real_judge(tmp_path, monkeypatch):

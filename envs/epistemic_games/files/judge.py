@@ -197,20 +197,10 @@ def set_failure(result: dict, mode: str, note: str = "") -> None:
 
 
 def changed_files_from_patch() -> set:
-    changed = set()
     if not os.path.isfile(PATCH_PATH):
-        return changed
+        return set()
     with open(PATCH_PATH, encoding="utf-8") as f:
-        for line in f:
-            if not (line.startswith("--- ") or line.startswith("+++ ")):
-                continue
-            path = line[4:].split("\t", 1)[0].strip()
-            if path == "/dev/null":
-                continue
-            if path.startswith("a/") or path.startswith("b/"):
-                path = path[2:]
-            changed.add(path)
-    return changed
+        return patch_validator.modified_files_from_patch(f.read())
 
 
 def require_changed_files(result: dict, required) -> bool:
@@ -227,6 +217,9 @@ def require_changed_files(result: dict, required) -> bool:
 
 
 def emit(result: dict) -> None:
+    if result.get("failure_mode") in (None, "unknown"):
+        result["score"] = 0.0
+        set_failure(result, "judge_runtime_error", "Judge emitted a verdict without a failure mode")
     result["verdict"] = "PASS" if result["score"] >= 1.0 else "FAIL"
     print(json.dumps(result))
     sys.exit(0 if result["verdict"] == "PASS" else 1)

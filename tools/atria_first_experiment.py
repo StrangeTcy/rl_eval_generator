@@ -31,6 +31,7 @@ from tools.first_experiment import (  # noqa: E402
     _runtime_check,
     _select_manifest,
 )
+from tools.instance_oracle_gate import validate_manifest_instances  # noqa: E402
 from tools.oracle_preflight import validate_manifest_oracles  # noqa: E402
 from tools.run_suite import run_suite  # noqa: E402
 from tools.suite_inventory import _load_yaml  # noqa: E402
@@ -420,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--keep-workspace", action="store_true")
     parser.add_argument(
         "--allow-compile-only-oracles", action="store_true",
-        help="explicitly accept unverified judge behavior; otherwise block before any provider call",
+        help="legacy static-check acknowledgement; cannot bypass exact-instance behavioral oracles",
     )
     args = parser.parse_args(argv)
     output = args.out.expanduser()
@@ -472,13 +473,24 @@ def main(argv: list[str] | None = None) -> int:
         oracle["operator_compile_only_override"] = bool(
             args.allow_compile_only_oracles and not oracle.get("behavioral_coverage_complete", False)
         )
+        # The compatibility request also costs money. Gate it, not only the
+        # subsequent suite, on three real judge submissions per selected case.
+        instance_report = (
+            validate_manifest_instances(manifest, root=ROOT, include_slow=True)
+            if oracle.get("model_sweep_allowed", False)
+            else None
+        )
+        if instance_report is not None:
+            _write(output / "instance_oracles.json", instance_report)
+        oracle["instance_coverage_complete"] = bool(
+            instance_report and instance_report["instance_coverage_complete"]
+        )
         _write(output / "oracle_preflight.json", oracle)
         oracle_reason = (
             "oracle_preflight_failed"
             if not oracle.get("model_sweep_allowed", False)
-            else "behavioral_oracle_coverage_incomplete"
-            if not oracle.get("behavioral_coverage_complete", False)
-            and not args.allow_compile_only_oracles
+            else "instance_oracle_coverage_incomplete"
+            if not oracle["instance_coverage_complete"]
             else None
         )
         if oracle_reason:

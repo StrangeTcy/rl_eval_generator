@@ -12,6 +12,15 @@ from tools.suite_inventory import build_manifest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _stub_passing_instance_gate(monkeypatch):
+    # These scheduler tests replace the provider/episode subprocess, not the
+    # judge. Behavioral gate integration has its own real-judge tests.
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances",
+        lambda *args, **kwargs: {"instance_coverage_complete": True, "provider_calls": 0, "cases": []},
+    )
+
+
 def test_inventory_audits_registry_and_representative_cases():
     manifest = build_manifest(root=ROOT, matrix="representative", seeds=[0])
     assert manifest["registry_audit"]["clean"] is True
@@ -125,7 +134,13 @@ def test_zero_api_oracle_preflight_is_model_free():
     assert "rd_state_carry" in report["unverified_environments"]
 
 
-def test_live_scheduler_blocks_compile_only_judges_before_credentials_or_provider(tmp_path):
+def test_live_scheduler_blocks_failed_instance_gate_before_credentials_or_provider(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances",
+        lambda *args, **kwargs: {"instance_coverage_complete": False, "provider_calls": 0,
+                                 "cases": [{"environment": "glyph", "status": "blocked",
+                                            "reason": "reference_did_not_grade_as_expected"}]},
+    )
     manifest = build_manifest(root=ROOT, matrix="representative", seeds=[0])
     manifest["environments"] = [
         item for item in manifest["environments"] if item["environment"] == "glyph"
@@ -141,15 +156,18 @@ def test_live_scheduler_blocks_compile_only_judges_before_credentials_or_provide
             invalid_retries=0,
         )
     except ValueError as exc:
-        assert "behavioral oracle coverage is incomplete" in str(exc)
+        assert "exact-instance behavioral oracle coverage is incomplete" in str(exc)
     else:
         raise AssertionError("compile-only judges must not silently reach a paid provider")
     oracle = json.loads((tmp_path / "blocked" / "oracle_preflight.json").read_text())
     assert oracle["unverified_environments"] == ["glyph"]
     assert oracle["operator_compile_only_override"] is False
+    instance = json.loads((tmp_path / "blocked" / "instance_oracles.json").read_text())
+    assert instance["instance_coverage_complete"] is False
 
 
-def test_all_matrix_live_scheduler_requires_explicit_token_ceiling(tmp_path):
+def test_all_matrix_live_scheduler_requires_explicit_token_ceiling(tmp_path, monkeypatch):
+    _stub_passing_instance_gate(monkeypatch)
     manifest = {
         "ready_for_scheduler": True,
         "repository": {"commit": "test"},
@@ -179,6 +197,7 @@ def test_all_matrix_live_scheduler_requires_explicit_token_ceiling(tmp_path):
 
 
 def test_floor_effect_pauses_after_consecutive_zero_scores(tmp_path, monkeypatch):
+    _stub_passing_instance_gate(monkeypatch)
     manifest = build_manifest(root=ROOT, matrix="representative", seeds=[0])
     manifest["cases"] = manifest["cases"][:2]
     manifest["case_count"] = len(manifest["cases"])
@@ -221,6 +240,7 @@ def test_floor_effect_pauses_after_consecutive_zero_scores(tmp_path, monkeypatch
 def test_judge_scoring_exception_pauses_suite_instead_of_counting_as_model_failure(
     tmp_path, monkeypatch
 ):
+    _stub_passing_instance_gate(monkeypatch)
     manifest = build_manifest(root=ROOT, matrix="representative", seeds=[0])
     manifest["cases"] = manifest["cases"][:2]
     manifest["case_count"] = 2
@@ -268,6 +288,69 @@ def test_judge_scoring_exception_pauses_suite_instead_of_counting_as_model_failu
     assert checkpoint["results"][0]["score"] is None
     assert checkpoint["results"][0]["verdict"] is None
     assert checkpoint["floor_effect_streak"] == 0
+
+
+def test_suite_never_counts_upstream_502_as_model_failure(tmp_path, monkeypatch):
+    _stub_passing_instance_gate(monkeypatch)
+    manifest = build_manifest(root=ROOT, matrix="representative", seeds=[0])
+    manifest["cases"] = manifest["cases"][:2]
+    manifest["case_count"] = 2
+    manifest["environments"] = []  # mock controller response without provider traffic
+    monkeypatch.setenv("OFFLINE_SUITE_API_KEY", "test-secret")
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps({
+                "run_dir": "runs/offline", "http_attempts": 1,
+                "final": {"verdict": "FAIL", "score": 0, "failure_mode": "api_error",
+                          "notes": ["HTTP 502 bad_gateway_error"]},
+            }), stderr="",
+        )
+
+    monkeypatch.setattr("tools.run_suite.subprocess.run", fake_run)
+    checkpoint = run_suite(
+        manifest, output_dir=tmp_path / "provider", provider="custom", model="offline/pinned",
+        api_key_env="OFFLINE_SUITE_API_KEY", api_base="https://example.invalid/v1",
+        max_steps=1, max_tokens=7, invalid_retries=0, allow_compile_only_oracles=True,
+    )
+    assert len(calls) == 1
+    assert checkpoint["pause_reason"] == "provider_error"
+    assert checkpoint["results"][0]["status"] == "paused_provider_error"
+    assert checkpoint["results"][0]["score"] is None
+    assert checkpoint["results"][0]["verdict"] is None
+
+
+def test_suite_pauses_on_legacy_not_submitted_instead_of_scoring_it(tmp_path, monkeypatch):
+    _stub_passing_instance_gate(monkeypatch)
+    manifest = build_manifest(root=ROOT, matrix="representative", seeds=[0])
+    manifest["cases"] = manifest["cases"][:2]
+    manifest["case_count"] = 2
+    manifest["environments"] = []  # offline subprocess stub; no configured reference
+    monkeypatch.setenv("OFFLINE_SUITE_API_KEY", "test-secret")
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps({
+                "run_dir": "runs/offline", "http_attempts": 1,
+                "final": {"verdict": "FAIL", "score": 0, "failure_mode": "not_submitted"},
+            }), stderr="",
+        )
+
+    monkeypatch.setattr("tools.run_suite.subprocess.run", fake_run)
+    checkpoint = run_suite(
+        manifest, output_dir=tmp_path / "suite", provider="custom", model="offline/pinned",
+        api_key_env="OFFLINE_SUITE_API_KEY", api_base="https://example.invalid/v1",
+        max_steps=1, max_tokens=7, invalid_retries=0, allow_compile_only_oracles=True,
+    )
+    assert len(calls) == 1
+    assert checkpoint["paused"] is True
+    assert checkpoint["pause_reason"] == "infrastructure_error"
+    assert checkpoint["results"][0]["score"] is None
+    assert checkpoint["results"][0]["verdict"] is None
 
 
 def test_agent_invalid_outputs_are_still_scored_failures():

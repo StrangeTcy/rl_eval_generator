@@ -420,12 +420,27 @@ def run_suite(
                 "zero-API oracle preflight failed; inspect "
                 f"{output_dir / 'oracle_preflight.json'} before retrying"
             )
-        if not oracle_report.get("behavioral_coverage_complete", False) and not allow_compile_only_oracles:
+        # Static compilation or a representative self-test is not enough for
+        # a paid case. Require a correct reference, empty no-op, and valid-but-
+        # wrong patch to grade as expected at *each selected vector and seed*.
+        # The legacy compile-only override cannot bypass this hard gate.
+        from tools.instance_oracle_gate import validate_manifest_instances
+
+        selected_cases = list(manifest.get("cases", []))
+        if max_cases is not None:
+            selected_cases = selected_cases[:max_cases]
+        instance_report = validate_manifest_instances(
+            {"cases": selected_cases}, root=ROOT, include_slow=True
+        )
+        _write_json_atomic(output_dir / "instance_oracles.json", instance_report)
+        if not instance_report["instance_coverage_complete"]:
             raise ValueError(
-                "behavioral oracle coverage is incomplete; inspect "
-                f"{output_dir / 'oracle_preflight.json'} and verify the judges "
-                "before paid calls (or explicitly pass --allow-compile-only-oracles)"
+                "exact-instance behavioral oracle coverage is incomplete; inspect "
+                f"{output_dir / 'instance_oracles.json'} before any paid call "
+                "(--allow-compile-only-oracles does not override this gate)"
             )
+        oracle_report["instance_coverage_complete"] = True
+        _write_json_atomic(output_dir / "oracle_preflight.json", oracle_report)
     checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
     repository = manifest.get("repository", {})
     selection = manifest.get("selection", {})
@@ -466,6 +481,7 @@ def run_suite(
             "api_calls": oracle_report.get("api_calls", 0) if oracle_report else None,
             "failure_count": oracle_report.get("failure_count") if oracle_report else None,
             "model_sweep_allowed": oracle_report.get("model_sweep_allowed") if oracle_report else None,
+            "instance_coverage_complete": oracle_report.get("instance_coverage_complete") if oracle_report else None,
         },
     }
     checkpoint = _load_checkpoint(checkpoint_path, manifest=manifest, metadata=metadata)
@@ -661,7 +677,10 @@ def run_suite(
                 status = "paused_provider_error"
                 error = "provider or quota failure detected; resume only after checking the account"
             elif parsed and isinstance(final, dict) and (
-                final.get("failure_mode") in {"controller_error", "judge_runtime_error"}
+                final.get("failure_mode") in {
+                    "controller_error", "judge_runtime_error", "not_submitted", "unknown"
+                }
+                or not isinstance(final.get("failure_mode"), str)
                 or _judge_scoring_failed(final)
             ):
                 status = "infrastructure_error"

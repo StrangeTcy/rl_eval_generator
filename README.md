@@ -4,6 +4,8 @@
 
 Procedurally generated ML debugging environments for evaluating whether AI agents can reason about machine-learning systems, rather than merely retrieving familiar fixes.
 
+> **Judge-validation coverage (2026-09-26):** GitHub CI installs `requirements.txt` (no PyTorch), so PyTorch-dependent behavioral tests are **skipped** there; its Docker smoke step builds images but does **not** execute the judges. A green CI badge does not establish PyTorch or all-instance behavioral coverage. Local PyTorch checks and exact-instance, provider-free oracle results are described in [safe suite execution](docs/suite_execution.md). An unconfigured or failing reference blocks paid suite/pilot/direct-episode calls, including with `--allow-compile-only-oracles`. Historic pilot patches and trajectories were not available for offline re-scoring; the recorded pilot scores are not a model-ability finding.
+
 The generator creates self-contained, Dockerized evaluation tasks. Each task presents an agent with a realistic codebase that runs, trains, and often appears superficially healthy, but fails because of subtle interactions between architecture, data, optimization, and stateful training behavior.
 
 ### Environment Categories

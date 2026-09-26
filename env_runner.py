@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import argparse
 import base64
-import difflib
 import json
+import math
 import os
 import re
 import shutil
@@ -19,6 +19,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from arena.diffing import files_differ, has_symlink_in_path, text_for_diff, unified_text_diff
 from arena.docker_backend import DockerBackend, DockerBackendError
 from arena.episode_id import validate_episode_id
 
@@ -26,6 +27,7 @@ ROOT = Path(__file__).resolve().parent
 EPISODES_DIR = ROOT / ".episodes"
 DEFAULT_MAX_STEPS = 40
 MAX_OBSERVATION_CHARS = 12000
+MAX_SUBMISSION_SOURCE_BYTES = 2 * 1024 * 1024
 
 
 def _json(obj: dict[str, Any]) -> None:
@@ -107,13 +109,19 @@ def _parse_required_files(judge_path: Path) -> list[str]:
 def _changed_files(state: dict[str, Any]) -> list[str]:
     workspace = Path(state["workspace"])
     original = Path(state["original_workspace"])
-    current_files = {p.relative_to(workspace) for p in workspace.rglob("*") if p.is_file()}
-    original_files = {p.relative_to(original) for p in original.rglob("*") if p.is_file()}
+    # Do not dereference workspace symlinks here: the agent can create them,
+    # and these paths are later shown in observations and public artifacts.
+    current_files = {p.relative_to(workspace) for p in workspace.rglob("*") if p.is_file() or p.is_symlink()}
+    original_files = {p.relative_to(original) for p in original.rglob("*") if p.is_file() or p.is_symlink()}
     changed: list[str] = []
     for rel in sorted(current_files | original_files):
         cur = workspace / rel
         old = original / rel
-        if not cur.exists() or not old.exists() or cur.read_bytes() != old.read_bytes():
+        if (
+            has_symlink_in_path(workspace, rel) or has_symlink_in_path(original, rel)
+            or not cur.is_file() or not old.is_file()
+            or files_differ(cur, old)
+        ):
             changed.append(str(rel))
     return changed
 
@@ -246,14 +254,17 @@ def _run_shell(state: dict[str, Any], cmd: str) -> tuple[str, dict[str, Any]]:
         image_info = state.get("agent_image") or {}
         image = image_info.get("name") or state.get("agent_image_name")
         if not image:
-            raise RuntimeError("Docker agent image is missing from episode state")
+            return "Docker agent image is missing", {"infrastructure_failure": "agent_image_missing"}
         result = DockerBackend().run_agent(image, workspace, tools, cmd)
         observation = (result.stdout or "") + ("\n[stderr]\n" + result.stderr if result.stderr else "")
-        return observation, {
+        extra = {
             "returncode": result.returncode,
             "sandbox": "docker",
             "container_command": result.command,
         }
+        if result.backend_error:
+            extra["infrastructure_failure"] = "agent_container_error"
+        return observation, extra
 
     rewritten = cmd.replace("/tools/", str(tools) + "/")
     env = os.environ.copy()
@@ -277,7 +288,7 @@ def _run_shell(state: dict[str, Any], cmd: str) -> tuple[str, dict[str, Any]]:
 
 
 def _file_diff(before: str, after: str, path: str) -> str:
-    return "\n".join(difflib.unified_diff(before.splitlines(), after.splitlines(), fromfile=f"before/{path}", tofile=f"after/{path}", lineterm=""))
+    return unified_text_diff(before, after, fromfile=f"before/{path}", tofile=f"after/{path}").rstrip("\n")
 
 
 def _read_file(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -376,9 +387,14 @@ def _show_diff(state: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     rels = _changed_files(state)
     diffs = []
     for rel in rels:
-        before = (original / rel).read_text(encoding="utf-8", errors="replace")
-        after = (workspace / rel).read_text(encoding="utf-8", errors="replace")
-        diffs.append(f"--- {rel}\n" + _file_diff(before, after, str(rel)))
+        old, cur = original / rel, workspace / rel
+        if has_symlink_in_path(original, rel) or has_symlink_in_path(workspace, rel):
+            diffs.append(f"--- {rel}\n[symlink contents omitted]")
+            continue
+        before = text_for_diff(old)
+        after = text_for_diff(cur)
+        diff = _file_diff(before, after, str(rel))
+        diffs.append(f"--- {rel}\n" + (diff or "[changed contents omitted]"))
     return "\n".join(diffs) if diffs else "no changes", {"changed_files": rels}
 
 
@@ -387,7 +403,7 @@ def _search(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, dict[st
     root = _safe_join(workspace, action.get("path", "."))
     regex = re.compile(action["pattern"])
     matches = []
-    files = [root] if root.is_file() else [p for p in root.rglob("*") if p.is_file()]
+    files = [root] if root.is_file() else [p for p in root.rglob("*") if p.is_file() and not p.is_symlink()]
     for path in files:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         for i, line in enumerate(lines, 1):
@@ -442,30 +458,65 @@ def _make_submission_patch(state: dict[str, Any]) -> tuple[Path, list[str]]:
         rel for rel in sorted(_changed_files(state)) if not patchable or rel in patchable
     ]
 
-    def _read(path: Path) -> str:
-        return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+    def _read(root: Path, rel: str) -> str:
+        if has_symlink_in_path(root, rel):
+            raise ValueError(f"Patchable file is a symlink: {rel}")
+        path = root / rel
+        if not path.is_file():
+            return ""
+        if path.stat().st_size > MAX_SUBMISSION_SOURCE_BYTES:
+            raise ValueError(f"Patchable source file is too large: {rel}")
+        try:
+            return path.read_bytes().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"Patchable file is not UTF-8: {rel}") from exc
 
     diffs: list[str] = []
     for rel in changed_rels:
-        before = _read(original / rel)
-        after = _read(workspace / rel)
-        diff = "\n".join(
-            difflib.unified_diff(
-                before.splitlines(),
-                after.splitlines(),
-                fromfile=f"a/{rel}",
-                tofile=f"b/{rel}",
-                lineterm="",
-            )
-        )
+        before = _read(original, rel)
+        after = _read(workspace, rel)
+        if (original / rel).is_file() and not (workspace / rel).is_file():
+            raise ValueError(f"Patchable file was deleted: {rel}")
+        diff = unified_text_diff(before, after, fromfile=f"a/{rel}", tofile=f"b/{rel}")
         if diff:
             diffs.append(diff)
-    patch_path.write_text("\n".join(diffs) + ("\n" if diffs else ""), encoding="utf-8")
+    patch_path.write_text("".join(diffs), encoding="utf-8")
     return patch_path, changed_rels
 
 
-def _submit(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, float, bool, dict[str, Any]]:
-    """Submit the current workspace to the local or isolated generated judge."""
+def _submission_failure(mode: str, note: str, **details: Any) -> tuple[str, float, bool, dict[str, Any]]:
+    result = {"verdict": "FAIL", "score": 0.0, "failure_mode": mode, "notes": [note]}
+    return json.dumps(result, indent=2), 0.0, True, {"judge_result": result, **details}
+
+
+def _judge_result(stdout: str, stderr: str, returncode: int) -> dict[str, Any]:
+    """Accept only a complete judge verdict with the expected exit status."""
+    result = _extract_last_json_object(stdout)
+    if result is not None:
+        verdict = result.get("verdict")
+        score = result.get("score")
+        if (
+            verdict in {"PASS", "FAIL"}
+            and isinstance(score, (int, float)) and not isinstance(score, bool)
+            and math.isfinite(score) and 0 <= score <= 1
+            and verdict == ("PASS" if score >= 1 else "FAIL")
+            and returncode == (0 if verdict == "PASS" else 1)
+            and isinstance(result.get("failure_mode"), str)
+            and result["failure_mode"] not in {"unknown", ""}
+            and (result["failure_mode"] == "pass") == (verdict == "PASS")
+        ):
+            return result
+    reason = f"Judge exited {returncode} without a valid JSON verdict"
+    return {
+        "verdict": "FAIL", "score": 0.0, "failure_mode": "judge_runtime_error",
+        "notes": [reason, stderr[-2000:]],
+    }
+
+
+def _submit(
+    state: dict[str, Any], action: dict[str, Any], *, judge_timeout: int | None = None
+) -> tuple[str, float, bool, dict[str, Any]]:
+    """Submit to the judge; only the host can set its timeout, not the model."""
     required = set(state.get("required_files") or [])
     changed = set(_changed_files(state))
     missing = sorted(required - changed)
@@ -480,36 +531,28 @@ def _submit(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, float, 
 
     env_dir = Path(state["env_dir"])
     episode_dir = Path(state["episode_dir"])
-    patch_path, _ = _make_submission_patch(state)
+    try:
+        patch_path, _ = _make_submission_patch(state)
+    except ValueError as exc:
+        return _submission_failure("patch_invalid", str(exc))
 
     if state.get("sandbox") == "docker":
         image_info = state.get("judge_image") or {}
         image = image_info.get("name") or state.get("judge_image_name")
         if not image:
-            return (
-                "Submission error: Docker judge image is missing from episode state",
-                0.0,
-                True,
-                {"error": "judge_image_missing"},
-            )
+            return _submission_failure("judge_runtime_error", "Docker judge image is missing from episode state")
         submission_dir = episode_dir / "submission"
         submission_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(patch_path, submission_dir / "agent.patch")
-        backend = DockerBackend()
-        container = backend.run_judge(image, submission_dir, int(state["seed"]))
+        try:
+            backend = DockerBackend()
+            container = backend.run_judge(image, submission_dir, int(state["seed"]))
+        except DockerBackendError as exc:
+            (episode_dir / "judge.stderr").write_text(str(exc), encoding="utf-8")
+            return _submission_failure("judge_runtime_error", f"Docker judge failed to run: {exc}")
         (episode_dir / "judge.stdout").write_text(container.stdout, encoding="utf-8")
         (episode_dir / "judge.stderr").write_text(container.stderr, encoding="utf-8")
-        result_json = _extract_last_json_object(container.stdout)
-        if result_json is None:
-            result_json = {
-                "verdict": "FAIL",
-                "score": 0.0,
-                "failure_mode": "judge_runtime_error",
-                "notes": [
-                    f"Judge exited {container.returncode} without a JSON result",
-                    container.stderr[-2000:],
-                ],
-            }
+        result_json = _judge_result(container.stdout, container.stderr, container.returncode)
         info: dict[str, Any] = {
             "sandbox": "docker",
             "returncode": container.returncode,
@@ -555,28 +598,18 @@ def _submit(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, float, 
     judge_env["PYTHONPATH"] = str(env_dir / "judge")
     judge_env["JUDGE_PATCH_PATH"] = str(sub_dir / "agent.patch")
     judge_env["JUDGE_ORIGINALS_DIR"] = str(judge_workdir / "originals")
-    judge_timeout = int(action.get("timeout") or os.environ.get("JUDGE_SUBMIT_TIMEOUT", "2100"))
+    timeout = judge_timeout if judge_timeout is not None else int(os.environ.get("JUDGE_SUBMIT_TIMEOUT", "2100"))
     try:
         proc = subprocess.run(
             [sys.executable, str(judge_script)],
             capture_output=True,
             text=True,
-            timeout=judge_timeout,
+            timeout=timeout,
             env=judge_env,
         )
         (episode_dir / "judge.stdout").write_text(proc.stdout or "", encoding="utf-8")
         (episode_dir / "judge.stderr").write_text(proc.stderr or "", encoding="utf-8")
-        result_json = _extract_last_json_object(proc.stdout or "")
-        if result_json is None:
-            result_json = {
-                "verdict": "FAIL",
-                "score": 0.0,
-                "failure_mode": "judge_runtime_error",
-                "notes": [
-                    f"Judge exited {proc.returncode} without a JSON result",
-                    (proc.stderr or "")[-2000:],
-                ],
-            }
+        result_json = _judge_result(proc.stdout or "", proc.stderr or "", proc.returncode)
         return (
             json.dumps(result_json, indent=2),
             float(result_json.get("score", 0.0)),
@@ -591,7 +624,8 @@ def _submit(state: dict[str, Any], action: dict[str, Any]) -> tuple[str, float, 
         )
     except Exception as exc:
         (episode_dir / "judge.stderr").write_text(str(exc), encoding="utf-8")
-        return (f"Submission error: {exc}", 0.0, True, {"error": str(exc)})
+        return _submission_failure("judge_runtime_error", f"Judge process failed: {exc}")
+
 
 def step(args: argparse.Namespace) -> None:
     state = _load_state(args.episode)
@@ -652,9 +686,16 @@ def step(args: argparse.Namespace) -> None:
         else:
             raise ValueError(f"Unknown action type: {action_type}")
         info.update(extra)
+        if extra.get("infrastructure_failure"):
+            done = True
     except Exception as exc:
         observation = f"ERROR: {exc}"
         info["error"] = str(exc)
+        if action_type == "submit":
+            observation, reward, done, failure = _submission_failure(
+                "controller_error", f"Runner could not submit: {exc}"
+            )
+            info.update(failure)
     state["step"] += 1
     if state["step"] >= state["max_steps"]:
         done = True
@@ -682,7 +723,12 @@ def step(args: argparse.Namespace) -> None:
 def submit_episode(args: argparse.Namespace) -> None:
     """Submit even if the interaction budget has already been exhausted."""
     state = _load_state(args.episode)
-    observation, reward, done, info = _submit(state, {"confirm": args.confirm, "timeout": args.timeout})
+    try:
+        observation, reward, done, info = _submit(state, {"confirm": args.confirm}, judge_timeout=args.timeout)
+    except Exception as exc:
+        observation, reward, done, info = _submission_failure(
+            "controller_error", f"Runner could not submit: {exc}"
+        )
     state["done"] = done
     state["reward"] = reward
     state["submitted"] = True

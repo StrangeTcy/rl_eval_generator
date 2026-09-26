@@ -1,8 +1,10 @@
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,6 +103,21 @@ def test_check_fraction_scoring_metadata_and_required_edits():
     assert misconfigured["failure_mode"] == "judge_runtime_error"
     assert "expected 5 checks, got 4" in misconfigured["notes"][0]
     assert misconfigured["metrics"]["actual_total_checks"] == 4
+
+
+def test_unknown_judge_failure_mode_is_unscored_even_if_score_says_pass(capsys):
+    source = (ROOT / "shared" / "judge_lib.py").read_text(encoding="utf-8")
+    source = source.replace("%%PATCHABLE_FILES%%", "[]")
+    namespace = {"__file__": str(ROOT / "shared" / "judge_lib.py")}
+    with patch.dict(sys.modules, {"torch": ModuleType("torch")}):
+        exec(compile(source, namespace["__file__"], "exec"), namespace)
+    result = namespace["base_result"](score=1.0)
+    with pytest.raises(SystemExit) as exc:
+        namespace["emit"](result)
+    assert exc.value.code == 1
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["score"] == 0
+    assert emitted["failure_mode"] == "judge_runtime_error"
 
 
 def test_required_multifile_edit_is_non_terminal():

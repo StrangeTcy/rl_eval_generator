@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .diffing import files_differ, has_symlink_in_path, text_for_diff, unified_text_diff
+
 ARTIFACT_NAMES = (
     "manifest.json",
     "trace.jsonl",
@@ -134,38 +136,37 @@ def copy_or_empty(source: Path, destination: Path, *, secret: str | None = None)
 
 
 def _diff_directories(original: Path, current: Path) -> str:
-    import difflib
-
     original_files = {
         path.relative_to(original)
         for path in original.rglob("*")
-        if path.is_file()
+        if path.is_file() or path.is_symlink()
     } if original.is_dir() else set()
     current_files = {
         path.relative_to(current)
         for path in current.rglob("*")
-        if path.is_file()
+        if path.is_file() or path.is_symlink()
     } if current.is_dir() else set()
-    def _read_text(path: Path) -> list[str]:
-        if not path.is_file():
-            return []
-        return path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    def _read_text(root: Path, rel: Path) -> str:
+        # Workspace files are agent-controlled. Do not follow a symlink into
+        # host files while collecting artifacts after the judge has finished.
+        if has_symlink_in_path(root, rel):
+            return "[symlink contents omitted]\n"
+        return text_for_diff(root / rel)
 
     chunks: list[str] = []
     for rel in sorted(original_files | current_files):
-        before = _read_text(original / rel)
-        after = _read_text(current / rel)
-        if before != after:
-            chunks.extend(
-                difflib.unified_diff(
-                    before,
-                    after,
-                    fromfile=f"before/{rel}",
-                    tofile=f"after/{rel}",
-                    lineterm="",
-                )
-            )
-    return "\n".join(chunks) + ("\n" if chunks else "")
+        old, cur = original / rel, current / rel
+        if (
+            not has_symlink_in_path(original, rel) and not has_symlink_in_path(current, rel)
+            and old.is_file() and cur.is_file() and not files_differ(old, cur)
+        ):
+            continue
+        before = _read_text(original, rel)
+        after = _read_text(current, rel)
+        diff = unified_text_diff(before, after, fromfile=f"before/{rel}", tofile=f"after/{rel}")
+        chunks.append(diff or f"--- before/{rel}\n+++ after/{rel}\n[changed contents omitted]\n")
+    return "".join(chunks)
 
 
 class RunArtifacts:

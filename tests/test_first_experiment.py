@@ -41,7 +41,12 @@ def test_nvidia_first5_profile_and_selected_manifest_are_pinned():
     assert profile["limits"] == REQUIRED_LIMITS
 
 
-def test_nvidia_pilot_blocks_compile_only_oracles_before_provider_access(tmp_path, monkeypatch):
+def test_nvidia_pilot_blocks_failed_instance_oracles_before_provider_access(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        first_experiment, "validate_manifest_instances",
+        lambda *args, **kwargs: {"instance_coverage_complete": False, "cases": [
+            {"status": "blocked", "reason": "reference_not_configured"}]},
+    )
     def forbidden(*args, **kwargs):
         raise AssertionError("provider/runtime setup must not be reached")
 
@@ -52,7 +57,7 @@ def test_nvidia_pilot_blocks_compile_only_oracles_before_provider_access(tmp_pat
     report = json.loads((output / "pilot_report.json").read_text(encoding="utf-8"))
     oracle = json.loads((output / "oracle_preflight.json").read_text(encoding="utf-8"))
     assert report["status"] == "blocked"
-    assert report["reason"] == "behavioral_oracle_coverage_incomplete"
+    assert report["reason"] == "instance_oracle_coverage_incomplete"
     assert oracle["behavioral_coverage_complete"] is False
     assert oracle["operator_compile_only_override"] is False
 

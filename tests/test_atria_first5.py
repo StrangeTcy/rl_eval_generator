@@ -45,7 +45,12 @@ def test_atria_profile_and_inventory_are_bounded_and_text_explicit():
     assert glyph["requires_non_text_input"] is False
 
 
-def test_atria_blocks_compile_only_preflight_before_any_provider_access(tmp_path, monkeypatch):
+def test_atria_blocks_failed_instance_oracle_before_any_provider_access(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        atria_first_experiment, "validate_manifest_instances",
+        lambda *args, **kwargs: {"instance_coverage_complete": False, "cases": [
+            {"environment": "glyph", "status": "blocked", "reason": "reference_did_not_grade_as_expected"}]},
+    )
     def no_provider_or_runtime(*args, **kwargs):
         raise AssertionError("provider/runtime setup must not be reached")
 
@@ -62,12 +67,17 @@ def test_atria_blocks_compile_only_preflight_before_any_provider_access(tmp_path
     }
     assert oracle["operator_compile_only_override"] is False
     assert report["status"] == "blocked"
-    assert report["reason"] == "behavioral_oracle_coverage_incomplete"
+    assert report["reason"] == "instance_oracle_coverage_incomplete"
+    assert json.loads((output / "instance_oracles.json").read_text())["instance_coverage_complete"] is False
 
 
 def test_atria_compile_only_override_is_explicit_and_still_uses_no_provider_without_key(
     tmp_path, monkeypatch
 ):
+    monkeypatch.setattr(
+        atria_first_experiment, "validate_manifest_instances",
+        lambda *args, **kwargs: {"instance_coverage_complete": True, "cases": []},
+    )
     monkeypatch.setattr(atria_first_experiment, "_runtime_check", lambda: {"available": True})
     monkeypatch.setattr(atria_first_experiment, "_optional_credentials", lambda profile: None)
     output = tmp_path / "operator_override"
@@ -79,6 +89,23 @@ def test_atria_compile_only_override_is_explicit_and_still_uses_no_provider_with
     report = json.loads((output / "pilot_report.json").read_text(encoding="utf-8"))
     assert report["status"] == "prepared"
     assert report["usage"]["actual"]["total_tokens"] == 0
+
+
+def test_atria_override_cannot_bypass_instance_oracle_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        atria_first_experiment, "validate_manifest_instances",
+        lambda *args, **kwargs: {"instance_coverage_complete": False, "cases": [
+            {"status": "blocked", "reason": "reference_did_not_grade_as_expected"}]},
+    )
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("no provider/credential access after oracle failure")
+
+    monkeypatch.setattr(atria_first_experiment, "_optional_credentials", forbidden)
+    monkeypatch.setattr(atria_first_experiment, "_compatibility_check", forbidden)
+    output = tmp_path / "blocked_override"
+    assert atria_first_experiment.main(["--allow-compile-only-oracles", "--out", str(output)]) == 2
+    report = json.loads((output / "pilot_report.json").read_text(encoding="utf-8"))
+    assert report["reason"] == "instance_oracle_coverage_incomplete"
 
 
 def test_atria_compatibility_fake_uses_shared_nonstreaming_client_and_telemetry(tmp_path, monkeypatch):

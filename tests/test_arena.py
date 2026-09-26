@@ -17,9 +17,22 @@ import arena.episode as episode_module
 from arena.artifacts import _diff_directories
 from arena.docker_backend import DockerBackend
 from arena.episode import EpisodeOptions, run_episode
-from arena.providers import ProviderClient, ProviderError, chat_completions_url, open_no_redirect
+from arena.providers import (
+    Completion,
+    ProviderClient,
+    ProviderError,
+    chat_completions_url,
+    open_no_redirect,
+)
 
 ROOT = Path(__file__).resolve().parents[1]  # noqa: E402
+
+
+def _stub_passing_oracle(monkeypatch):
+    # Controller/provider failure tests exercise a mocked episode; the real
+    # three-variant gate is tested separately with an actual generated judge.
+    monkeypatch.setattr("tools.instance_oracle_gate.validate_case", lambda *args, **kwargs: {"status": "passed"})
+    monkeypatch.setattr("tools.instance_oracle_gate.verify_reset_matches_oracle", lambda *args: "mock-hash")
 
 
 class _Response:
@@ -246,7 +259,52 @@ def test_provider_http_budget_is_shared_across_logical_calls():
     assert client.http_attempts_used == 1
 
 
+def test_controller_rejects_legacy_unknown_failure_mode_as_judge_error():
+    result = episode_module._submitted_final({"info": {"judge_result": {
+        "verdict": "FAIL", "score": 0, "failure_mode": "unknown"
+    }}})
+    assert result["failure_mode"] == "judge_runtime_error"
+    assert "unclassified" in result["notes"][0]
+
+
+def test_upstream_502_stops_as_provider_error_without_judging(tmp_path, monkeypatch):
+    _stub_passing_oracle(monkeypatch)
+    episode_dir = tmp_path / "episode"
+    episode_dir.mkdir()
+    runner_calls = []
+    provider_calls = []
+
+    def bad_gateway(req, timeout):
+        provider_calls.append(req.full_url)
+        raise HTTPError(
+            req.full_url, 502, "bad gateway", {},
+            io.BytesIO(b'{"error":{"message":"bad_gateway_error"}}'),
+        )
+
+    def offline_runner(arguments):
+        runner_calls.append(arguments[0])
+        assert arguments[0] == "reset"
+        return {"observation": "ready", "done": False, "info": {"episode_dir": str(episode_dir)}}
+
+    def offline_client(provider, api_key, **kwargs):
+        return ProviderClient(provider, api_key, opener=bad_gateway, **kwargs)
+
+    monkeypatch.setattr(episode_module, "ProviderClient", offline_client)
+    monkeypatch.setattr(episode_module, "_run_env_runner", offline_runner)
+    result = run_episode(EpisodeOptions(
+        provider="custom", model="offline/model", api_key="FAKE_OFFLINE_KEY",
+        api_base="https://example.invalid/v1", env="glyph",
+        difficulty="easy,easy,easy,easy,easy,easy", sandbox="local",
+        max_steps=3, out=tmp_path / "runs",
+    ))
+    assert result["final"]["failure_mode"] == "api_error"
+    assert result["final"]["verdict"] == "FAIL"
+    assert runner_calls == ["reset"] and len(provider_calls) == 1
+    assert "502" in (Path(result["run_dir"]) / "api_errors.jsonl").read_text()
+
+
 def test_episode_exception_traceback_canary_is_absent_from_artifacts(tmp_path, monkeypatch, capsys):
+    _stub_passing_oracle(monkeypatch)
     canary = "exception-header-credential-canary"
     episode_dir = tmp_path / "episode"
     episode_dir.mkdir()
@@ -295,6 +353,105 @@ def test_episode_exception_traceback_canary_is_absent_from_artifacts(tmp_path, m
     for path in run_dir.rglob("*"):
         if path.is_file():
             assert canary not in path.read_text(encoding="utf-8", errors="replace")
+
+
+@pytest.mark.parametrize("explicit_submit", [True, False])
+def test_missing_judge_response_is_controller_error_not_model_failure(
+    tmp_path, monkeypatch, explicit_submit
+):
+    _stub_passing_oracle(monkeypatch)
+    episode_dir = tmp_path / "episode"
+    episode_dir.mkdir()
+    provider_calls = []
+    runner_calls = []
+
+    class OfflineProvider:
+        last_retry_count = 0
+        last_http_attempts = 1
+        http_attempts_used = 1
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def complete(self, **kwargs):
+            provider_calls.append(kwargs)
+            return Completion(
+                content=json.dumps({"type": "submit", "confirm": True} if explicit_submit else {"cmd": "ls"}),
+                requested_model="offline/model", resolved_model="offline/model", finish_reason="stop",
+                usage={}, raw_response={}, latency_ms=0, request_id=None, response_headers={},
+            )
+
+    def offline_runner(arguments):
+        runner_calls.append(arguments[0])
+        if arguments[0] == "reset":
+            return {"observation": "ready", "done": False, "info": {"episode_dir": str(episode_dir)}}
+        if arguments[0] == "step":
+            return {
+                "observation": "Submission error: judge timed out" if explicit_submit else "ls output",
+                "done": True, "info": {"error": "judge timed out"} if explicit_submit else {},
+            }
+        assert arguments[0] == "submit"
+        return {"observation": "Submission error: judge timed out", "done": True,
+                "info": {"error": "judge timed out"}}
+
+    monkeypatch.setattr(episode_module, "ProviderClient", OfflineProvider)
+    monkeypatch.setattr(episode_module, "_run_env_runner", offline_runner)
+    result = run_episode(EpisodeOptions(
+        provider="custom", model="offline/model", api_key="FAKE_OFFLINE_KEY",
+        api_base="https://example.invalid/v1", env="glyph",
+        difficulty="easy,easy,easy,easy,easy,easy", sandbox="local",
+        max_steps=1, out=tmp_path / "runs",
+    ))
+    assert result["final"]["failure_mode"] == "controller_error"
+    assert result["final"]["score"] == 0
+    assert runner_calls == (["reset", "step"] if explicit_submit else ["reset", "step", "submit"])
+    assert len(provider_calls) == 1  # no paid retry after a judge failure
+    final = json.loads((Path(result["run_dir"]) / "final.json").read_text())
+    assert final["failure_mode"] == "controller_error"
+
+
+def test_agent_sandbox_failure_stops_before_auto_submit_or_more_provider_calls(
+    tmp_path, monkeypatch
+):
+    _stub_passing_oracle(monkeypatch)
+    episode_dir = tmp_path / "episode"
+    episode_dir.mkdir()
+    requests = []
+    commands = []
+
+    class OfflineProvider:
+        last_retry_count = 0
+        http_attempts_used = 1
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def complete(self, **_kwargs):
+            requests.append(1)
+            return Completion(
+                content='{"cmd":"ls"}', requested_model="offline/model",
+                resolved_model="offline/model", finish_reason="stop", usage={},
+                raw_response={}, latency_ms=0, request_id=None, response_headers={},
+            )
+
+    def offline_runner(args):
+        commands.append(args[0])
+        if args[0] == "reset":
+            return {"observation": "ready", "done": False, "info": {"episode_dir": str(episode_dir)}}
+        assert args[0] == "step"  # any auto-submit would be an infrastructure retry
+        return {"observation": "[stderr] Docker command timed out", "done": True,
+                "info": {"infrastructure_failure": "agent_container_error", "returncode": 125}}
+
+    monkeypatch.setattr(episode_module, "ProviderClient", OfflineProvider)
+    monkeypatch.setattr(episode_module, "_run_env_runner", offline_runner)
+    result = run_episode(EpisodeOptions(
+        provider="custom", model="offline/model", api_key="FAKE_OFFLINE_KEY",
+        api_base="https://example.invalid/v1", env="glyph",
+        difficulty="easy,easy,easy,easy,easy,easy", sandbox="local",
+        max_steps=3, out=tmp_path / "runs",
+    ))
+    assert result["final"]["failure_mode"] == "controller_error"
+    assert commands == ["reset", "step"] and requests == [1]
 
 
 def test_docker_image_tags_are_lowercase_for_timestamped_episode_ids(tmp_path):

@@ -51,6 +51,12 @@ Allowed actions:
 Do not use Markdown. Do not explain. Return only the action JSON.
 For code edits, prefer a small unified diff via apply_patch. Use apply_patch_base64 only for a base64-encoded unified diff; never encode JSON edit instructions as patch_base64.
 The current working directory for shell commands is the environment workspace.
+Generated prompt.md files may describe the standalone interactive workflow:
+"python /tools/submit.py" followed by "exit". That workflow has a separate
+/submission volume and is NOT available in this controller's per-command
+sandbox. Do not run that tool or exit to submit. Instead return
+{"type": "submit", "confirm": true}; the host builds the patch from your
+current workspace, even if your action budget has been exhausted.
 
 Read docs/secrets.md and secret_key.example.json if they are available to you.
 Never open, print, copy, or modify the live secret_key.json; the host credential
@@ -263,6 +269,28 @@ def _fallback_final(failure_mode: str, note: str) -> dict[str, Any]:
     }
 
 
+def _submitted_final(response: dict[str, Any]) -> dict[str, Any]:
+    """A failed runner/judge invocation is not a scored model submission."""
+    info = response.get("info") if isinstance(response.get("info"), dict) else {}
+    candidate = info.get("judge_result")
+    if isinstance(candidate, dict):
+        if candidate.get("failure_mode") in (None, "", "unknown"):
+            return _fallback_final("judge_runtime_error", "Judge returned an unclassified result")
+        return candidate
+    observation = str(response.get("observation", ""))
+    if not info.get("error"):
+        # Older runners returned the verdict in the observation only.
+        parsed = _extract_json_object(observation)
+        if parsed is not None and "verdict" in parsed and "score" in parsed:
+            if parsed.get("failure_mode") in (None, "", "unknown"):
+                return _fallback_final("judge_runtime_error", "Judge returned an unclassified result")
+            return parsed
+    return _fallback_final(
+        "controller_error",
+        "Submission produced no judge result: " + clip(str(info.get("error") or observation), 2000),
+    )
+
+
 def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     """Run one episode and write all requested artifacts.
 
@@ -290,6 +318,26 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     if not options.model.strip():
         raise ValueError("model must not be empty")
     request_extra = _request_extra(options.request_extra)
+    # Direct arena.py runs must obey the same pre-provider behavioral gate as
+    # suite/pilot entry points. In particular, a Docker reset is not proof the
+    # judge can score the *chosen* difficulty and seed. Run before credentials
+    # are resolved or a model request is sent; failures are not task scores.
+    from tools.instance_oracle_gate import validate_case
+
+    oracle = validate_case(
+        {"case_id": options.episode_id or "direct", "environment": options.env,
+         "difficulty": options.difficulty, "seed": options.seed},
+        root=ROOT, include_slow=True,
+    )
+    oracle_dir = Path(options.out) / "_instance_oracles"
+    oracle_dir.mkdir(parents=True, exist_ok=True)
+    oracle_path = oracle_dir / f"{uuid.uuid4().hex}.json"
+    oracle_path.write_text(json.dumps(oracle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if oracle["status"] != "passed":
+        raise ValueError(
+            "Exact-instance judge oracle failed before provider access; "
+            f"inspect {oracle_path} ({oracle.get('reason')})"
+        )
     api_key, _ = resolve_credentials(
         options.provider,
         api_key=options.api_key,
@@ -354,6 +402,13 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
             # Older/local runners expose the path in state but not in info.
             episode_dir = ROOT / ".episodes" / episode_id
         reset_info = reset.get("info") if isinstance(reset.get("info"), dict) else {}
+        from tools.instance_oracle_gate import verify_reset_matches_oracle
+
+        # This is the actual reset the agent will see. The earlier oracle
+        # generation is not sufficient unless its judge/workspace bytes match.
+        verify_reset_matches_oracle(
+            oracle, episode_dir, options.env, options.difficulty, options.seed
+        )
         agent_info = reset_info.get("agent_image") if isinstance(reset_info.get("agent_image"), dict) else {}
         judge_info = reset_info.get("judge_image") if isinstance(reset_info.get("judge_image"), dict) else {}
         artifacts.update_manifest(
@@ -561,12 +616,18 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
             )
             observation = str(env_response.get("observation", ""))
             done = bool(env_response.get("done", False))
+            if env_info.get("infrastructure_failure"):
+                final = _fallback_final(
+                    "controller_error",
+                    f"Agent sandbox failed: {env_info['infrastructure_failure']}: " + clip(observation, 2000),
+                )
+                done = True
+                break
             requested_submit = action.get("type") == "submit"
-            if requested_submit:
-                candidate = env_info.get("judge_result")
-                if isinstance(candidate, dict):
-                    final = candidate
-                submitted = bool(env_response.get("done")) and not env_info.get("submit_blocked", False)
+            if requested_submit and not env_info.get("submit_blocked", False):
+                submitted = bool(env_response.get("done"))
+                if submitted:
+                    final = _submitted_final(env_response)
             history.append({"role": "assistant", "content": json.dumps(action, ensure_ascii=False)})
             history.append({"role": "user", "content": clip(observation)})
             if submitted:
@@ -578,18 +639,14 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
             "api_error",
             "provider_transient",
             "invalid_action",
+            "controller_error",
+            "judge_runtime_error",
         }:
             submit_response = _run_env_runner(
                 ["submit", "--episode", episode_id, "--confirm"]
             )
             submit_info = submit_response.get("info") if isinstance(submit_response.get("info"), dict) else {}
-            candidate = submit_info.get("judge_result")
-            if isinstance(candidate, dict):
-                final = candidate
-            else:
-                parsed = _extract_json_object(str(submit_response.get("observation", "")))
-                if parsed is not None:
-                    final = parsed
+            final = _submitted_final(submit_response)
             artifacts.trace(
                 {
                     "turn": turn + 1,
