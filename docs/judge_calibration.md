@@ -144,6 +144,31 @@ Recorded here for completeness; details and evidence live in
    They pass as of this pass (all 23 environments generate and compile with
    zero unresolved placeholders) but are wired into nothing; wire them into
    CI or delete them.
+5. **Campaign runs paid cases under compile-only judges for the 22
+   environments without a behavioral reference** (2026-09-26, explicit
+   operator choice for the covering campaign). This relaxes the repo's
+   standing invariant that an unconfigured reference blocks paid calls even
+   with `--allow-compile-only-oracles`. The relaxation is scoped: opt-in per
+   campaign profile (`unreferenced_compile_only: true`), every affected
+   result row is labeled `judge_guarantee=compile_only`, the report carries
+   a not-a-validated-verdict disclaimer, and the pilot path plus default
+   scheduler behavior still refuse such cases. Whether compile-only rows
+   should ever count as model results — rather than infrastructure
+   telemetry — remains open.
+6. **Campaign resumes carry the exact-instance gate pass** (2026-09-26).
+   Re-running CPU-hours of reference validation on every resume made the
+   resilient campaign impractical, so a resume accepts the checkpoint's
+   recorded gate pass only when the gated case list and the deployed code
+   SHA match exactly; any drift re-runs the full gate. This is the
+   previously-deferred "gate caching" decision, now constrained to
+   metadata-keyed carry-over within one campaign's checkpoint chain: it
+   cannot leak across manifests, code versions, or independent runs.
+7. **Gate-phase cost can approach the 6-hour GitHub job cap** (2026-09-26).
+   The covering matrix's Glyph/MoCo/RoPE reference families dominate the
+   first dispatch's provider-free validation; a job killed before any
+   checkpoint exists loses the gate work (the supervisor restarts once from
+   the recorded ref). If that repeats, the gate phase must be split by hand
+   or given a dedicated long-running machine.
 
 ## Validation environments for this pass
 

@@ -1,0 +1,213 @@
+# Resilient Atria covering campaign, published under the docs/workflows scheme.
+# Copy this file to .github/workflows/atria-campaign.yml (web UI or commit).
+#
+# What it runs: every environment in envs/registry.yaml across every
+# difficulty-axis level (covering matrix, seed 0 — 218 cases, of which the
+# 17 rope cases are omitted loudly at runtime because rope requires non-text
+# input and Atria is text-only: 201 served cases at the time of writing),
+# via tools/atria_campaign.py and experiments/atria_campaign.yaml.
+# Zero provider calls happen before the provider-free gates pass; the 22
+# environments without a behavioral judge reference run compile-only and are
+# labeled judge_guarantee=compile_only on every result row.
+#
+# Why it survives provider interruptions:
+#   * in-run patience — provider outages are waited out with exponential
+#     backoff up to one hour per outage (profile: resilience.*);
+#   * checkpoint/resume — anything longer pauses with a resumable checkpoint
+#     (provider_error, max_wall_seconds, provider_infrastructure_error_
+#     compatibility); this workflow's own schedule trigger picks the state
+#     artifact back up and continues without human action;
+#   * fail-closed on money — budget ceilings (max_api_calls,
+#     max_tokens_total, max_http_attempts), floor effects, and
+#     infrastructure errors pause NON-resumably and wait for an operator.
+#     The supervisor never raises a ceiling.
+#
+# The cron tick is a no-op (a few seconds, no checkout, no provider) unless a
+# resumable campaign state exists and no other Atria run is in progress.
+name: Atria covering campaign
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or full commit SHA containing the pinned campaign code"
+        required: true
+        default: "arena/01a0dc92-rl-eval-generator"
+  schedule:
+    # Twice hourly, off the hour. Every tick either resumes or no-ops.
+    - cron: "13,43 * * * *"
+
+permissions:
+  contents: read
+  actions: read
+
+# One campaign at a time; a queued tick waits for the running one to finish.
+concurrency:
+  group: atria-campaign
+  cancel-in-progress: false
+
+jobs:
+  campaign:
+    runs-on: ubuntu-latest
+    # 350m leaves headroom under GitHub's 6h job cap: the first dispatch
+    # spends most of it on the provider-free gates (Glyph/MoCo/RoPE
+    # references alone are CPU-hours); later dispatches carry the gate pass
+    # and spend it on episodes.
+    timeout-minutes: 350
+    steps:
+      - name: Decide dispatch versus supervised resume
+        id: mode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=fresh" >> "$GITHUB_OUTPUT"
+            echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Scheduled tick: is there a campaign state to resume?
+          LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[]
+                   | select(.name | startswith("atria-campaign-state-"))
+                   | select(.expired == false)]
+                  | sort_by(.created_at) | last')
+          if [ "$LATEST" = "null" ] || [ -z "$LATEST" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=no campaign state" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ARTIFACT_ID=$(echo "$LATEST" | jq -r '.id')
+          mkdir -p runs/atria_campaign
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > state.zip
+          unzip -q state.zip -d runs/atria_campaign
+          CHECKPOINT=runs/atria_campaign/suite_checkpoint.json
+          if [ ! -f "$CHECKPOINT" ]; then
+            # The last dispatch died before any checkpoint existed (e.g.
+            # inside the gate phase). Restart from the recorded ref; if the
+            # gates cannot fit a job this will repeat and needs an operator.
+            REF=$(cat runs/atria_campaign/campaign_ref.txt 2>/dev/null || true)
+            if [ -n "$REF" ]; then
+              echo "mode=fresh" >> "$GITHUB_OUTPUT"
+              echo "ref=$REF" >> "$GITHUB_OUTPUT"
+              echo "reason=restarting after pre-checkpoint death" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=state artifact has no checkpoint and no recorded ref" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          DECISION=$(python3 - "$CHECKPOINT" <<'PY'
+          import json, sys
+          from datetime import datetime, timezone
+          checkpoint = json.load(open(sys.argv[1]))
+          if not checkpoint.get("paused"):
+              print("none|campaign already completed")
+              raise SystemExit
+          reason = str(checkpoint.get("pause_reason") or "")
+          resumable = {"provider_error", "max_wall_seconds",
+                       "provider_infrastructure_error_compatibility"}
+          if reason not in resumable:
+              print(f"none|operator pause: {reason} (supervisor never raises ceilings)")
+              raise SystemExit
+          updated = str(checkpoint.get("updated_at") or "")
+          if updated:
+              age = (datetime.now(timezone.utc)
+                     - datetime.fromisoformat(updated.replace("Z", "+00:00"))).total_seconds()
+              if age < 1200:
+                  print(f"none|backoff: paused {int(age)}s ago, retry in {int(1200-age)}s")
+                  raise SystemExit
+          ref = ((checkpoint.get("run") or {}).get("manifest_commit")) or ""
+          print(f"resume|{reason}|{ref}")
+          PY
+          )
+          case "$DECISION" in
+            none\|*)
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=${DECISION#none|}" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+          # Another Atria consumer in progress? (This run counts as one.)
+          BUSY=$(gh api "repos/${{ github.repository }}/actions/runs?status=in_progress&per_page=100" \
+            --jq '[.workflow_runs[]
+                   | select(.name == "Atria covering campaign" or .name == "Atria Dawn Preview first-five pilot")]
+                  | length')
+          if [ "$BUSY" -gt 1 ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=another Atria run is in progress (shared 60 RPM budget)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          REF=$(echo "$DECISION" | cut -d'|' -f3)
+          if [ -z "$REF" ]; then
+            REF=$(cat runs/atria_campaign/campaign_ref.txt 2>/dev/null || true)
+          fi
+          if [ -z "$REF" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=resumable pause but no code ref recorded" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "mode=resume" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "reason=${DECISION}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out pinned campaign code
+        if: steps.mode.outputs.mode != 'none'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.mode.outputs.ref }}
+
+      # Fail closed on any ref that predates the exact-instance gate.
+      - name: Refuse ungated code
+        if: steps.mode.outputs.mode != 'none'
+        run: test -f tools/instance_oracle_gate.py || { echo "ref lacks exact-instance gate"; exit 1; }
+
+      - name: Set up Python
+        if: steps.mode.outputs.mode != 'none'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install controller dependencies
+        if: steps.mode.outputs.mode != 'none'
+        run: python -m pip install -r requirements.txt
+
+      # The provider-free gates run the real judge code (and the Glyph/MoCo/
+      # RoPE references train) on the host, so the pinned CPU torch stack is
+      # required before any validation can pass.
+      - name: Install pinned CPU PyTorch stack for the gates
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
+          python -m pip install jinja2
+
+      - name: Record the dispatched code ref for future resumes
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          mkdir -p runs/atria_campaign
+          echo "${{ steps.mode.outputs.ref }}" > runs/atria_campaign/campaign_ref.txt
+
+      - name: Run the covering campaign (fresh or resumed)
+        if: steps.mode.outputs.mode != 'none'
+        env:
+          # The host controller reads this value. It is never placed in a
+          # Docker agent/judge environment, command argument, or artifact.
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          python tools/atria_campaign.py \
+            --profile experiments/atria_campaign.yaml \
+            --out runs/atria_campaign
+
+      - name: Upload campaign state
+        if: always() && steps.mode.outputs.mode != 'none'
+        uses: actions/upload-artifact@v4
+        with:
+          name: atria-campaign-state-${{ github.run_number }}
+          path: |
+            runs/atria_campaign/**
+            !runs/atria_campaign/**/secret_key.json
+            !secret_key.json
+          if-no-files-found: warn
+          retention-days: 90

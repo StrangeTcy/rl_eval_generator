@@ -207,3 +207,58 @@ using an authorized GitHub account with Workflows write permission. Store only
 an account-approved CI secret such as `SUITE_API_KEY` in GitHub Actions; do not
 upload a personal `secret_key.json`. A `workflow_dispatch` workflow must exist
 on the default branch before it can be triggered from the Actions UI.
+
+## Resilient covering campaign (2026-09-26)
+
+`docs/workflows/atria-campaign.yml.example` plus
+`tools/atria_campaign.py` and `experiments/atria_campaign.yaml` run the pinned
+model across the **covering matrix**: every environment in
+`envs/registry.yaml` with every difficulty-axis level exercised at least once
+at seed 0. Rope requires non-text input and Atria is text-only, so its 17
+cases are omitted loudly at runtime (recorded in the manifest and report):
+**201 served cases at introduction**. The campaign exists because two
+consecutive pilot dispatches were interrupted by provider-side failures at
+two different stages; it is built so those interruptions cost time, never the
+run:
+
+- **Provider-free validation before any paid call**, exactly like the pilot:
+  modality inventory, generation preflight, compile preflight, and the
+  exact-instance gate over every environment that has a behavioral reference.
+- **In-run outage patience**: provider errors are waited out with exponential
+  backoff (60 s doubling, capped at 600 s) up to one hour per outage, inside
+  the run, bounded by the remaining wall and HTTP-attempt budgets.
+- **Supervised resume**: longer outages (and the job wall limit) pause with a
+  checkpoint whose `pause_reason` is in {`provider_error`,
+  `max_wall_seconds`, `provider_infrastructure_error_compatibility`}; the
+  workflow's own schedule trigger downloads the state artifact, checks out
+  the recorded code SHA, and continues. Completed cases are never re-run.
+- **Fail-closed on money and infrastructure**: budget ceilings
+  (`max_api_calls`, `max_tokens_total`, `max_http_attempts`), floor effects,
+  and infrastructure errors pause **non-resumably**; the supervisor never
+  raises a ceiling and an operator must act.
+
+Two guarantees are deliberately weaker than the pilot's, both explicit
+operator choices recorded in the calibration decision list:
+
+1. The 22 environments without a behavioral judge reference run under
+   **compile-only** validation; every one of their result rows is labeled
+   `judge_guarantee=compile_only`, and the campaign report carries a
+   disclaimer that those rows are not validated verdicts. The relaxation is
+   opt-in per campaign profile (`unreferenced_compile_only: true`); the
+   pilot path and the default scheduler behavior are unchanged and still
+   refuse unreferenced paid cases.
+2. A resumed dispatch **carries the exact-instance gate pass** recorded in
+   its checkpoint instead of re-running CPU-hours of reference validation.
+   The carry is keyed on the gated case list and the deployed code SHA and
+   is only accepted when both match byte-for-byte; any drift re-runs the
+   full gate. The first dispatch still pays the full gate cost, which can
+   consume most of a 6-hour job (the Glyph, MoCo, and RoPE reference
+   families dominate); if a dispatch is killed before any checkpoint
+   exists, the supervisor restarts it once from the recorded ref, and a
+   repeat pre-checkpoint death means the gate phase must be split by hand.
+
+Budget ceilings for the campaign are pinned in
+`experiments/atria_campaign.yaml` (52,386 HTTP attempts, 10,900 logical API
+calls, 71.5 M output tokens — the theoretical bound plus margin for 218
+cases) and are hard: reaching one ends the campaign for an operator, not the
+supervisor.
