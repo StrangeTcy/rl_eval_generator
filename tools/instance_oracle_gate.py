@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Provider-free, fail-closed behavioral gate for *exact generated instances*.
 
-For a manifest case, generate once and submit three independent patches to its
-real local judge using env_runner's production patch/submission path: an empty
-no-op, a syntactically valid but behaviorally wrong attempt, and a reference
-repair. Reference implementations live here, never in the agent workspace.
-A reference is intentionally *not* inferred for unimplemented environments;
-those cases remain blocked, not compile-only "verified".
+For a manifest case, generate once and submit independent patches to its real
+local judge using env_runner's production patch/submission path: an empty no-op,
+a syntactically valid but behaviorally wrong attempt, a reference repair, and —
+for environments whose judges guard against visible-output hard-coding — a
+"transcription" patch that hard-codes exactly what visible_tests.py asserts and
+must still FAIL. Reference implementations live here, never in the agent
+workspace. A reference is intentionally *not* inferred for unimplemented
+environments; those cases remain blocked, not compile-only "verified".
 
 This is an offline host integration test, not a Docker-isolation proof, an agent
 trajectory, or a guarantee that the reference generalizes to other vectors.
@@ -181,17 +183,164 @@ def _lenses(workspace: Path, *, wrong: bool) -> None:
     _replace(workspace, "lenses.py", "return (a, 0.0)",
              "return (a, s[0])" if wrong else "return (a, s[1])")
 
+
+def _spreadsheet(workspace: Path, *, wrong: bool) -> None:
+    name = _class_name(workspace, "sheet_model.py")
+    # Wrong-but-plausible recurrence drops the MIN: B_i = A_i + B_{i-1}.
+    recurrence = "=A{i}+B{i-1}" if wrong else "=A{i}+MIN(B{i-1},B{i-2})"
+    _write(workspace, "sheet_model.py", f'''class {name}:
+    def build_dp_formulas(self, n):
+        formulas = {{"B1": "=A1"}}
+        if n >= 2:
+            formulas["B2"] = "=A2+B1"
+        for i in range(3, n + 1):
+            formulas[f"B{{i}}"] = f"{recurrence}"
+        return formulas
+''')
+
+
+def _template(workspace: Path, *, wrong: bool) -> None:
+    name = _class_name(workspace, "template_machine.py")
+    # Wrong-but-plausible template ignores the skip flag entirely.
+    template = (
+        "{% for op in operations %}{{ op.symbol * op.repeat }}{% endfor %}" if wrong else
+        "{% for op in operations %}{% if not op.skip %}{{ op.symbol * op.repeat }}{% endif %}{% endfor %}"
+    )
+    _write(workspace, "template_machine.py", f'''class {name}:
+    def get_template(self):
+        return {template!r}
+''')
+
+
+def _ci(workspace: Path, *, wrong: bool) -> None:
+    name = _class_name(workspace, "ci_machine.py")
+    if wrong:
+        # Plausible: layer = number of direct dependencies. Correct for the
+        # basic two-job case, wrong for any chain longer than two hops.
+        _write(workspace, "ci_machine.py", f'''class {name}:
+    def generate_workflow(self, dependencies):
+        wf = {{}}
+        for job_id, parents in dependencies.items():
+            wf[f"job_{{job_id}}"] = {{
+                "needs": [f"job_{{p}}" for p in parents],
+                "env": {{"LAYER": len(parents)}},
+            }}
+        return wf
+''')
+    else:
+        _write(workspace, "ci_machine.py", f'''class {name}:
+    def generate_workflow(self, dependencies):
+        wf = {{}}
+        remaining = list(dependencies)
+        while remaining:
+            progressed = False
+            for job_id in list(remaining):
+                parents = dependencies[job_id]
+                if all(f"job_{{p}}" in wf for p in parents):
+                    layer = max([wf[f"job_{{p}}"]["env"]["LAYER"] for p in parents], default=-1) + 1
+                    wf[f"job_{{job_id}}"] = {{
+                        "needs": [f"job_{{p}}" for p in parents],
+                        "env": {{"LAYER": layer}},
+                    }}
+                    remaining.remove(job_id)
+                    progressed = True
+            if not progressed:
+                raise ValueError("dependency cycle")
+        return wf
+''')
+
+
+# A "transcription" patch hard-codes exactly what visible_tests.py asserts and
+# gives up on everything else. Each one deliberately passes the agent-visible
+# test; only the judge's held-out randomized checks can reject it.
+def _regex_transcription(workspace: Path) -> None:
+    name = _class_name(workspace, "regex_machine.py")
+    _write(workspace, "regex_machine.py", f'''import re
+
+# Hard-codes the two transitions asserted by visible_tests.py.
+_VISIBLE = {{"1": "1", "001": "011"}}
+
+class {name}:
+    def step(self, state_str):
+        return re.sub(r"[01]+", lambda m: _VISIBLE.get(m.group(0), m.group(0)), state_str)
+''')
+
+
+def _sql_transcription(workspace: Path) -> None:
+    name = _class_name(workspace, "query_module.py")
+    _write(workspace, "query_module.py", f'''class {name}:
+    def get_reachability_query(self):
+        # Literal reachable pairs from the visible_tests.py example graph.
+        return ("SELECT 1 AS start, 2 AS target "
+                "UNION ALL SELECT 1 AS start, 3 AS target")
+''')
+
+
+def _css_transcription(workspace: Path) -> None:
+    name = _class_name(workspace, "css_logic.py")
+    _write(workspace, "css_logic.py", f'''class {name}:
+    def generate_parity_rules(self, n):
+        # Only the two n=2 configurations asserted by visible_tests.py.
+        return [
+            ("#c0:not(:checked) ~ #c1:not(:checked) ~ #out_even", {{"display": "block"}}),
+            ("#c0:checked ~ #c1:not(:checked) ~ #out_odd", {{"display": "block"}}),
+        ]
+''')
+
+
+def _spreadsheet_transcription(workspace: Path) -> None:
+    name = _class_name(workspace, "sheet_model.py")
+    _write(workspace, "sheet_model.py", f'''class {name}:
+    def build_dp_formulas(self, n):
+        # Literal B-column values from the visible_tests.py example inputs.
+        literal = {{"B1": "=10.0", "B2": "=15.0", "B3": "=12.0", "B4": "=20.0"}}
+        return {{f"B{{i}}": literal.get(f"B{{i}}", "=0.0") for i in range(1, n + 1)}}
+''')
+
+
+def _template_transcription(workspace: Path) -> None:
+    name = _class_name(workspace, "template_machine.py")
+    source = (
+        "class " + name + ":\n"
+        "    def get_template(self):\n"
+        "        # Renders only the exact operation list asserted by visible_tests.py.\n"
+        "        return '{% if operations == [{\"symbol\": \"A\", \"repeat\": 3, \"skip\": False},"
+        " {\"symbol\": \"X\", \"repeat\": 5, \"skip\": True},"
+        " {\"symbol\": \"B\", \"repeat\": 2, \"skip\": False}] %}AAABB{% endif %}'\n"
+    )
+    _write(workspace, "template_machine.py", source)
+
+
+def _ci_transcription(workspace: Path) -> None:
+    name = _class_name(workspace, "ci_machine.py")
+    _write(workspace, "ci_machine.py", f'''class {name}:
+    def generate_workflow(self, dependencies):
+        # The exact diamond workflow verified by visible_tests.py, ignoring
+        # the requested dependencies.
+        return {{
+            "job_1": {{"needs": [], "env": {{"LAYER": 0}}}},
+            "job_2": {{"needs": ["job_1"], "env": {{"LAYER": 1}}}},
+            "job_3": {{"needs": ["job_1"], "env": {{"LAYER": 1}}}},
+            "job_4": {{"needs": ["job_2", "job_3"], "env": {{"LAYER": 2}}}},
+        }}
+''')
+
 # Negative checks target the named behavior, not just patch format/required files.
-REFERENCES: dict[str, tuple[Callable[..., None], str]] = {
+# A third element adds the transcription variant: a patch that hard-codes the
+# visible-test outputs must still FAIL the judge's randomized held-out checks.
+REFERENCES: dict[str, tuple[Callable[..., None], str] | tuple[Callable[..., None], str, Callable[..., None]]] = {
     "rd_state_carry": (_state_carry, "hidden_depth_exact"),
     "rope": (_rope, "rope_pairing"),
     "moco": (_moco, "temperature_sensitive"),
     "glyph": (_glyph, "optimization_progressed"),
     "epistemic_games": (_epistemic, "posterior_within_strict_tolerance"),
-    "regex_state_machine": (_regex, "randomized_accuracy"),
-    "sql_fixed_point": (_sql, "randomized_reachability"),
-    "css_state_machine": (_css, "parity_correctness"),
+    "regex_state_machine": (_regex, "randomized_accuracy", _regex_transcription),
+    "sql_fixed_point": (_sql, "randomized_reachability", _sql_transcription),
+    "css_state_machine": (_css, "parity_correctness", _css_transcription),
     "categorical_lenses": (_lenses, "get_put"),
+    "spreadsheet_dataflow": (_spreadsheet, "randomized_invariance", _spreadsheet_transcription),
+    "template_interpreter": (_template, "randomized_rendering", _template_transcription),
+    "ci_dependency_graph": (_ci, "randomized_scheduling", _ci_transcription),
 }
 
 
@@ -259,6 +408,14 @@ def _check(row: dict[str, Any], label: str, negative_check: str) -> bool:
             and row["score"] < 1.0 and checks.get("patch_valid") is True
             and checks.get(negative_check) is False
         )
+    if label == "transcription":
+        # A patch that hard-codes the visible-test outputs must still fail:
+        # valid patch format, but the randomized held-out check rejects it.
+        return (
+            row["verdict"] == "FAIL" and isinstance(row["score"], (int, float))
+            and row["score"] < 1.0 and checks.get("patch_valid") is True
+            and checks.get(negative_check) is False
+        )
     return (row["verdict"] == "PASS" and row["score"] == 1.0
             and row["failure_mode"] == "pass" and checks.get("patch_valid") is True)
 
@@ -292,7 +449,9 @@ def validate_case(
         ):
             result["reason"] = "pinned_config_drift"
             return result
-    apply, negative_check = REFERENCES[environment]
+    entry = REFERENCES[environment]
+    apply, negative_check = entry[0], entry[1]
+    transcription = entry[2] if len(entry) > 2 else None
     difficulty = case.get("difficulty")
     if not isinstance(difficulty, str) or not difficulty or not isinstance(case.get("seed"), int):
         result["reason"] = "invalid_case_vector"
@@ -313,8 +472,14 @@ def validate_case(
             result["instance_sha256"] = _instance_hash(state)
             workspace = Path(state["workspace"])
             pristine = Path(state["original_workspace"])
-            for label in ("no_op", "plausible_wrong", "reference"):
-                if label != "no_op":
+            for label in ("no_op", "plausible_wrong", "transcription", "reference"):
+                if label == "transcription":
+                    if transcription is None:
+                        continue
+                    shutil.rmtree(workspace)
+                    shutil.copytree(pristine, workspace)
+                    transcription(workspace)
+                elif label != "no_op":
                     shutil.rmtree(workspace)
                     shutil.copytree(pristine, workspace)
                     apply(workspace, wrong=label == "plausible_wrong")

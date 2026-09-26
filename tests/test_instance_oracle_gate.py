@@ -76,17 +76,27 @@ def test_css_triple_uses_real_generated_judge_and_plausible_wrong_fails(seed):
     pytest.importorskip("torch")
     row = gate.validate_case({**CSS_CASE, "seed": seed})
     assert row["status"] == "passed", row
-    assert [v["score"] for v in row["variants"]] == [0, pytest.approx(0.416667), 1]
+    assert [v["variant"] for v in row["variants"]] == [
+        "no_op", "plausible_wrong", "transcription", "reference",
+    ]
+    scores = [v["score"] for v in row["variants"]]
+    assert scores[0] == 0 and scores[1] == pytest.approx(0.416667)
+    assert scores[2] < 1 and scores[3] == 1
     wrong = row["variants"][1]
     assert wrong["checks"]["patch_valid"] is True
     assert wrong["checks"]["rule_structure"] is True
     assert wrong["checks"]["parity_correctness"] is False
+    transcription = row["variants"][2]
+    assert transcription["checks"]["patch_valid"] is True
+    assert transcription["checks"]["rule_structure"] is True
+    assert transcription["checks"]["parity_correctness"] is False
     assert all(v["accepted"] for v in row["variants"])
 
 
 def test_wrong_submission_that_passes_is_not_silently_accepted(monkeypatch):
     pytest.importorskip("torch")
-    reference, negative_check = gate.REFERENCES["css_state_machine"]
+    entry = gate.REFERENCES["css_state_machine"]
+    reference, negative_check = entry[0], entry[1]
     monkeypatch.setitem(gate.REFERENCES, "css_state_machine",
                         (lambda workspace, *, wrong: reference(workspace, wrong=False), negative_check))
     row = gate.validate_case(CSS_CASE)
