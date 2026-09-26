@@ -29,6 +29,11 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
+      # Fail closed on any ref that predates the exact-instance gate: the
+      # workflow must never run ungated pilot code, however it was selected.
+      - name: Refuse ungated code
+        run: test -f tools/instance_oracle_gate.py || { echo "ref lacks exact-instance gate"; exit 1; }
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
