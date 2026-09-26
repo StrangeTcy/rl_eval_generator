@@ -163,13 +163,23 @@ Recorded here for completeness; details and evidence live in
    previously-deferred "gate caching" decision, now constrained to
    metadata-keyed carry-over within one campaign's checkpoint chain: it
    cannot leak across manifests, code versions, or independent runs.
-7. **Gate-phase cost can approach the 6-hour GitHub job cap** (2026-09-26).
-   The covering matrix's Glyph and MoCo reference families dominate the
-   first dispatch's provider-free validation; a job killed before any
-   checkpoint exists loses the gate work (the supervisor restarts once from
-   the recorded ref). If that repeats, the gate phase must be split by hand
-   or given a dedicated long-running machine — e.g. a separate pre-run job
-   that publishes the gate pass as an artifact.
+7. **Gate-phase cost exceeds the 6-hour GitHub job cap** (2026-09-26,
+   sharpened 2026-09-27). Runner-side pilot data: one glyph gate case cost
+   ~552 s (reference) + ~313 s (plausible-wrong) ≈ 865 s. The covering
+   matrix has 13 glyph and 13 moco cases; at the easy-equivalent rate,
+   glyph alone is ~3.1 h and glyph+moco ~6.2 h — the whole usable job
+   budget — before the other 53 referenced cases, and harder vectors
+   train longer. The first dispatch therefore cannot complete the full
+   gate inside one 350-minute job, and restart-once cannot recover it:
+   the gate record is written only when the entire gate completes, so a
+   mid-gate death loses everything. Correction to the earlier hand-split
+   sketch: the designed gate carry is all-or-nothing (same gated-manifest
+   SHA + context SHA skips the whole gate; anything else re-runs it), so a
+   split job that gates only glyph+moco cannot carry its pass into the
+   campaign — the split requires per-case gate accumulation and
+   incremental gate checkpointing first. Until that exists, the options
+   are: implement it, run the gate on a dedicated long-running machine, or
+   accept burning two ~6 h jobs that die mid-gate.
 
 ## Validation environments for this pass
 
