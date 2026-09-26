@@ -187,6 +187,23 @@ Recorded here for completeness; details and evidence live in
    resume gating only the missing cases. The exact-instance guarantee is
    unchanged: no paid call happens until every referenced case has a
    passed row in the merged report.
+8. **A single gate case that cannot fit one job budget would spin the
+   supervisor forever** (2026-09-27, not built — theoretical until timing
+   says otherwise). The forward-progress floor ("bank one fresh row
+   before GateWallExceeded may raise") makes the multi-job gate converge
+   whenever every case fits the phase-1 wall budget. If one case's
+   validation exceeds it (e.g. a hardest-difficulty Glyph vector on a
+   slow runner), the job runs to the step timeout, banks nothing, and
+   the cron retries the same case forever with zero progress. Runner-side
+   pilot data (one easy glyph case ~14.4 min) leaves orders of magnitude
+   before the ~5.2 h gate wall, so this is currently theoretical; the
+   sandbox smoke's first glyph row (in progress >21 min on 2 cores) and
+   the first dispatch will tell. If it becomes live, the fix is: when the
+   partial file shows the same first-unfinished case across N
+   consecutive dispatches with no new rows, pause non-resumably with
+   pause_reason gate_case_exceeds_job_budget and the case ID, so a human
+   decides whether to split, defer, or drop that case. Recorded here
+   instead of built, per review.
 
 ## Validation environments for this pass
 
