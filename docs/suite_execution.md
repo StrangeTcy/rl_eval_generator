@@ -76,12 +76,14 @@ a budget plan and **does not** execute behavioral oracles.
 
 The gate currently has concrete references for `rd_state_carry`, `rope`,
 `moco`, `glyph`, `epistemic_games`, `categorical_lenses`,
-`regex_state_machine`, `sql_fixed_point`, and `css_state_machine`. Other
+`regex_state_machine`, `sql_fixed_point`, `css_state_machine`,
+`spreadsheet_dataflow`, `template_interpreter`, and `ci_dependency_graph`
+(the last six including the transcription variant). Other
 registered environments have **no configured reference** and will block a
 live sweep that includes them; don't call them verified. A reference built for
 one vector can fail a different vector, so the gate grades the exact selected
 vector/seed, not an easier proxy. On the local CPU, Glyph takes about nine
-minutes for all three variants. None of these host-side judge checks proves
+minutes for all its variants. None of these host-side judge checks proves
 Docker runtime isolation; the separate CI Docker step builds but does not run
 judge containers.
 
@@ -125,12 +127,57 @@ With PyTorch 2.5.1 and Torchvision 0.20.1 installed locally, no provider calls:
   trace excerpt are needed to audit those historical claims; ZIP uploads are
   not required.
 
-These are provider-free **local** tests. CI's `requirements.txt` does not install
-PyTorch/Torchvision: tests using `pytest.importorskip("torch")` or
-`pytest.importorskip("torchvision")` are skipped, and the opt-in slow Glyph
-behavioral test is skipped unless `RUN_SLOW_JUDGE_ORACLES=1`. Check the skip
-count, not just the green badge. CI does run static/rendered-judge checks and
-Docker **build** smoke, not a behavioral PyTorch or Docker-executed judge suite.
+### Second pass (2026-09-26): pinned-torch rerun, transcription variant, false positives
+
+All provider-free, on torch 2.14.0+cu130 and re-run on the documented 2.5.1
+baseline; details and bug entries in [the calibration log](judge_calibration.md).
+
+- Full suite with real PyTorch and zero torch skips; the opt-in slow Glyph
+  oracle passed (~8.5 min on 2 CPU cores).
+- All six weird-machine judges (regex, sql, css, spreadsheet, template, ci)
+  passed the four-variant gate — no-op / plausible-wrong / **transcription** /
+  reference — at the easy vector on seeds 0, 1, and 2 and at the hard vector
+  on seed 0: 24 further exact generated instances beyond the first pass's 18.
+  Every transcription patch that hard-codes the visible-test outputs was
+  rejected by the randomized held-out checks while remaining patch-valid.
+  Note this makes paid manifests containing those three previously
+  unconfigured environments certifiable instead of blocked.
+- batchnorm_ema: the no-op submission fails closed (`patch_invalid`), but a
+  plausible-but-wrong patch that leaves BN momentum unscaled scores
+  **1.0/PASS at easy and medium** — an open calibration decision, not a fix;
+  batchnorm_ema still has no gate reference, so no paid run can reach it.
+- The exact-instance gate wiring was audited end to end: `run_episode`
+  validates the episode's exact `(environment, difficulty, seed)` before
+  credentials are resolved and byte-compares the agent's actual reset against
+  the oracle-graded fingerprint; `run_suite` and both first-experiment tools
+  gate exactly the case selection they later execute, with
+  `--allow-compile-only-oracles` unable to bypass it.
+- Root-level generation smoke scripts (`test_cat_theo.py`,
+  `test_weird_machine.py`) were run manually: all 23 environments generate and
+  compile with zero unresolved placeholders.
+
+These are provider-free **local** tests. The CI `smoke` job's
+`requirements.txt` does not install PyTorch/Torchvision: tests using
+`pytest.importorskip("torch")` or `pytest.importorskip("torchvision")` are
+skipped there, and the opt-in slow Glyph behavioral test is skipped unless
+`RUN_SLOW_JUDGE_ORACLES=1`. The CI `behavioural` job installs pinned
+CPU `torch==2.5.1` / `torchvision==0.20.1` (plus jinja2) and runs the whole
+suite with `RUN_SLOW_JUDGE_ORACLES=1`, so those skips are CI-covered too —
+check which job a badge refers to, and still check the skip count. Neither
+job executes judge **containers**; the smoke job only builds them.
+
+### PyTorch version record
+
+The pilot ran with Docker judge images whose `shared/Dockerfile.judge`
+installs **unpinned** `torch torchvision` at build time, so the pilot's
+actual judge-side PyTorch version was never recorded anywhere and cannot be
+recovered — that is a reproducibility gap, not a validated choice. The
+documented offline judge-validation baseline is PyTorch 2.5.1 +
+Torchvision 0.20.1 (first pass). The 2026-09-26 second pass additionally
+validated on torch 2.14.0+cu130 and re-validated on 2.5.1; results are in
+[the calibration log](judge_calibration.md). The CI `behavioural` job pins
+2.5.1 so the baseline cannot drift silently; pinning the Docker judge
+images is still an open decision.
 
 A local PASS cannot retroactively repair a judge failure in a paid trajectory.
 Infrastructure failures (`judge_runtime_error`, `unknown`, HTTP 502, Docker

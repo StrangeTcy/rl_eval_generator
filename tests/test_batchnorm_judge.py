@@ -136,11 +136,12 @@ def test_noop_submission_fails_closed_under_real_judge(tmp_path, monkeypatch):
 
     NOTE (2026-09-26, torch 2.14.0+cu130): a plausible-but-wrong patch
     (accumulation-boundary reformulation + classifier re-init, BN momentum
-    left unscaled) was demonstrated to score 1.0/PASS at the easy vector —
-    raw_accuracy 1.0, running_stats_sane and eval_mode_consistent both True,
-    ~19 min CPU. The easy/medium vectors cannot behaviorally discriminate the
-    momentum bug (shuffled batches over template data keep running stats
-    accurate even at effective momentum ~0.34); the hard vector is caught by
+    left unscaled) was demonstrated to score 1.0/PASS at BOTH the easy and
+    the medium vector — raw_accuracy 1.0, running_stats_sane and
+    eval_mode_consistent both True, ~19/~18 CPU-minutes respectively. The
+    easy/medium vectors cannot behaviorally discriminate the momentum bug
+    (shuffled batches over template data keep running stats accurate even at
+    effective momentum ~0.34); the hard vector is caught by
     eval_mode_consistent via the ghost train() override (covered by the probe
     test above). The env's own easy visible test (momentum != 0.1) rejects
     that patch while the judge accepts it. No recorded score could have been
