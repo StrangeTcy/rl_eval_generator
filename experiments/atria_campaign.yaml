@@ -1,0 +1,54 @@
+# Resilient Atria covering campaign: every environment in envs/registry.yaml,
+# every difficulty-axis level exercised at least once (covering matrix,
+# seed 0; 218 cases at the time of writing).  Provider outages are waited out
+# in-run up to the patience window; longer outages pause with a resumable
+# checkpoint that the supervisor workflow (docs/workflows/atria-campaign.yml.example)
+# resumes.  Budget ceilings pause non-resumably and wait for an operator.
+#
+# The 22 environments without a behavioral judge reference run under
+# compile-only validation; every one of their result rows is labeled
+# judge_guarantee=compile_only and must not be read as a validated verdict.
+name: atria_covering_campaign
+provider: atria
+api_base: https://api.atria-asi.ai/v1
+model: Atria-Dawn-Preview
+api_key_env: ATRIA_API_KEY
+concurrency: 1
+temperature: 1.0
+top_p: 0.95
+stream: false
+request_extra: {}
+reasoning_mode: provider_default_uncontrolled
+rate_limit:
+  documented_requests_per_minute: 60
+  min_interval_seconds: 1.1
+quota_ceiling_tokens: null
+matrix:
+  mode: covering
+  seeds: [0]
+resilience:
+  # Wait out provider outages up to one hour per outage inside the run
+  # (60s initial backoff, doubling, capped at 600s); longer outages pause
+  # resumably instead of burning the job budget.
+  provider_outage_patience_seconds: 3600
+  provider_outage_backoff_seconds: 60
+unreferenced_compile_only: true
+# Wall budget inside one workflow job (which is capped at 6h by GitHub);
+# episode time per dispatch is what remains after the provider-free gates.
+campaign_job_seconds: 19800
+limits:
+  max_steps: 20
+  max_tokens: 8192
+  invalid_retries: 1
+  max_retries: 5
+  # Theoretical bound: 6 compat + 201 served cases * 20 steps * 2 * 6
+  # attempts = 48,246; the ceiling adds a small margin. Hard physical bound
+  # on all HTTP traffic in the whole campaign.
+  max_http_attempts: 48306
+  # 201 served cases * ~50 logical calls per case (40 estimated + margin).
+  max_api_calls: 10050
+  # 201 served cases * 327,680 estimated output tokens, rounded up. Hard
+  # ceiling.
+  max_tokens_total: 66000000
+  floor_effect_after: 0
+  sandbox: docker
