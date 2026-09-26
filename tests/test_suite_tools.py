@@ -14,11 +14,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _stub_passing_instance_gate(monkeypatch):
     # These scheduler tests replace the provider/episode subprocess, not the
-    # judge. Behavioral gate integration has its own real-judge tests.
+    # judge. Behavioral gate integration has its own real-judge tests. The
+    # gate is invoked per case (accumulating), so the stub must return a
+    # passed row for whichever case it is handed.
+    def _fake(manifest, **kwargs):
+        return {
+            "instance_coverage_complete": True,
+            "provider_calls": 0,
+            "cases": [
+                {
+                    "case_id": case.get("case_id"),
+                    "environment": case.get("environment"),
+                    "status": "passed",
+                    "provider_calls": 0,
+                    "variants": [],
+                }
+                for case in manifest.get("cases", [])
+            ],
+        }
+
     monkeypatch.setattr(
-        "tools.instance_oracle_gate.validate_manifest_instances",
-        lambda *args, **kwargs: {"instance_coverage_complete": True, "provider_calls": 0, "cases": []},
-    )
+        "tools.instance_oracle_gate.validate_manifest_instances", _fake)
 
 
 def test_inventory_audits_registry_and_representative_cases():

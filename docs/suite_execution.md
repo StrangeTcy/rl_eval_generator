@@ -255,11 +255,14 @@ operator choices recorded in the calibration decision list:
    its checkpoint instead of re-running CPU-hours of reference validation.
    The carry is keyed on the gated case list and the deployed code SHA and
    is only accepted when both match byte-for-byte; any drift re-runs the
-   full gate. The first dispatch still pays the full gate cost, which can
-   consume most of a 6-hour job (the Glyph and MoCo reference families
-   dominate); if a dispatch is killed before any checkpoint
-   exists, the supervisor restarts it once from the recorded ref, and a
-   repeat pre-checkpoint death means the gate phase must be split by hand.
+   full gate. Because the gate phase (Glyph and MoCo reference training
+   dominates) costs more CPU-hours than one runner job, the gate also
+   **accumulates per case**: every completed case row is checkpointed
+   atomically to `instance_oracles_partial.json`, and a dispatch killed
+   mid-gate has its completed rows carried forward by the supervisor, so
+   repeated 6-hour dispatches make forward progress through the gate until
+   it completes; rows are accepted only under the same case content hash
+   and deployed-code context, and any drift re-gates that case.
 
 Budget ceilings for the campaign are pinned in
 `experiments/atria_campaign.yaml` (48,306 HTTP attempts, 10,050 logical API

@@ -489,6 +489,7 @@ def run_suite(
                 ).get("instance_gate")
             except (OSError, json.JSONDecodeError):
                 carried = None
+        partial_path = output_dir / "instance_oracles_partial.json"
         if (
             isinstance(carried, dict)
             and carried.get("passed") is True
@@ -500,9 +501,75 @@ def run_suite(
             instance_report = dict(carried["report"])
             instance_report["carried_from_checkpoint"] = True
         else:
-            instance_report = validate_manifest_instances(
-                gated_manifest, root=ROOT, include_slow=True
-            )
+            # The gate phase can cost more CPU-hours than one runner job
+            # (Glyph/MoCo reference training dominates), so it accumulates
+            # per case: every completed case row is checkpointed atomically
+            # to instance_oracles_partial.json, and a resume revalidates
+            # only the cases missing from it.  Rows are keyed on the case
+            # content hash and accepted only under the same gate context
+            # (deployed code SHA); any drift re-gates that case.
+            partial_rows: dict[str, Any] = {}
+            if partial_path.is_file():
+                try:
+                    partial = json.loads(partial_path.read_text(encoding="utf-8"))
+                    if partial.get("gate_context_sha") == gate_context_sha:
+                        saved = partial.get("rows")
+                        if isinstance(saved, dict):
+                            partial_rows = saved
+                except (OSError, json.JSONDecodeError):
+                    partial_rows = {}
+            gate_rows: list[dict[str, Any]] = []
+            gate_rows_reused = 0
+            for gate_case in gated_cases:
+                gate_case_id = str(gate_case.get("case_id"))
+                gate_case_sha = hashlib.sha256(
+                    json.dumps(gate_case, sort_keys=True).encode("utf-8")
+                ).hexdigest()
+                entry = partial_rows.get(gate_case_id)
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("case_sha256") == gate_case_sha
+                    and isinstance(entry.get("row"), dict)
+                ):
+                    gate_rows.append(dict(entry["row"]))
+                    gate_rows_reused += 1
+                    continue
+                case_report = validate_manifest_instances(
+                    {"cases": [gate_case]}, root=ROOT, include_slow=True
+                )
+                case_rows = case_report.get("cases") or []
+                if not case_rows:
+                    raise ValueError(
+                        f"exact-instance gate returned no row for {gate_case_id}"
+                    )
+                gate_rows.append(case_rows[0])
+                partial_rows[gate_case_id] = {
+                    "case_sha256": gate_case_sha,
+                    "row": case_rows[0],
+                }
+                _write_json_atomic(partial_path, {
+                    "schema_version": 1,
+                    "gate_context_sha": gate_context_sha,
+                    "gated_manifest_sha256": gated_manifest_sha,
+                    "rows": partial_rows,
+                    "updated_at": _utc_now(),
+                })
+            if gated_cases:
+                instance_report = {
+                    "schema_version": 1,
+                    "provider_calls": 0,
+                    "instance_coverage_complete": all(
+                        row.get("status") == "passed" for row in gate_rows
+                    ),
+                    "cases": gate_rows,
+                    "gate_rows_reused_from_partial": gate_rows_reused,
+                }
+            else:
+                # Degenerate selection (no cases): defer to the gate itself,
+                # which refuses to authorize a paid run over nothing.
+                instance_report = validate_manifest_instances(
+                    gated_manifest, root=ROOT, include_slow=True
+                )
         if compile_only_cases:
             instance_report = dict(instance_report)
             instance_report["compile_only_cases"] = [

@@ -8,7 +8,10 @@
 # via tools/atria_campaign.py and experiments/atria_campaign.yaml.
 # Zero provider calls happen before the provider-free gates pass; the 22
 # environments without a behavioral judge reference run compile-only and are
-# labeled judge_guarantee=compile_only on every result row.
+# labeled judge_guarantee=compile_only on every result row. The gate phase
+# itself costs more CPU-hours than one 6-hour job (Glyph/MoCo reference
+# training dominates), so it accumulates per case and resumes across
+# dispatches via instance_oracles_partial.json.
 #
 # Why it survives provider interruptions:
 #   * in-run patience — provider outages are waited out with exponential
@@ -84,8 +87,14 @@ jobs:
           CHECKPOINT=runs/atria_campaign/suite_checkpoint.json
           if [ ! -f "$CHECKPOINT" ]; then
             # The last dispatch died before any checkpoint existed (e.g.
-            # inside the gate phase). Restart from the recorded ref; if the
-            # gates cannot fit a job this will repeat and needs an operator.
+            # inside the gate phase). Restart from the recorded ref. The
+            # gate accumulates per case: completed gate rows live in
+            # instance_oracles_partial.json inside this state artifact, so
+            # the restart revalidates only the missing cases and repeated
+            # restarts make forward progress across job boundaries. Only a
+            # death before the FIRST gated case completes makes no
+            # progress (the operator sees a state artifact with neither
+            # checkpoint nor partial rows).
             REF=$(cat runs/atria_campaign/campaign_ref.txt 2>/dev/null || true)
             if [ -n "$REF" ]; then
               echo "mode=fresh" >> "$GITHUB_OUTPUT"

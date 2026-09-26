@@ -178,8 +178,15 @@ Recorded here for completeness; details and evidence live in
    split job that gates only glyph+moco cannot carry its pass into the
    campaign — the split requires per-case gate accumulation and
    incremental gate checkpointing first. Until that exists, the options
-   are: implement it, run the gate on a dedicated long-running machine, or
-   accept burning two ~6 h jobs that die mid-gate.
+   are: run the gate on a dedicated long-running machine, or accept burning
+   ~6 h jobs that die mid-gate.
+   RESOLVED for the campaign (2026-09-27): the gate now accumulates per
+   case — each completed row is checkpointed atomically to
+   `instance_oracles_partial.json` and carried forward on resume under the
+   same case-content hash and code context, so dispatches killed mid-gate
+   resume gating only the missing cases. The exact-instance guarantee is
+   unchanged: no paid call happens until every referenced case has a
+   passed row in the merged report.
 
 ## Validation environments for this pass
 

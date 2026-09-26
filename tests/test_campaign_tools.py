@@ -18,7 +18,23 @@ ROOT = Path(__file__).resolve().parents[1]
 def _capture_gate(monkeypatch, calls):
     def fake(manifest, **kwargs):
         calls.append(manifest)
-        return {"instance_coverage_complete": True, "provider_calls": 0, "cases": []}
+        rows = [
+            {
+                "case_id": case.get("case_id"),
+                "environment": case.get("environment"),
+                "status": "passed",
+                "provider_calls": 0,
+                "variants": [],
+            }
+            for case in manifest.get("cases", [])
+        ]
+        return {
+            "schema_version": 1,
+            "provider_calls": 0,
+            "instance_coverage_complete": bool(rows)
+            and all(row["status"] == "passed" for row in rows),
+            "cases": rows,
+        }
 
     monkeypatch.setattr("tools.instance_oracle_gate.validate_manifest_instances", fake)
 
@@ -563,3 +579,138 @@ def test_resume_carries_logical_call_and_token_reservations(tmp_path, monkeypatc
     assert rows_b[manifest["cases"][2]["case_id"]]["status"] == "scored"
     assert manifest["cases"][3]["case_id"] not in rows_b
     assert b2["paused"] is True and b2["pause_reason"] == "max_tokens_total"
+
+
+def test_gate_accumulates_per_case_and_survives_mid_gate_death(tmp_path, monkeypatch):
+    """The gate phase costs more CPU-hours than one runner job (Glyph/MoCo
+    reference training), so it must accumulate per case: a dispatch killed
+    mid-gate keeps its completed rows, and the resume revalidates only the
+    missing cases."""
+    assert "glyph" in REFERENCES and "regex_state_machine" in REFERENCES
+    manifest = _manifest_with("glyph", "regex_state_machine")
+
+    def _row(case):
+        return {
+            "case_id": case["case_id"],
+            "environment": case["environment"],
+            "status": "passed",
+            "provider_calls": 0,
+            "variants": [],
+        }
+
+    # Dispatch 1: the gate completes the first case, then the job "dies"
+    # (runner timeout / kill) while validating the second.
+    dying_calls: list[str] = []
+
+    def _gate_dying(manifest, **kwargs):
+        case = manifest["cases"][0]
+        if dying_calls:
+            raise RuntimeError("simulated runner death mid-gate")
+        dying_calls.append(str(case["case_id"]))
+        return {
+            "schema_version": 1, "provider_calls": 0,
+            "instance_coverage_complete": True, "cases": [_row(case)],
+        }
+
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances", _gate_dying)
+    with pytest.raises(RuntimeError, match="simulated runner death"):
+        _run(tmp_path, monkeypatch, manifest,
+              unreferenced_compile_only=True, gate_context_sha="ctx-1")
+    partial = json.loads(
+        (tmp_path / "suite" / "instance_oracles_partial.json").read_text("utf-8"))
+    assert len(partial["rows"]) == 1
+    assert partial["gate_context_sha"] == "ctx-1"
+    assert partial["gated_manifest_sha256"]
+
+    # Dispatch 2 (resume): healthy gate; only the missing case may revalidate.
+    resumed_calls: list[list[str]] = []
+
+    def _gate_healthy(manifest, **kwargs):
+        resumed_calls.append([str(c["case_id"]) for c in manifest["cases"]])
+        return {
+            "schema_version": 1, "provider_calls": 0,
+            "instance_coverage_complete": True,
+            "cases": [_row(c) for c in manifest["cases"]],
+        }
+
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances", _gate_healthy)
+    monkeypatch.setattr(
+        "tools.run_suite.subprocess.run",
+        lambda command, **kwargs: _scored_episode(),
+    )
+    second = _run(tmp_path, monkeypatch, manifest,
+                  unreferenced_compile_only=True, gate_context_sha="ctx-1")
+    assert second["paused"] is False
+    assert len(resumed_calls) == 1  # exactly one case revalidated
+    assert resumed_calls[0] == [manifest["cases"][1]["case_id"]]
+    assert second["instance_gate"]["report"]["gate_rows_reused_from_partial"] == 1
+    assert second["instance_gate"]["gated_case_count"] == 2
+    report = json.loads(
+        (tmp_path / "suite" / "instance_oracles.json").read_text("utf-8"))
+    assert report["gate_rows_reused_from_partial"] == 1
+    assert len(report["cases"]) == 2
+    assert {row["environment"] for row in report["cases"]} == {
+        "glyph", "regex_state_machine"}
+    # The episodes ran for both cases after the gate completed.
+    assert len(second["results"]) == 2
+    assert all(row["status"] == "scored" for row in second["results"])
+
+
+def test_partial_gate_rows_require_matching_context(tmp_path, monkeypatch):
+    """A partial gate recorded under a different deployed-code context is
+    rejected wholesale: every case revalidates under the new context."""
+    assert "glyph" in REFERENCES and "regex_state_machine" in REFERENCES
+    manifest = _manifest_with("glyph", "regex_state_machine")
+
+    def _row(case):
+        return {
+            "case_id": case["case_id"],
+            "environment": case["environment"],
+            "status": "passed",
+            "provider_calls": 0,
+            "variants": [],
+        }
+
+    dying_calls: list[str] = []
+
+    def _gate_dying(manifest, **kwargs):
+        case = manifest["cases"][0]
+        if dying_calls:
+            raise RuntimeError("simulated runner death mid-gate")
+        dying_calls.append(str(case["case_id"]))
+        return {
+            "schema_version": 1, "provider_calls": 0,
+            "instance_coverage_complete": True, "cases": [_row(case)],
+        }
+
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances", _gate_dying)
+    with pytest.raises(RuntimeError, match="simulated runner death"):
+        _run(tmp_path, monkeypatch, manifest,
+              unreferenced_compile_only=True, gate_context_sha="ctx-old")
+
+    fresh_calls: list[list[str]] = []
+
+    def _gate_healthy(manifest, **kwargs):
+        fresh_calls.append([str(c["case_id"]) for c in manifest["cases"]])
+        return {
+            "schema_version": 1, "provider_calls": 0,
+            "instance_coverage_complete": True,
+            "cases": [_row(c) for c in manifest["cases"]],
+        }
+
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances", _gate_healthy)
+    monkeypatch.setattr(
+        "tools.run_suite.subprocess.run",
+        lambda command, **kwargs: _scored_episode(),
+    )
+    second = _run(tmp_path, monkeypatch, manifest,
+                  unreferenced_compile_only=True, gate_context_sha="ctx-new")
+    assert sorted(
+        case_id for call in fresh_calls for case_id in call
+    ) == sorted(str(c["case_id"]) for c in manifest["cases"])  # all revalidated
+    assert second["instance_gate"]["report"]["gate_rows_reused_from_partial"] == 0
+    assert second["instance_gate"]["gate_context_sha"] == "ctx-new"
