@@ -496,3 +496,70 @@ def test_resume_end_to_end_fake_provider_semantics(tmp_path, monkeypatch):
             provider_outage_patience_seconds=0, provider_outage_backoff_seconds=60,
             **{**common, "max_http_attempts": 8},
         )
+
+
+def test_resume_carries_logical_call_and_token_reservations(tmp_path, monkeypatch):
+    """The gpt-requested counter demonstration, calls and tokens dimension:
+    a resume pauses at a case that would have run had the reservation been
+    reset, and runs a case that would have paused had it been double-counted.
+    """
+    gate_calls: list[dict] = []
+    _capture_gate(monkeypatch, gate_calls)
+    manifest = _manifest_with("glyph", "epistemic_games", "categorical_lenses",
+                              "regex_state_machine")
+    monkeypatch.setattr("tools.run_suite._sleep", lambda s: None)
+    monkeypatch.setenv("CAMPAIGN_TEST_KEY", "test-secret")
+
+    common = dict(
+        provider="custom",
+        model="offline/pinned",
+        api_key_env="CAMPAIGN_TEST_KEY",
+        api_base="https://example.invalid/v1",
+        max_steps=1,
+        max_tokens=7,
+        invalid_retries=0,
+        max_retries=1,
+        allow_compile_only_oracles=True,
+        provider_outage_patience_seconds=0,
+        provider_outage_backoff_seconds=60,
+    )
+
+    def _dispatches(output_dir, **ceilings):
+        # Dispatch 1: two cases score, the third hits a provider outage.
+        scripted = [_scored_episode(http_attempts=1),
+                    _episode({"verdict": "FAIL", "score": 0.0,
+                              "failure_mode": "fail"}, http_attempts=1,
+                             returncode=0),
+                    _provider_error_episode(http_attempts=1)]
+        monkeypatch.setattr(
+            "tools.run_suite.subprocess.run",
+            lambda command, **kwargs: scripted.pop(0),
+        )
+        first = run_suite(manifest, output_dir=output_dir, **common, **ceilings)
+        assert first["pause_reason"] == "provider_error"
+        # Dispatch 2: provider healthy; only the interrupted case may run.
+        scripted2 = [_scored_episode(http_attempts=1)]
+        monkeypatch.setattr(
+            "tools.run_suite.subprocess.run",
+            lambda command, **kwargs: scripted2.pop(0),
+        )
+        second = run_suite(manifest, output_dir=output_dir, **common, **ceilings)
+        return first, second
+
+    # Scenario A — logical API calls: reservation of 3 carried from dispatch 1
+    # lets the retry run (4 <= 4) and blocks case 4 (5 > 4).  A reset counter
+    # would have run case 4; a double-counted one (6) would have blocked the
+    # retry itself.
+    _, a2 = _dispatches(tmp_path / "calls", max_api_calls=4)
+    rows = {row["case_id"]: row for row in a2["results"]}
+    assert rows[manifest["cases"][2]["case_id"]]["status"] == "scored"
+    assert manifest["cases"][3]["case_id"] not in rows
+    assert a2["paused"] is True and a2["pause_reason"] == "max_api_calls"
+
+    # Scenario B — output tokens: 21 tokens carried (3 calls x 7) let the
+    # retry run (28 <= 28) and block case 4 (35 > 28) on the token ceiling.
+    _, b2 = _dispatches(tmp_path / "tokens", max_tokens_total=28)
+    rows_b = {row["case_id"]: row for row in b2["results"]}
+    assert rows_b[manifest["cases"][2]["case_id"]]["status"] == "scored"
+    assert manifest["cases"][3]["case_id"] not in rows_b
+    assert b2["paused"] is True and b2["pause_reason"] == "max_tokens_total"
