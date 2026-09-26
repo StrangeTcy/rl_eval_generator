@@ -121,12 +121,15 @@ Recorded here for completeness; details and evidence live in
 
 ## Decision list (found, not fixed — awaiting a call)
 
-1. **Pilot judge PyTorch version unrecorded; judge Docker images unpinned.**
-   `shared/Dockerfile.judge` installs unpinned `torch torchvision`, so judge
-   images are not reproducible across builds and the pilots' actual judge-side
-   torch version is unrecoverable. The CI `behavioural` job now pins 2.5.1;
-   pinning the Docker images (and recording the pin per pilot artifact) is a
-   decision.
+1. **Pilot judge PyTorch version unrecorded; judge Docker images were
+   unpinned.** `shared/Dockerfile.judge` installed unpinned
+   `torch torchvision`, so judge images were not reproducible across builds
+   and the pilots' actual judge-side torch version is unrecoverable.
+   RESOLVED for future builds: `shared/Dockerfile.judge` now pins
+   `torch==2.5.1 torchvision==0.20.1` (commit `b0a0004`), matching the
+   documented validation baseline and the behavioural CI example. Remaining
+   operator step: print and record the in-container version once per built
+   image before a paid run.
 2. **batchnorm_ema calibration (entry 3 above).** Options: make the EMA
    staleness behaviourally visible (e.g. class-correlated batches), raise
    ACCUM_STEPS so unscaled momentum collapses eval accuracy, restrict

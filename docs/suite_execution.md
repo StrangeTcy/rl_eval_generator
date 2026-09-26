@@ -160,7 +160,9 @@ These are provider-free **local** tests. The CI `smoke` job's
 `requirements.txt` does not install PyTorch/Torchvision: tests using
 `pytest.importorskip("torch")` or `pytest.importorskip("torchvision")` are
 skipped there, and the opt-in slow Glyph behavioral test is skipped unless
-`RUN_SLOW_JUDGE_ORACLES=1`. The CI `behavioural` job installs pinned
+`RUN_SLOW_JUDGE_ORACLES=1`. The behavioural CI job — published at
+`docs/workflows/ci-behavioural.yml.example` under the docs/workflows scheme;
+copy it into `.github/workflows/` to activate — installs pinned
 CPU `torch==2.5.1` / `torchvision==0.20.1` (plus jinja2) and runs the whole
 suite with `RUN_SLOW_JUDGE_ORACLES=1`, so those skips are CI-covered too —
 check which job a badge refers to, and still check the skip count. Neither
@@ -169,7 +171,7 @@ job executes judge **containers**; the smoke job only builds them.
 ### PyTorch version record
 
 The pilot ran with Docker judge images whose `shared/Dockerfile.judge`
-installs **unpinned** `torch torchvision` at build time, so the pilot's
+installed **unpinned** `torch torchvision` at build time, so the pilot's
 actual judge-side PyTorch version was never recorded anywhere and cannot be
 recovered — that is a reproducibility gap, not a validated choice. The
 documented offline judge-validation baseline is PyTorch 2.5.1 +

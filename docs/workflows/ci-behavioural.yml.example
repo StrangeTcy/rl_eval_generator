@@ -1,0 +1,35 @@
+# Behavioural CI job, published under the docs/workflows scheme.
+# Copy this file to .github/workflows/ci-behavioural.yml (web UI or commit)
+# to activate it; it is deliberately not committed to .github/workflows/
+# directly so repository pushes never need workflow-file permissions.
+#
+# The in-repo CI smoke job installs only requirements.txt (no PyTorch), so
+# every torch-dependent judge test silently skips there. This job pins the
+# CPU PyTorch stack so judge behaviour (including the opt-in slow oracles
+# and the batchnorm false-positive check) runs on every push instead of
+# being local-only. Pin rationale: the pilot's judge images installed
+# unpinned torch and the pilot's exact version was never recorded; 2.5.1 is
+# the documented offline judge-validation baseline in docs/suite_execution.md
+# and matches the judge Docker image pin in shared/Dockerfile.judge.
+name: CI behavioural
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  behavioural:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned CPU PyTorch stack
+        run: |
+          pip install -r requirements.txt
+          pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
+          pip install jinja2
+      - name: Run behavioural suite with zero torch skips and slow oracles
+        run: RUN_SLOW_JUDGE_ORACLES=1 pytest -q -rs
