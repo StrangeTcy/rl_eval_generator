@@ -6,7 +6,7 @@ on:
       ref:
         description: "Branch or full commit SHA containing the pinned Atria pilot code"
         required: true
-        default: "arena/01a0b10c-rl-eval-generator"
+        default: "arena/01a0dc92-rl-eval-generator"
 
 permissions:
   contents: read
@@ -20,13 +20,19 @@ jobs:
   pilot:
     runs-on: ubuntu-latest
     # The controller enforces the two-hour pilot wall limit. This larger job
-    # limit leaves room for checkout, dependencies, Docker, and artifacts.
+    # limit leaves room for checkout, dependencies, the exact-instance gate
+    # (Glyph reference alone takes ~9-10 CPU-minutes), Docker, and artifacts.
     timeout-minutes: 135
     steps:
       - name: Check out pinned evaluation code
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
+
+      # Fail closed on any ref that predates the exact-instance gate: the
+      # workflow must never run ungated pilot code, however it was selected.
+      - name: Refuse ungated code
+        run: test -f tools/instance_oracle_gate.py || { echo "ref lacks exact-instance gate"; exit 1; }
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,6 +42,19 @@ jobs:
 
       - name: Install controller dependencies
         run: python -m pip install -r requirements.txt
+
+      # The exact-instance oracle gate judges the selected (environment,
+      # difficulty, seed) triples on the HOST, through the real patch
+      # validator and judge code, before any provider call. The generated
+      # judges import torch, and the Glyph reference trains on the host, so
+      # the gate blocks (exit 2) without a PyTorch runtime. The versions are
+      # pinned to the documented offline validation baseline and to the
+      # judge Docker image pin, so the host gate and the container judges
+      # run the same torch.
+      - name: Install pinned CPU PyTorch stack for the exact-instance gate
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
+          python -m pip install jinja2
 
       - name: Run only the bounded Atria first-five profile
         env:
