@@ -75,6 +75,17 @@ jobs:
       - name: Install controller dependencies
         run: pip install -r requirements.txt
 
+      # The exact-instance oracle gate grades every selected case on the
+      # host, through the real patch validator and judge code, before any
+      # provider call. Generated judges import torch and some references
+      # train on the host, so the gate blocks without a PyTorch runtime.
+      # Versions are pinned to the documented offline validation baseline
+      # and to the judge Docker image pin.
+      - name: Install pinned CPU PyTorch stack for the exact-instance gate
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
+          pip install jinja2
+
       - name: Inspect notebook/runner capabilities
         run: python tools/notebook_mode.py --out capabilities.json
 
