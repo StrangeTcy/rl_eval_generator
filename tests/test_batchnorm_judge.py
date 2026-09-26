@@ -129,3 +129,36 @@ def test_hard_batchnorm_probe_catches_training_mode_bn_during_eval(tmp_path, mon
     assert fixed["batch_independent"] is True
     assert fixed["eval_consistent"] is True
     assert "anti_gaming_passed = coverage_ok and running_stats_ok and eval_consistent" in JUDGE.read_text()
+
+
+def test_noop_submission_fails_closed_under_real_judge(tmp_path, monkeypatch):
+    """An empty batchnorm_ema submission must fail closed as an invalid patch.
+
+    NOTE (2026-09-26, torch 2.14.0+cu130): a plausible-but-wrong patch
+    (accumulation-boundary reformulation + classifier re-init, BN momentum
+    left unscaled) was demonstrated to score 1.0/PASS at the easy vector —
+    raw_accuracy 1.0, running_stats_sane and eval_mode_consistent both True,
+    ~19 min CPU. The easy/medium vectors cannot behaviorally discriminate the
+    momentum bug (shuffled batches over template data keep running stats
+    accurate even at effective momentum ~0.34); the hard vector is caught by
+    eval_mode_consistent via the ghost train() override (covered by the probe
+    test above). The env's own easy visible test (momentum != 0.1) rejects
+    that patch while the judge accepts it. No recorded score could have been
+    affected: batchnorm_ema has no gate reference, so paid runs including it
+    stay blocked. Fix direction is a calibration decision — see
+    docs/judge_calibration.md. Until decided, no FAIL assertion is made here
+    for valid-but-wrong batchnorm patches.
+    """
+    pytest.importorskip("torch")
+    monkeypatch.setattr(env_runner, "EPISODES_DIR", tmp_path / "episodes")
+    args = SimpleNamespace(
+        episode_id="offline_bn_noop", env="batchnorm_ema",
+        difficulty="easy,easy,easy,easy,easy", seed=0, max_steps=1,
+        sandbox="local", keep_images=False, keep_workspace=True,
+    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        env_runner.reset(args)
+    state = env_runner._load_state(args.episode_id)
+    _observation, score, done, info = env_runner._submit(state, {"confirm": True}, judge_timeout=2100)
+    assert done and score == 0, info
+    assert info["judge_result"]["failure_mode"] == "patch_invalid"
