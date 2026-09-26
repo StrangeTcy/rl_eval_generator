@@ -183,7 +183,12 @@ Recorded here for completeness; details and evidence live in
   fail-closed check.
 - torch 2.5.1+cu124 / torchvision 0.20.1 / numpy 2.1.2 (Python 3.11.2,
   2 CPU cores), 2026-09-26 campaign pass: full suite on the campaign code
-  — **250 passed, 1 opt-in skip** (slow Glyph oracle left off; the live
-  gate smoke over the covering matrix exercises the same oracle family).
-  This is the first full-torch execution of the campaign/scheduler tests;
-  they also pass torch-less (stub-based) in the 26-test local run.
+  — **251 passed, 1 opt-in skip** (the opt-in slow Glyph oracle stays a
+  separate, unexecuted check; the live gate smoke over the covering matrix
+  exercises the same oracle family but is not a pytest result). Caveat:
+  this is the CUDA 12.4 wheel running on CPU, not the workflow's
+  `+cpu` wheel from the PyTorch CPU index — same upstream version, so
+  numerics are expected to match, but the exact-runtime record remains the
+  pinned `+cpu` stack on the GitHub runner. This is the first full-torch
+  execution of the campaign/scheduler tests; they also pass torch-less
+  (stub-based, 28-test local run).

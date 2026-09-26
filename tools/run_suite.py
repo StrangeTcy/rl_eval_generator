@@ -627,6 +627,12 @@ def run_suite(
         for row in checkpoint.get("results", [])
         if row.get("status") in {"scored", "infrastructure_error", "paused_provider_error"}
     )
+    # The row sum is a lower bound only: when a paused case is retried and
+    # scores on resume, its earlier spent attempts drop out of its row.  The
+    # persistent monotonic total keeps the global physical bound honest
+    # across resumes (never reset, never double-counted).
+    http_attempts_total = int(checkpoint.get("http_attempts_total", 0) or 0)
+    http_attempts_reserved = max(http_attempts_reserved, http_attempts_total)
     if max_http_attempts is not None and http_attempts_reserved > max_http_attempts:
         raise ValueError("recorded HTTP attempts exceed the configured bounded budget")
     completed_this_run = 0
@@ -944,6 +950,9 @@ def run_suite(
         api_calls_reserved += estimated_calls
         output_tokens_reserved += estimated_tokens
         http_attempts_used = int(result.get("http_attempts", 0) or 0)
+        checkpoint["http_attempts_total"] = (
+            int(checkpoint.get("http_attempts_total", 0) or 0) + http_attempts_used
+        )
         if max_http_attempts is not None:
             http_attempts_reserved += http_attempts_used
         if result.get("status") == "paused_provider_error":

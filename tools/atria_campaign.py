@@ -166,6 +166,9 @@ def _report_from_checkpoint(
         bucket = by_guarantee.setdefault(guarantee, {})
         status_key = str(row.get("status", "unknown"))
         bucket[status_key] = bucket.get(status_key, 0) + 1
+        if status_key == "scored":
+            verdict_key = str(row.get("verdict") or "unknown").lower()
+            bucket[f"verdict_{verdict_key}"] = bucket.get(f"verdict_{verdict_key}", 0) + 1
     gate = checkpoint.get("instance_gate") or {}
     report: dict[str, Any] = {
         "schema_version": 1,
@@ -184,6 +187,13 @@ def _report_from_checkpoint(
             "attempts": compatibility.get("attempts") if compatibility else None,
             "waited_seconds": round(compat_waited, 1),
         },
+        # Two separate denominators by design: never report a combined
+        # pass rate across judge guarantees. gated_case_count and
+        # compile_only_case_count above are those denominators.
+        "aggregate_note": (
+            "report per judge_guarantee bucket only; compile_only verdicts "
+            "are exploratory and excluded from any validated aggregate"
+        ),
         "compile_only_disclaimer": (
             "compile_only rows are graded by judges without a behavioral "
             "reference on that exact instance; they do not carry the "

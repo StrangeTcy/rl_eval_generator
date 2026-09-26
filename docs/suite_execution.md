@@ -231,7 +231,11 @@ run:
   checkpoint whose `pause_reason` is in {`provider_error`,
   `max_wall_seconds`, `provider_infrastructure_error_compatibility`}; the
   workflow's own schedule trigger downloads the state artifact, checks out
-  the recorded code SHA, and continues. Completed cases are never re-run.
+  the recorded code SHA, and continues. Completed cases are never re-run,
+  the interrupted case is retried, and a persistent monotonic
+  `http_attempts_total` keeps the global physical HTTP bound honest across
+  resumes (attempts wasted on a paused case are never forgotten when that
+  case later scores).
 - **Fail-closed on money and infrastructure**: budget ceilings
   (`max_api_calls`, `max_tokens_total`, `max_http_attempts`), floor effects,
   and infrastructure errors pause **non-resumably**; the supervisor never

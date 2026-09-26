@@ -372,3 +372,127 @@ def test_order_cases_referenced_first_puts_validated_envs_before_compile_only():
     again = {"cases": [dict(case) for case in cases]}
     _order_cases_referenced_first(again)
     assert [c["case_id"] for c in again["cases"]] == [c["case_id"] for c in manifest["cases"]]
+
+
+def test_resume_end_to_end_fake_provider_semantics(tmp_path, monkeypatch):
+    """One fake-provider run demonstrating every resume guarantee:
+
+    - completed cases are not re-run (and their rows are untouched);
+    - the interrupted case is retried and scores;
+    - cumulative HTTP attempts survive resume in a persistent total;
+    - counters are neither reset nor double-counted;
+    - metadata drift (a changed ceiling) rejects the checkpoint.
+    """
+    gate_calls: list[dict] = []
+    _capture_gate(monkeypatch, gate_calls)
+    envs = ["glyph", "epistemic_games", "categorical_lenses", "regex_state_machine"]
+    manifest = _manifest_with(*envs)
+    assert len(manifest["cases"]) == 4
+
+    episode_log: list[dict] = []
+
+    def _episode_cmd(command, **kwargs):
+        # The episode command embeds the case id; record which case ran.
+        cmd = " ".join(str(part) for part in command)
+        episode_log.append(cmd)
+        return scripted.pop(0)
+
+    monkeypatch.setattr("tools.run_suite.subprocess.run", _episode_cmd)
+    monkeypatch.setattr("tools.run_suite._sleep", lambda s: None)
+    monkeypatch.setenv("CAMPAIGN_TEST_KEY", "test-secret")
+
+    def _case_id(cmd):
+        # Episode commands carry "--env <environment> --difficulty ..."; the
+        # manifest under test has one representative case per environment.
+        parts = cmd.split()
+        return parts[parts.index("--env") + 1]
+
+    common = dict(
+        provider="custom",
+        model="offline/pinned",
+        api_key_env="CAMPAIGN_TEST_KEY",
+        api_base="https://example.invalid/v1",
+        max_steps=1,
+        max_tokens=7,
+        invalid_retries=0,
+        max_retries=1,
+        allow_compile_only_oracles=True,
+        max_http_attempts=100,
+    )
+
+    # --- Dispatch 1: c1 and c2 score, c3 hits a provider outage with zero
+    # patience (pauses immediately), c4 is never started.
+    scripted = [
+        _scored_episode(http_attempts=2),                                   # glyph PASS
+        _episode({"verdict": "FAIL", "score": 0.0, "failure_mode": "fail"},
+                 http_attempts=1, returncode=0),                            # epistemic FAIL
+        _provider_error_episode(http_attempts=2),                           # lenses outage
+    ]
+    first = run_suite(
+        manifest, output_dir=tmp_path / "suite",
+        provider_outage_patience_seconds=0, provider_outage_backoff_seconds=60,
+        **common,
+    )
+    assert first["paused"] is True and first["pause_reason"] == "provider_error"
+    rows = {row["case_id"]: row for row in first["results"]}
+    assert len(rows) == 3
+    assert rows[manifest["cases"][0]["case_id"]]["status"] == "scored"
+    assert rows[manifest["cases"][1]["case_id"]]["verdict"] == "FAIL"
+    assert rows[manifest["cases"][2]["case_id"]]["status"] == "paused_provider_error"
+    assert manifest["cases"][3]["case_id"] not in rows
+    assert first["http_attempts_total"] == 5  # 2 + 1 + 2, wastage included
+    # Only terminal rows must stay untouched; the paused row is expected to
+    # be replaced by its retry on resume.
+    first_rows = {
+        cid: dict(row) for cid, row in rows.items()
+        if row["status"] in {"scored", "generation_error", "compile_error",
+                             "blocked_config_drift"}
+    }
+    assert len(first_rows) == 2
+
+    # --- Dispatch 2: provider healthy.  Only the interrupted case and the
+    # never-started case run; the two completed rows are byte-identical.
+    scripted = [
+        _episode({"verdict": "FAIL", "score": 0.0, "failure_mode": "fail"},
+                 http_attempts=1, returncode=0),                            # lenses retry
+        _scored_episode(http_attempts=2),                                   # regex PASS
+    ]
+    dispatch2_log_len = len(episode_log)
+    second = run_suite(
+        manifest, output_dir=tmp_path / "suite",
+        provider_outage_patience_seconds=0, provider_outage_backoff_seconds=60,
+        **common,
+    )
+    resumed_cmds = episode_log[dispatch2_log_len:]
+    assert len(resumed_cmds) == 2, "resume must run exactly the two unfinished cases"
+    resumed_ids = {_case_id(cmd) for cmd in resumed_cmds}
+    assert resumed_ids == {
+        manifest["cases"][2]["environment"], manifest["cases"][3]["environment"]}
+    rows2 = {row["case_id"]: row for row in second["results"]}
+    assert len(rows2) == 4
+    for cid, saved in first_rows.items():
+        assert rows2[cid] == saved, f"completed case {cid} must be untouched"
+    assert rows2[manifest["cases"][2]["case_id"]]["status"] == "scored"
+    assert rows2[manifest["cases"][3]["case_id"]]["status"] == "scored"
+    # Cumulative attempts survive resume, are not reset, not double-counted:
+    # 2 + 1 (dispatch 1) + 2 (wasted outage) + 1 + 2 (dispatch 2) = 8.
+    assert second["http_attempts_total"] == 8
+
+    # --- Dispatch 3: nothing left to do -> no episode subprocesses at all.
+    before = len(episode_log)
+    third = run_suite(
+        manifest, output_dir=tmp_path / "suite",
+        provider_outage_patience_seconds=0, provider_outage_backoff_seconds=60,
+        **common,
+    )
+    assert len(episode_log) == before
+    assert len(third["results"]) == 4
+    assert third["http_attempts_total"] == 8
+
+    # --- Dispatch 4: metadata drift (different HTTP ceiling) must refuse.
+    with pytest.raises(ValueError, match="metadata mismatch"):
+        run_suite(
+            manifest, output_dir=tmp_path / "suite",
+            provider_outage_patience_seconds=0, provider_outage_backoff_seconds=60,
+            **{**common, "max_http_attempts": 8},
+        )
