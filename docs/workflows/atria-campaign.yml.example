@@ -2,10 +2,11 @@
 # Copy this file to .github/workflows/atria-campaign.yml (web UI or commit).
 #
 # What it runs: every environment in envs/registry.yaml across every
-# difficulty-axis level (covering matrix, seed 0 — 218 cases, of which the
-# 17 rope cases are omitted loudly at runtime because rope requires non-text
-# input and Atria is text-only: 201 served cases at the time of writing),
-# via tools/atria_campaign.py and experiments/atria_campaign.yaml.
+# difficulty-axis level (covering matrix, seed 0 — 218 cases). The 17 rope
+# cases are omitted loudly because rope requires non-text input and Atria is
+# text-only; seven exact Glyph/MoCo vectors are separately omitted as known
+# gate-blocked calibration failures (run 36346941741): 194 served cases.
+# See experiments/atria_campaign.yaml for the exact IDs and provenance.
 # Zero provider calls happen before the provider-free gates pass; the 22
 # environments without a behavioral judge reference run compile-only and are
 # labeled judge_guarantee=compile_only on every result row. The gate phase

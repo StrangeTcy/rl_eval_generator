@@ -248,6 +248,92 @@ def _order_cases_referenced_first(manifest: dict) -> None:
     }
 
 
+def _apply_gate_blocked_exclusions(manifest: dict, profile: Mapping[str, Any]) -> None:
+    """Omit explicitly reviewed, exact gate-blocked cases before any provider use.
+
+    This is deliberately separate from modality omissions: these cases are
+    text-compatible, but the recorded gate run found calibration-apparatus
+    defects. Unknown or duplicate IDs fail closed so profile drift cannot
+    silently broaden or weaken the campaign.
+    """
+    configured = profile.get("manual_gate_blocked_exclusions") or {}
+    entries = configured.get("cases") or []
+    if not entries:
+        return
+    if not isinstance(entries, list) or not all(isinstance(item, dict) for item in entries):
+        raise ValueError("manual_gate_blocked_exclusions.cases must be a list of mappings")
+    excluded_ids = [str(item.get("case_id") or "") for item in entries]
+    if any(not case_id for case_id in excluded_ids):
+        raise ValueError("every manual gate-blocked exclusion requires case_id")
+    if len(excluded_ids) != len(set(excluded_ids)):
+        raise ValueError("manual gate-blocked exclusion case_ids must be unique")
+
+    original_cases = list(manifest.get("cases") or [])
+    by_id = {str(case.get("case_id")): case for case in original_cases}
+    unknown = sorted(set(excluded_ids) - set(by_id))
+    if unknown:
+        raise ValueError(f"manual gate-blocked exclusions are absent from manifest: {unknown}")
+    omitted = [by_id[case_id] for case_id in excluded_ids]
+    excluded = set(excluded_ids)
+    manifest["cases"] = [
+        case for case in original_cases if str(case.get("case_id")) not in excluded
+    ]
+    manifest["case_count"] = len(manifest["cases"])
+
+    # Re-check covering-level accounting after the omissions. Every level in
+    # the original covering manifest must remain served or be named by an
+    # exact reviewed omission; an unexplained coverage hole fails closed.
+    required = {
+        (str(case.get("environment")), str(axis), str(level))
+        for case in original_cases
+        for axis, level in (case.get("difficulty_levels") or {}).items()
+    }
+    served = {
+        (str(case.get("environment")), str(axis), str(level))
+        for case in manifest["cases"]
+        for axis, level in (case.get("difficulty_levels") or {}).items()
+    }
+    explicitly_omitted = {
+        (str(case.get("environment")), str(axis), str(level))
+        for case in omitted
+        for axis, level in (case.get("difficulty_levels") or {}).items()
+    }
+    unexplained = sorted(required - served - explicitly_omitted)
+    if unexplained:
+        raise ValueError(f"unexplained covering-level gaps after exclusions: {unexplained}")
+    omitted_levels = sorted(required - served)
+
+    manifest["known_gate_blocked_omissions"] = {
+        "omitted_case_ids": excluded_ids,
+        "omitted_case_count": len(excluded_ids),
+        "reason": configured.get("reason", "known_gate_blocked_calibration_failures"),
+        "disposition": "omitted_before_provider_access",
+        "provider_calls_before_omission": 0,
+        "provenance": dict(configured.get("provenance") or {}),
+        "cases": [dict(item) for item in entries],
+        "level_coverage_check": {
+            "status": "passed_with_explicit_omissions",
+            "unexplained_missing_levels": [],
+            "explicitly_omitted_levels": [
+                {"environment": env, "axis": axis, "level": level}
+                for env, axis, level in omitted_levels
+            ],
+        },
+        "statement": (
+            "known judge/reference calibration failures; omitted before provider "
+            "access and excluded from scored results"
+        ),
+    }
+
+
+def _add_omissions_to_report(report: dict[str, Any], manifest: Mapping[str, Any]) -> dict[str, Any]:
+    if manifest.get("campaign_omissions"):
+        report["campaign_omissions"] = manifest["campaign_omissions"]
+    if manifest.get("known_gate_blocked_omissions"):
+        report["known_gate_blocked_omissions"] = manifest["known_gate_blocked_omissions"]
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", type=Path, default=ROOT / "experiments" / "atria_campaign.yaml")
@@ -272,6 +358,7 @@ def main(argv: list[str] | None = None) -> int:
         backoff = float(resilience["provider_outage_backoff_seconds"])
 
         manifest = build_manifest(root=ROOT, matrix="covering", seeds=[0])
+        _apply_gate_blocked_exclusions(manifest, profile)
         output.mkdir(parents=True, exist_ok=True)
         write_json(output / "pilot_manifest.json", manifest)
         modality = inventory_selected_modalities(manifest, root=ROOT)
@@ -307,10 +394,10 @@ def main(argv: list[str] | None = None) -> int:
         write_json(output / "pilot_manifest.json", manifest)
         write_json(output / "modality_inventory.json", modality)
         if not modality["all_selected_cases_text_only_compatible"]:
-            write_json(output / "campaign_report.json", {
+            write_json(output / "campaign_report.json", _add_omissions_to_report({
                 "status": "blocked", "pause_reason": "unsupported_non_text_input_for_atria",
                 "resumable": False,
-            })
+            }, manifest))
             _mark_terminal(output, "unsupported_non_text_input_for_atria",
                            "provider cannot serve the selected cases")
             print(f"Campaign blocked by modality inventory; inspect {output}")
@@ -318,10 +405,10 @@ def main(argv: list[str] | None = None) -> int:
         generation = _generation_preflight(manifest)
         write_json(output / "generation_preflight.json", {"cases": generation})
         if any(item.get("status") != "ready" for item in generation):
-            write_json(output / "campaign_report.json", {
+            write_json(output / "campaign_report.json", _add_omissions_to_report({
                 "status": "blocked", "pause_reason": "generation_preflight_failed",
                 "resumable": False,
-            })
+            }, manifest))
             _mark_terminal(output, "generation_preflight_failed",
                            "generation preflight produced non-ready cases")
             print(f"Campaign blocked by generation preflight; inspect {output}")
@@ -391,7 +478,7 @@ def main(argv: list[str] | None = None) -> int:
                 "detail": redact_text(str(exc)),
                 "recorded_at": _utc_now(),
             })
-            write_json(output / "campaign_report.json", {
+            write_json(output / "campaign_report.json", _add_omissions_to_report({
                 "status": "blocked",
                 "pause_reason": "gate_case_repeatedly_blocked",
                 "resumable": False,
@@ -402,7 +489,7 @@ def main(argv: list[str] | None = None) -> int:
                     "not carry the exact-instance oracle guarantee and must "
                     "not be read as validated model verdicts"
                 ),
-            })
+            }, manifest))
             print(f"Campaign blocked: a gate case failed validation twice; "
                   f"inspect {output}")
             return 2
@@ -415,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
                 ).get("rows") or {})
             except (OSError, json.JSONDecodeError):
                 banked = 0
-            write_json(output / "campaign_report.json", {
+            write_json(output / "campaign_report.json", _add_omissions_to_report({
                 "status": "paused",
                 "pause_reason": "max_wall_seconds",
                 "resumable": True,
@@ -428,7 +515,7 @@ def main(argv: list[str] | None = None) -> int:
                     "not carry the exact-instance oracle guarantee and must "
                     "not be read as validated model verdicts"
                 ),
-            })
+            }, manifest))
             print(f"Campaign paused mid-gate ({banked} rows banked); "
                   f"inspect {output}")
             return 7
@@ -447,10 +534,10 @@ def main(argv: list[str] | None = None) -> int:
             "api_key_env": "ATRIA_API_KEY",
         })
         if credentials is None:
-            write_json(output / "campaign_report.json", {
+            write_json(output / "campaign_report.json", _add_omissions_to_report({
                 "status": "prepared", "pause_reason": "waiting_for_private_ATRIA_API_KEY",
                 "resumable": False,
-            })
+            }, manifest))
             _mark_terminal(output, "waiting_for_private_ATRIA_API_KEY",
                            "no provider call was made; configure the secret "
                            "and re-dispatch manually")
@@ -460,10 +547,10 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = str(runtime.get("reason", "docker_unavailable"))
             write_json(output / "suite_checkpoint.json", checkpoint)
-            write_json(output / "campaign_report.json", {
+            write_json(output / "campaign_report.json", _add_omissions_to_report({
                 "status": "prepared", "pause_reason": checkpoint["pause_reason"],
                 "resumable": False,
-            })
+            }, manifest))
             _mark_terminal(output, str(runtime.get("reason", "docker_unavailable")),
                            "Docker unavailable; no provider call was made")
             print(f"Campaign prepared but Docker is unavailable; no provider call: {output}")
@@ -492,9 +579,11 @@ def main(argv: list[str] | None = None) -> int:
                 "waited_seconds": round(compat_waited, 1),
             }
             write_json(output / "suite_checkpoint.json", checkpoint)
-            write_json(output / "campaign_report.json", _report_from_checkpoint(
-                checkpoint, compatibility=compatibility, compat_waited=compat_waited,
-                status="paused", pause_reason=pause_reason,
+            write_json(output / "campaign_report.json", _add_omissions_to_report(
+                _report_from_checkpoint(
+                    checkpoint, compatibility=compatibility, compat_waited=compat_waited,
+                    status="paused", pause_reason=pause_reason,
+                ), manifest,
             ))
             if pause_reason == "completion_compatibility_failed":
                 # Substantive compat failure is a model/API change, not a
@@ -516,8 +605,7 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint, compatibility=compatibility, compat_waited=compat_waited,
             status=status, pause_reason=pause_reason,
         )
-        if manifest.get("campaign_omissions"):
-            report["campaign_omissions"] = manifest["campaign_omissions"]
+        _add_omissions_to_report(report, manifest)
         report["remaining_job_seconds"] = round(job_seconds - (time.monotonic() - started), 1)
         write_json(output / "campaign_report.json", report)
         print(f"Atria campaign {status}; inspect {output}")

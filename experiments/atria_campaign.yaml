@@ -33,6 +33,32 @@ resilience:
   provider_outage_patience_seconds: 3600
   provider_outage_backoff_seconds: 60
 unreferenced_compile_only: true
+# Exact vectors that the first full gate run proved are calibration-apparatus
+# failures, not model results. They are omitted before generation gates or any
+# provider access. Keep this list case-specific: the other vectors from these
+# environments remain behaviorally gated and scored.
+manual_gate_blocked_exclusions:
+  reason: known_gate_blocked_calibration_failures
+  disposition: omitted_before_provider_access
+  provenance:
+    github_actions_run_id: 36346941741
+    github_actions_run_url: https://github.com/StrangeTcy/rl_eval_generator/actions/runs/36346941741
+    calibration_issue: https://github.com/StrangeTcy/rl_eval_generator/issues/1
+  cases:
+    - case_id: glyph__architecture=easy_optimizer=hard_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_exists_per_environment_not_per_vector
+    - case_id: glyph__architecture=easy_optimizer=medium_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_exists_per_environment_not_per_vector
+    - case_id: moco__naming=hard_distractors=easy_queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0
+      calibration_class: oracle_assumes_easy_layout
+    - case_id: moco__naming=medium_distractors=easy_queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0
+      calibration_class: oracle_assumes_easy_layout
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=hard__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
 # Wall budget inside one workflow job (which is capped at 6h by GitHub);
 # episode time per dispatch is what remains after the provider-free gates.
 campaign_job_seconds: 19800
@@ -41,14 +67,13 @@ limits:
   max_tokens: 8192
   invalid_retries: 1
   max_retries: 5
-  # Theoretical bound: 6 compat + 201 served cases * 20 steps * 2 * 6
-  # attempts = 48,246; the ceiling adds a small margin. Hard physical bound
-  # on all HTTP traffic in the whole campaign.
+  # Conservative ceiling retained from the pre-exclusion 201-case campaign:
+  # 6 compat + 201 * 20 steps * 2 invalid attempts * 6 retries = 48,246,
+  # plus margin. The selected campaign now serves 194 cases after 17 modality
+  # omissions and seven known gate-blocked calibration omissions.
   max_http_attempts: 48306
-  # 201 served cases * ~50 logical calls per case (40 estimated + margin).
+  # Conservative pre-exclusion ceilings; exclusions lower actual exposure.
   max_api_calls: 10050
-  # 201 served cases * 327,680 estimated output tokens, rounded up. Hard
-  # ceiling.
   max_tokens_total: 66000000
   floor_effect_after: 0
   sandbox: docker

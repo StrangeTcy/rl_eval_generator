@@ -363,6 +363,46 @@ def test_gate_pass_carries_across_resume_with_matching_context(tmp_path, monkeyp
     assert third["instance_gate"]["gate_context_sha"] == "def456"
 
 
+def test_manual_gate_blocked_exclusions_are_exact_and_coverage_accounted():
+    from tools.atria_campaign import _apply_gate_blocked_exclusions
+    from tools.suite_inventory import _load_yaml, build_manifest
+
+    profile = _load_yaml(ROOT / "experiments" / "atria_campaign.yaml")
+    manifest = build_manifest(root=ROOT, matrix="covering", seeds=[0])
+    original_ids = {case["case_id"] for case in manifest["cases"]}
+    _apply_gate_blocked_exclusions(manifest, profile)
+
+    omission = manifest["known_gate_blocked_omissions"]
+    omitted_ids = set(omission["omitted_case_ids"])
+    assert len(omitted_ids) == omission["omitted_case_count"] == 7
+    assert omitted_ids <= original_ids
+    assert omitted_ids.isdisjoint({case["case_id"] for case in manifest["cases"]})
+    assert manifest["case_count"] == 211
+    assert omission["disposition"] == "omitted_before_provider_access"
+    assert omission["provider_calls_before_omission"] == 0
+    assert omission["provenance"]["github_actions_run_id"] == 36346941741
+    assert omission["level_coverage_check"]["status"] == \
+        "passed_with_explicit_omissions"
+    assert omission["level_coverage_check"]["unexplained_missing_levels"] == []
+    assert {item["calibration_class"] for item in omission["cases"]} == {
+        "reference_exists_per_environment_not_per_vector",
+        "oracle_assumes_easy_layout",
+        "negative_control_is_not_a_negative_control",
+        "reference_does_not_solve_its_own_instance",
+    }
+
+
+def test_manual_gate_blocked_exclusions_fail_closed_on_manifest_drift():
+    from tools.atria_campaign import _apply_gate_blocked_exclusions
+
+    manifest = {"cases": [{"case_id": "present", "environment": "glyph"}]}
+    profile = {"manual_gate_blocked_exclusions": {
+        "cases": [{"case_id": "missing", "calibration_class": "test"}],
+    }}
+    with pytest.raises(ValueError, match="absent from manifest"):
+        _apply_gate_blocked_exclusions(manifest, profile)
+
+
 def test_order_cases_referenced_first_puts_validated_envs_before_compile_only():
     from tools.atria_campaign import _order_cases_referenced_first
 
@@ -838,6 +878,7 @@ def test_campaign_wrapper_pauses_resumably_when_gate_wall_exhausts(tmp_path, mon
     campaign pause (exit 7) with the banked-row count in the report, so the
     job ends normally and the state upload still happens."""
     import tools.atria_campaign as campaign
+    monkeypatch.setattr(campaign, "_apply_gate_blocked_exclusions", lambda manifest, profile: None)
     from tools.run_suite import GateWallExceeded
 
     monkeypatch.setattr(
@@ -963,6 +1004,7 @@ def test_campaign_wrapper_marks_terminal_failures_and_clears_on_start(tmp_path, 
     supervisor stands down, and clears it at the start of every run so one
     automatic restart is allowed."""
     import tools.atria_campaign as campaign
+    monkeypatch.setattr(campaign, "_apply_gate_blocked_exclusions", lambda manifest, profile: None)
     from tools.run_suite import GateCaseBlockedRepeatedly
 
     monkeypatch.setattr(
@@ -1020,6 +1062,7 @@ def test_blocked_gate_makes_next_scheduled_tick_stand_down(tmp_path, monkeypatch
     validation twice (terminal marker + non-resumable report), the next
     scheduled tick stands down instead of re-dispatching the same ref."""
     import tools.atria_campaign as campaign
+    monkeypatch.setattr(campaign, "_apply_gate_blocked_exclusions", lambda manifest, profile: None)
     from tools.campaign_supervisor import decide_tick
     from tools.run_suite import GateCaseBlockedRepeatedly
 
@@ -1067,6 +1110,7 @@ def test_interrupted_gate_still_resumes_on_the_next_tick(tmp_path, monkeypatch):
     checkpoint yet) is re-dispatched from the recorded ref, so validation
     continues from the banked rows instead of standing down."""
     import tools.atria_campaign as campaign
+    monkeypatch.setattr(campaign, "_apply_gate_blocked_exclusions", lambda manifest, profile: None)
     from tools.campaign_supervisor import decide_tick
     from tools.run_suite import GateWallExceeded
 

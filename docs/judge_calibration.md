@@ -215,6 +215,27 @@ Recorded here for completeness; details and evidence live in
    wrapper clears the marker at the start of each run, so one automatic
    restart is allowed and a repeat failure becomes an operator stop.
 
+9. **Seven covering vectors are omitted as known calibration failures**
+   (2026-09-28, GitHub Actions run `36346941741`). The first full gate run
+   validated 72/79 referenced vectors and blocked seven before any provider
+   call. They fall into four apparatus-defect classes: the Glyph optimizer
+   medium/hard reference exists per environment but not per vector; the MoCo
+   naming medium/hard oracle assumes the easy workspace layout; the Glyph
+   architecture=hard and symptom_mask=hard plausible-wrong controls fail for
+   the wrong reason; and the Glyph red_herring=hard reference does not solve
+   its own instance. The last case remains deliberately unresolved pending an
+   independent known-good attempt: that attempt must distinguish a wrong
+   reference from an over-hard instance rather than guessing. For the first
+   campaign these seven exact case IDs are recorded in
+   `experiments/atria_campaign.yaml` and omitted before generation gates or
+   provider access. They are excluded from scored results, reported separately
+   from modality omissions, and every other vector in Glyph and MoCo remains
+   behaviorally gated. No judge, reference, or oracle was changed. This
+   preserves fail-closed semantics: the gate refused to score these cases; it
+   did not observe seven model failures. Per-vector reference coverage and the
+   seven repairs are tracked as calibration work rather than campaign-harness
+   work.
+
 ## Validation environments for this pass
 
 - torch 2.14.0+cu130, torchvision 0.29.0, numpy 2.4.6, jinja2 3.1.6,

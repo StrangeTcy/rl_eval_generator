@@ -215,8 +215,14 @@ on the default branch before it can be triggered from the Actions UI.
 model across the **covering matrix**: every environment in
 `envs/registry.yaml` with every difficulty-axis level exercised at least once
 at seed 0. Rope requires non-text input and Atria is text-only, so its 17
-cases are omitted loudly at runtime (recorded in the manifest and report):
-**201 served cases at introduction**. The campaign exists because two
+cases are omitted loudly at runtime (recorded in the manifest and report).
+Seven exact Glyph/MoCo cases found gate-blocked by run `36346941741` are also
+omitted, under separate `known_gate_blocked_omissions` metadata, before any
+provider access. They are calibration-apparatus failures rather than modality
+failures or model results: **194 served cases** (72 behaviorally referenced,
+122 compile-only). The exact IDs and four failure classes are pinned in
+`experiments/atria_campaign.yaml` and the calibration decision list. The
+campaign exists because two
 consecutive pilot dispatches were interrupted by provider-side failures at
 two different stages; it is built so those interruptions cost time, never the
 run:
@@ -278,11 +284,11 @@ operator choices recorded in the calibration decision list:
 
 Budget ceilings for the campaign are pinned in
 `experiments/atria_campaign.yaml` (48,306 HTTP attempts, 10,050 logical API
-calls, 66 M output tokens — the theoretical bound plus margin for 201 served
-cases) and are hard: reaching one ends the campaign for an operator, not the
+calls, 66 M output tokens — conservative pre-exclusion bounds for 201 cases)
+and are hard: reaching one ends the campaign for an operator, not the
 supervisor. Because those pauses are non-resumable, the wrapper orders the
-case list **referenced-environments-first** (79 validated cases, then the
-122 compile-only ones, deterministic order preserved inside each group): a
+case list **referenced-environments-first** (72 selected validated cases, then
+the 122 compile-only ones, deterministic order preserved inside each group): a
 campaign cut short by a ceiling loses compile-only rows, never validated
 verdicts. The provider's actual free quota should be checked against the
 66 M-token ceiling before dispatch — the ceiling is a cap, not a plan.
