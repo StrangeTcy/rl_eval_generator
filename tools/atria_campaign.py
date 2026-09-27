@@ -49,7 +49,12 @@ from tools.atria_first_experiment import (  # noqa: E402
 )
 from tools.atria_modality import inventory_selected_modalities  # noqa: E402
 from tools.first_experiment import _generation_preflight, _runtime_check  # noqa: E402
-from tools.run_suite import GateWallExceeded, run_suite  # noqa: E402
+from tools.run_suite import (  # noqa: E402
+    GateCaseBlockedRepeatedly,
+    GateWallExceeded,
+    _utc_now,
+    run_suite,
+)
 from tools.suite_inventory import _load_yaml, build_manifest  # noqa: E402
 
 RESUMABLE_PAUSE_REASONS = {
@@ -204,6 +209,21 @@ def _report_from_checkpoint(
     return report
 
 
+def _mark_terminal(output: Path, reason: str, detail: str) -> None:
+    """Record a non-resumable end so the supervisor stops instead of
+    restarting a deterministically failing wrapper forever.  The marker is
+    cleared at the start of every run, so the supervisor allows exactly one
+    automatic restart and a human decision after that."""
+    try:
+        write_json(output / "wrapper_failed.json", {
+            "pause_reason": reason,
+            "detail": redact_text(detail),
+            "recorded_at": _utc_now(),
+        })
+    except OSError:
+        pass
+
+
 def _order_cases_referenced_first(manifest: dict) -> None:
     """Sort cases so environments with an exact-instance oracle reference run
     before compile-only ones, preserving the deterministic order inside each
@@ -237,6 +257,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     output = args.out
     try:
+        # A terminal-failure marker from a previous dispatch is cleared at
+        # the start of every run: one automatic restart is allowed, a repeat
+        # failure rewrites it and the supervisor stands down for an operator.
+        marker = output / "wrapper_failed.json"
+        marker.unlink(missing_ok=True)
         started = time.monotonic()
         profile = _load_yaml(args.profile)
         _validate_campaign_profile(profile)
@@ -286,6 +311,8 @@ def main(argv: list[str] | None = None) -> int:
                 "status": "blocked", "pause_reason": "unsupported_non_text_input_for_atria",
                 "resumable": False,
             })
+            _mark_terminal(output, "unsupported_non_text_input_for_atria",
+                           "provider cannot serve the selected cases")
             print(f"Campaign blocked by modality inventory; inspect {output}")
             return 2
         generation = _generation_preflight(manifest)
@@ -295,6 +322,8 @@ def main(argv: list[str] | None = None) -> int:
                 "status": "blocked", "pause_reason": "generation_preflight_failed",
                 "resumable": False,
             })
+            _mark_terminal(output, "generation_preflight_failed",
+                           "generation preflight produced non-ready cases")
             print(f"Campaign blocked by generation preflight; inspect {output}")
             return 2
 
@@ -356,6 +385,27 @@ def main(argv: list[str] | None = None) -> int:
                 manifest, stop_after_gates=True,
                 gate_wall_seconds=gate_wall_seconds, **scheduler_kwargs,
             )
+        except GateCaseBlockedRepeatedly as exc:
+            write_json(marker, {
+                "pause_reason": "gate_case_repeatedly_blocked",
+                "detail": redact_text(str(exc)),
+                "recorded_at": _utc_now(),
+            })
+            write_json(output / "campaign_report.json", {
+                "status": "blocked",
+                "pause_reason": "gate_case_repeatedly_blocked",
+                "resumable": False,
+                "detail": redact_text(str(exc)),
+                "compile_only_disclaimer": (
+                    "compile_only rows are graded by judges without a "
+                    "behavioral reference on that exact instance; they do "
+                    "not carry the exact-instance oracle guarantee and must "
+                    "not be read as validated model verdicts"
+                ),
+            })
+            print(f"Campaign blocked: a gate case failed validation twice; "
+                  f"inspect {output}")
+            return 2
         except GateWallExceeded as exc:
             partial_path = output / "instance_oracles_partial.json"
             banked = 0
@@ -401,6 +451,9 @@ def main(argv: list[str] | None = None) -> int:
                 "status": "prepared", "pause_reason": "waiting_for_private_ATRIA_API_KEY",
                 "resumable": False,
             })
+            _mark_terminal(output, "waiting_for_private_ATRIA_API_KEY",
+                           "no provider call was made; configure the secret "
+                           "and re-dispatch manually")
             print("Campaign validated with no provider call; configure ATRIA_API_KEY privately.")
             return 3
         if not runtime.get("available", False):
@@ -411,6 +464,8 @@ def main(argv: list[str] | None = None) -> int:
                 "status": "prepared", "pause_reason": checkpoint["pause_reason"],
                 "resumable": False,
             })
+            _mark_terminal(output, str(runtime.get("reason", "docker_unavailable")),
+                           "Docker unavailable; no provider call was made")
             print(f"Campaign prepared but Docker is unavailable; no provider call: {output}")
             return 4
 
@@ -441,6 +496,12 @@ def main(argv: list[str] | None = None) -> int:
                 checkpoint, compatibility=compatibility, compat_waited=compat_waited,
                 status="paused", pause_reason=pause_reason,
             ))
+            if pause_reason == "completion_compatibility_failed":
+                # Substantive compat failure is a model/API change, not a
+                # transient: the supervisor must not auto-resume it.
+                _mark_terminal(output, pause_reason,
+                               "compatibility probe completed but the model "
+                               "did not answer READY")
             print(f"Campaign paused after compatibility check; inspect {output}")
             return 7
 
@@ -462,7 +523,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Atria campaign {status}; inspect {output}")
         return 0 if status == "completed" else 8
     except (OSError, RuntimeError, ValueError, DockerBackendError) as exc:
-        print(f"atria_campaign failed: {redact_text(str(exc))}")
+        detail = redact_text(str(exc))
+        try:
+            write_json(output / "wrapper_failed.json", {
+                "pause_reason": "wrapper_exception",
+                "detail": detail,
+                "recorded_at": _utc_now(),
+            })
+        except OSError:
+            pass
+        print(f"atria_campaign failed: {detail}")
         return 2
 
 

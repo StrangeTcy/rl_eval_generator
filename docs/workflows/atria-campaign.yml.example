@@ -94,6 +94,19 @@ jobs:
           gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
             > "$RUNNER_TEMP/state.zip"
           unzip -q "$RUNNER_TEMP/state.zip" -d "$STATE_STAGE"
+          # A terminal marker means the last dispatch ended in a
+          # non-resumable failure (wrapper exception, generation preflight,
+          # a gate case blocked twice, missing credentials, Docker down, or
+          # a substantive compatibility failure).  The wrapper clears this
+          # marker at the start of every run, so one automatic restart is
+          # allowed and this stand-down only triggers on a repeat failure.
+          # Recovery is a human re-dispatch after fixing the cause.
+          if [ -f "$STATE_STAGE/wrapper_failed.json" ]; then
+            STOP=$(python3 -c "import json; print(json.load(open('$STATE_STAGE/wrapper_failed.json')).get('pause_reason', 'unknown'))" 2>/dev/null || echo unknown)
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=operator stop: ${STOP} (wrapper failed; fix and re-dispatch manually)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           CHECKPOINT="$STATE_STAGE/suite_checkpoint.json"
           if [ ! -f "$CHECKPOINT" ]; then
             # The last dispatch died before any checkpoint existed (e.g.

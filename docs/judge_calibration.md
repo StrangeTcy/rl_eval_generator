@@ -204,6 +204,16 @@ Recorded here for completeness; details and evidence live in
    pause_reason gate_case_exceeds_job_budget and the case ID, so a human
    decides whether to split, defer, or drop that case. Recorded here
    instead of built, per review.
+   RESOLVED (2026-09-27), the hard way: the first dispatched campaign spun
+   exactly this way for 13 hours — a failed gate row was banked and reused
+   forever, so every supervisor restart failed in seconds with zero
+   re-validation. Fix: a failed row is re-validated exactly once (attempt
+   counter in the partial file); a second failure raises
+   GateCaseBlockedRepeatedly naming the case and reason, and every
+   non-resumable wrapper end (including generic exceptions) writes a
+   wrapper_failed.json marker that makes the supervisor stand down. The
+   wrapper clears the marker at the start of each run, so one automatic
+   restart is allowed and a repeat failure becomes an operator stop.
 
 ## Validation environments for this pass
 

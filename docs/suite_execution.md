@@ -262,7 +262,12 @@ operator choices recorded in the calibration decision list:
    mid-gate has its completed rows carried forward by the supervisor, so
    repeated 6-hour dispatches make forward progress through the gate until
    it completes; rows are accepted only under the same case content hash
-   and deployed-code context, and any drift re-gates that case. The
+   and deployed-code context, and any drift re-gates that case. A row that
+   failed validation is re-validated exactly once on a later dispatch; a
+   second failure escalates to the operator (the case and reason are
+   named) instead of being retried forever, and every non-resumable
+   wrapper end writes a terminal marker on which the supervisor stands
+   down — one automatic restart, then a human decision. The
    supervisor transports that state safely across runners: it stages the
    previous artifact outside the checkout destination and restores it
    only after checkout (checkout clears a workspace that is not the

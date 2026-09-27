@@ -877,3 +877,138 @@ def test_campaign_wrapper_pauses_resumably_when_gate_wall_exhausts(tmp_path, mon
     assert report["resumable"] is True
     assert report["note"] == "gate_in_progress"
     assert report["gate_rows_banked"] == 12
+
+
+def test_blocked_gate_row_retries_once_then_escalates(tmp_path, monkeypatch):
+    """Regression for the observed zero-progress spin: a blocked gate row
+    was banked and reused forever, so every supervisor restart failed in
+    seconds without ever re-validating. Now a failed row is re-validated
+    exactly once; a second failure escalates to the operator."""
+    from tools.run_suite import GateCaseBlockedRepeatedly
+
+    assert "glyph" in REFERENCES
+    manifest = _manifest_with("glyph")
+
+    def _blocked_row(case):
+        return {
+            "case_id": case["case_id"], "environment": case["environment"],
+            "status": "blocked", "reason": "oracle_error",
+            "provider_calls": 0, "variants": [],
+        }
+
+    gate_calls: list[str] = []
+
+    def _gate_blocked(manifest, **kwargs):
+        case = manifest["cases"][0]
+        gate_calls.append(str(case["case_id"]))
+        return {
+            "schema_version": 1, "provider_calls": 0,
+            "instance_coverage_complete": False, "cases": [_blocked_row(case)],
+        }
+
+    monkeypatch.setattr(
+        "tools.instance_oracle_gate.validate_manifest_instances", _gate_blocked)
+
+    # Dispatch 1: the case blocks; coverage incomplete fails the run.
+    with pytest.raises(ValueError, match="coverage is incomplete"):
+        _run(tmp_path, monkeypatch, manifest,
+              unreferenced_compile_only=True, gate_context_sha="ctx-s")
+    partial = json.loads(
+        (tmp_path / "suite" / "instance_oracles_partial.json").read_text("utf-8"))
+    assert len(partial["rows"]) == 1
+    assert partial["rows"][manifest["cases"][0]["case_id"]]["attempts"] == 1
+
+    # Dispatch 2: the blocked row is NOT reused; it re-validates and blocks
+    # again (attempts -> 2).  Still a coverage failure, but a real retry.
+    assert len(gate_calls) == 1
+    with pytest.raises(ValueError, match="coverage is incomplete"):
+        _run(tmp_path, monkeypatch, manifest,
+              unreferenced_compile_only=True, gate_context_sha="ctx-s")
+    assert len(gate_calls) == 2
+    partial = json.loads(
+        (tmp_path / "suite" / "instance_oracles_partial.json").read_text("utf-8"))
+    assert partial["rows"][manifest["cases"][0]["case_id"]]["attempts"] == 2
+
+    # Dispatch 3: a third encounter escalates instead of validating again.
+    with pytest.raises(GateCaseBlockedRepeatedly, match="failed validation twice"):
+        _run(tmp_path, monkeypatch, manifest,
+              unreferenced_compile_only=True, gate_context_sha="ctx-s")
+    assert len(gate_calls) == 2  # no third validation
+
+
+def test_passed_gate_rows_are_still_reused_across_restarts(tmp_path, monkeypatch):
+    """The retry bound must not slow down healthy resumes: passed rows are
+    reused without any fresh validation, as before."""
+    assert "glyph" in REFERENCES
+    manifest = _manifest_with("glyph")
+    gate_calls: list[str] = []
+    _capture_gate(monkeypatch, gate_calls)
+    monkeypatch.setattr(
+        "tools.run_suite.subprocess.run",
+        lambda command, **kwargs: _scored_episode(),
+    )
+    first = _run(tmp_path, monkeypatch, manifest,
+                 unreferenced_compile_only=True, gate_context_sha="ctx-r")
+    assert len(gate_calls) == 1
+    gate_calls.clear()
+    _capture_gate(monkeypatch, gate_calls)
+    second = _run(tmp_path, monkeypatch, manifest,
+                  unreferenced_compile_only=True, gate_context_sha="ctx-r")
+    assert gate_calls == []  # wholesale carry, no revalidation
+    assert second["instance_gate"]["report"]["carried_from_checkpoint"] is True
+
+
+def test_campaign_wrapper_marks_terminal_failures_and_clears_on_start(tmp_path, monkeypatch):
+    """The wrapper writes wrapper_failed.json on terminal failures so the
+    supervisor stands down, and clears it at the start of every run so one
+    automatic restart is allowed."""
+    import tools.atria_campaign as campaign
+    from tools.run_suite import GateCaseBlockedRepeatedly
+
+    monkeypatch.setattr(
+        campaign, "build_manifest",
+        lambda **kwargs: {
+            "cases": [{"case_id": "case-1", "environment": "glyph"}],
+            "case_count": 1,
+        })
+    monkeypatch.setattr(
+        campaign, "inventory_selected_modalities",
+        lambda manifest, **kwargs: {
+            "all_selected_cases_text_only_compatible": True,
+            "unsupported_case_ids": [], "selected_case_count": 1,
+        })
+    monkeypatch.setattr(campaign, "_generation_preflight", lambda manifest: [])
+    monkeypatch.setattr(campaign, "_gate_context_sha", lambda: "ctx-m")
+    out = tmp_path / "out"
+    out.mkdir(parents=True)
+
+    def _blocked_twice(*args, **kwargs):
+        raise GateCaseBlockedRepeatedly(
+            "exact-instance gate case failed validation twice: case-1")
+
+    monkeypatch.setattr(campaign, "run_suite", _blocked_twice)
+    code = campaign.main([
+        "--profile", str(ROOT / "experiments" / "atria_campaign.yaml"),
+        "--out", str(out),
+    ])
+    assert code == 2
+    marker = out / "wrapper_failed.json"
+    assert marker.is_file()
+    assert json.loads(marker.read_text("utf-8"))["pause_reason"] == \
+        "gate_case_repeatedly_blocked"
+    report = json.loads((out / "campaign_report.json").read_text("utf-8"))
+    assert report["resumable"] is False
+    assert "case-1" in report["detail"]
+
+    # A fresh run clears the marker at start even if it then crashes with an
+    # uncaught exception (nothing rewrites the marker).
+    def _uncaught(*args, **kwargs):
+        raise KeyboardInterrupt("simulated hard kill")
+
+    monkeypatch.setattr(campaign, "run_suite", _uncaught)
+    with pytest.raises(KeyboardInterrupt):
+        campaign.main([
+            "--profile", str(ROOT / "experiments" / "atria_campaign.yaml"),
+            "--out", str(out),
+        ])
+    assert not marker.exists()

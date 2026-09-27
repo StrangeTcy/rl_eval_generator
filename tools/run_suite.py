@@ -192,6 +192,15 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
     }
 
 
+class GateCaseBlockedRepeatedly(RuntimeError):
+    """A gate case failed validation twice and must not be retried again.
+
+    Carrying blocked rows forward unconditionally turns one bad case into an
+    infinite supervisor restart loop with zero progress. A repeated failure
+    is an operator decision (split, defer, drop the case), not a retry.
+    """
+
+
 class GateWallExceeded(RuntimeError):
     """The per-case exact-instance gate ran out of wall budget mid-gate.
 
@@ -543,10 +552,26 @@ def run_suite(
                     isinstance(entry, dict)
                     and entry.get("case_sha256") == gate_case_sha
                     and isinstance(entry.get("row"), dict)
+                    and entry["row"].get("status") == "passed"
                 ):
                     gate_rows.append(dict(entry["row"]))
                     gate_rows_reused += 1
                     continue
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("case_sha256") == gate_case_sha
+                    and int(entry.get("attempts", 1) or 1) >= 2
+                ):
+                    # Failed twice across dispatches: never a silent retry
+                    # loop. Escalate to the operator with the case named.
+                    raise GateCaseBlockedRepeatedly(
+                        "exact-instance gate case failed validation twice: "
+                        f"{gate_case_id} "
+                        f"({entry['row'].get('reason') or entry['row'].get('status')}); "
+                        "an operator must split, defer, or drop this case"
+                    )
+                # Otherwise (no row yet, or a failed row on its first retry)
+                # validate fresh below; the attempt counter bounds retries.
                 if (
                     gate_wall_seconds is not None
                     and gate_fresh_validations >= 1
@@ -573,9 +598,16 @@ def run_suite(
                     )
                 gate_rows.append(case_rows[0])
                 gate_fresh_validations += 1
+                previous_attempts = 0
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("case_sha256") == gate_case_sha
+                ):
+                    previous_attempts = int(entry.get("attempts", 0) or 0)
                 partial_rows[gate_case_id] = {
                     "case_sha256": gate_case_sha,
                     "row": case_rows[0],
+                    "attempts": previous_attempts + 1,
                 }
                 _write_json_atomic(partial_path, {
                     "schema_version": 1,
