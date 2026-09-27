@@ -1012,3 +1012,194 @@ def test_campaign_wrapper_marks_terminal_failures_and_clears_on_start(tmp_path, 
             "--out", str(out),
         ])
     assert not marker.exists()
+
+
+def test_blocked_gate_makes_next_scheduled_tick_stand_down(tmp_path, monkeypatch):
+    """End to end, provider-free, exactly the supervisor contract the spin
+    incident demanded: after the wrapper escalates a gate case that failed
+    validation twice (terminal marker + non-resumable report), the next
+    scheduled tick stands down instead of re-dispatching the same ref."""
+    import tools.atria_campaign as campaign
+    from tools.campaign_supervisor import decide_tick
+    from tools.run_suite import GateCaseBlockedRepeatedly
+
+    monkeypatch.setattr(
+        campaign, "build_manifest",
+        lambda **kwargs: {
+            "cases": [{"case_id": "case-1", "environment": "glyph"}],
+            "case_count": 1,
+        })
+    monkeypatch.setattr(
+        campaign, "inventory_selected_modalities",
+        lambda manifest, **kwargs: {
+            "all_selected_cases_text_only_compatible": True,
+            "unsupported_case_ids": [], "selected_case_count": 1,
+        })
+    monkeypatch.setattr(campaign, "_generation_preflight", lambda manifest: [])
+    monkeypatch.setattr(campaign, "_gate_context_sha", lambda: "ctx-m")
+    out = tmp_path / "out"
+    out.mkdir(parents=True)
+    (out / "campaign_ref.txt").write_text("sha-of-pinned-code", encoding="utf-8")
+
+    def _blocked_twice(*args, **kwargs):
+        raise GateCaseBlockedRepeatedly(
+            "exact-instance gate case failed validation twice: case-1")
+
+    monkeypatch.setattr(campaign, "run_suite", _blocked_twice)
+    code = campaign.main([
+        "--profile", str(ROOT / "experiments" / "atria_campaign.yaml"),
+        "--out", str(out),
+    ])
+    assert code == 2
+    assert (out / "wrapper_failed.json").is_file()
+
+    # The next scheduled tick, deciding on exactly the state the wrapper
+    # left behind, must not restart the campaign.
+    decision = decide_tick(out)
+    assert decision["mode"] == "none"
+    assert "gate_case_repeatedly_blocked" in decision["reason"]
+    assert "operator stop" in decision["reason"]
+
+
+def test_interrupted_gate_still_resumes_on_the_next_tick(tmp_path, monkeypatch):
+    """The other half of the contract: a gate interrupted by the wall
+    budget (rows banked, resumable report, no terminal marker, no suite
+    checkpoint yet) is re-dispatched from the recorded ref, so validation
+    continues from the banked rows instead of standing down."""
+    import tools.atria_campaign as campaign
+    from tools.campaign_supervisor import decide_tick
+    from tools.run_suite import GateWallExceeded
+
+    monkeypatch.setattr(
+        campaign, "build_manifest",
+        lambda **kwargs: {
+            "cases": [{"case_id": "case-1", "environment": "glyph"}],
+            "case_count": 1,
+        })
+    monkeypatch.setattr(
+        campaign, "inventory_selected_modalities",
+        lambda manifest, **kwargs: {
+            "all_selected_cases_text_only_compatible": True,
+            "unsupported_case_ids": [], "selected_case_count": 1,
+        })
+    monkeypatch.setattr(campaign, "_generation_preflight", lambda manifest: [])
+    monkeypatch.setattr(campaign, "_gate_context_sha", lambda: "ctx-m")
+    out = tmp_path / "out"
+    out.mkdir(parents=True)
+    (out / "campaign_ref.txt").write_text("sha-of-pinned-code", encoding="utf-8")
+
+    def _wall_cut(*args, **kwargs):
+        (out / "instance_oracles_partial.json").write_text(json.dumps({
+            "schema_version": 1,
+            "rows": {"case-1": {"case_id": "case-1", "status": "passed",
+                                "variants": [], "provider_calls": 0}},
+        }), encoding="utf-8")
+        raise GateWallExceeded("gate wall budget exhausted mid-gate")
+
+    monkeypatch.setattr(campaign, "run_suite", _wall_cut)
+    code = campaign.main([
+        "--profile", str(ROOT / "experiments" / "atria_campaign.yaml"),
+        "--out", str(out),
+    ])
+    assert code == 7
+    assert not (out / "wrapper_failed.json").exists()
+    report = json.loads((out / "campaign_report.json").read_text("utf-8"))
+    assert report["resumable"] is True
+    assert report["gate_rows_banked"] == 1
+
+    # The next scheduled tick restarts the recorded ref: the interrupted
+    # gate resumes and keeps the banked rows.
+    decision = decide_tick(out)
+    assert decision["mode"] == "fresh"
+    assert decision["ref"] == "sha-of-pinned-code"
+    assert "pre-checkpoint" in decision["reason"]
+
+
+def test_supervisor_decision_table_for_staged_states(tmp_path):
+    """decide_tick is the single source of truth for tick modes; lock its
+    truth table so the workflow step cannot drift from the tests."""
+    from datetime import datetime, timezone
+
+    from tools.campaign_supervisor import decide_tick
+
+    def stage(name, files):
+        d = tmp_path / name
+        d.mkdir(parents=True)
+        for fname, content in files.items():
+            (d / fname).write_text(content, encoding="utf-8")
+        return d
+
+    # Nothing restartable at all.
+    d = stage("bare", {"instance_oracles_partial.json": "{}"})
+    assert decide_tick(d)["mode"] == "none"
+
+    # Interrupted mid-gate with a recorded ref: restart (resume path).
+    d = stage("interrupted", {
+        "instance_oracles_partial.json": "{}",
+        "campaign_ref.txt": "sha-a",
+    })
+    decision = decide_tick(d)
+    assert decision["mode"] == "fresh" and decision["ref"] == "sha-a"
+
+    # Completed campaign.
+    d = stage("done", {
+        "suite_checkpoint.json": json.dumps({"paused": False}),
+        "campaign_ref.txt": "sha-a",
+    })
+    assert decide_tick(d)["mode"] == "none"
+
+    # Resumable pause that just happened: back off, do not resume yet.
+    recent = datetime.now(timezone.utc).isoformat()
+    d = stage("backoff", {
+        "suite_checkpoint.json": json.dumps({
+            "paused": True, "pause_reason": "provider_error",
+            "updated_at": recent}),
+        "campaign_ref.txt": "sha-a",
+    })
+    decision = decide_tick(d)
+    assert decision["mode"] == "none" and "backoff" in decision["reason"]
+
+    # Resumable pause past the backoff window: resume from the
+    # checkpoint's manifest commit, falling back to the recorded ref.
+    old = "2026-09-20T00:00:00+00:00"
+    d = stage("resume", {
+        "suite_checkpoint.json": json.dumps({
+            "paused": True, "pause_reason": "max_wall_seconds",
+            "updated_at": old, "run": {"manifest_commit": "sha-b"}}),
+        "campaign_ref.txt": "sha-a",
+    })
+    decision = decide_tick(d)
+    assert decision["mode"] == "resume" and decision["ref"] == "sha-b"
+
+    d = stage("resume_no_commit", {
+        "suite_checkpoint.json": json.dumps({
+            "paused": True, "pause_reason": "provider_error",
+            "updated_at": old}),
+        "campaign_ref.txt": "sha-a",
+    })
+    decision = decide_tick(d)
+    assert decision["mode"] == "resume" and decision["ref"] == "sha-a"
+
+    # Non-resumable pause: operator territory, never a ceiling raise.
+    d = stage("operator", {
+        "suite_checkpoint.json": json.dumps({
+            "paused": True, "pause_reason": "max_api_calls",
+            "updated_at": old}),
+        "campaign_ref.txt": "sha-a",
+    })
+    decision = decide_tick(d)
+    assert decision["mode"] == "none" and "operator pause" in decision["reason"]
+
+    # A terminal marker overrides everything else in the state.
+    d = stage("marker", {
+        "wrapper_failed.json": json.dumps({
+            "pause_reason": "wrapper_exception", "detail": "redacted",
+            "recorded_at": "2026-09-27T00:00:00+00:00"}),
+        "suite_checkpoint.json": json.dumps({
+            "paused": True, "pause_reason": "provider_error",
+            "updated_at": old, "run": {"manifest_commit": "sha-b"}}),
+        "campaign_ref.txt": "sha-a",
+    })
+    decision = decide_tick(d)
+    assert decision["mode"] == "none"
+    assert "wrapper_exception" in decision["reason"]

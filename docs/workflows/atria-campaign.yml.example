@@ -94,73 +94,39 @@ jobs:
           gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
             > "$RUNNER_TEMP/state.zip"
           unzip -q "$RUNNER_TEMP/state.zip" -d "$STATE_STAGE"
-          # A terminal marker means the last dispatch ended in a
-          # non-resumable failure (wrapper exception, generation preflight,
-          # a gate case blocked twice, missing credentials, Docker down, or
-          # a substantive compatibility failure).  The wrapper clears this
-          # marker at the start of every run, so one automatic restart is
-          # allowed and this stand-down only triggers on a repeat failure.
-          # Recovery is a human re-dispatch after fixing the cause.
-          if [ -f "$STATE_STAGE/wrapper_failed.json" ]; then
-            STOP=$(python3 -c "import json; print(json.load(open('$STATE_STAGE/wrapper_failed.json')).get('pause_reason', 'unknown'))" 2>/dev/null || echo unknown)
+          # The tick decision lives in tools/campaign_supervisor.py at the
+          # PINNED ref recorded in campaign_ref.txt — the same code whose
+          # wrapper wrote this state — so the marker schema and its reader
+          # stay versioned together.  The module is exercised provider-free
+          # by tests/test_campaign_tools.py; this step only stages state,
+          # fetches the module, and maps its verdict to outputs.
+          PINNED_REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
+          SUPERVISOR="$RUNNER_TEMP/campaign_supervisor.py"
+          if [ -z "$PINNED_REF" ] \
+             || ! gh api "repos/${{ github.repository }}/contents/tools/campaign_supervisor.py?ref=$PINNED_REF" \
+                  --jq '.content' | base64 -d > "$SUPERVISOR" 2>/dev/null \
+             || [ ! -s "$SUPERVISOR" ]; then
+            # A ref that predates the supervisor module predates the
+            # bounded-retry campaign code as a whole (no terminal markers,
+            # no per-row attempt counters): re-dispatching it can replay a
+            # failed gate row forever, so it is an operator decision.
             echo "mode=none" >> "$GITHUB_OUTPUT"
-            echo "reason=operator stop: ${STOP} (wrapper failed; fix and re-dispatch manually)" >> "$GITHUB_OUTPUT"
+            echo "reason=no supervisor module at the pinned ref (pre-retry-bound campaign code); operator review" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          CHECKPOINT="$STATE_STAGE/suite_checkpoint.json"
-          if [ ! -f "$CHECKPOINT" ]; then
-            # The last dispatch died before any checkpoint existed (e.g.
-            # inside the gate phase). Restart from the recorded ref. The
-            # gate accumulates per case: completed gate rows live in
-            # instance_oracles_partial.json inside this state artifact, so
-            # the restart revalidates only the missing cases and repeated
-            # restarts make forward progress across job boundaries. Only a
-            # death before the FIRST gated case completes makes no
-            # progress (the operator sees a state artifact with neither
-            # checkpoint nor partial rows).
-            REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
-            if [ -n "$REF" ]; then
-              echo "mode=fresh" >> "$GITHUB_OUTPUT"
-              echo "ref=$REF" >> "$GITHUB_OUTPUT"
-              echo "reason=restarting after pre-checkpoint death" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "mode=none" >> "$GITHUB_OUTPUT"
-            echo "reason=state artifact has no checkpoint and no recorded ref" >> "$GITHUB_OUTPUT"
+          DECISION=$(python3 -c "import importlib.util, json, sys; spec = importlib.util.spec_from_file_location('campaign_supervisor', sys.argv[1]); module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module); print(json.dumps(module.decide_tick(sys.argv[2])))" "$SUPERVISOR" "$STATE_STAGE")
+          MODE=$(printf '%s' "$DECISION" | jq -r '.mode')
+          REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
+          REF=$(printf '%s' "$DECISION" | jq -r '.ref // ""')
+          if [ "$MODE" != "resume" ]; then
+            # fresh (restart from the recorded ref) or none (stand down).
+            echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+            echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+            if [ -n "$REF" ]; then echo "ref=$REF" >> "$GITHUB_OUTPUT"; fi
             exit 0
           fi
-          DECISION=$(python3 - "$CHECKPOINT" <<'PY'
-          import json, sys
-          from datetime import datetime, timezone
-          checkpoint = json.load(open(sys.argv[1]))
-          if not checkpoint.get("paused"):
-              print("none|campaign already completed")
-              raise SystemExit
-          reason = str(checkpoint.get("pause_reason") or "")
-          resumable = {"provider_error", "max_wall_seconds",
-                       "provider_infrastructure_error_compatibility"}
-          if reason not in resumable:
-              print(f"none|operator pause: {reason} (supervisor never raises ceilings)")
-              raise SystemExit
-          updated = str(checkpoint.get("updated_at") or "")
-          if updated:
-              age = (datetime.now(timezone.utc)
-                     - datetime.fromisoformat(updated.replace("Z", "+00:00"))).total_seconds()
-              if age < 1200:
-                  print(f"none|backoff: paused {int(age)}s ago, retry in {int(1200-age)}s")
-                  raise SystemExit
-          ref = ((checkpoint.get("run") or {}).get("manifest_commit")) or ""
-          print(f"resume|{reason}|{ref}")
-          PY
-          )
-          case "$DECISION" in
-            none\|*)
-              echo "mode=none" >> "$GITHUB_OUTPUT"
-              echo "reason=${DECISION#none|}" >> "$GITHUB_OUTPUT"
-              exit 0
-              ;;
-          esac
-          # Another Atria consumer in progress? (This run counts as one.)
+          # Resume only: another Atria consumer in progress? (This run
+          # counts as one.)
           BUSY=$(gh api "repos/${{ github.repository }}/actions/runs?status=in_progress&per_page=100" \
             --jq '[.workflow_runs[]
                    | select(.name == "Atria covering campaign" or .name == "Atria Dawn Preview first-five pilot")]
@@ -170,18 +136,9 @@ jobs:
             echo "reason=another Atria run is in progress (shared 60 RPM budget)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          REF=$(echo "$DECISION" | cut -d'|' -f3)
-          if [ -z "$REF" ]; then
-            REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
-          fi
-          if [ -z "$REF" ]; then
-            echo "mode=none" >> "$GITHUB_OUTPUT"
-            echo "reason=resumable pause but no code ref recorded" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           echo "mode=resume" >> "$GITHUB_OUTPUT"
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "reason=${DECISION}" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
 
       - name: Check out pinned campaign code
         if: steps.mode.outputs.mode != 'none'
