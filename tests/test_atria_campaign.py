@@ -122,10 +122,109 @@ def test_gate_only_clears_stale_dispatch_state_and_never_enters_paid_phase(
     assert result == 0
     assert (output / "campaign_ref.txt").read_text(encoding="utf-8") == "main\n"
     assert not (output / "instance_oracles_partial.json").exists()
+    assert not (output / "suite_checkpoint.json").exists()
     report = json.loads((output / "campaign_report.json").read_text(encoding="utf-8"))
     assert report["status"] == "gate_passed"
     assert report["provider_calls"] == 0
     assert report["provider_phase_started"] is False
+
+
+def test_campaign_failure_artifact_names_blocking_gate_case_and_replaces_stale_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "atria_campaign"
+    output.mkdir()
+    (output / "campaign_ref.txt").write_text("main\n", encoding="utf-8")
+    (output / "suite_checkpoint.json").write_text(
+        json.dumps({"manifest_case_count": 5, "run": {"provider": "custom"}}),
+        encoding="utf-8",
+    )
+    (output / "campaign_report.json").write_text(
+        json.dumps({"status": "completed", "event": "rehearsal_campaign"}),
+        encoding="utf-8",
+    )
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(yaml.safe_dump(_profile()), encoding="utf-8")
+    case = {
+        "case_id": "moco__naming=hard__seed-0",
+        "environment": "moco",
+        "difficulty": "hard",
+        "seed": 0,
+    }
+    failed_row = {
+        "case_id": case["case_id"],
+        "environment": "moco",
+        "status": "blocked",
+        "reason": "reference_did_not_grade_as_expected",
+        "variants": [{
+            "variant": "reference",
+            "accepted": False,
+            "verdict": "FAIL",
+            "failure_mode": "fail",
+            "checks": {"temperature_sensitive": False},
+            "stderr_tail": "oracle failure detail",
+        }],
+    }
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setattr(
+        atria_campaign,
+        "build_manifest",
+        lambda **_kwargs: {
+            "ready_for_scheduler": True,
+            "case_count": 1,
+            "cases": [dict(case)],
+        },
+    )
+    monkeypatch.setattr(atria_campaign, "_order_cases_referenced_first", lambda _manifest: None)
+    monkeypatch.setattr(
+        atria_campaign,
+        "inventory_selected_modalities",
+        lambda *_args, **_kwargs: {
+            "unsupported_case_ids": [],
+            "all_selected_cases_text_only_compatible": True,
+        },
+    )
+    monkeypatch.setattr(
+        atria_campaign,
+        "_generation_preflight",
+        lambda _manifest: [{"case_id": case["case_id"], "status": "ready"}],
+    )
+    monkeypatch.setattr(atria_campaign, "_gate_context_sha", lambda: "test-gate-context")
+
+    def fake_run_suite(_manifest, **kwargs):
+        assert kwargs["stop_after_gates"] is True
+        (output / "instance_oracles.json").write_text(
+            json.dumps({"instance_coverage_complete": False, "cases": [failed_row]}),
+            encoding="utf-8",
+        )
+        raise ValueError(
+            "exact-instance behavioral oracle coverage is incomplete; inspect instance_oracles.json"
+        )
+
+    monkeypatch.setattr(atria_campaign, "run_suite", fake_run_suite)
+    monkeypatch.setattr(
+        atria_campaign,
+        "_runtime_check",
+        lambda: pytest.fail("a blocked gate must not reach Docker or the paid phase"),
+    )
+    monkeypatch.setattr(
+        atria_campaign,
+        "_optional_credentials",
+        lambda *_args, **_kwargs: pytest.fail("a blocked gate must not inspect provider credentials"),
+    )
+
+    result = atria_campaign.main(["--profile", str(profile_path), "--out", str(output)])
+
+    assert result == 2
+    wrapper = json.loads((output / "wrapper_failed.json").read_text(encoding="utf-8"))
+    report = json.loads((output / "campaign_report.json").read_text(encoding="utf-8"))
+    assert wrapper["pause_reason"] == "instance_oracle_coverage_incomplete"
+    assert case["case_id"] in wrapper["detail"]
+    assert report["status"] == "blocked"
+    assert report["provider_calls"] == 0
+    assert report["diagnostics"]["exact_instance_failed_cases"][0]["case_id"] == case["case_id"]
+    assert not (output / "suite_checkpoint.json").exists()
 
 
 def test_campaign_failure_diagnostics_name_failed_exact_instance_and_variant(
