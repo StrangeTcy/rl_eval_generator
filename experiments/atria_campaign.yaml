@@ -9,6 +9,10 @@
 # compile-only validation; every one of their result rows is labeled
 # judge_guarantee=compile_only and must not be read as a validated verdict.
 name: atria_covering_campaign
+# Temporary, provider-free diagnosis of the exact-instance gate. This ref exits
+# before Docker, credential checks, compatibility probes, or paid API requests.
+# Remove this override before using this ref for a paid campaign.
+gate_only: true
 provider: atria
 api_base: https://api.atria-asi.ai/v1
 model: Atria-Dawn-Preview
