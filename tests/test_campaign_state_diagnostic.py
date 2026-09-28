@@ -102,13 +102,18 @@ def test_surface_preserved_campaign_failure_without_rerunning_gate():
     # provider-free diagnostic step.
     if len(failures) != 1:
         os._exit(200 + min(len(failures), 50))
-    reason_codes = {
-        "no_op_did_not_grade_as_expected": 11,
-        "plausible_wrong_did_not_grade_as_expected": 12,
-        "transcription_did_not_grade_as_expected": 13,
-        "reference_did_not_grade_as_expected": 14,
-        "oracle_error": 15,
-        "pinned_config_drift": 16,
-        "invalid_case_vector": 17,
+    rejected = [
+        variant for variant in failures[0].get("variants", [])
+        if variant.get("accepted") is False
+    ]
+    if not rejected:
+        os._exit(20)
+    mode_codes = {
+        "patch_invalid": 21,
+        "source_invalid": 22,
+        "underfit": 23,
+        "judge_runtime_error": 24,
+        "unknown": 25,
+        "pass": 26,
     }
-    os._exit(reason_codes.get(str(failures[0].get("reason")), 18))
+    os._exit(mode_codes.get(str(rejected[-1].get("failure_mode")), 27))
