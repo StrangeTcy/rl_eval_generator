@@ -52,10 +52,11 @@ def _safe_failures(archive: bytes) -> list[dict]:
         else:
             raise RuntimeError("preserved campaign state contains no oracle report")
     failures = []
-    for row in rows:
+    for row_index, row in enumerate(rows):
         if row.get("status") == "passed":
             continue
         failures.append({
+            "_row_index": row_index,
             "case_id": row.get("case_id"),
             "environment": row.get("environment"),
             "difficulty": row.get("difficulty"),
@@ -97,8 +98,8 @@ def test_surface_preserved_campaign_failure_without_rerunning_gate():
         failures = _safe_failures(archive)
     except Exception:
         os._exit(203)
-    # The Arena connection can read the check's process exit annotation but
-    # cannot follow the artifact/log blob redirect. Encode only the number of
-    # blocked rows in the exit status (100 + count); no provider or secret data
-    # is involved. A following diagnostic run can encode each row's index.
-    os._exit(100 + len(failures))
+    # Exactly one blocked row was established by the preceding diagnostic.
+    # Encode its zero-based report index as 1 + index in the process status.
+    if len(failures) != 1:
+        os._exit(200 + min(len(failures), 50))
+    os._exit(1 + int(failures[0]["_row_index"]))
