@@ -1,0 +1,1280 @@
+#!/usr/bin/env python3
+"""Run a checkpointed suite manifest through the existing arena controller.
+
+The scheduler is intentionally provider-neutral.  It launches one
+``arena.py run`` process per manifest case, keeps the API key in the controller
+process environment, and never passes a literal key to Docker or an agent
+command.  A model failure is a scored result and does not stop the suite;
+provider/quota and infrastructure failures pause the run so a free allowance
+is not consumed by blind retries.
+
+The manifest is the experiment contract.  Build one first with
+``tools/suite_inventory.py`` and do not change provider/model/protocol halfway
+through a checkpoint.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from arena.secrets import resolve_provider  # noqa: E402
+
+PROVIDER_MARKERS = (
+    "429",
+    "503",
+    "504",
+    "rate limit",
+    "rate_limit",
+    "quota",
+    "insufficient_quota",
+    "too many requests",
+    "api key",
+    "unauthorized",
+    "authentication",
+    "credit",
+)
+
+
+def _sleep(seconds: float) -> None:
+    """Indirection so tests can observe provider-outage backoff without waiting."""
+    time.sleep(seconds)
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _safe_name(value: str) -> str:
+    return "".join(char if char.isalnum() or char in "._=-" else "_" for char in value)
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path}: expected a JSON object")
+    return value
+
+
+def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _extract_result(text: str) -> dict[str, Any] | None:
+    """Extract the largest JSON object containing a run result."""
+
+    decoder = json.JSONDecoder()
+    candidates: list[dict[str, Any]] = []
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            candidates.append(value)
+    scored = [item for item in candidates if "final" in item or "run_dir" in item]
+    return max(scored or candidates, key=lambda item: len(json.dumps(item))) if candidates else None
+
+
+def _redact(text: str, secret: str | None) -> str:
+    if secret:
+        text = text.replace(secret, "[REDACTED]")
+    return text[-4000:]
+
+
+def _provider_failure(text: str) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in PROVIDER_MARKERS)
+
+
+def _judge_scoring_failed(final: dict[str, Any]) -> bool:
+    """A judge's own scoring exception is infrastructure, not a model answer.
+
+    Do not treat every reward_denial as infrastructure: an agent can submit
+    invalid model outputs, and those remain scored task failures.
+    """
+    if final.get("failure_mode") not in {"REWARD_DENIAL", "reward_denial"}:
+        return False
+    notes = final.get("notes")
+    return isinstance(notes, list) and any(
+        isinstance(note, str) and note.startswith("Failed to score:") for note in notes
+    )
+
+
+def _current_config_hash(root: Path, case: dict[str, Any]) -> str | None:
+    path = root / str(case.get("config_path", ""))
+    if not path.is_file():
+        return None
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _estimated_case_budget(max_steps: int, max_tokens: int, invalid_retries: int) -> tuple[int, int]:
+    if max_steps < 1 or max_tokens < 1 or invalid_retries < 0:
+        raise ValueError("max-steps and max-tokens must be positive; invalid-retries must not be negative")
+    calls = max_steps * (1 + invalid_retries)
+    return calls, calls * max_tokens
+
+
+def _is_zero_score(result: dict[str, Any]) -> bool:
+    score = result.get("score")
+    return result.get("status") == "scored" and isinstance(score, (int, float)) and float(score) == 0.0
+
+
+def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+    if path.is_file():
+        checkpoint = _read_json(path)
+        previous = checkpoint.get("run", {})
+        immutable = (
+            "manifest_commit",
+            "provider",
+            "model",
+            "api_base",
+            "sandbox",
+            "secrets",
+            "max_steps",
+            "max_tokens",
+            "temperature",
+            "top_p",
+            "invalid_retries",
+            "max_retries",
+            "max_http_attempts",
+            "provider_min_interval_seconds",
+            "max_api_calls",
+            "request_extra",
+            "max_tokens_total",
+            "floor_effect_after",
+            "reasoning_effort",
+        )
+        for field in immutable:
+            if field == "max_http_attempts" and previous.get(field) is None:
+                # A preflight checkpoint may intentionally leave the live
+                # episode allocation unset until compatibility has consumed its
+                # bounded attempts.
+                continue
+            if previous.get(field) != metadata.get(field):
+                raise ValueError(
+                    f"checkpoint metadata mismatch for {field}: "
+                    f"{previous.get(field)!r} != {metadata.get(field)!r}"
+                )
+        if checkpoint.get("manifest_case_count") != manifest.get("case_count"):
+            raise ValueError("manifest case count changed; use a new checkpoint")
+        return checkpoint
+    return {
+        "schema_version": 1,
+        "run": metadata,
+        "manifest_case_count": manifest.get("case_count", len(manifest.get("cases", []))),
+        "started_at": _utc_now(),
+        "updated_at": _utc_now(),
+        "paused": False,
+        "pause_reason": None,
+        "floor_effect": False,
+        "floor_effect_streak": 0,
+        "results": [],
+    }
+
+
+class GateCaseBlockedRepeatedly(RuntimeError):
+    """A gate case failed validation twice and must not be retried again.
+
+    Carrying blocked rows forward unconditionally turns one bad case into an
+    infinite supervisor restart loop with zero progress. A repeated failure
+    is an operator decision (split, defer, drop the case), not a retry.
+    """
+
+
+class GateWallExceeded(RuntimeError):
+    """The per-case exact-instance gate ran out of wall budget mid-gate.
+
+    Completed rows are already banked atomically in
+    instance_oracles_partial.json; the caller must treat this as a
+    resumable pause (not a failure) so a supervisor job can continue
+    gating the remaining cases later.
+    """
+
+
+def _result_by_case(checkpoint: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {str(item["case_id"]): item for item in checkpoint.get("results", []) if item.get("case_id")}
+
+
+def _coverage_rows(checkpoint: dict[str, Any]) -> list[dict[str, Any]]:
+    return [dict(item) for item in checkpoint.get("results", [])]
+
+
+def _write_coverage(output_dir: Path, checkpoint: dict[str, Any]) -> None:
+    rows = _coverage_rows(checkpoint)
+    coverage_json = output_dir / "coverage.json"
+    _write_json_atomic(
+        coverage_json,
+        {
+            "schema_version": 1,
+            "run": checkpoint.get("run", {}),
+            "updated_at": checkpoint.get("updated_at"),
+            "paused": checkpoint.get("paused", False),
+            "pause_reason": checkpoint.get("pause_reason"),
+            "floor_effect": checkpoint.get("floor_effect", False),
+            "floor_effect_streak": checkpoint.get("floor_effect_streak", 0),
+            "counts": {
+                status: sum(row.get("status") == status for row in rows)
+                for status in sorted({str(row.get("status")) for row in rows})
+            },
+            "rows": rows,
+        },
+    )
+    fields = [
+        "case_id",
+        "environment",
+        "track",
+        "difficulty",
+        "seed",
+        "status",
+        "verdict",
+        "score",
+        "failure_mode",
+        "returncode",
+        "elapsed_seconds",
+        "http_attempts",
+        "http_attempt_ceiling",
+        "run_dir",
+        "error",
+    ]
+    with (output_dir / "coverage.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows({field: row.get(field) for field in fields} for row in rows)
+    lines = [
+        "# Suite coverage",
+        "",
+        f"- Cases in manifest: `{checkpoint.get('manifest_case_count', 0)}`",
+        f"- Cases recorded: `{len(rows)}`",
+        f"- Paused: `{checkpoint.get('paused', False)}`",
+        f"- Pause reason: `{checkpoint.get('pause_reason') or 'none'}`",
+        f"- Floor effect: `{checkpoint.get('floor_effect', False)}`",
+        "",
+        "| environment | difficulty | seed | status | verdict | score | runtime (s) |",
+        "|---|---|---:|---|---|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row.get('environment')} | {row.get('difficulty')} | {row.get('seed')} | "
+            f"{row.get('status')} | {row.get('verdict', '')} | {row.get('score', '')} | "
+            f"{row.get('elapsed_seconds', '')} |"
+        )
+    (output_dir / "coverage.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _build_command(
+    case: dict[str, Any],
+    *,
+    provider: str,
+    model: str,
+    api_key_env: str,
+    secrets: Path | None,
+    api_base: str | None,
+    sandbox: str,
+    output_dir: Path,
+    max_steps: int,
+    max_tokens: int,
+    invalid_retries: int,
+    keep_images: bool,
+    keep_workspace: bool,
+    temperature: float = 0.0,
+    top_p: float | None = None,
+    max_http_attempts: int | None = None,
+    provider_min_interval_seconds: float = 0.0,
+    max_retries: int = 3,
+    reasoning_effort: str | None = None,
+    request_extra: dict[str, Any] | None = None,
+) -> list[str]:
+    command = [
+        sys.executable,
+        str(ROOT / "arena.py"),
+        "run",
+        "--provider",
+        provider,
+        "--model",
+        model,
+        "--api-key-env",
+        api_key_env,
+    ]
+    if secrets:
+        command.extend(["--secrets", str(secrets)])
+    command.extend([
+        "--env",
+        str(case["environment"]),
+        "--difficulty",
+        str(case["difficulty"]),
+        "--seed",
+        str(case["seed"]),
+        "--max-steps",
+        str(max_steps),
+        "--max-tokens",
+        str(max_tokens),
+        "--temperature",
+        str(temperature),
+        "--invalid-retries",
+        str(invalid_retries),
+        "--max-retries",
+        str(max_retries),
+    ])
+    if top_p is not None:
+        command.extend(["--top-p", str(top_p)])
+    if max_http_attempts is not None:
+        command.extend(["--max-http-attempts", str(max_http_attempts)])
+    if provider_min_interval_seconds > 0:
+        command.extend(
+            ["--provider-min-interval-seconds", str(provider_min_interval_seconds)]
+        )
+    command.extend([
+        "--sandbox",
+        sandbox,
+        "--out",
+        str(output_dir),
+    ])
+    if api_base:
+        command.extend(["--api-base", api_base])
+    effective_extra = dict(request_extra or {})
+    if reasoning_effort:
+        effective_extra["reasoning"] = {"effort": reasoning_effort}
+    if effective_extra:
+        command.extend(
+            [
+                "--request-extra",
+                json.dumps(effective_extra, separators=(",", ":")),
+            ]
+        )
+    if keep_images:
+        command.append("--keep-images")
+    if keep_workspace:
+        command.append("--keep-workspace")
+    return command
+
+
+def run_suite(
+    manifest: dict[str, Any],
+    *,
+    output_dir: Path,
+    provider: str,
+    model: str,
+    api_key_env: str,
+    secrets: Path | None = None,
+    api_base: str | None = None,
+    sandbox: str = "docker",
+    max_steps: int = 30,
+    max_tokens: int = 1024,
+    temperature: float = 0.0,
+    top_p: float | None = None,
+    invalid_retries: int = 2,
+    max_retries: int = 3,
+    max_http_attempts: int | None = None,
+    provider_min_interval_seconds: float = 0.0,
+    max_cases: int | None = None,
+    max_api_calls: int | None = None,
+    max_output_tokens: int | None = None,
+    max_tokens_total: int | None = None,
+    max_wall_seconds: float | None = None,
+    min_interval_seconds: float = 0.0,
+    floor_effect_after: int | None = 3,
+    reasoning_effort: str | None = None,
+    request_extra: dict[str, Any] | None = None,
+    checkpoint_path: Path | None = None,
+    dry_run: bool = False,
+    allow_config_drift: bool = False,
+    allow_compile_only_oracles: bool = False,
+    retry_recorded: bool = False,
+    keep_images: bool = False,
+    keep_workspace: bool = False,
+    provider_outage_patience_seconds: float = 0.0,
+    provider_outage_backoff_seconds: float = 60.0,
+    unreferenced_compile_only: bool = False,
+    gate_context_sha: str | None = None,
+    stop_after_gates: bool = False,
+    gate_wall_seconds: float | None = None,
+) -> dict[str, Any]:
+    if not manifest.get("ready_for_scheduler", False) and not allow_config_drift:
+        raise ValueError("manifest is not ready; fix inventory issues or pass --allow-config-drift explicitly")
+    if not provider or not model:
+        raise ValueError("provider and model are required")
+    if provider_outage_patience_seconds < 0:
+        raise ValueError("provider-outage-patience-seconds must not be negative")
+    if provider_outage_backoff_seconds <= 0:
+        raise ValueError("provider-outage-backoff-seconds must be positive")
+    if unreferenced_compile_only and not allow_compile_only_oracles:
+        raise ValueError(
+            "unreferenced-compile-only requires allow-compile-only-oracles; "
+            "the weaker guarantee must be an explicit operator choice"
+        )
+    if stop_after_gates and dry_run:
+        raise ValueError("stop-after-gates requires a live run; a dry run skips the gates")
+    if invalid_retries < 0 or max_retries < 0 or max_retries > 5:
+        raise ValueError("invalid-retries must not be negative and max-retries must be between 0 and 5")
+    if top_p is not None and not 0.0 < top_p <= 1.0:
+        raise ValueError("top-p must be greater than 0 and at most 1")
+    if max_http_attempts is not None and max_http_attempts < 1:
+        raise ValueError("max-http-attempts must be positive when provided")
+    if provider_min_interval_seconds < 0:
+        raise ValueError("provider-min-interval-seconds must not be negative")
+    if not api_key_env and not dry_run:
+        raise ValueError("api_key_env is required; do not pass a literal API key to the scheduler")
+    if max_tokens_total is not None and max_tokens_total < 1:
+        raise ValueError("max-tokens-total must be positive")
+    if max_output_tokens is not None and max_output_tokens < 1:
+        raise ValueError("max-output-tokens must be positive")
+    if floor_effect_after is not None and floor_effect_after < 0:
+        raise ValueError("floor-effect-after must be positive, zero, or omitted")
+    if floor_effect_after == 0:
+        floor_effect_after = None
+    if sandbox != "docker":
+        raise ValueError("suite scheduler requires Docker isolation; use a separate local smoke test")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
+    referenced_envs: set[str] = set()
+    oracle_report: dict[str, Any] | None = None
+    gate_record: dict[str, Any] | None = None
+    if not dry_run:
+        # This gate is intentionally local and provider-free.  It validates the
+        # pinned environment/reference behavior before resolving credentials or
+        # starting the first model request.
+        from tools.oracle_preflight import validate_manifest_oracles
+
+        oracle_report = validate_manifest_oracles(manifest, root=ROOT)
+        oracle_report["operator_compile_only_override"] = bool(
+            allow_compile_only_oracles and not oracle_report.get("behavioral_coverage_complete", False)
+        )
+        oracle_report["unreferenced_compile_only"] = unreferenced_compile_only
+        _write_json_atomic(output_dir / "oracle_preflight.json", oracle_report)
+        if not oracle_report.get("model_sweep_allowed", False):
+            raise ValueError(
+                "zero-API oracle preflight failed; inspect "
+                f"{output_dir / 'oracle_preflight.json'} before retrying"
+            )
+        # Static compilation or a representative self-test is not enough for
+        # a paid case. Require a correct reference, empty no-op, and valid-but-
+        # wrong patch to grade as expected at *each selected vector and seed*.
+        # The legacy compile-only override cannot bypass this hard gate.
+        from tools.instance_oracle_gate import REFERENCES, validate_manifest_instances
+
+        referenced_envs = set(REFERENCES)
+        selected_cases = list(manifest.get("cases", []))
+        if max_cases is not None:
+            selected_cases = selected_cases[:max_cases]
+        if unreferenced_compile_only:
+            # Explicit campaign mode: environments without any configured
+            # reference run under compile-only validation and are labeled as
+            # such on every result row; every environment WITH a reference
+            # still passes the full four-variant gate before any paid call.
+            gated_cases = [
+                case for case in selected_cases
+                if str(case.get("environment", "")) in referenced_envs
+            ]
+            compile_only_cases = [
+                case for case in selected_cases
+                if str(case.get("environment", "")) not in referenced_envs
+            ]
+        else:
+            gated_cases = selected_cases
+            compile_only_cases = []
+        gated_manifest = {"cases": gated_cases}
+        gated_manifest_sha = hashlib.sha256(
+            json.dumps(gated_manifest, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        # A resumed campaign may carry a previously completed gate pass
+        # instead of re-running the (CPU-hours) exact-instance validation.
+        # The carry is only accepted when the gated case list and the caller's
+        # code context (e.g. the deployed git SHA) are byte-identical; any
+        # drift re-runs the full gate.
+        carried = None
+        if checkpoint_path.is_file():
+            try:
+                carried = json.loads(
+                    checkpoint_path.read_text(encoding="utf-8")
+                ).get("instance_gate")
+            except (OSError, json.JSONDecodeError):
+                carried = None
+        partial_path = output_dir / "instance_oracles_partial.json"
+        if (
+            isinstance(carried, dict)
+            and carried.get("passed") is True
+            and carried.get("gated_manifest_sha256") == gated_manifest_sha
+            and carried.get("gate_context_sha") == gate_context_sha
+            and isinstance(carried.get("report"), dict)
+            and carried["report"].get("instance_coverage_complete") is True
+        ):
+            instance_report = dict(carried["report"])
+            instance_report["carried_from_checkpoint"] = True
+        else:
+            # The gate phase can cost more CPU-hours than one runner job
+            # (Glyph/MoCo reference training dominates), so it accumulates
+            # per case: every completed case row is checkpointed atomically
+            # to instance_oracles_partial.json, and a resume revalidates
+            # only the cases missing from it.  Rows are keyed on the case
+            # content hash and accepted only under the same gate context
+            # (deployed code SHA); any drift re-gates that case.
+            partial_rows: dict[str, Any] = {}
+            if partial_path.is_file():
+                try:
+                    partial = json.loads(partial_path.read_text(encoding="utf-8"))
+                    if partial.get("gate_context_sha") == gate_context_sha:
+                        saved = partial.get("rows")
+                        if isinstance(saved, dict):
+                            partial_rows = saved
+                except (OSError, json.JSONDecodeError):
+                    partial_rows = {}
+            gate_rows: list[dict[str, Any]] = []
+            gate_rows_reused = 0
+            gate_fresh_validations = 0
+            gate_started_at = time.monotonic()
+            for gate_case in gated_cases:
+                gate_case_id = str(gate_case.get("case_id"))
+                gate_case_sha = hashlib.sha256(
+                    json.dumps(gate_case, sort_keys=True).encode("utf-8")
+                ).hexdigest()
+                entry = partial_rows.get(gate_case_id)
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("case_sha256") == gate_case_sha
+                    and isinstance(entry.get("row"), dict)
+                    and entry["row"].get("status") == "passed"
+                ):
+                    gate_rows.append(dict(entry["row"]))
+                    gate_rows_reused += 1
+                    continue
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("case_sha256") == gate_case_sha
+                    and int(entry.get("attempts", 1) or 1) >= 2
+                ):
+                    # Failed twice across dispatches: never a silent retry
+                    # loop. Escalate to the operator with the case named.
+                    raise GateCaseBlockedRepeatedly(
+                        "exact-instance gate case failed validation twice: "
+                        f"{gate_case_id} "
+                        f"({entry['row'].get('reason') or entry['row'].get('status')}); "
+                        "an operator must split, defer, or drop this case"
+                    )
+                # Otherwise (no row yet, or a failed row on its first retry)
+                # validate fresh below; the attempt counter bounds retries.
+                if (
+                    gate_wall_seconds is not None
+                    and gate_fresh_validations >= 1
+                    and time.monotonic() - gate_started_at >= gate_wall_seconds
+                ):
+                    # Banked rows are safe in the partial file; stop gating
+                    # before the runner's job deadline so the state upload
+                    # still happens.  Only pause once at least one fresh
+                    # validation completed this dispatch, so a resume always
+                    # makes forward progress.
+                    raise GateWallExceeded(
+                        "gate wall budget exhausted mid-gate; "
+                        f"{gate_rows_reused} rows reused and "
+                        f"{gate_fresh_validations} fresh rows banked to "
+                        f"{partial_path}; resume to continue gating"
+                    )
+                case_report = validate_manifest_instances(
+                    {"cases": [gate_case]}, root=ROOT, include_slow=True
+                )
+                case_rows = case_report.get("cases") or []
+                if not case_rows:
+                    raise ValueError(
+                        f"exact-instance gate returned no row for {gate_case_id}"
+                    )
+                gate_rows.append(case_rows[0])
+                gate_fresh_validations += 1
+                previous_attempts = 0
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("case_sha256") == gate_case_sha
+                ):
+                    previous_attempts = int(entry.get("attempts", 0) or 0)
+                partial_rows[gate_case_id] = {
+                    "case_sha256": gate_case_sha,
+                    "row": case_rows[0],
+                    "attempts": previous_attempts + 1,
+                }
+                _write_json_atomic(partial_path, {
+                    "schema_version": 1,
+                    "gate_context_sha": gate_context_sha,
+                    "gated_manifest_sha256": gated_manifest_sha,
+                    "rows": partial_rows,
+                    "updated_at": _utc_now(),
+                })
+            if gated_cases:
+                instance_report = {
+                    "schema_version": 1,
+                    "provider_calls": 0,
+                    "instance_coverage_complete": all(
+                        row.get("status") == "passed" for row in gate_rows
+                    ),
+                    "cases": gate_rows,
+                    "gate_rows_reused_from_partial": gate_rows_reused,
+                }
+            else:
+                # Degenerate selection (no cases): defer to the gate itself,
+                # which refuses to authorize a paid run over nothing.
+                instance_report = validate_manifest_instances(
+                    gated_manifest, root=ROOT, include_slow=True
+                )
+        if compile_only_cases:
+            instance_report = dict(instance_report)
+            instance_report["compile_only_cases"] = [
+                str(case.get("case_id")) for case in compile_only_cases
+            ]
+            instance_report["compile_only_guarantee"] = (
+                "these cases run with compile-only judge validation: no "
+                "behavioral reference exists for their environments, so their "
+                "verdicts do not carry the exact-instance oracle guarantee"
+            )
+        _write_json_atomic(output_dir / "instance_oracles.json", instance_report)
+        if not instance_report["instance_coverage_complete"]:
+            raise ValueError(
+                "exact-instance behavioral oracle coverage is incomplete; inspect "
+                f"{output_dir / 'instance_oracles.json'} before any paid call "
+                "(--allow-compile-only-oracles does not override this gate)"
+            )
+        oracle_report["instance_coverage_complete"] = True
+        _write_json_atomic(output_dir / "oracle_preflight.json", oracle_report)
+        gate_record = {
+            "passed": True,
+            "gated_manifest_sha256": gated_manifest_sha,
+            "gate_context_sha": gate_context_sha,
+            "gated_case_count": len(gated_cases),
+            "compile_only_case_count": len(compile_only_cases),
+            "recorded_at": _utc_now(),
+            "report": instance_report,
+        }
+    repository = manifest.get("repository", {})
+    selection = manifest.get("selection", {})
+    matrix = selection.get("matrix") if isinstance(selection, dict) else None
+    if (
+        matrix in {"all", "covering"}
+        and not dry_run
+        and max_tokens_total is None
+        and max_output_tokens is None
+    ):
+        raise ValueError(
+            "all-matrix or covering-matrix execution requires --dry-run or an "
+            "explicit --max-tokens-total/--max-output-tokens ceiling"
+        )
+    case_budget_calls, case_budget_tokens = _estimated_case_budget(
+        max_steps, max_tokens, invalid_retries
+    )
+    metadata = {
+        "manifest_commit": repository.get("commit"),
+        "provider": provider,
+        "model": model,
+        "api_base": api_base,
+        "sandbox": sandbox,
+        "api_key_env": api_key_env,
+        "secrets": str(secrets) if secrets else None,
+        "max_steps": max_steps,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "top_p": top_p,
+        "invalid_retries": invalid_retries,
+        "max_retries": max_retries,
+        "max_http_attempts": max_http_attempts,
+        "provider_min_interval_seconds": provider_min_interval_seconds,
+        "max_api_calls": max_api_calls,
+        "max_tokens_total": max_tokens_total,
+        "floor_effect_after": floor_effect_after,
+        "reasoning_effort": reasoning_effort,
+        "reasoning_enabled": reasoning_effort is not None,
+        "request_extra": dict(request_extra or {}),
+        "estimated_case_api_calls": case_budget_calls,
+        "estimated_case_output_tokens": case_budget_tokens,
+        "oracle_preflight": {
+            "api_calls": oracle_report.get("api_calls", 0) if oracle_report else None,
+            "failure_count": oracle_report.get("failure_count") if oracle_report else None,
+            "model_sweep_allowed": oracle_report.get("model_sweep_allowed") if oracle_report else None,
+            "instance_coverage_complete": oracle_report.get("instance_coverage_complete") if oracle_report else None,
+        },
+    }
+    checkpoint = _load_checkpoint(checkpoint_path, manifest=manifest, metadata=metadata)
+    checkpoint["run"].update(metadata)
+    if gate_record is not None:
+        checkpoint["instance_gate"] = gate_record
+    checkpoint["paused"] = False
+    checkpoint["pause_reason"] = None
+    checkpoint["floor_effect"] = bool(checkpoint.get("floor_effect", False))
+    checkpoint["floor_effect_streak"] = int(checkpoint.get("floor_effect_streak", 0) or 0)
+    result_by_case = _result_by_case(checkpoint)
+    cases = list(manifest.get("cases", []))
+    if max_cases is not None:
+        if max_cases < 1:
+            raise ValueError("max-cases must be positive")
+        cases = cases[:max_cases]
+    estimated_total_tokens = len(cases) * case_budget_tokens
+    estimated_total_calls = len(cases) * case_budget_calls
+    checkpoint["run"].update(
+        {
+            "estimated_total_api_calls": estimated_total_calls,
+            "estimated_total_output_tokens": estimated_total_tokens,
+        }
+    )
+    if matrix == "all" and not dry_run and max_tokens_total is not None:
+        if estimated_total_tokens > max_tokens_total:
+            raise ValueError(
+                "all-matrix estimate exceeds --max-tokens-total: "
+                f"{estimated_total_tokens} > {max_tokens_total}; lower --max-cases or the per-case limits"
+            )
+    started = time.monotonic()
+    if stop_after_gates:
+        # Provider-free validation phase complete (compile preflight plus the
+        # exact-instance gate, or a carried pass).  The campaign wrapper runs
+        # its paid compatibility probe here and then re-enters the scheduler
+        # with identical parameters; the recorded gate pass is carried over.
+        checkpoint["provider_free_validation_complete"] = True
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+        return checkpoint
+    api_calls_reserved = sum(
+        max_steps * (1 + invalid_retries)
+        for row in checkpoint.get("results", [])
+        if row.get("status") in {"scored", "infrastructure_error", "paused_provider_error"}
+    )
+    output_tokens_reserved = api_calls_reserved * max_tokens
+    http_attempts_reserved = sum(
+        int(row.get("http_attempts", row.get("http_attempt_ceiling", 0)) or 0)
+        for row in checkpoint.get("results", [])
+        if row.get("status") in {"scored", "infrastructure_error", "paused_provider_error"}
+    )
+    # The row sum is a lower bound only: when a paused case is retried and
+    # scores on resume, its earlier spent attempts drop out of its row.  The
+    # persistent monotonic total keeps the global physical bound honest
+    # across resumes (never reset, never double-counted).
+    http_attempts_total = int(checkpoint.get("http_attempts_total", 0) or 0)
+    http_attempts_reserved = max(http_attempts_reserved, http_attempts_total)
+    if max_http_attempts is not None and http_attempts_reserved > max_http_attempts:
+        raise ValueError("recorded HTTP attempts exceed the configured bounded budget")
+    completed_this_run = 0
+    secret = None
+    if not dry_run:
+        credentials = resolve_provider(
+            provider,
+            api_key_env=api_key_env,
+            api_base=api_base,
+            secret_path=secrets,
+        )
+        secret = credentials.api_key
+    case_index = 0
+    retry_case_id: str | None = None
+    case_attempts_spent = 0
+    case_try_count = 0
+    outage_waited = 0.0
+    outage_retries = 0
+    while case_index < len(cases):
+        case = cases[case_index]
+        case_id = str(case.get("case_id", ""))
+        if case_id != retry_case_id:
+            retry_case_id = case_id
+            case_attempts_spent = 0
+            case_try_count = 0
+        if not case_id or not case.get("environment"):
+            raise ValueError("every manifest case needs case_id and environment")
+        existing = result_by_case.get(case_id)
+        if existing and not retry_recorded and existing.get("status") in {
+            "scored",
+            "generation_error",
+            "compile_error",
+            "blocked_config_drift",
+        }:
+            case_index += 1
+            continue
+        # A dry-run is a plan, not a completed API case.  It must be possible
+        # to resume the same checkpoint in live mode after reviewing its budget.
+        if existing and not retry_recorded and dry_run and existing.get("status") == "planned":
+            case_index += 1
+            continue
+        if max_wall_seconds is not None and time.monotonic() - started >= max_wall_seconds:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_wall_seconds"
+            break
+        current_hash = _current_config_hash(ROOT, case)
+        if current_hash != case.get("config_sha256") and not allow_config_drift:
+            result = {
+                "case_id": case_id,
+                "environment": case.get("environment"),
+                "track": case.get("track"),
+                "difficulty": case.get("difficulty"),
+                "seed": case.get("seed"),
+                "status": "blocked_config_drift",
+                "error": "config hash differs from the pinned inventory",
+            }
+            result_by_case[case_id] = result
+            checkpoint["results"] = list(result_by_case.values())
+            checkpoint["updated_at"] = _utc_now()
+            _write_json_atomic(checkpoint_path, checkpoint)
+            _write_coverage(output_dir, checkpoint)
+            case_index += 1
+            continue
+        estimated_calls, estimated_tokens = case_budget_calls, case_budget_tokens
+        if max_api_calls is not None and api_calls_reserved + estimated_calls > max_api_calls:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_api_calls"
+            break
+        if max_tokens_total is not None and output_tokens_reserved + estimated_tokens > max_tokens_total:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_tokens_total"
+            break
+        if max_output_tokens is not None and output_tokens_reserved + estimated_tokens > max_output_tokens:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_output_tokens"
+            break
+        case_http_attempt_ceiling: int | None = None
+        if max_http_attempts is not None:
+            remaining_http_attempts = max_http_attempts - http_attempts_reserved
+            if remaining_http_attempts < 1:
+                checkpoint["paused"] = True
+                checkpoint["pause_reason"] = "max_http_attempts"
+                break
+            # The ceiling is shared by every logical completion in this
+            # subprocess. ProviderClient still caps each logical call at six
+            # attempts; this outer ceiling counts all HTTP attempts globally.
+            case_http_attempt_ceiling = min(
+                remaining_http_attempts,
+                estimated_calls * (max_retries + 1),
+            )
+        if dry_run:
+            result = {
+                "case_id": case_id,
+                "environment": case.get("environment"),
+                "track": case.get("track"),
+                "difficulty": case.get("difficulty"),
+                "seed": case.get("seed"),
+                "status": "planned",
+                "estimated_api_calls": estimated_calls,
+                "estimated_output_tokens": estimated_tokens,
+                "http_attempt_ceiling": case_http_attempt_ceiling,
+            }
+            result_by_case[case_id] = result
+            api_calls_reserved += estimated_calls
+            output_tokens_reserved += estimated_tokens
+            if max_http_attempts is not None:
+                http_attempts_reserved += int(case_http_attempt_ceiling or 0)
+            completed_this_run += 1
+            checkpoint["results"] = list(result_by_case.values())
+            checkpoint["updated_at"] = _utc_now()
+            _write_json_atomic(checkpoint_path, checkpoint)
+            _write_coverage(output_dir, checkpoint)
+            case_index += 1
+            continue
+        if not secret:
+            raise ValueError(f"API key environment variable {api_key_env!r} is not set")
+        if min_interval_seconds > 0 and completed_this_run:
+            time.sleep(min_interval_seconds)
+        case_output = output_dir / "episodes" / _safe_name(case_id)
+        command = _build_command(
+            case,
+            provider=provider,
+            model=model,
+            api_key_env=api_key_env,
+            secrets=secrets,
+            api_base=api_base,
+            sandbox=sandbox,
+            output_dir=case_output,
+            max_steps=max_steps,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            invalid_retries=invalid_retries,
+            max_http_attempts=case_http_attempt_ceiling,
+            provider_min_interval_seconds=provider_min_interval_seconds,
+            max_retries=max_retries,
+            keep_images=keep_images,
+            keep_workspace=keep_workspace,
+            reasoning_effort=reasoning_effort,
+            request_extra=request_extra,
+        )
+        case_started = time.monotonic()
+        remaining_wall_seconds = None
+        if max_wall_seconds is not None:
+            remaining_wall_seconds = max(0.1, max_wall_seconds - (case_started - started))
+        try:
+            process = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=os.environ.copy(),
+                capture_output=True,
+                text=True,
+                timeout=remaining_wall_seconds,
+            )
+            stdout = _redact(process.stdout, secret)
+            stderr = _redact(process.stderr, secret)
+            parsed = _extract_result(process.stdout)
+            final = parsed.get("final", {}) if parsed else {}
+            reported_http_attempts = (
+                parsed.get("http_attempts")
+                if isinstance(parsed, dict) and isinstance(parsed.get("http_attempts"), int)
+                else None
+            )
+            if parsed and isinstance(final, dict) and final.get("failure_mode") in {
+                "api_error",
+                "provider_transient",
+            }:
+                status = "paused_provider_error"
+                error = "provider or quota failure detected; resume only after checking the account"
+            elif parsed and isinstance(final, dict) and (
+                final.get("failure_mode") in {
+                    "controller_error", "judge_runtime_error", "not_submitted", "unknown"
+                }
+                or not isinstance(final.get("failure_mode"), str)
+                or _judge_scoring_failed(final)
+            ):
+                status = "infrastructure_error"
+                error = "arena controller or judge failed before producing a valid score"
+            elif parsed and isinstance(final, dict) and "verdict" in final:
+                status = "scored"
+                error = None
+            elif _provider_failure(stdout + stderr):
+                status = "paused_provider_error"
+                error = "provider or quota failure detected; resume only after checking the account"
+            else:
+                status = "infrastructure_error"
+                error = "arena controller did not return a scored result"
+            result = {
+                "case_id": case_id,
+                "environment": case.get("environment"),
+                "track": case.get("track"),
+                "difficulty": case.get("difficulty"),
+                "seed": case.get("seed"),
+                "status": status,
+                # A judge/controller/provider failure is not a scored model result.
+                # The raw final JSON remains available in the episode artifacts.
+                "verdict": final.get("verdict") if status == "scored" else None,
+                "score": final.get("score") if status == "scored" else None,
+                "failure_mode": final.get("failure_mode") if isinstance(final, dict) else None,
+                "returncode": process.returncode,
+                "elapsed_seconds": round(time.monotonic() - case_started, 3),
+                "http_attempts": (
+                    reported_http_attempts
+                    if reported_http_attempts is not None
+                    else case_http_attempt_ceiling
+                ),
+                "http_attempt_ceiling": case_http_attempt_ceiling,
+                "run_dir": parsed.get("run_dir") if parsed else None,
+                "reasoning_enabled": reasoning_effort is not None,
+                "error": error,
+                "stdout_tail": stdout,
+                "stderr_tail": stderr,
+            }
+        except subprocess.TimeoutExpired:
+            result = {
+                "case_id": case_id,
+                "environment": case.get("environment"),
+                "track": case.get("track"),
+                "difficulty": case.get("difficulty"),
+                "seed": case.get("seed"),
+                "status": "infrastructure_error",
+                "reasoning_enabled": reasoning_effort is not None,
+                "http_attempts": case_http_attempt_ceiling,
+                "http_attempt_ceiling": case_http_attempt_ceiling,
+                "error": "scheduler subprocess timed out",
+                "elapsed_seconds": round(time.monotonic() - case_started, 3),
+            }
+        # Every attempt is individually bounded by the per-case HTTP-attempt
+        # ceiling; a retried case may legitimately total more, and the global
+        # ceiling below still bounds total spend.
+        raw_try_attempts = int(result.get("http_attempts", 0) or 0)
+        if (
+            max_http_attempts is not None
+            and case_http_attempt_ceiling is not None
+            and raw_try_attempts > int(case_http_attempt_ceiling)
+        ):
+            raise ValueError("episode exceeded its bounded HTTP-attempt ceiling")
+        if (
+            result.get("status") == "paused_provider_error"
+            and provider_outage_patience_seconds > 0
+        ):
+            # Resilient-campaign mode: a provider outage is waited out inside
+            # the run with exponential backoff instead of pausing the suite,
+            # bounded by the patience window, the remaining wall budget, and
+            # the remaining global HTTP-attempt budget.
+            case_try_count += 1
+            budget_left = (
+                max_http_attempts - http_attempts_reserved - case_attempts_spent - raw_try_attempts
+                if max_http_attempts is not None
+                else None
+            )
+            backoff = min(
+                provider_outage_backoff_seconds * (2 ** (case_try_count - 1)),
+                600.0,
+            )
+            remaining_patience = provider_outage_patience_seconds - outage_waited
+            wall_left = (
+                max_wall_seconds - (time.monotonic() - started)
+                if max_wall_seconds is not None
+                else None
+            )
+            if (
+                backoff < remaining_patience
+                and (wall_left is None or backoff < wall_left)
+                and (budget_left is None or budget_left >= 1)
+            ):
+                case_attempts_spent += raw_try_attempts
+                outage_waited += backoff
+                outage_retries += 1
+                checkpoint["provider_outage"] = {
+                    "waited_seconds": round(outage_waited, 1),
+                    "retries": outage_retries,
+                    "last_backoff_seconds": round(backoff, 1),
+                    "last_case_id": case_id,
+                    "updated_at": _utc_now(),
+                }
+                _write_json_atomic(checkpoint_path, checkpoint)
+                _sleep(backoff)
+                continue
+            # Patience, wall, or attempt budget is exhausted: record this
+            # attempt as the case result and let the pause logic below stop
+            # the suite for the supervisor to resume later.
+        if case_attempts_spent:
+            result["http_attempts"] = raw_try_attempts + case_attempts_spent
+        if case_try_count:
+            result["provider_outage_retries"] = case_try_count
+        result["judge_guarantee"] = (
+            "compile_only"
+            if unreferenced_compile_only
+            and str(case.get("environment", "")) not in referenced_envs
+            else "behavioral_reference"
+        )
+        if result.get("status") != "paused_provider_error":
+            outage_waited = 0.0
+            outage_retries = 0
+        if not reasoning_effort and _is_zero_score(result):
+            checkpoint["floor_effect_streak"] = int(checkpoint.get("floor_effect_streak", 0) or 0) + 1
+        else:
+            checkpoint["floor_effect_streak"] = 0
+        if (
+            floor_effect_after is not None
+            and checkpoint["floor_effect_streak"] >= floor_effect_after
+            and not reasoning_effort
+            and _is_zero_score(result)
+        ):
+            result["floor_effect"] = True
+            checkpoint["floor_effect"] = True
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "floor_effect"
+        result["floor_effect_streak"] = checkpoint["floor_effect_streak"]
+        result_by_case[case_id] = result
+        checkpoint["results"] = list(result_by_case.values())
+        checkpoint["updated_at"] = _utc_now()
+        completed_this_run += 1
+        api_calls_reserved += estimated_calls
+        output_tokens_reserved += estimated_tokens
+        http_attempts_used = int(result.get("http_attempts", 0) or 0)
+        checkpoint["http_attempts_total"] = (
+            int(checkpoint.get("http_attempts_total", 0) or 0) + http_attempts_used
+        )
+        if max_http_attempts is not None:
+            http_attempts_reserved += http_attempts_used
+        if result.get("status") == "paused_provider_error":
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "provider_error"
+        elif result.get("status") == "infrastructure_error":
+            # Docker/isolation/controller failures are not model answers. Stop
+            # before spending another request on a potentially unsafe runner.
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "infrastructure_error"
+        elif max_http_attempts is not None and http_attempts_reserved >= max_http_attempts:
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = "max_http_attempts"
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+        if checkpoint.get("paused"):
+            break
+        case_index += 1
+    if dry_run:
+        checkpoint["results"] = list(result_by_case.values())
+        checkpoint["updated_at"] = _utc_now()
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+    return checkpoint
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--out", type=Path, default=Path("runs/suite"))
+    parser.add_argument("--provider", required=True)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--api-key-env", default="SUITE_API_KEY")
+    parser.add_argument("--secrets", type=Path, default=None)
+    parser.add_argument("--api-base", default=None)
+    parser.add_argument("--sandbox", choices=("docker", "local"), default="docker")
+    parser.add_argument("--max-steps", type=int, default=30)
+    parser.add_argument("--max-tokens", type=int, default=1024)
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--top-p", type=float, default=None)
+    parser.add_argument("--invalid-retries", type=int, default=2)
+    parser.add_argument("--max-retries", type=int, default=3)
+    parser.add_argument("--max-http-attempts", type=int, default=None)
+    parser.add_argument("--provider-min-interval-seconds", type=float, default=0.0)
+    parser.add_argument("--max-cases", type=int, default=None)
+    parser.add_argument("--max-api-calls", type=int, default=None)
+    parser.add_argument("--max-output-tokens", type=int, default=None)
+    parser.add_argument(
+        "--max-tokens-total",
+        type=int,
+        default=None,
+        help="required ceiling for live all-matrix execution (estimated output tokens)",
+    )
+    parser.add_argument("--max-wall-seconds", type=float, default=None)
+    parser.add_argument("--min-interval-seconds", type=float, default=0.0)
+    parser.add_argument(
+        "--floor-effect-after",
+        type=int,
+        default=3,
+        help="pause after this many consecutive non-reasoning scored zeros; use 0 to disable",
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=("low", "medium", "high"),
+        default=None,
+        help="opt into a provider reasoning request; floor-effect detection is disabled",
+    )
+    parser.add_argument("--checkpoint", type=Path, default=None)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--allow-config-drift", action="store_true")
+    parser.add_argument(
+        "--allow-compile-only-oracles", action="store_true",
+        help="explicitly allow paid calls with judges that have no behavioral reference self-test",
+    )
+    parser.add_argument("--retry-recorded", action="store_true")
+    parser.add_argument("--keep-images", action="store_true")
+    parser.add_argument("--keep-workspace", action="store_true")
+    parser.add_argument(
+        "--provider-outage-patience-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "wait out provider outages inside the run with exponential backoff "
+            "up to this many total seconds per outage before pausing (0 keeps "
+            "the fail-closed pause-on-first-provider-error behaviour)"
+        ),
+    )
+    parser.add_argument(
+        "--provider-outage-backoff-seconds",
+        type=float,
+        default=60.0,
+        help="initial provider-outage backoff; doubles per retry, capped at 600s",
+    )
+    parser.add_argument(
+        "--unreferenced-compile-only",
+        action="store_true",
+        help=(
+            "allow environments without a configured behavioral reference to "
+            "run under compile-only judge validation (requires "
+            "--allow-compile-only-oracles; result rows are labeled "
+            "judge_guarantee=compile_only)"
+        ),
+    )
+    parser.add_argument(
+        "--gate-context-sha",
+        default=None,
+        help=(
+            "code context (e.g. deployed git SHA) recorded with the "
+            "exact-instance gate pass; a resumed checkpoint with a different "
+            "context re-runs the full gate"
+        ),
+    )
+    parser.add_argument(
+        "--gate-wall-seconds",
+        type=float,
+        default=None,
+        help=(
+            "pause the per-case exact-instance gate resumably once this wall "
+            "budget is exhausted mid-gate (banked rows are carried in "
+            "instance_oracles_partial.json)"
+        ),
+    )
+    parser.add_argument(
+        "--stop-after-gates",
+        action="store_true",
+        help=(
+            "run the provider-free validation phase, write the checkpoint "
+            "with the carry-able gate record, and stop before any episode"
+        ),
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        manifest = _read_json(args.manifest)
+        checkpoint = run_suite(
+            manifest,
+            output_dir=args.out,
+            provider=args.provider,
+            model=args.model,
+            api_key_env=args.api_key_env,
+            secrets=args.secrets,
+            api_base=args.api_base,
+            sandbox=args.sandbox,
+            max_steps=args.max_steps,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            invalid_retries=args.invalid_retries,
+            max_retries=args.max_retries,
+            max_http_attempts=args.max_http_attempts,
+            provider_min_interval_seconds=args.provider_min_interval_seconds,
+            max_cases=args.max_cases,
+            max_api_calls=args.max_api_calls,
+            max_output_tokens=args.max_output_tokens,
+            max_tokens_total=args.max_tokens_total,
+            max_wall_seconds=args.max_wall_seconds,
+            min_interval_seconds=args.min_interval_seconds,
+            floor_effect_after=args.floor_effect_after,
+            reasoning_effort=args.reasoning_effort,
+            checkpoint_path=args.checkpoint,
+            dry_run=args.dry_run,
+            allow_config_drift=args.allow_config_drift,
+            allow_compile_only_oracles=args.allow_compile_only_oracles,
+            retry_recorded=args.retry_recorded,
+            keep_images=args.keep_images,
+            keep_workspace=args.keep_workspace,
+            provider_outage_patience_seconds=args.provider_outage_patience_seconds,
+            provider_outage_backoff_seconds=args.provider_outage_backoff_seconds,
+            unreferenced_compile_only=args.unreferenced_compile_only,
+            gate_context_sha=args.gate_context_sha,
+            gate_wall_seconds=args.gate_wall_seconds,
+        )
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"suite run failed: {exc}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(
+            {
+                "out": str(args.out),
+                "paused": checkpoint.get("paused", False),
+                "pause_reason": checkpoint.get("pause_reason"),
+                "floor_effect": checkpoint.get("floor_effect", False),
+                "recorded_cases": len(checkpoint.get("results", [])),
+                "manifest_cases": checkpoint.get("manifest_case_count"),
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

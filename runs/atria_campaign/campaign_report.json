@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "event": "rehearsal_campaign",
+  "status": "completed",
+  "pause_reason": null,
+  "resumable": false,
+  "recorded_cases": 5,
+  "manifest_case_count": 5,
+  "results": [
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "track": "weird_machine",
+      "difficulty": "easy,easy",
+      "seed": 0,
+      "status": "scored",
+      "verdict": "PASS",
+      "score": 1.0,
+      "failure_mode": "pass",
+      "returncode": 0,
+      "elapsed_seconds": 2.0,
+      "http_attempts": 1,
+      "http_attempt_ceiling": 2,
+      "run_dir": "runs/fake",
+      "reasoning_enabled": false,
+      "error": null,
+      "stdout_tail": "{\"run_dir\": \"runs/fake\", \"http_attempts\": 1, \"final\": {\"verdict\": \"PASS\", \"score\": 1.0, \"failure_mode\": \"pass\"}}",
+      "stderr_tail": "",
+      "judge_guarantee": "behavioral_reference",
+      "floor_effect_streak": 0
+    },
+    {
+      "case_id": "epistemic_games__scenario=trap_evidence=ambiguous_presentation=paired_prior=balanced_framing=bare_table__seed-0",
+      "environment": "epistemic_games",
+      "track": "ml_debugging",
+      "difficulty": "trap,ambiguous,paired,balanced,bare_table",
+      "seed": 0,
+      "status": "scored",
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "fail",
+      "returncode": 0,
+      "elapsed_seconds": 2.001,
+      "http_attempts": 3,
+      "http_attempt_ceiling": 2,
+      "run_dir": "runs/fake",
+      "reasoning_enabled": false,
+      "error": null,
+      "stdout_tail": "{\"run_dir\": \"runs/fake\", \"http_attempts\": 1, \"final\": {\"verdict\": \"FAIL\", \"score\": 0.0, \"failure_mode\": \"fail\"}}",
+      "stderr_tail": "",
+      "provider_outage_retries": 1,
+      "judge_guarantee": "behavioral_reference",
+      "floor_effect_streak": 1
+    },
+    {
+      "case_id": "categorical_lenses__naming=easy_symptom_mask=easy__seed-0",
+      "environment": "categorical_lenses",
+      "track": "category_theoretic_compositional",
+      "difficulty": "easy,easy",
+      "seed": 0,
+      "status": "scored",
+      "verdict": "PASS",
+      "score": 1.0,
+      "failure_mode": "pass",
+      "returncode": 0,
+      "elapsed_seconds": 2.0,
+      "http_attempts": 1,
+      "http_attempt_ceiling": 2,
+      "run_dir": "runs/fake",
+      "reasoning_enabled": false,
+      "error": null,
+      "stdout_tail": "{\"run_dir\": \"runs/fake\", \"http_attempts\": 1, \"final\": {\"verdict\": \"PASS\", \"score\": 1.0, \"failure_mode\": \"pass\"}}",
+      "stderr_tail": "",
+      "judge_guarantee": "behavioral_reference",
+      "floor_effect_streak": 0
+    },
+    {
+      "case_id": "rd_state_carry__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0",
+      "environment": "rd_state_carry",
+      "track": "recurrent_depth_behavioral",
+      "difficulty": "easy,easy,easy,easy,easy",
+      "seed": 0,
+      "status": "scored",
+      "verdict": "PASS",
+      "score": 1.0,
+      "failure_mode": "pass",
+      "returncode": 0,
+      "elapsed_seconds": 2.001,
+      "http_attempts": 1,
+      "http_attempt_ceiling": 2,
+      "run_dir": "runs/fake",
+      "reasoning_enabled": false,
+      "error": null,
+      "stdout_tail": "{\"run_dir\": \"runs/fake\", \"http_attempts\": 1, \"final\": {\"verdict\": \"PASS\", \"score\": 1.0, \"failure_mode\": \"pass\"}}",
+      "stderr_tail": "",
+      "judge_guarantee": "behavioral_reference",
+      "floor_effect_streak": 0
+    },
+    {
+      "case_id": "glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0",
+      "environment": "glyph",
+      "track": "ml_debugging",
+      "difficulty": "easy,easy,easy,easy,easy,easy",
+      "seed": 0,
+      "status": "scored",
+      "verdict": "PASS",
+      "score": 1.0,
+      "failure_mode": "pass",
+      "returncode": 0,
+      "elapsed_seconds": 2.01,
+      "http_attempts": 1,
+      "http_attempt_ceiling": 2,
+      "run_dir": "runs/fake",
+      "reasoning_enabled": false,
+      "error": null,
+      "stdout_tail": "{\"run_dir\": \"runs/fake\", \"http_attempts\": 1, \"final\": {\"verdict\": \"PASS\", \"score\": 1.0, \"failure_mode\": \"pass\"}}",
+      "stderr_tail": "",
+      "judge_guarantee": "behavioral_reference",
+      "floor_effect_streak": 0
+    }
+  ],
+  "provider_outage": {
+    "waited_seconds": 1.0,
+    "retries": 1,
+    "last_backoff_seconds": 1.0,
+    "last_case_id": "epistemic_games__scenario=trap_evidence=ambiguous_presentation=paired_prior=balanced_framing=bare_table__seed-0",
+    "updated_at": "2026-09-28T07:13:38.890227Z"
+  },
+  "http_attempts_total": 7,
+  "updated_at": "2026-09-28T07:13:48.119505Z",
+  "wall_seconds_used": 300.0,
+  "rehearsal_note": "simulated provider, no real API calls, exercises checkpoint resume and transient error handling",
+  "pinned_manifest": {
+    "cases": [
+      {
+        "environment": "regex_state_machine",
+        "difficulty": "easy,easy",
+        "seed": 0
+      },
+      {
+        "environment": "epistemic_games",
+        "difficulty": "trap,ambiguous,paired,balanced,bare_table",
+        "seed": 0
+      },
+      {
+        "environment": "categorical_lenses",
+        "difficulty": "easy,easy",
+        "seed": 0
+      },
+      {
+        "environment": "rd_state_carry",
+        "difficulty": "easy,easy,easy,easy,easy",
+        "seed": 0
+      },
+      {
+        "environment": "glyph",
+        "difficulty": "easy,easy,easy,easy,easy,easy",
+        "seed": 0
+      }
+    ],
+    "commit": "a7fb0f16c4f78f9b8b9083d07635a851fc3386e7"
+  }
+}

@@ -22,7 +22,8 @@ K = %%K%%
 
 # Write probe as a standalone module instead of using string formatting.
 # This avoids code injection vulnerabilities from .format() with untrusted values.
-PROBE_MODULE_TEMPLATE = '''import sys
+PROBE_MODULE_TEMPLATE = '''import copy
+import sys
 import torch
 
 # Configuration passed via command-line arguments, not string interpolation
@@ -44,21 +45,30 @@ test_in = torch.load("eval_test_inputs.pt", weights_only=True)
 
 with torch.no_grad():
     # --- temperature sensitivity ---------------------------------------
+    # Temperature scales contrastive logits, not encoder_q features. Run two
+    # identical snapshots so forward's momentum/queue updates cannot create
+    # a false signal or mask cancellation of temperature before normalization.
     tau_ok = False
     for attr in ["tau", "temp", "temperature", "t"]:
-        if hasattr(model, attr):
-            orig = getattr(model, attr)
-            if isinstance(orig, (int, float, torch.Tensor)):
-                f1 = model.encoder_q(train_in[:1])
-                try:
-                    setattr(model, attr, orig * 2.0 if not isinstance(orig, torch.Tensor) else orig * 2)
-                    f2 = model.encoder_q(train_in[:1])
-                    setattr(model, attr, orig)
-                    if not torch.allclose(f1, f2, atol=1e-5):
-                        tau_ok = True
-                        break
-                except Exception:
-                    pass
+        if not hasattr(model, attr):
+            continue
+        orig = getattr(model, attr)
+        if not isinstance(orig, (int, float, torch.Tensor)):
+            continue
+        try:
+            baseline = copy.deepcopy(model)
+            altered = copy.deepcopy(model)
+            setattr(altered, attr, orig * 2)
+            logits_before, _ = baseline(train_in[:2], train_in[:2])
+            logits_after, _ = altered(train_in[:2], train_in[:2])
+            if (logits_before.shape == logits_after.shape
+                    and torch.isfinite(logits_before).all().item()
+                    and torch.isfinite(logits_after).all().item()
+                    and not torch.allclose(logits_before, logits_after, atol=1e-4, rtol=1e-3)):
+                tau_ok = True
+                break
+        except Exception:
+            pass
 
     # --- queue wraparound ----------------------------------------------
     queue_wrap_ok = False
@@ -154,11 +164,11 @@ def main() -> None:
         test_var = feature_variance(test_feats)
         set_metric(result, "train_feature_variance", round(train_var, 6))
         set_metric(result, "test_feature_variance", round(test_var, 6))
-        anti_gaming_passed = train_var > 1e-4 and test_var > 1e-4
-        if not anti_gaming_passed:
+        non_collapsed = train_var > 1e-4 and test_var > 1e-4
+        if not non_collapsed:
             result["notes"].append("collapsed_features")
-        mark_check(result, "non_collapsed_features", anti_gaming_passed)
-        judge_event(result, "check", "ok" if anti_gaming_passed else "fail", "non_collapsed_features")
+        mark_check(result, "non_collapsed_features", non_collapsed)
+        judge_event(result, "check", "ok" if non_collapsed else "fail", "non_collapsed_features")
         tau_ok = bool(outputs.get("tau_ok", False))
         mark_check(result, "temperature_sensitive", tau_ok)
         judge_event(result, "check", "ok" if tau_ok else "fail", "temperature_sensitive")
@@ -169,6 +179,9 @@ def main() -> None:
         judge_event(result, "check", "ok" if queue_wrap_ok else "fail", "queue_wraparound")
         if not queue_wrap_ok:
             result["notes"].append("queue_wrap_broken")
+        # Full credit requires the two stated bug fixes as well as usable
+        # representations; previously these checks were logged but ignored.
+        anti_gaming_passed = non_collapsed and tau_ok and queue_wrap_ok
         probe = nn.Linear(train_feats.shape[1], 4)
         opt = torch.optim.Adam(probe.parameters(), lr=1e-2)
         crit = nn.CrossEntropyLoss()

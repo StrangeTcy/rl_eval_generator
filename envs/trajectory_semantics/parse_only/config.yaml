@@ -1,0 +1,119 @@
+benchmark:
+  track: trajectory_solver_synthesis_debugging
+  scoreboard: trajectory_solver_synthesis
+  primary_direct_answer: false
+  interpretation: "Solver-writing/debugging only; not evidence of model-side recurrence."
+
+axes:
+  - id: witness_status
+    description: "Whether the complete-state witness is intact or broken by C(b) -> A(1)."
+    levels:
+      valid:
+        "%%WITNESS_STATUS%%": "valid"
+        "%%C_RULE%%": "A(payload)"
+        "%%C_RULE_RELABELED%%": "Kestrel(payload)"
+      broken:
+        "%%WITNESS_STATUS%%": "broken"
+        "%%C_RULE%%": "A(1)"
+        "%%C_RULE_RELABELED%%": "Kestrel(blue)"
+
+  - id: representation
+    description: "Flat data syntax versus executable restricted source-template syntax."
+    levels:
+      flat:
+        "%%REPRESENTATION%%": "flat"
+        "%%SPEC_TEXT%%": |
+          format: flat-relay-v1
+          templates: A, B, C
+          payloads: 0, 1
+          rules:
+          - A(payload) -> B(payload)
+          - B(payload) -> C(flip(payload))
+          - C(payload) -> %%C_RULE%%
+        "%%NOISY_SPEC_TEXT%%": |
+          # Format-only comment.
+          format: flat-relay-v1
+          templates: A, B, C
+          payloads: 0, 1
+          rules:
+          - A(payload) -> B(payload)
+          - B(payload) -> C(flip(payload))
+          - C(payload) -> %%C_RULE%%
+          # End comment.
+        "%%RELABELED_SPEC_TEXT%%": |
+          format: flat-relay-v1
+          templates: Kestrel, Mallow, Orchid
+          payloads: red, blue
+          rules:
+          - Kestrel(payload) -> Mallow(payload)
+          - Mallow(payload) -> Orchid(flip(payload))
+          - Orchid(payload) -> %%C_RULE_RELABELED%%
+      reflective:
+        "%%REPRESENTATION%%": "reflective"
+        "%%SPEC_TEXT%%": |
+          format: reflective-relay-v1
+          payloads: 0, 1
+
+          template A(payload):
+            emit_source("B(payload)")
+
+          template B(payload):
+            emit_source("C(flip(payload))")
+
+          template C(payload):
+            emit_source("%%C_RULE%%")
+        "%%NOISY_SPEC_TEXT%%": |
+          # Format-only comment.
+          format: reflective-relay-v1
+          payloads: 0, 1
+
+          template A(payload):
+            emit_source("B(payload)")
+
+          template B(payload):
+            emit_source("C(flip(payload))")
+
+          template C(payload):
+            emit_source("%%C_RULE%%")
+          # End comment.
+        "%%RELABELED_SPEC_TEXT%%": |
+          format: reflective-relay-v1
+          payloads: red, blue
+
+          template Kestrel(payload):
+            emit_source("Mallow(payload)")
+
+          template Mallow(payload):
+            emit_source("Orchid(flip(payload))")
+
+          template Orchid(payload):
+            emit_source("%%C_RULE_RELABELED%%")
+
+scoring:
+  mode: check_fraction
+  total_checks: 6
+
+constants:
+  "%%PATCHABLE_FILES%%": '["solution.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"solution", "re"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/solution.py: solution.py
+  agent/workspace/task.py: task.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  judge/judge.py: judge.py
+  run_eval.sh: shared/run_eval.sh

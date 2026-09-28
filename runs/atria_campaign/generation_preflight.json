@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "difficulty": "easy,easy",
+      "seed": 0,
+      "config_sha256": "f3ac4bbe8f06081747afeddd3b6a3fbe36b610d79d295a10078d8b0c395a6286",
+      "status": "ready",
+      "generated_file_count": 34,
+      "eval_scripts_checked": 1
+    },
+    {
+      "case_id": "epistemic_games__scenario=trap_evidence=ambiguous_presentation=paired_prior=balanced_framing=bare_table__seed-0",
+      "environment": "epistemic_games",
+      "difficulty": "trap,ambiguous,paired,balanced,bare_table",
+      "seed": 0,
+      "config_sha256": "cb00ffa2ae48fc7949d48fd11d83604416054108e5618959532a70d48ae0b0a8",
+      "status": "ready",
+      "generated_file_count": 36,
+      "eval_scripts_checked": 0
+    },
+    {
+      "case_id": "categorical_lenses__naming=easy_symptom_mask=easy__seed-0",
+      "environment": "categorical_lenses",
+      "difficulty": "easy,easy",
+      "seed": 0,
+      "config_sha256": "1df98c5c365b913d36250e208feb7fff3e7a0fe4f9488fdaea83aa544bafb4cc",
+      "status": "ready",
+      "generated_file_count": 34,
+      "eval_scripts_checked": 1
+    },
+    {
+      "case_id": "rd_state_carry__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0",
+      "environment": "rd_state_carry",
+      "difficulty": "easy,easy,easy,easy,easy",
+      "seed": 0,
+      "config_sha256": "96357258b1e04319af5a14ac2f75d1329eeb98ca7bd16a074e97a12d8235d4f2",
+      "status": "ready",
+      "generated_file_count": 36,
+      "eval_scripts_checked": 0
+    },
+    {
+      "case_id": "glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0",
+      "environment": "glyph",
+      "difficulty": "easy,easy,easy,easy,easy,easy",
+      "seed": 0,
+      "config_sha256": "ee02fcb125763e232da48eee24277c57a3da411480ead09aaebc1c1737111dd6",
+      "status": "ready",
+      "generated_file_count": 38,
+      "eval_scripts_checked": 1
+    }
+  ]
+}

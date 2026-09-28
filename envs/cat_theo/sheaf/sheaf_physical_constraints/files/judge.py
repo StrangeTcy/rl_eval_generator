@@ -71,7 +71,7 @@ except Exception as e:
 
 # 3. Global Gluing Consistency (Proportional Scaling & Fairness under High Asymmetric Overlapping Demands)
 try:
-    # Demands: {"route_A": 90.0, "route_B": 80.0, "route_C": 90.0}.
+    # Demands: route_A=90.0, route_B=80.0, route_C=90.0.
     # After local switch limits, total global backbone capacity (150.0) must also be respected.
     demands = {{"route_A": 90.0, "route_B": 80.0, "route_C": 90.0}}
     allocations = router.allocate_bandwidth(demands)

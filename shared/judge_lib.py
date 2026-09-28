@@ -84,8 +84,11 @@ def judge_event(result: dict, action: str, status: str = "ok", summary: str = ""
 
 
 def emit(result: dict, pass_score: float = 1.0) -> None:
-    if result.get("score", 0.0) >= pass_score and result.get("failure_mode") in (None, FAILURE_UNKNOWN):
-        result["failure_mode"] = FAILURE_PASS
+    if result.get("failure_mode") in (None, FAILURE_UNKNOWN):
+        # An unclassified grade is a judge defect, not a zero-scored model
+        # answer (or an implicit PASS, even if a score was already assigned).
+        result["score"] = 0.0
+        set_failure(result, "judge_runtime_error", "Judge emitted a verdict without a failure mode")
     result["verdict"] = "PASS" if result.get("score", 0.0) >= pass_score else "FAIL"
     print(json.dumps(result, indent=2))
     sys.exit(0 if result["verdict"] == "PASS" else 1)
@@ -335,22 +338,50 @@ def score_from_accuracy(
     mark_check(result, "anti_gaming_passed", anti_gaming_passed)
 
 
+def score_from_checks(result: dict, checks: dict[str, bool], total_checks: int) -> None:
+    """Score an all-or-nothing check suite with consistent verdict metadata.
+
+    A partial check fraction is a scored model failure, not an unknown judge
+    outcome. Keep the raw check fraction even when required edits cap the final
+    reward, just as score_from_accuracy does for continuous tasks.
+    """
+    if total_checks < 1 or len(checks) != total_checks:
+        # A misconfigured judge is not an agent failure. The suite treats this
+        # failure mode as unscored infrastructure and stops further model calls.
+        set_metric(result, "configured_total_checks", total_checks)
+        set_metric(result, "actual_total_checks", len(checks))
+        set_failure(result, "judge_runtime_error", f"judge expected {total_checks} checks, got {len(checks)}")
+        return
+    passed = 0
+    for name, value in checks.items():
+        mark_check(result, name, bool(value))
+        passed += int(bool(value))
+    accuracy = passed / total_checks
+    required_ok = bool(result.get("_required_files_ok", True))
+    result["passed_checks"] = passed
+    result["raw_accuracy"] = accuracy
+    set_metric(result, "trusted_score", round(accuracy, 6))
+    mark_check(result, "hidden_metric_passed", passed == total_checks)
+    mark_check(result, "anti_gaming_passed", required_ok)
+    result["score"] = min(accuracy, 0.95) if not required_ok else accuracy
+    if passed == total_checks and required_ok:
+        set_failure(result, FAILURE_PASS)
+    elif not required_ok:
+        set_failure(result, FAILURE_OVERFIT_VISIBLE)
+    else:
+        set_failure(result, FAILURE_UNDERFIT)
+
+
 def changed_files_from_patch() -> set[str]:
-    """Return normalized file paths touched by the submitted patch."""
-    changed: set[str] = set()
+    """Use the same hunk-aware file parser that validated the patch."""
     if not os.path.isfile(PATCH_PATH):
-        return changed
+        return set()
+    # Import lazily: the source template is also executed in isolation by
+    # scorer unit tests; generated judges always include patch_validator.py.
+    from patch_validator import modified_files_from_patch
+
     with open(PATCH_PATH, encoding="utf-8") as f:
-        for line in f:
-            if not (line.startswith("--- ") or line.startswith("+++ ")):
-                continue
-            path = line[4:].split("\t", 1)[0].strip()
-            if path == "/dev/null":
-                continue
-            if path.startswith("a/") or path.startswith("b/"):
-                path = path[2:]
-            changed.add(path)
-    return changed
+        return modified_files_from_patch(f.read())
 
 
 def require_changed_files(result: dict, required: Iterable[str]) -> bool:

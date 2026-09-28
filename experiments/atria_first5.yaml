@@ -1,0 +1,42 @@
+# Bounded Atria Dawn Preview first-five pilot.
+# The reasoning mode is intentionally provider-default/unknown for raw Chat Completions.
+name: atria_first5
+provider: atria
+api_base: https://api.atria-asi.ai/v1
+model: Atria-Dawn-Preview
+api_key_env: ATRIA_API_KEY
+concurrency: 1
+seed: 0
+temperature: 1.0
+top_p: 0.95
+stream: false
+request_extra: {}
+reasoning_mode: provider_default_uncontrolled
+rate_limit:
+  documented_requests_per_minute: 60
+  min_interval_seconds: 1.1
+# Optional operator-supplied account quota; null means do not invent one.
+quota_ceiling_tokens: null
+limits:
+  max_steps: 20
+  max_tokens: 8192
+  invalid_retries: 1
+  max_retries: 5
+  # Preserve the existing 1207-attempt operator ceiling. Atria does not use
+  # /models; its theoretical pilot bound is 6 compatibility + 1200 episodes.
+  max_http_attempts: 1207
+  max_api_calls: 250
+  max_wall_seconds: 7200
+  floor_effect_after: 0
+  sandbox: docker
+cases:
+  - environment: regex_state_machine
+    difficulty: easy,easy
+  - environment: epistemic_games
+    difficulty: trap,ambiguous,paired,balanced,bare_table
+  - environment: categorical_lenses
+    difficulty: easy,easy
+  - environment: rd_state_carry
+    difficulty: easy,easy,easy,easy,easy
+  - environment: glyph
+    difficulty: easy,easy,easy,easy,easy,easy

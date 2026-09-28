@@ -1,0 +1,374 @@
+{
+  "schema_version": 1,
+  "manifest_type": "rl_eval_generator_suite",
+  "created_at": "2026-09-28T07:13:43.487715Z",
+  "repository": {
+    "commit": "a7fb0f16c4f78f9b8b9083d07635a851fc3386e7",
+    "pinned_revision": "a7fb0f16c4f78f9b8b9083d07635a851fc3386e7",
+    "dirty": true,
+    "root": "/home/user/rl_eval_generator"
+  },
+  "inventory": {
+    "config_paths_sha256": "75ce981813a362832f47a486e9dcb454dec69959c822f3dcb258ca2b118329c4",
+    "comparison_refs": []
+  },
+  "selection": {
+    "matrix": "all",
+    "seeds": [
+      0
+    ],
+    "selected_levels": [],
+    "dry_run": false,
+    "max_tokens_total": null
+  },
+  "registry_audit": {
+    "registry_path": "envs/registry.yaml",
+    "registry_entry_count": 34,
+    "config_file_count": 34,
+    "missing_registry_paths": [],
+    "unregistered_config_paths": [],
+    "duplicate_registry_paths": {},
+    "duplicate_registry_names": false,
+    "clean": true
+  },
+  "branch_comparisons": [],
+  "environment_count": 5,
+  "case_count": 5,
+  "environments": [
+    {
+      "environment": "regex_state_machine",
+      "registry_names": [
+        "regex_state_machine"
+      ],
+      "config_path": "envs/weird_machine/regex_state_machine/config.yaml",
+      "config_sha256": "f3ac4bbe8f06081747afeddd3b6a3fbe36b610d79d295a10078d8b0c395a6286",
+      "track": "weird_machine",
+      "axes": [
+        {
+          "id": "surface_deceptiveness",
+          "description": "Framing of the regex task (pattern matcher vs computational automaton)",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "hidden_depth",
+          "description": "Depth and complexity of generated string states",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        }
+      ],
+      "axis_count": 2,
+      "difficulty_vector_count": 9,
+      "issues": []
+    },
+    {
+      "environment": "epistemic_games",
+      "registry_names": [
+        "epistemic_games"
+      ],
+      "config_path": "envs/epistemic_games/config.yaml",
+      "config_sha256": "cb00ffa2ae48fc7949d48fd11d83604416054108e5618959532a70d48ae0b0a8",
+      "track": "ml_debugging",
+      "axes": [
+        {
+          "id": "scenario",
+          "description": "Surface scenario template (varies names and labels to reduce retrieval cues)",
+          "levels": [
+            "report",
+            "trap"
+          ]
+        },
+        {
+          "id": "evidence",
+          "description": "Information content of the observed announcement: no information, weak information, or strong information (likelihood-ratio band)",
+          "levels": [
+            "ambiguous",
+            "strong",
+            "weak"
+          ]
+        },
+        {
+          "id": "presentation",
+          "description": "Task framing: type inference (solo) or paired-world observational equivalence (strategic ambiguity)",
+          "levels": [
+            "paired",
+            "solo"
+          ]
+        },
+        {
+          "id": "prior",
+          "description": "Prior over the two worlds: balanced (0.5/0.5) or skewed (0.6/0.4 toward the level-1 world)",
+          "levels": [
+            "balanced",
+            "skewed"
+          ]
+        },
+        {
+          "id": "framing",
+          "description": "Presentation framing: narrative story vs bare probability tables (control for narrative seduction)",
+          "levels": [
+            "bare_table",
+            "narrative"
+          ]
+        }
+      ],
+      "axis_count": 5,
+      "difficulty_vector_count": 48,
+      "issues": []
+    },
+    {
+      "environment": "categorical_lenses",
+      "registry_names": [
+        "categorical_lenses"
+      ],
+      "config_path": "envs/cat_theo/categorical_lenses/config.yaml",
+      "config_sha256": "1df98c5c365b913d36250e208feb7fff3e7a0fe4f9488fdaea83aa544bafb4cc",
+      "track": "category_theoretic_compositional",
+      "axes": [
+        {
+          "id": "naming",
+          "description": "Naming abstraction of the lens class",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "symptom_mask",
+          "description": "Whether the exact lens composition laws are checked",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        }
+      ],
+      "axis_count": 2,
+      "difficulty_vector_count": 9,
+      "issues": []
+    },
+    {
+      "environment": "rd_state_carry",
+      "registry_names": [
+        "rd_state_carry"
+      ],
+      "config_path": "envs/recurrent_depth/state_carry/config.yaml",
+      "config_sha256": "96357258b1e04319af5a14ac2f75d1329eeb98ca7bd16a074e97a12d8235d4f2",
+      "track": "recurrent_depth_behavioral",
+      "axes": [
+        {
+          "id": "recurrence_depth",
+          "description": "Training and held-out recurrence depth",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "clue_clarity",
+          "description": "How directly the prompt names the state-carry invariant",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "visible_tests",
+          "description": "Visible sanity checks",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "implementation_obfuscation",
+          "description": "Extra irrelevant implementation detail",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "batching_complexity",
+          "description": "Batch shapes used by the visible examples",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        }
+      ],
+      "axis_count": 5,
+      "difficulty_vector_count": 243,
+      "issues": []
+    },
+    {
+      "environment": "glyph",
+      "registry_names": [
+        "glyph"
+      ],
+      "config_path": "envs/glyph/config.yaml",
+      "config_sha256": "ee02fcb125763e232da48eee24277c57a3da411480ead09aaebc1c1737111dd6",
+      "track": "ml_debugging",
+      "axes": [
+        {
+          "id": "architecture",
+          "description": "How obvious the Flatten bug is",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "optimizer",
+          "description": "How obvious the training dynamics issue is",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "red_herring",
+          "description": "Strength of the augmentation red herring",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "visible_tests",
+          "description": "Informativeness of visible tests",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "data_clue",
+          "description": "How hidden the permutation-invariance rule is",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "symptom_mask",
+          "description": "Nasty symptom masks / misleading gradients for Glyph",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        }
+      ],
+      "axis_count": 6,
+      "difficulty_vector_count": 729,
+      "issues": []
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "config_path": "envs/weird_machine/regex_state_machine/config.yaml",
+      "config_sha256": "f3ac4bbe8f06081747afeddd3b6a3fbe36b610d79d295a10078d8b0c395a6286",
+      "track": "weird_machine",
+      "runner": "arena_episode",
+      "difficulty_levels": {
+        "surface_deceptiveness": "easy",
+        "hidden_depth": "easy"
+      },
+      "difficulty": "easy,easy",
+      "seed": 0,
+      "status": "planned"
+    },
+    {
+      "case_id": "epistemic_games__scenario=trap_evidence=ambiguous_presentation=paired_prior=balanced_framing=bare_table__seed-0",
+      "environment": "epistemic_games",
+      "config_path": "envs/epistemic_games/config.yaml",
+      "config_sha256": "cb00ffa2ae48fc7949d48fd11d83604416054108e5618959532a70d48ae0b0a8",
+      "track": "ml_debugging",
+      "runner": "arena_episode",
+      "difficulty_levels": {
+        "scenario": "trap",
+        "evidence": "ambiguous",
+        "presentation": "paired",
+        "prior": "balanced",
+        "framing": "bare_table"
+      },
+      "difficulty": "trap,ambiguous,paired,balanced,bare_table",
+      "seed": 0,
+      "status": "planned"
+    },
+    {
+      "case_id": "categorical_lenses__naming=easy_symptom_mask=easy__seed-0",
+      "environment": "categorical_lenses",
+      "config_path": "envs/cat_theo/categorical_lenses/config.yaml",
+      "config_sha256": "1df98c5c365b913d36250e208feb7fff3e7a0fe4f9488fdaea83aa544bafb4cc",
+      "track": "category_theoretic_compositional",
+      "runner": "arena_episode",
+      "difficulty_levels": {
+        "naming": "easy",
+        "symptom_mask": "easy"
+      },
+      "difficulty": "easy,easy",
+      "seed": 0,
+      "status": "planned"
+    },
+    {
+      "case_id": "rd_state_carry__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0",
+      "environment": "rd_state_carry",
+      "config_path": "envs/recurrent_depth/state_carry/config.yaml",
+      "config_sha256": "96357258b1e04319af5a14ac2f75d1329eeb98ca7bd16a074e97a12d8235d4f2",
+      "track": "recurrent_depth_behavioral",
+      "runner": "arena_episode",
+      "difficulty_levels": {
+        "recurrence_depth": "easy",
+        "clue_clarity": "easy",
+        "visible_tests": "easy",
+        "implementation_obfuscation": "easy",
+        "batching_complexity": "easy"
+      },
+      "difficulty": "easy,easy,easy,easy,easy",
+      "seed": 0,
+      "status": "planned"
+    },
+    {
+      "case_id": "glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0",
+      "environment": "glyph",
+      "config_path": "envs/glyph/config.yaml",
+      "config_sha256": "ee02fcb125763e232da48eee24277c57a3da411480ead09aaebc1c1737111dd6",
+      "track": "ml_debugging",
+      "runner": "arena_episode",
+      "difficulty_levels": {
+        "architecture": "easy",
+        "optimizer": "easy",
+        "red_herring": "easy",
+        "visible_tests": "easy",
+        "data_clue": "easy",
+        "symptom_mask": "easy"
+      },
+      "difficulty": "easy,easy,easy,easy,easy,easy",
+      "seed": 0,
+      "status": "planned"
+    }
+  ],
+  "issues": [],
+  "ready_for_scheduler": true
+}

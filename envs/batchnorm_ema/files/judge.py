@@ -40,23 +40,40 @@ for m in bn_modules:
         continue
     if not (torch.isfinite(rv).all() and torch.isfinite(rm).all()):
         bn_stats_ok = False
-    # Degenerate running variance (collapsed to ~0 or exploded) indicates the
-    # statistics were corrupted during accumulation.
-    if float(rv.min()) <= 1e-6 or float(rv.max()) > 1e6:
+    # Negative or exploded variance indicates corruption; a constant/dead
+    # feature can legitimately have zero variance.
+    if float(rv.min()) < 0 or float(rv.max()) > 1e6:
         bn_stats_ok = False
 
+bn_buffers = [
+    tuple(buffer.detach().clone() if buffer is not None else None for buffer in
+          (m.running_mean, m.running_var, m.num_batches_tracked))
+    for m in bn_modules
+]
 with torch.no_grad():
     # Batch the forward pass; a single 2000-image batch is slow and memory-heavy.
     batches = [model(inputs[i:i + 128]) for i in range(0, inputs.shape[0], 128)]
     logits = torch.cat(batches, dim=0)
-    # Eval mode must be deterministic across identical passes. Re-run only a
-    # small slice to keep the probe cheap.
     probe_slice = inputs[:64]
     c1 = model(probe_slice)
     c2 = model(probe_slice)
-eval_consistent = bool(torch.allclose(c1, c2, atol=1e-4))
+    # BN accidentally left in training mode gives *identical* outputs for two
+    # identical batches, while still mutating running statistics. Change the
+    # other half of the batch to detect per-batch normalization in eval mode.
+    c_mixed = model(torch.cat((inputs[:32], inputs[64:96]), dim=0))[:32]
+bn_stats_frozen = all(
+    all(
+        (before is None and now is None) or
+        (before is not None and now is not None and torch.equal(before, now))
+        for before, now in zip(saved, (m.running_mean, m.running_var, m.num_batches_tracked))
+    ) for saved, m in zip(bn_buffers, bn_modules)
+)
+batch_independent = bool(torch.allclose(c1[:32], c_mixed, atol=1e-4, rtol=1e-3))
+eval_consistent = bool(torch.allclose(c1, c2, atol=1e-4, rtol=1e-3)
+                       and bn_stats_frozen and batch_independent)
 
 torch.save({{"logits": logits, "has_bn": has_bn, "bn_stats_ok": bool(bn_stats_ok),
+            "bn_stats_frozen": bool(bn_stats_frozen), "batch_independent": batch_independent,
             "eval_consistent": eval_consistent}}, "eval_outputs.pt")
 '''
 
@@ -68,7 +85,9 @@ def generate_evaluation_data(workdir: str):
     data = torch.zeros(num_samples, 3, 32, 32)
     for i, label in enumerate(labels.tolist()):
         row = (label * 7) % 24
-        col = (label * 11) % 24
+        # Match the public training distribution: distinguish classes that
+        # share label % 24 in the 100-class hard configuration.
+        col = (label * 11 + 5 * (label // 24)) % 24
         channel = label % 3
         data[i, channel, row:row + 8, col:col + 8] = 1.0
         data[i, (channel + 1) % 3, 4:12, (label * 3) % 24:(label * 3) % 24 + 8] = 0.5
@@ -120,12 +139,14 @@ def main() -> None:
         coverage = prediction_coverage(preds)
         set_metric(result, "prediction_entropy", round(entropy, 6))
         set_metric(result, "predicted_classes", coverage)
-        anti_gaming_passed = coverage >= min(NUM_CLASSES, 5) and entropy >= 1.0
+        coverage_ok = coverage >= min(NUM_CLASSES, 5) and entropy >= 1.0
 
         # --- behavioral checks: attribute the failure cause ---------------
         has_bn = bool(outputs.get("has_bn", False))
-        bn_stats_ok = bool(outputs.get("bn_stats_ok", True))
-        eval_consistent = bool(outputs.get("eval_consistent", True))
+        bn_stats_ok = bool(outputs.get("bn_stats_ok", False))
+        eval_consistent = bool(outputs.get("eval_consistent", False))
+        set_metric(result, "eval_bn_stats_frozen", bool(outputs.get("bn_stats_frozen", False)))
+        set_metric(result, "eval_batch_independent", bool(outputs.get("batch_independent", False)))
         set_metric(result, "uses_batchnorm", has_bn)
 
         # Running statistics corrupted by accumulation (only meaningful if the
@@ -141,6 +162,9 @@ def main() -> None:
         judge_event(result, "check", "ok" if eval_consistent else "fail", "eval_mode_consistent")
         if not eval_consistent:
             result["notes"].append("eval_mode_stats_bad")
+        # Previously these checks were diagnostics only: a model could receive
+        # PASS even while updating BatchNorm statistics on every eval batch.
+        anti_gaming_passed = coverage_ok and running_stats_ok and eval_consistent
     except Exception as exc:
         set_failure(result, FAILURE_REWARD_DENIAL, f"Failed to score outputs: {exc}")
         emit(result)

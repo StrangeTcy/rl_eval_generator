@@ -1,0 +1,101 @@
+axes:
+  - id: recurrence_depth
+    description: "Training and held-out recurrence depth"
+    levels:
+      easy:
+        "%%TRAIN_DEPTH%%": "4"
+        "%%HIDDEN_DEPTH%%": "8"
+      medium:
+        "%%TRAIN_DEPTH%%": "16"
+        "%%HIDDEN_DEPTH%%": "32"
+      hard:
+        "%%TRAIN_DEPTH%%": "32"
+        "%%HIDDEN_DEPTH%%": "64"
+
+  - id: clue_clarity
+    description: "How directly the prompt names the state-carry invariant"
+    levels:
+      easy:
+        "%%CLUE%%": "The transition must consume the state returned by the previous step."
+      medium:
+        "%%CLUE%%": "Check what value is fed back into a tied transition."
+      hard:
+        "%%CLUE%%": ""
+
+  - id: visible_tests
+    description: "Visible sanity checks"
+    levels:
+      easy:
+        "%%VISIBLE_TESTS%%": |
+          def test_depth_one():
+              block = RecurrentBlock(4, 4, depth=1)
+              x = torch.randn(2, 4)
+              assert torch.equal(block(x), block.transition(x))
+      medium:
+        "%%VISIBLE_TESTS%%": |
+          def test_depth_one():
+              block = RecurrentBlock(4, 4, depth=1)
+              x = torch.randn(2, 4)
+              assert torch.equal(block(x), block.transition(x))
+
+          def test_batch_shape():
+              block = RecurrentBlock(4, 4, depth=2)
+              assert block(torch.randn(3, 4)).shape == (3, 4)
+      hard:
+        "%%VISIBLE_TESTS%%": |
+          def test_depth_one():
+              block = RecurrentBlock(4, 4, depth=1)
+              x = torch.randn(2, 4)
+              assert torch.equal(block(x), block.transition(x))
+
+  - id: implementation_obfuscation
+    description: "Extra irrelevant implementation detail"
+    levels:
+      easy:
+        "%%IMPLEMENTATION_NOTE%%": "# The single transition module is intentionally shared across steps."
+      medium:
+        "%%IMPLEMENTATION_NOTE%%": "# The block also accepts an optional evaluation depth."
+      hard:
+        "%%IMPLEMENTATION_NOTE%%": ""
+
+  - id: batching_complexity
+    description: "Batch shapes used by the visible examples"
+    levels:
+      easy:
+        "%%BATCH_SIZE%%": "2"
+      medium:
+        "%%BATCH_SIZE%%": "4"
+      hard:
+        "%%BATCH_SIZE%%": "7"
+
+scoring:
+  mode: check_fraction
+  total_checks: 5
+
+constants:
+  "%%PATCHABLE_FILES%%": '["recurrent_block.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"recurrent_block"'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/recurrent_block.py: recurrent_block.py
+  agent/workspace/train.py: train.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: shared/Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge_lib.py: shared/judge_lib.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: shared/Dockerfile.judge
+  judge/judge.py: judge.py
+
+  run_eval.sh: shared/run_eval.sh

@@ -11,8 +11,16 @@ ORIGINAL_DIR = "/originals"
 PATCHABLE    = %%PATCHABLE_FILES%%
 
 def main():
-    os.makedirs("/submission", exist_ok=True)
+    if not os.path.isdir("/submission"):
+        print(
+            "No /submission volume in controller mode. Return the JSON action "
+            '{"type":"submit","confirm":true} instead; the host creates the patch '
+            "from your workspace. /tools/submit.py is for interactive run_eval.sh only.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     lines = []
+    changed_files = []
     for fname in PATCHABLE:
         original = os.path.join(ORIGINAL_DIR, fname)
         modified = os.path.join(WORKSPACE, fname)
@@ -30,6 +38,8 @@ def main():
             print(f"ERROR: diff failed for {fname}: {result.stderr}")
             sys.exit(1)
         lines.append(result.stdout)
+        if result.stdout:
+            changed_files.append(fname)
 
     patch_text = "".join(lines)
     if not patch_text.strip():
@@ -40,9 +50,8 @@ def main():
         f.write(patch_text)
 
     print(f"Patch written to {PATCH_DEST}")
-    for line in patch_text.splitlines():
-        if line.startswith("---") or line.startswith("+++"):
-            print(f"  {line}")
+    for fname in changed_files:
+        print(f"  {fname}")
 
 if __name__ == "__main__":
     main()

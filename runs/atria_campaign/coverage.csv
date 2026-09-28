@@ -1,0 +1,6 @@
+case_id,environment,track,difficulty,seed,status,verdict,score,failure_mode,returncode,elapsed_seconds,http_attempts,http_attempt_ceiling,run_dir,error
+regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0,regex_state_machine,weird_machine,"easy,easy",0,scored,PASS,1.0,pass,0,2.0,1,2,runs/fake,
+epistemic_games__scenario=trap_evidence=ambiguous_presentation=paired_prior=balanced_framing=bare_table__seed-0,epistemic_games,ml_debugging,"trap,ambiguous,paired,balanced,bare_table",0,scored,FAIL,0.0,fail,0,2.001,3,2,runs/fake,
+categorical_lenses__naming=easy_symptom_mask=easy__seed-0,categorical_lenses,category_theoretic_compositional,"easy,easy",0,scored,PASS,1.0,pass,0,2.0,1,2,runs/fake,
+rd_state_carry__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0,rd_state_carry,recurrent_depth_behavioral,"easy,easy,easy,easy,easy",0,scored,PASS,1.0,pass,0,2.001,1,2,runs/fake,
+glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0,glyph,ml_debugging,"easy,easy,easy,easy,easy,easy",0,scored,PASS,1.0,pass,0,2.01,1,2,runs/fake,

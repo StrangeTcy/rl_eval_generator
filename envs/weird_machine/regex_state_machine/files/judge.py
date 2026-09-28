@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Judge for regex_state_machine environment."""
+import json
 import os
 import sys
 import torch
@@ -21,7 +22,8 @@ def main() -> None:
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
         f.write(f"""
-import sys, random, ast
+import os
+import sys, random, ast, json
 sys.path.insert(0, {workdir!r})
 from regex_machine import %%MODEL_CLASS%%
 
@@ -103,10 +105,10 @@ try:
                         elif i == len(s) - 1:
                             boundary_fail = "right boundary neighborhood"
             if forensics is None:
-                forensics = {
+                forensics = {{
                     "failed_rules": sorted(failed_neighborhoods),
                     "boundary_collapse": boundary_fail,
-                }
+                }}
     checks["length_preservation"] = length_ok
     checks["randomized_accuracy"] = all_ok
     checks["forensics"] = forensics
@@ -115,7 +117,6 @@ except Exception:
     checks["randomized_accuracy"] = False
     checks["forensics"] = None
 
-import json
 with open("eval_outputs.json", "w") as f_out:
     json.dump(checks, f_out)
 """)

@@ -1,0 +1,507 @@
+{
+  "schema_version": 1,
+  "provider_calls": 0,
+  "instance_coverage_complete": true,
+  "cases": [
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "difficulty": "easy,easy",
+      "seed": 0,
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": [
+        {
+          "variant": "no_op",
+          "done": true,
+          "score": 0.0,
+          "raw_accuracy": 0.0,
+          "verdict": "FAIL",
+          "failure_mode": "patch_invalid",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": false,
+            "sources_valid": false,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": false
+          },
+          "elapsed_seconds": 1.33,
+          "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "notes": [
+            "Patch validation failed:\nFAIL: Patch file is empty\n\n"
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        },
+        {
+          "variant": "plausible_wrong",
+          "done": true,
+          "score": 0.416667,
+          "raw_accuracy": 0.5,
+          "verdict": "FAIL",
+          "failure_mode": "underfit",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": true,
+            "required_multifile_edit": true,
+            "regex_used": true,
+            "basic_step": false,
+            "length_preservation": true,
+            "randomized_accuracy": false
+          },
+          "elapsed_seconds": 1.57,
+          "patch_sha256": "67c350538ec9c23e39e40c22995706d5aa441d4aba40f50acd9451742aaad3fe",
+          "notes": [
+            "Morphism Error Report: Rule transition failed on: 110->1 (got 0)."
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": "randomized_accuracy",
+          "accepted": true
+        },
+        {
+          "variant": "transcription",
+          "done": true,
+          "score": 0.416667,
+          "raw_accuracy": 0.5,
+          "verdict": "FAIL",
+          "failure_mode": "underfit",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": true,
+            "required_multifile_edit": true,
+            "regex_used": true,
+            "basic_step": false,
+            "length_preservation": true,
+            "randomized_accuracy": false
+          },
+          "elapsed_seconds": 1.48,
+          "patch_sha256": "af87f44351be1c6827912e04c6e51cbd3523e80c66aca63c94557a75e5646645",
+          "notes": [
+            "Morphism Error Report: Rule transition failed on: 001->1 (got 0), 101->1 (got 0), 111->0 (got 1)."
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        },
+        {
+          "variant": "reference",
+          "done": true,
+          "score": 1.0,
+          "raw_accuracy": 1.0,
+          "verdict": "PASS",
+          "failure_mode": "pass",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": true,
+            "anti_gaming_passed": true,
+            "required_multifile_edit": true,
+            "regex_used": true,
+            "basic_step": true,
+            "length_preservation": true,
+            "randomized_accuracy": true
+          },
+          "elapsed_seconds": 1.5,
+          "patch_sha256": "ee0f13c066c23f798feed4442800204c7a7c282d217d074a2254cd409bed1f55",
+          "notes": [],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        }
+      ],
+      "instance_sha256": "febf39b74d87c1e3470a94f2e855f3ca6cb9dcc1f22fe711b26bc98533df4316"
+    },
+    {
+      "case_id": "epistemic_games__scenario=trap_evidence=ambiguous_presentation=paired_prior=balanced_framing=bare_table__seed-0",
+      "environment": "epistemic_games",
+      "difficulty": "trap,ambiguous,paired,balanced,bare_table",
+      "seed": 0,
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": [
+        {
+          "variant": "no_op",
+          "done": true,
+          "score": 0.0,
+          "raw_accuracy": 0.0,
+          "verdict": "FAIL",
+          "failure_mode": "patch_invalid",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": false,
+            "sources_valid": false,
+            "provenance_ok": false,
+            "answer_extracted": false,
+            "answer_format_valid": false,
+            "support_consistent": false,
+            "posterior_within_tolerance": false,
+            "posterior_within_strict_tolerance": false,
+            "verdict_correct": false,
+            "most_supported_correct": false,
+            "all_correct": false
+          },
+          "elapsed_seconds": 0.05,
+          "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "notes": [
+            "Patch validation failed: Patch file is empty"
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        },
+        {
+          "variant": "plausible_wrong",
+          "done": true,
+          "score": 0.083333,
+          "raw_accuracy": 0.1,
+          "verdict": "FAIL",
+          "failure_mode": "seductive_truth",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "provenance_ok": true,
+            "answer_extracted": true,
+            "answer_format_valid": true,
+            "support_consistent": true,
+            "posterior_within_tolerance": false,
+            "posterior_within_strict_tolerance": false,
+            "verdict_correct": false,
+            "most_supported_correct": false,
+            "all_correct": false
+          },
+          "elapsed_seconds": 0.04,
+          "patch_sha256": "141afe67e4566b152fe80c3d5aeb1f619a3a9bd1717ac5efb9d0ccdcbc5305cc",
+          "notes": [
+            "reported P(W1)=0.9 vs true 1/2 (0.5000); reported verdict='distinguishable' vs true 'indistinguishable'; reported support='world1' vs true 'neither'; consistent=True; strict=False"
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": "posterior_within_strict_tolerance",
+          "accepted": true
+        },
+        {
+          "variant": "reference",
+          "done": true,
+          "score": 1.0,
+          "raw_accuracy": 1.0,
+          "verdict": "PASS",
+          "failure_mode": "pass",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "provenance_ok": true,
+            "answer_extracted": true,
+            "answer_format_valid": true,
+            "support_consistent": true,
+            "posterior_within_tolerance": true,
+            "posterior_within_strict_tolerance": true,
+            "verdict_correct": true,
+            "most_supported_correct": true,
+            "all_correct": true
+          },
+          "elapsed_seconds": 0.04,
+          "patch_sha256": "7abe908d0c5688707aacf4d51e3a9efbb9a18292fc5169b917cad71230768117",
+          "notes": [
+            "reported P(W1)=0.5 vs true 1/2 (0.5000); reported verdict='indistinguishable' vs true 'indistinguishable'; reported support='neither' vs true 'neither'; consistent=True; strict=True"
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        }
+      ],
+      "instance_sha256": "0a583536cd1af008e12783ab7350aa5be7ddd722f0882c4390b26dd2cad8681e"
+    },
+    {
+      "case_id": "categorical_lenses__naming=easy_symptom_mask=easy__seed-0",
+      "environment": "categorical_lenses",
+      "difficulty": "easy,easy",
+      "seed": 0,
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": [
+        {
+          "variant": "no_op",
+          "done": true,
+          "score": 0.0,
+          "raw_accuracy": 0.0,
+          "verdict": "FAIL",
+          "failure_mode": "patch_invalid",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": false,
+            "sources_valid": false,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": false
+          },
+          "elapsed_seconds": 1.5,
+          "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "notes": [
+            "Patch validation failed:\nFAIL: Patch file is empty\n\n"
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        },
+        {
+          "variant": "plausible_wrong",
+          "done": true,
+          "score": 0.277778,
+          "raw_accuracy": 0.333333,
+          "verdict": "FAIL",
+          "failure_mode": "underfit",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": true,
+            "required_multifile_edit": true,
+            "put_get": true,
+            "get_put": false,
+            "put_put": false
+          },
+          "elapsed_seconds": 2.82,
+          "patch_sha256": "b8f88f792d0d1959d8c130634b3bcbc601133f08f6902db88e50d2a5878edea8",
+          "notes": [],
+          "stderr_tail": "",
+          "expected_failed_check": "get_put",
+          "accepted": true
+        },
+        {
+          "variant": "reference",
+          "done": true,
+          "score": 1.0,
+          "raw_accuracy": 1.0,
+          "verdict": "PASS",
+          "failure_mode": "pass",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": true,
+            "anti_gaming_passed": true,
+            "required_multifile_edit": true,
+            "put_get": true,
+            "get_put": true,
+            "put_put": true
+          },
+          "elapsed_seconds": 2.79,
+          "patch_sha256": "56abf1d7b9f14b3002305213480a2d171c95e084a23bf3e74bc6255905f5f828",
+          "notes": [],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        }
+      ],
+      "instance_sha256": "140bf6dfd377eec1b1c4113f70b7627172b85ea914ed200e8c720ea2e68ca6fb"
+    },
+    {
+      "case_id": "rd_state_carry__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0",
+      "environment": "rd_state_carry",
+      "difficulty": "easy,easy,easy,easy,easy",
+      "seed": 0,
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": [
+        {
+          "variant": "no_op",
+          "done": true,
+          "score": 0.0,
+          "raw_accuracy": 0.0,
+          "verdict": "FAIL",
+          "failure_mode": "patch_invalid",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": false,
+            "sources_valid": false,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": false
+          },
+          "elapsed_seconds": 1.4,
+          "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "notes": [
+            "Patch validation failed:\nFAIL: Patch file is empty\n\n"
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        },
+        {
+          "variant": "plausible_wrong",
+          "done": true,
+          "score": 0.6,
+          "raw_accuracy": 0.6,
+          "verdict": "FAIL",
+          "failure_mode": "underfit",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": true,
+            "required_multifile_edit": true,
+            "depth_one_exact": true,
+            "configured_depth_exact": false,
+            "hidden_depth_exact": false,
+            "parameter_count_independent_of_depth": true,
+            "batch_independence": true
+          },
+          "elapsed_seconds": 1.39,
+          "patch_sha256": "6fb7c23848b5b10fcd02b07c685ea684272636c464089e4ae98afeb046b53069",
+          "notes": [],
+          "stderr_tail": "",
+          "expected_failed_check": "hidden_depth_exact",
+          "accepted": true
+        },
+        {
+          "variant": "reference",
+          "done": true,
+          "score": 1.0,
+          "raw_accuracy": 1.0,
+          "verdict": "PASS",
+          "failure_mode": "pass",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": true,
+            "anti_gaming_passed": true,
+            "required_multifile_edit": true,
+            "depth_one_exact": true,
+            "configured_depth_exact": true,
+            "hidden_depth_exact": true,
+            "parameter_count_independent_of_depth": true,
+            "batch_independence": true
+          },
+          "elapsed_seconds": 1.3,
+          "patch_sha256": "dcdd49779baa29c40b44c672198b493c06d862d5a800ac3040b847b5708a07ae",
+          "notes": [],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        }
+      ],
+      "instance_sha256": "52d7bdd9eba6d51f8934121eec2bbc7e89b421cdefd352b330d314b2ccaff913"
+    },
+    {
+      "case_id": "glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0",
+      "environment": "glyph",
+      "difficulty": "easy,easy,easy,easy,easy,easy",
+      "seed": 0,
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": [
+        {
+          "variant": "no_op",
+          "done": true,
+          "score": 0.0,
+          "raw_accuracy": 0.0,
+          "verdict": "FAIL",
+          "failure_mode": "patch_invalid",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": false,
+            "sources_valid": false,
+            "training_completed": false,
+            "artifact_found": false,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": false
+          },
+          "elapsed_seconds": 1.27,
+          "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "notes": [
+            "Patch validation failed:\nFAIL: Patch file is empty\n\n"
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        },
+        {
+          "variant": "plausible_wrong",
+          "done": true,
+          "score": 0.082083,
+          "raw_accuracy": 0.0985,
+          "verdict": "FAIL",
+          "failure_mode": "overfit_visible_tests",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": true,
+            "artifact_found": true,
+            "hidden_metric_passed": false,
+            "anti_gaming_passed": false,
+            "required_multifile_edit": true,
+            "optimization_progressed": false,
+            "spatial_invariance_learned": true
+          },
+          "elapsed_seconds": 166.84,
+          "patch_sha256": "ee410f978e11eb6c652ae84db09964b723d040f3a43a3730c31b6a544d9f6db3",
+          "notes": [
+            "optimizer_pathology_unfixed"
+          ],
+          "stderr_tail": "",
+          "expected_failed_check": "optimization_progressed",
+          "accepted": true
+        },
+        {
+          "variant": "reference",
+          "done": true,
+          "score": 1.0,
+          "raw_accuracy": 0.8875,
+          "verdict": "PASS",
+          "failure_mode": "pass",
+          "checks": {
+            "patch_found": true,
+            "patch_valid": true,
+            "sources_valid": true,
+            "training_completed": true,
+            "artifact_found": true,
+            "hidden_metric_passed": true,
+            "anti_gaming_passed": true,
+            "required_multifile_edit": true,
+            "optimization_progressed": true,
+            "spatial_invariance_learned": true
+          },
+          "elapsed_seconds": 297.38,
+          "patch_sha256": "7d548f40e1d46761b1b542a2276a88a2de3ad938cb2381c1e896c6e6775c6160",
+          "notes": [],
+          "stderr_tail": "",
+          "expected_failed_check": null,
+          "accepted": true
+        }
+      ],
+      "instance_sha256": "367255ae88154b748e69af152822a52fb629ba414b5c3cd7cbc61a1f9e8f9ff0"
+    }
+  ],
+  "missing_references": []
+}
