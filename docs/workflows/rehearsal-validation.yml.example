@@ -1,0 +1,50 @@
+name: Rehearsal real validation
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or commit SHA containing the pinned code to validate"
+        required: true
+        default: "arena/01a0e6c8-rl-eval-generator"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
+          python -m pip install jinja2
+      - run: |
+          python - << 'PY'
+          from tools.suite_inventory import build_manifest
+          from tools.instance_oracle_gate import validate_manifest_instances
+          from pathlib import Path
+          import json
+          ROOT=Path.cwd()
+          manifest=build_manifest(root=ROOT, matrix="all", seeds=[0], dry_run=False)
+          EXPECTED=[("regex_state_machine","easy,easy"),("epistemic_games","trap,ambiguous,paired,balanced,bare_table"),("categorical_lenses","easy,easy"),("rd_state_carry","easy,easy,easy,easy,easy"),("glyph","easy,easy,easy,easy,easy,easy")]
+          selected=[]
+          for env,diff in EXPECTED:
+              m=[c for c in manifest["cases"] if c["environment"]==env and c["difficulty"]==diff and c["seed"]==0]
+              selected.append(m[0])
+          report=validate_manifest_instances({"cases":selected}, root=ROOT, include_slow=True, timeout=2100)
+          Path("runs/rehearsal_validation").mkdir(parents=True, exist_ok=True)
+          Path("runs/rehearsal_validation/instance_oracles.json").write_text(json.dumps(report, indent=2))
+          assert report["instance_coverage_complete"]
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rehearsal-validation-${{ github.run_id }}
+          path: runs/rehearsal_validation/**
+          retention-days: 14

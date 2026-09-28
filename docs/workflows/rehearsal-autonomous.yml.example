@@ -1,0 +1,89 @@
+name: Rehearsal autonomous continuation
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or commit SHA containing the pinned rehearsal code"
+        required: true
+        default: "arena/01a0e6c8-rl-eval-generator"
+  schedule:
+    - cron: "*/7 * * * *"
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: rehearsal-autonomous
+  cancel-in-progress: false
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Decide dispatch versus supervised resume
+        id: mode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=fresh" >> "$GITHUB_OUTPUT"
+            echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name | startswith("rehearsal-state-")) | select(.expired == false)] | sort_by(.created_at) | last')
+          if [ "$LATEST" = "null" ] || [ -z "$LATEST" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=no rehearsal state" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ARTIFACT_ID=$(echo "$LATEST" | jq -r '.id')
+          STATE_STAGE="$RUNNER_TEMP/rehearsal_state"
+          echo "state_staged=true" >> "$GITHUB_OUTPUT"
+          rm -rf "$STATE_STAGE"
+          mkdir -p "$STATE_STAGE"
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/state.zip"
+          unzip -q "$RUNNER_TEMP/state.zip" -d "$STATE_STAGE"
+          PINNED_REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
+          SUPERVISOR="$RUNNER_TEMP/campaign_supervisor.py"
+          if [ -z "$PINNED_REF" ] || ! gh api "repos/${{ github.repository }}/contents/tools/campaign_supervisor.py?ref=$PINNED_REF" --jq '.content' | base64 -d > "$SUPERVISOR" 2>/dev/null || [ ! -s "$SUPERVISOR" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=no supervisor module at pinned ref" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          DECISION=$(python3 -c "import importlib.util, json, sys; spec = importlib.util.spec_from_file_location('campaign_supervisor', sys.argv[1]); module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module); print(json.dumps(module.decide_tick(sys.argv[2])))" "$SUPERVISOR" "$STATE_STAGE")
+          MODE=$(printf '%s' "$DECISION" | jq -r '.mode')
+          REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
+          REF=$(printf '%s' "$DECISION" | jq -r '.ref // ""')
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+          if [ -n "$REF" ]; then echo "ref=$REF" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.mode.outputs.mode != 'none'
+        with:
+          ref: ${{ steps.mode.outputs.ref }}
+      - uses: actions/setup-python@v5
+        if: steps.mode.outputs.mode != 'none'
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+        if: steps.mode.outputs.mode != 'none'
+      - name: Restore previous rehearsal state after checkout
+        if: steps.mode.outputs.mode != 'none' && steps.mode.outputs.state_staged == 'true'
+        run: |
+          mkdir -p runs/rehearsal
+          cp -a "$RUNNER_TEMP/rehearsal_state/." runs/rehearsal/
+      - run: |
+          mkdir -p runs/rehearsal
+          echo "${{ steps.mode.outputs.ref }}" > runs/rehearsal/campaign_ref.txt
+        if: steps.mode.outputs.mode != 'none'
+      - run: python tools/atria_campaign.py --profile experiments/atria_campaign.yaml --out runs/rehearsal
+        if: steps.mode.outputs.mode != 'none'
+        timeout-minutes: 15
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.mode.outputs.mode != 'none'
+        with:
+          name: rehearsal-state-${{ github.run_number }}
+          path: runs/rehearsal/**
+          retention-days: 14

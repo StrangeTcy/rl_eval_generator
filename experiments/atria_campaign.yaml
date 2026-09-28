@@ -1,79 +1,43 @@
-# Resilient Atria covering campaign: every environment in envs/registry.yaml,
-# every difficulty-axis level exercised at least once (covering matrix,
-# seed 0; 218 cases at the time of writing).  Provider outages are waited out
-# in-run up to the patience window; longer outages pause with a resumable
-# checkpoint that the supervisor workflow (docs/workflows/atria-campaign.yml.example)
-# resumes.  Budget ceilings pause non-resumably and wait for an operator.
-#
-# The 22 environments without a behavioral judge reference run under
-# compile-only validation; every one of their result rows is labeled
-# judge_guarantee=compile_only and must not be read as a validated verdict.
-name: atria_covering_campaign
-provider: atria
-api_base: https://api.atria-asi.ai/v1
-model: Atria-Dawn-Preview
-api_key_env: ATRIA_API_KEY
+# Rehearsal profile for autonomous continuation test (simulated provider, no real API calls)
+# This overwrites the covering campaign profile on this branch only, for rehearsal evidence.
+# Real validation of the 5-case manifest is done separately via instance_oracle_gate.
+name: rehearsal
+provider: custom
+api_base: https://example.invalid/v1
+model: offline/pinned
+api_key_env: REHEARSAL_API_KEY
 concurrency: 1
-temperature: 1.0
-top_p: 0.95
+temperature: 0.0
+top_p: null
 stream: false
 request_extra: {}
 reasoning_mode: provider_default_uncontrolled
 rate_limit:
   documented_requests_per_minute: 60
-  min_interval_seconds: 1.1
+  min_interval_seconds: 0.1
 quota_ceiling_tokens: null
-matrix:
-  mode: covering
-  seeds: [0]
 resilience:
-  # Wait out provider outages up to one hour per outage inside the run
-  # (60s initial backoff, doubling, capped at 600s); longer outages pause
-  # resumably instead of burning the job budget.
-  provider_outage_patience_seconds: 3600
-  provider_outage_backoff_seconds: 60
-unreferenced_compile_only: true
-# Exact vectors that the first full gate run proved are calibration-apparatus
-# failures, not model results. They are omitted before generation gates or any
-# provider access. Keep this list case-specific: the other vectors from these
-# environments remain behaviorally gated and scored.
-manual_gate_blocked_exclusions:
-  reason: known_gate_blocked_calibration_failures
-  disposition: omitted_before_provider_access
-  provenance:
-    github_actions_run_id: 36346941741
-    github_actions_run_url: https://github.com/StrangeTcy/rl_eval_generator/actions/runs/36346941741
-    calibration_issue: https://github.com/StrangeTcy/rl_eval_generator/issues/1
-  cases:
-    - case_id: glyph__architecture=easy_optimizer=hard_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
-      calibration_class: reference_exists_per_environment_not_per_vector
-    - case_id: glyph__architecture=easy_optimizer=medium_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
-      calibration_class: reference_exists_per_environment_not_per_vector
-    - case_id: moco__naming=hard_distractors=easy_queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0
-      calibration_class: oracle_assumes_easy_layout
-    - case_id: moco__naming=medium_distractors=easy_queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0
-      calibration_class: oracle_assumes_easy_layout
-    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
-      calibration_class: negative_control_is_not_a_negative_control
-    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=hard__seed-0
-      calibration_class: negative_control_is_not_a_negative_control
-    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
-      calibration_class: reference_does_not_solve_its_own_instance
-# Wall budget inside one workflow job (which is capped at 6h by GitHub);
-# episode time per dispatch is what remains after the provider-free gates.
-campaign_job_seconds: 19800
+  provider_outage_patience_seconds: 60
+  provider_outage_backoff_seconds: 1
+campaign_job_seconds: 60
 limits:
-  max_steps: 20
-  max_tokens: 8192
-  invalid_retries: 1
-  max_retries: 5
-  # Conservative ceiling retained from the pre-exclusion 201-case campaign:
-  # 6 compat + 201 * 20 steps * 2 invalid attempts * 6 retries = 48,246,
-  # plus margin. The selected campaign now serves 194 cases after 17 modality
-  # omissions and seven known gate-blocked calibration omissions.
-  max_http_attempts: 48306
-  # Conservative pre-exclusion ceilings; exclusions lower actual exposure.
-  max_api_calls: 10050
+  max_steps: 1
+  max_tokens: 7
+  invalid_retries: 0
+  max_retries: 1
+  max_http_attempts: 100
+  max_api_calls: 100
   max_tokens_total: 66000000
   floor_effect_after: 0
   sandbox: docker
+cases:
+  - environment: regex_state_machine
+    difficulty: easy,easy
+  - environment: epistemic_games
+    difficulty: trap,ambiguous,paired,balanced,bare_table
+  - environment: categorical_lenses
+    difficulty: easy,easy
+  - environment: rd_state_carry
+    difficulty: easy,easy,easy,easy,easy
+  - environment: glyph
+    difficulty: easy,easy,easy,easy,easy,easy

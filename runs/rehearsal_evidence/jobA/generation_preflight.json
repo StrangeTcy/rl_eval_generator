@@ -17,7 +17,7 @@
       "seed": 0,
       "config_sha256": "cb00ffa2ae48fc7949d48fd11d83604416054108e5618959532a70d48ae0b0a8",
       "status": "generation_error",
-      "error": "Generating 'epistemic_games' -> 'suite-preflight-f7pjx67c-generated'\n  Axes: scenario=trap, evidence=ambiguous, presentation=paired, prior=balanced, framing=bare_table\n  Judge seed: 0\n\n\nERROR: Unresolved placeholders in 'task.md': %%TASK_MD%%\n"
+      "error": "Generating 'epistemic_games' -> 'suite-preflight-zz0gm85v-generated'\n  Axes: scenario=trap, evidence=ambiguous, presentation=paired, prior=balanced, framing=bare_table\n  Judge seed: 0\n\n\nERROR: Unresolved placeholders in 'task.md': %%TASK_MD%%\n"
     },
     {
       "case_id": "categorical_lenses__naming=easy_symptom_mask=easy__seed-0",
