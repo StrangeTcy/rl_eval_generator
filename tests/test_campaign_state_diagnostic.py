@@ -82,17 +82,15 @@ def test_surface_preserved_campaign_failure_without_rerunning_gate():
         token = _checkout_token()
     except Exception:
         os._exit(201)
-    request = urllib.request.Request(
-        f"https://api.github.com/repos/{REPOSITORY}/actions/artifacts/{ARTIFACT_ID}/zip",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            archive = response.read()
+        result = subprocess.run(
+            ["gh", "api", f"repos/{REPOSITORY}/actions/artifacts/{ARTIFACT_ID}/zip"],
+            check=True,
+            capture_output=True,
+            env={**os.environ, "GH_TOKEN": token},
+            timeout=120,
+        )
+        archive = result.stdout
     except Exception:
         os._exit(202)
     try:
