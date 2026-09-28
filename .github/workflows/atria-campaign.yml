@@ -1,11 +1,9 @@
-# Resilient Atria covering campaign, published under the docs/workflows scheme.
-# Copy this file to .github/workflows/atria-campaign.yml (web UI or commit).
-#
-# What it runs: every environment in envs/registry.yaml across every
-# difficulty-axis level (covering matrix, seed 0 — 218 cases, of which the
-# 17 rope cases are omitted loudly at runtime because rope requires non-text
-# input and Atria is text-only: 201 served cases at the time of writing),
-# via tools/atria_campaign.py and experiments/atria_campaign.yaml.
+# Resilient Atria covering campaign: every environment in envs/registry.yaml,
+# every difficulty-axis level exercised at least once (covering matrix,
+# seed 0 — 218 cases, of which 17 rope cases are omitted loudly at runtime
+# because rope requires non-text input and Atria is text-only: 201 served
+# cases at the time of writing, 194 after 7 known gate-blocked calibration
+# omissions), via tools/atria_campaign.py and experiments/atria_campaign.yaml.
 # Zero provider calls happen before the provider-free gates pass; the 22
 # environments without a behavioral judge reference run compile-only and are
 # labeled judge_guarantee=compile_only on every result row. The gate phase
@@ -35,7 +33,7 @@ on:
       ref:
         description: "Branch or full commit SHA containing the pinned campaign code"
         required: true
-        default: "arena/01a0dc92-rl-eval-generator"
+        default: "main"
   schedule:
     # Twice hourly, off the hour. Every tick either resumes or no-ops.
     - cron: "13,43 * * * *"
@@ -67,6 +65,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "mode=fresh" >> "$GITHUB_OUTPUT"
             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+            echo "reason=manual dispatch ref ${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # Scheduled tick: is there a campaign state to resume?
@@ -94,29 +93,45 @@ jobs:
           gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
             > "$RUNNER_TEMP/state.zip"
           unzip -q "$RUNNER_TEMP/state.zip" -d "$STATE_STAGE"
-          CHECKPOINT="$STATE_STAGE/suite_checkpoint.json"
-          if [ ! -f "$CHECKPOINT" ]; then
-            # The last dispatch died before any checkpoint existed (e.g.
-            # inside the gate phase). Restart from the recorded ref. The
-            # gate accumulates per case: completed gate rows live in
-            # instance_oracles_partial.json inside this state artifact, so
-            # the restart revalidates only the missing cases and repeated
-            # restarts make forward progress across job boundaries. Only a
-            # death before the FIRST gated case completes makes no
-            # progress (the operator sees a state artifact with neither
-            # checkpoint nor partial rows).
-            REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
-            if [ -n "$REF" ]; then
-              echo "mode=fresh" >> "$GITHUB_OUTPUT"
-              echo "ref=$REF" >> "$GITHUB_OUTPUT"
-              echo "reason=restarting after pre-checkpoint death" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+          # Fetch the supervisor module from the pinned ref recorded in the
+          # state artifact, so the marker schema and its reader stay versioned
+          # together.  This is the same module exercised provider-free by
+          # tests/test_campaign_tools.py.
+          PINNED_REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
+          # Also try manifest_commit inside checkpoint if campaign_ref.txt missing
+          if [ -z "$PINNED_REF" ]; then
+            PINNED_REF=$(jq -r '.run.manifest_commit // empty' "$STATE_STAGE/suite_checkpoint.json" 2>/dev/null || true)
+          fi
+          if [ -z "$PINNED_REF" ]; then
             echo "mode=none" >> "$GITHUB_OUTPUT"
-            echo "reason=state artifact has no checkpoint and no recorded ref" >> "$GITHUB_OUTPUT"
+            echo "reason=no pinned ref in state artifact" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          DECISION=$(python3 - "$CHECKPOINT" <<'PY'
+          # Old states from before 7b3565f lack manual_gate_blocked_exclusions and will
+          # always die with gate_case_repeatedly_blocked (40m). Ignore them and require
+          # fresh dispatch with ref: main (which has exclusions). This also prevents
+          # schedule ticks from endlessly retrying broken pre-fix artifacts.
+          PROFILE_YAML=$(gh api "repos/${{ github.repository }}/contents/experiments/atria_campaign.yaml?ref=$PINNED_REF" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null || true)
+          if [ -n "$PROFILE_YAML" ] && ! printf '%s' "$PROFILE_YAML" | grep -q "manual_gate_blocked_exclusions"; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=old campaign state without exclusions (pre-7b3565f $PINNED_REF), dispatch fresh with ref: main" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SUPERVISOR="$RUNNER_TEMP/campaign_supervisor.py"
+          if ! gh api "repos/${{ github.repository }}/contents/tools/campaign_supervisor.py?ref=$PINNED_REF" --jq '.content' | base64 -d > "$SUPERVISOR" 2>/dev/null || [ ! -s "$SUPERVISOR" ]; then
+            # Fallback to inline decision logic if supervisor fetch fails
+            # (e.g., ref predates supervisor module).  This mirrors the
+            # original inline logic but still respects resumable vs operator
+            # pauses and backoff.
+            echo "supervisor fetch failed for ref $PINNED_REF, falling back to inline logic" >&2
+            CHECKPOINT="$STATE_STAGE/suite_checkpoint.json"
+            if [ ! -f "$CHECKPOINT" ]; then
+              echo "mode=fresh" >> "$GITHUB_OUTPUT"
+              echo "ref=$PINNED_REF" >> "$GITHUB_OUTPUT"
+              echo "reason=restarting after pre-checkpoint death (inline fallback)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            DECISION=$(python3 - "$CHECKPOINT" <<'PY'
           import json, sys
           from datetime import datetime, timezone
           checkpoint = json.load(open(sys.argv[1]))
@@ -131,50 +146,84 @@ jobs:
               raise SystemExit
           updated = str(checkpoint.get("updated_at") or "")
           if updated:
-              age = (datetime.now(timezone.utc)
-                     - datetime.fromisoformat(updated.replace("Z", "+00:00"))).total_seconds()
-              if age < 1200:
+              try:
+                  age = (datetime.now(timezone.utc)
+                         - datetime.fromisoformat(updated.replace("Z", "+00:00"))).total_seconds()
+              except ValueError:
+                  age = None
+              if age is not None and age < 1200:
                   print(f"none|backoff: paused {int(age)}s ago, retry in {int(1200-age)}s")
                   raise SystemExit
           ref = ((checkpoint.get("run") or {}).get("manifest_commit")) or ""
           print(f"resume|{reason}|{ref}")
           PY
-          )
-          case "$DECISION" in
-            none\|*)
+            )
+            case "$DECISION" in
+              none\|*)
+                echo "mode=none" >> "$GITHUB_OUTPUT"
+                echo "reason=${DECISION#none|}" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+            BUSY=$(gh api "repos/${{ github.repository }}/actions/runs?status=in_progress&per_page=100" \
+              --jq '[.workflow_runs[]
+                     | select(.name == "Atria covering campaign" or .name == "Atria Dawn Preview first-five pilot")]
+                    | length')
+            if [ "$BUSY" -gt 1 ]; then
               echo "mode=none" >> "$GITHUB_OUTPUT"
-              echo "reason=${DECISION#none|}" >> "$GITHUB_OUTPUT"
+              echo "reason=another Atria run is in progress (shared 60 RPM budget)" >> "$GITHUB_OUTPUT"
               exit 0
-              ;;
-          esac
-          # Another Atria consumer in progress? (This run counts as one.)
-          BUSY=$(gh api "repos/${{ github.repository }}/actions/runs?status=in_progress&per_page=100" \
-            --jq '[.workflow_runs[]
-                   | select(.name == "Atria covering campaign" or .name == "Atria Dawn Preview first-five pilot")]
-                  | length')
-          if [ "$BUSY" -gt 1 ]; then
-            echo "mode=none" >> "$GITHUB_OUTPUT"
-            echo "reason=another Atria run is in progress (shared 60 RPM budget)" >> "$GITHUB_OUTPUT"
+            fi
+            REF=$(echo "$DECISION" | cut -d'|' -f3)
+            if [ -z "$REF" ]; then
+              REF="$PINNED_REF"
+            fi
+            echo "mode=resume" >> "$GITHUB_OUTPUT"
+            echo "ref=$REF" >> "$GITHUB_OUTPUT"
+            echo "reason=${DECISION}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          REF=$(echo "$DECISION" | cut -d'|' -f3)
-          if [ -z "$REF" ]; then
-            REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
+          # Use the pinned supervisor module for decision
+          DECISION_JSON=$(python3 -c "
+          import importlib.util, json, sys
+          spec = importlib.util.spec_from_file_location('campaign_supervisor', sys.argv[1])
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          print(json.dumps(module.decide_tick(sys.argv[2])))
+          " "$SUPERVISOR" "$STATE_STAGE")
+          MODE=$(printf '%s' "$DECISION_JSON" | jq -r '.mode')
+          REASON=$(printf '%s' "$DECISION_JSON" | jq -r '.reason')
+          REF=$(printf '%s' "$DECISION_JSON" | jq -r '.ref // ""')
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+          if [ -n "$REF" ]; then
+            echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$PINNED_REF" >> "$GITHUB_OUTPUT"
           fi
-          if [ -z "$REF" ]; then
-            echo "mode=none" >> "$GITHUB_OUTPUT"
-            echo "reason=resumable pause but no code ref recorded" >> "$GITHUB_OUTPUT"
-            exit 0
+          # Shared RPM budget guard: don't start a second Atria consumer if one is already running
+          if [ "$MODE" != "none" ]; then
+            BUSY=$(gh api "repos/${{ github.repository }}/actions/runs?status=in_progress&per_page=100" \
+              --jq '[.workflow_runs[]
+                     | select(.name == "Atria covering campaign" or .name == "Atria Dawn Preview first-five pilot")]
+                    | length')
+            if [ "$BUSY" -gt 1 ]; then
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=another Atria run is in progress (shared 60 RPM budget)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
-          echo "mode=resume" >> "$GITHUB_OUTPUT"
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "reason=${DECISION}" >> "$GITHUB_OUTPUT"
 
       - name: Check out pinned campaign code
         if: steps.mode.outputs.mode != 'none'
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.mode.outputs.ref }}
+          fetch-depth: 0
+          # fetch-depth 0 is required because pinned ref may be a commit SHA
+          # from another branch (e.g. arena/01a0dc92) not in main's shallow history;
+          # without full history checkout of a commit SHA fails in 38s with
+          # "not found" (run 36393386990).
 
       # Fail closed on any ref that predates the exact-instance gate.
       - name: Refuse ungated code
