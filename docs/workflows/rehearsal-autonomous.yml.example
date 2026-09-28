@@ -5,7 +5,7 @@ on:
       ref:
         description: "Branch or commit SHA containing the pinned rehearsal code"
         required: true
-        default: "arena/01a0e6c8-rl-eval-generator"
+        default: "arena/01a0e6ee-rl-eval-generator"
   schedule:
     - cron: "*/7 * * * *"
 permissions:
@@ -28,6 +28,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "mode=fresh" >> "$GITHUB_OUTPUT"
             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+            echo "reason=manual dispatch ref ${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
@@ -45,19 +46,28 @@ jobs:
           gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/state.zip"
           unzip -q "$RUNNER_TEMP/state.zip" -d "$STATE_STAGE"
           PINNED_REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
+          if [ -z "$PINNED_REF" ]; then
+            PINNED_REF=$(jq -r '.run.manifest_commit // empty' "$STATE_STAGE/suite_checkpoint.json" 2>/dev/null || true)
+          fi
           SUPERVISOR="$RUNNER_TEMP/campaign_supervisor.py"
           if [ -z "$PINNED_REF" ] || ! gh api "repos/${{ github.repository }}/contents/tools/campaign_supervisor.py?ref=$PINNED_REF" --jq '.content' | base64 -d > "$SUPERVISOR" 2>/dev/null || [ ! -s "$SUPERVISOR" ]; then
             echo "mode=none" >> "$GITHUB_OUTPUT"
-            echo "reason=no supervisor module at pinned ref" >> "$GITHUB_OUTPUT"
+            echo "reason=no supervisor module at pinned ref $PINNED_REF" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          DECISION=$(python3 -c "import importlib.util, json, sys; spec = importlib.util.spec_from_file_location('campaign_supervisor', sys.argv[1]); module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module); print(json.dumps(module.decide_tick(sys.argv[2])))" "$SUPERVISOR" "$STATE_STAGE")
+          DECISION=$(python3 -c "
+          import importlib.util, json, sys
+          spec = importlib.util.spec_from_file_location('campaign_supervisor', sys.argv[1])
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          print(json.dumps(module.decide_tick(sys.argv[2])))
+          " "$SUPERVISOR" "$STATE_STAGE")
           MODE=$(printf '%s' "$DECISION" | jq -r '.mode')
           REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
           REF=$(printf '%s' "$DECISION" | jq -r '.ref // ""')
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "reason=$REASON" >> "$GITHUB_OUTPUT"
-          if [ -n "$REF" ]; then echo "ref=$REF" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$REF" ]; then echo "ref=$REF" >> "$GITHUB_OUTPUT"; else echo "ref=$PINNED_REF" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
         if: steps.mode.outputs.mode != 'none'
         with:
@@ -78,7 +88,7 @@ jobs:
           mkdir -p runs/rehearsal
           echo "${{ steps.mode.outputs.ref }}" > runs/rehearsal/campaign_ref.txt
         if: steps.mode.outputs.mode != 'none'
-      - run: python tools/atria_campaign.py --profile experiments/atria_campaign.yaml --out runs/rehearsal
+      - run: python tools/atria_campaign.py --profile experiments/rehearsal.yaml --out runs/rehearsal
         if: steps.mode.outputs.mode != 'none'
         timeout-minutes: 15
       - uses: actions/upload-artifact@v4

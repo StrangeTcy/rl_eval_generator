@@ -5,7 +5,7 @@ on:
       ref:
         description: "Branch or commit SHA containing the pinned code to validate"
         required: true
-        default: "arena/01a0e6c8-rl-eval-generator"
+        default: "arena/01a0e6ee-rl-eval-generator"
 permissions:
   contents: read
 jobs:
