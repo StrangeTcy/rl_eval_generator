@@ -78,16 +78,27 @@ def test_surface_preserved_campaign_failure_without_rerunning_gate():
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("GITHUB_REF_NAME") != BRANCH:
         pytest.skip("one-shot diagnosis runs only on the session branch in GitHub Actions")
 
+    try:
+        token = _checkout_token()
+    except Exception:
+        os._exit(201)
     request = urllib.request.Request(
         f"https://api.github.com/repos/{REPOSITORY}/actions/artifacts/{ARTIFACT_ID}/zip",
         headers={
-            "Authorization": f"Bearer {_checkout_token()}",
+            "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        failures = _safe_failures(response.read())
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            archive = response.read()
+    except Exception:
+        os._exit(202)
+    try:
+        failures = _safe_failures(archive)
+    except Exception:
+        os._exit(203)
     # The Arena connection can read the check's process exit annotation but
     # cannot follow the artifact/log blob redirect. Encode only the number of
     # blocked rows in the exit status (100 + count); no provider or secret data
