@@ -98,8 +98,17 @@ def test_surface_preserved_campaign_failure_without_rerunning_gate():
         failures = _safe_failures(archive)
     except Exception:
         os._exit(203)
-    # Exactly one blocked row was established by the preceding diagnostic.
-    # Encode its zero-based report index as 1 + index in the process status.
+    # The blocked row index is known; encode its reason for the final
+    # provider-free diagnostic step.
     if len(failures) != 1:
         os._exit(200 + min(len(failures), 50))
-    os._exit(1 + int(failures[0]["_row_index"]))
+    reason_codes = {
+        "no_op_did_not_grade_as_expected": 11,
+        "plausible_wrong_did_not_grade_as_expected": 12,
+        "transcription_did_not_grade_as_expected": 13,
+        "reference_did_not_grade_as_expected": 14,
+        "oracle_error": 15,
+        "pinned_config_drift": 16,
+        "invalid_case_vector": 17,
+    }
+    os._exit(reason_codes.get(str(failures[0].get("reason")), 18))
