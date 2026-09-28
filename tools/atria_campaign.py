@@ -20,13 +20,15 @@ environment at seed 0), so a provider outage costs time instead of the run:
    the supervisor workflow resumes.  Budget ceilings and infrastructure
    failures pause non-resumably and wait for an operator.
 
-Exit codes: 0 completed; 2 blocked or unexpected error; 3 no credentials;
-4 Docker unavailable; 7 compatibility paused; 8 suite paused or incomplete.
+Exit codes: 0 completed (or provider-free gates-only pass); 2 blocked or unexpected error;
+3 no credentials; 4 Docker unavailable; 7 compatibility paused; 8 suite paused or incomplete.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -216,15 +218,147 @@ def _report_from_checkpoint(
     return report
 
 
+def _load_report_file(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _campaign_failure_diagnostics(output: Path) -> dict[str, Any]:
+    """Extract concise, redacted provider-free failures for reports and logs."""
+    generation = _load_report_file(output / "generation_preflight.json")
+    generation_rows = generation.get("cases") or []
+    generation_failures = [
+        {
+            "case_id": row.get("case_id"),
+            "status": row.get("status"),
+            "error": redact_text(str(row.get("error") or ""))[:1600],
+        }
+        for row in generation_rows
+        if isinstance(row, dict) and row.get("status") != "ready"
+    ]
+
+    oracle = _load_report_file(output / "instance_oracles.json")
+    oracle_rows = oracle.get("cases") or []
+    failed_cases: list[dict[str, Any]] = []
+    for row in oracle_rows:
+        if not isinstance(row, dict) or row.get("status") == "passed":
+            continue
+        failed_variants = []
+        for variant in row.get("variants") or []:
+            if not isinstance(variant, dict) or variant.get("accepted") is True:
+                continue
+            failed_variants.append({
+                "variant": variant.get("variant"),
+                "verdict": variant.get("verdict"),
+                "failure_mode": variant.get("failure_mode"),
+                "checks": variant.get("checks") or {},
+                "stderr_tail": redact_text(str(variant.get("stderr_tail") or ""))[-600:],
+            })
+        failed_cases.append({
+            "case_id": row.get("case_id"),
+            "environment": row.get("environment"),
+            "status": row.get("status"),
+            "reason": redact_text(str(row.get("reason") or ""))[:800],
+            "failed_variants": failed_variants,
+        })
+
+    partial = _load_report_file(output / "instance_oracles_partial.json")
+    partial_failures = []
+    rows = partial.get("rows")
+    if isinstance(rows, dict):
+        for case_id, entry in rows.items():
+            if not isinstance(entry, dict):
+                continue
+            row = entry.get("row")
+            if isinstance(row, dict) and row.get("status") != "passed":
+                partial_failures.append({
+                    "case_id": case_id,
+                    "status": row.get("status"),
+                    "reason": redact_text(str(row.get("reason") or ""))[:800],
+                    "attempts": entry.get("attempts"),
+                })
+
+    return {
+        "generation_preflight_failed_cases": generation_failures,
+        "exact_instance_failed_cases": failed_cases,
+        "partial_exact_instance_failed_cases": partial_failures,
+    }
+
+
+def _format_failure_diagnostics(diagnostics: Mapping[str, Any]) -> str:
+    details: list[str] = []
+    for key, label in (
+        ("generation_preflight_failed_cases", "generation"),
+        ("exact_instance_failed_cases", "exact-instance oracle"),
+        ("partial_exact_instance_failed_cases", "partial exact-instance oracle"),
+    ):
+        failures = diagnostics.get(key) or []
+        for row in failures[:20]:
+            case_id = row.get("case_id") or "unknown case"
+            reason = row.get("error") or row.get("reason") or row.get("status")
+            details.append(f"{label}: {case_id} ({reason or 'failed'})")
+    if not details:
+        return ""
+    suffix = " Provider-free diagnostics: " + "; ".join(details)
+    return suffix[:6000]
+
+
+def _reset_fresh_campaign_output(output: Path) -> None:
+    """Remove stale checked-in rehearsal artifacts on an explicit fresh run.
+
+    Manual workflow_dispatch runs are fresh, not resumes. The workflow writes
+    campaign_ref.txt immediately before invoking this script; preserve that
+    pin while discarding old reports/checkpoints that would otherwise poison
+    the new manifest (the repository contains five-case rehearsal artifacts).
+    """
+    resolved = output.resolve()
+    repo_root = ROOT.resolve()
+    git_dir = repo_root / ".git"
+    if resolved == repo_root or resolved in repo_root.parents:
+        raise ValueError(f"refusing to reset unsafe campaign output path: {output}")
+    if resolved == git_dir or git_dir in resolved.parents:
+        raise ValueError(f"refusing to reset Git metadata path: {output}")
+    if output.is_symlink():
+        raise ValueError(f"refusing to reset a symlink campaign output: {output}")
+
+    pinned_ref = ""
+    ref_path = output / "campaign_ref.txt"
+    if ref_path.is_file() and not ref_path.is_symlink():
+        try:
+            pinned_ref = ref_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            pinned_ref = ""
+
+    if output.exists():
+        known_state_files = {
+            "campaign_ref.txt", "suite_checkpoint.json", "instance_oracles_partial.json",
+            "campaign_report.json", "pilot_manifest.json", "generation_preflight.json",
+        }
+        if not output.is_dir() or not any((output / name).exists() for name in known_state_files):
+            raise ValueError(
+                f"refusing to clear {output}: it does not contain recognizable campaign state"
+            )
+        shutil.rmtree(output)
+    output.mkdir(parents=True, exist_ok=True)
+    if pinned_ref:
+        (output / "campaign_ref.txt").write_text(pinned_ref + "\n", encoding="utf-8")
+
+
 def _mark_terminal(output: Path, reason: str, detail: str) -> None:
     """Record a non-resumable end so the supervisor stops instead of
     restarting a deterministically failing wrapper forever.  The marker is
-    cleared at the start of every run, so the supervisor allows exactly one
-    automatic restart and a human decision after that."""
+    cleared at the start of every run: one automatic restart is allowed and a
+    human decision after that."""
+    diagnostics = _campaign_failure_diagnostics(output)
+    detail = redact_text(detail) + _format_failure_diagnostics(diagnostics)
     try:
         write_json(output / "wrapper_failed.json", {
             "pause_reason": reason,
-            "detail": redact_text(detail),
+            "detail": detail,
+            "diagnostics": diagnostics,
             "recorded_at": _utc_now(),
         })
     except OSError:
@@ -578,17 +712,40 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=ROOT / "runs" / "atria_campaign")
     parser.add_argument("--keep-images", action="store_true")
     parser.add_argument("--keep-workspace", action="store_true")
+    parser.add_argument(
+        "--fresh", action="store_true",
+        help="clear recognizable prior campaign state before starting a fresh campaign",
+    )
+    parser.add_argument(
+        "--gates-only", action="store_true",
+        help="stop after provider-free gates; do not check credentials or call the provider",
+    )
     args = parser.parse_args(argv)
     output = args.out
     try:
+        started = time.monotonic()
+        profile = _load_yaml(args.profile)
+        _validate_campaign_profile(profile)
+
+        # workflow_dispatch is always a fresh run in atria-campaign.yml. The
+        # repository currently tracks stale five-case rehearsal outputs under
+        # runs/atria_campaign; do not let those seed a covering run. Resumes
+        # arrive as schedule events and must keep the artifact restored by the
+        # workflow. --fresh provides the same explicit behavior to local users.
+        fresh_dispatch = (
+            os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+            and profile.get("provider") == "atria"
+        )
+        if profile.get("provider") == "atria" and (args.fresh or fresh_dispatch):
+            _reset_fresh_campaign_output(output)
+        else:
+            output.mkdir(parents=True, exist_ok=True)
+
         # A terminal-failure marker from a previous dispatch is cleared at
         # the start of every run: one automatic restart is allowed, a repeat
         # failure rewrites it and the supervisor stands down for an operator.
         marker = output / "wrapper_failed.json"
         marker.unlink(missing_ok=True)
-        started = time.monotonic()
-        profile = _load_yaml(args.profile)
-        _validate_campaign_profile(profile)
 
         # Rehearsal mode: custom provider, no real API calls
         if profile.get("provider") == "custom" and profile.get("name") in {"rehearsal", "rehearsal_autonomous"}:
@@ -716,16 +873,20 @@ def main(argv: list[str] | None = None) -> int:
                 gate_wall_seconds=gate_wall_seconds, **scheduler_kwargs,
             )
         except GateCaseBlockedRepeatedly as exc:
+            diagnostics = _campaign_failure_diagnostics(output)
+            detail = redact_text(str(exc)) + _format_failure_diagnostics(diagnostics)
             write_json(marker, {
                 "pause_reason": "gate_case_repeatedly_blocked",
-                "detail": redact_text(str(exc)),
+                "detail": detail,
+                "diagnostics": diagnostics,
                 "recorded_at": _utc_now(),
             })
             write_json(output / "campaign_report.json", _add_omissions_to_report({
                 "status": "blocked",
                 "pause_reason": "gate_case_repeatedly_blocked",
                 "resumable": False,
-                "detail": redact_text(str(exc)),
+                "detail": detail,
+                "diagnostics": diagnostics,
                 "compile_only_disclaimer": (
                     "compile_only rows are graded by judges without a "
                     "behavioral reference on that exact instance; they do "
@@ -733,8 +894,7 @@ def main(argv: list[str] | None = None) -> int:
                     "not be read as validated model verdicts"
                 ),
             }, manifest))
-            print(f"Campaign blocked: a gate case failed validation twice; "
-                  f"inspect {output}")
+            print(f"Campaign blocked: {detail}; inspect {output}")
             return 2
         except GateWallExceeded as exc:
             partial_path = output / "instance_oracles_partial.json"
@@ -762,12 +922,37 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Campaign paused mid-gate ({banked} rows banked); "
                   f"inspect {output}")
             return 7
+        gate_record = checkpoint.get("instance_gate") or {}
         write_json(output / "gate_phase_checkpoint.json", {
             "provider_free_validation_complete": True,
             "gate_context_sha": gate_context_sha,
-            "gated_case_count": (checkpoint.get("instance_gate") or {}).get("gated_case_count"),
-            "compile_only_case_count": (checkpoint.get("instance_gate") or {}).get("compile_only_case_count"),
+            "gated_case_count": gate_record.get("gated_case_count"),
+            "compile_only_case_count": gate_record.get("compile_only_case_count"),
         })
+
+        # This mode exercises the same generation and exact-instance gates as
+        # the campaign but deliberately exits before Docker checks, credentials,
+        # compatibility probes, or any provider request. It is suitable for a
+        # zero-spend CI rehearsal of the gate phase.
+        if args.gates_only or profile.get("gate_only") is True:
+            report = _add_omissions_to_report({
+                "schema_version": 1,
+                "event": "atria_covering_campaign",
+                "status": "gate_passed",
+                "pause_reason": None,
+                "resumable": False,
+                "provider_calls": 0,
+                "provider_phase_started": False,
+                "gated_case_count": gate_record.get("gated_case_count"),
+                "compile_only_case_count": gate_record.get("compile_only_case_count"),
+                "gate_context_sha": gate_context_sha,
+            }, manifest)
+            write_json(output / "campaign_report.json", report)
+            print(
+                "Atria provider-free gates passed; gate-only mode made no provider calls. "
+                f"Inspect {output}"
+            )
+            return 0
 
         runtime = _runtime_check()
         write_json(output / "runtime.json", runtime)
@@ -854,12 +1039,35 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Atria campaign {status}; inspect {output}")
         return 0 if status == "completed" else 8
     except (OSError, RuntimeError, ValueError, DockerBackendError) as exc:
-        detail = redact_text(str(exc))
+        diagnostics = _campaign_failure_diagnostics(output)
+        detail = redact_text(str(exc)) + _format_failure_diagnostics(diagnostics)
+        if diagnostics["generation_preflight_failed_cases"]:
+            pause_reason = "generation_preflight_failed"
+            provider_calls: int | None = 0
+        elif diagnostics["exact_instance_failed_cases"]:
+            pause_reason = "instance_oracle_coverage_incomplete"
+            provider_calls = 0
+        else:
+            pause_reason = "wrapper_exception"
+            provider_calls = None
         try:
+            output.mkdir(parents=True, exist_ok=True)
             write_json(output / "wrapper_failed.json", {
-                "pause_reason": "wrapper_exception",
+                "pause_reason": pause_reason,
                 "detail": detail,
+                "diagnostics": diagnostics,
                 "recorded_at": _utc_now(),
+            })
+            write_json(output / "campaign_report.json", {
+                "schema_version": 1,
+                "event": "atria_covering_campaign",
+                "status": "blocked",
+                "pause_reason": pause_reason,
+                "resumable": False,
+                "provider_calls": provider_calls,
+                "detail": detail,
+                "diagnostics": diagnostics,
+                "updated_at": _utc_now(),
             })
         except OSError:
             pass

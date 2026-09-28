@@ -9,6 +9,9 @@
 # compile-only validation; every one of their result rows is labeled
 # judge_guarantee=compile_only and must not be read as a validated verdict.
 name: atria_covering_campaign
+# Temporary provider-free rehearsal switch for run 36396321137's gate diagnosis.
+# Remove after the exact-instance blockers are resolved; the wrapper stops before API access.
+gate_only: true
 provider: atria
 api_base: https://api.atria-asi.ai/v1
 model: Atria-Dawn-Preview
