@@ -47,6 +47,41 @@ PROVIDER_MARKERS = (
     "credit",
 )
 
+# ``instance_oracle_gate.validate_case`` submits each patch variant separately.
+# A judge invocation is allowed this long before it is declared a gate failure.
+# Keep the gate-wall calculation in lockstep with that default: starting a
+# case without enough time for every variant risks Actions killing the worker
+# before the case's atomic partial-row checkpoint is written.
+GATE_JUDGE_TIMEOUT_SECONDS = 2_100
+GATE_CASE_FINISH_RESERVE_SECONDS = 180
+
+
+def _gate_case_wall_budget(case: dict[str, Any], references: dict[str, Any]) -> float:
+    """Return a conservative wall-time bound for one exact-instance case.
+
+    Every reference validates no-op, plausible-wrong, and reference patches;
+    references with a transcription patch validate a fourth variant.  The
+    result includes workspace/reset and atomic-checkpoint headroom.  It is a
+    *start* guard, not a shorter judge timeout, so a temporary slow judge never
+    turns into a false/terminal gate result merely because a job is near its
+    Actions deadline.
+    """
+    reference = references.get(str(case.get("environment") or ""))
+    has_transcription = (
+        isinstance(reference, tuple)
+        and len(reference) > 2
+        and reference[2] is not None
+    )
+    variant_count = 4 if has_transcription else 3
+    return float(variant_count * GATE_JUDGE_TIMEOUT_SECONDS + GATE_CASE_FINISH_RESERVE_SECONDS)
+
+
+def _gate_case_fits_remaining_wall(
+    case: dict[str, Any], references: dict[str, Any], remaining_seconds: float
+) -> bool:
+    """Whether a complete atomic gate row can be attempted safely now."""
+    return remaining_seconds >= _gate_case_wall_budget(case, references)
+
 
 def _sleep(seconds: float) -> None:
     """Indirection so tests can observe provider-outage backoff without waiting."""
@@ -572,24 +607,32 @@ def run_suite(
                     )
                 # Otherwise (no row yet, or a failed row on its first retry)
                 # validate fresh below; the attempt counter bounds retries.
-                if (
-                    gate_wall_seconds is not None
-                    and gate_fresh_validations >= 1
-                    and time.monotonic() - gate_started_at >= gate_wall_seconds
-                ):
-                    # Banked rows are safe in the partial file; stop gating
-                    # before the runner's job deadline so the state upload
-                    # still happens.  Only pause once at least one fresh
-                    # validation completed this dispatch, so a resume always
-                    # makes forward progress.
-                    raise GateWallExceeded(
-                        "gate wall budget exhausted mid-gate; "
-                        f"{gate_rows_reused} rows reused and "
-                        f"{gate_fresh_validations} fresh rows banked to "
-                        f"{partial_path}; resume to continue gating"
-                    )
+                #
+                # A partial row is atomic only *after* validate_case returns.
+                # Do not begin a three/four-variant judge sequence when the
+                # remaining in-process gate window could end first: the
+                # Actions job would then be cancelled before its progress can
+                # be uploaded, recreating the long-run failure this campaign
+                # controller is meant to avoid.  This also applies to the
+                # first fresh case in a resumed job; no-progress is safer
+                # than allowing the job-level timeout to destroy its state.
+                if gate_wall_seconds is not None:
+                    elapsed = time.monotonic() - gate_started_at
+                    required = _gate_case_wall_budget(gate_case, REFERENCES)
+                    remaining = gate_wall_seconds - elapsed
+                    if not _gate_case_fits_remaining_wall(gate_case, REFERENCES, remaining):
+                        raise GateWallExceeded(
+                            "gate wall budget is too small to safely start the next "
+                            f"exact-instance case ({remaining:.0f}s remaining, "
+                            f"{required:.0f}s required); {gate_rows_reused} rows reused "
+                            f"and {gate_fresh_validations} fresh rows banked to "
+                            f"{partial_path}; resume to continue gating"
+                        )
                 case_report = validate_manifest_instances(
-                    {"cases": [gate_case]}, root=ROOT, include_slow=True
+                    {"cases": [gate_case]},
+                    root=ROOT,
+                    include_slow=True,
+                    timeout=GATE_JUDGE_TIMEOUT_SECONDS,
                 )
                 case_rows = case_report.get("cases") or []
                 if not case_rows:

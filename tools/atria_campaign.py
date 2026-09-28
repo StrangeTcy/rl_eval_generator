@@ -26,6 +26,7 @@ Exit codes: 0 completed (or provider-free gates-only pass); 2 blocked or unexpec
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -82,6 +83,87 @@ def _gate_context_sha() -> str | None:
     except (OSError, subprocess.CalledProcessError):
         return None
     return result.stdout.strip() or None
+
+
+def _manifest_cases_sha256(manifest: Mapping[str, Any]) -> str:
+    """Hash the selected cases, not incidental manifest timestamps or paths."""
+    cases = list(manifest.get("cases") or [])
+    return hashlib.sha256(
+        json.dumps(cases, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _record_campaign_intent(
+    output: Path,
+    manifest: Mapping[str, Any],
+    *,
+    execution_mode: str,
+    gate_context_sha: str | None,
+) -> dict[str, Any]:
+    """Persist the only continuation authority a scheduled run may trust.
+
+    It is written before the long exact-instance gate, which may span several
+    jobs. A schedule tick uses this small, non-secret record to decide whether
+    it should resume provider-free gating or the explicitly requested paid
+    phase; it never infers permission from a profile or the presence of a key.
+    """
+    if execution_mode not in {"gates_only", "paid"}:
+        raise ValueError(f"invalid campaign execution mode: {execution_mode}")
+    path = output / "campaign_intent.json"
+    expected = {
+        "schema_version": 1,
+        "provider": "atria",
+        "execution_mode": execution_mode,
+        "case_manifest_sha256": _manifest_cases_sha256(manifest),
+        "gate_context_sha": gate_context_sha,
+    }
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        existing = None
+    if isinstance(existing, dict):
+        comparable = {key: existing.get(key) for key in expected}
+        if comparable != expected:
+            raise ValueError(
+                "campaign intent differs from the restored state; refuse to "
+                "continue with a changed mode, manifest, or code context"
+            )
+        return existing
+    value = {**expected, "recorded_at": _utc_now()}
+    write_json(path, value)
+    return value
+
+
+def _restored_paid_authorization(output: Path) -> bool:
+    """Return whether the staged state itself authorizes a paid resume.
+
+    The authorization is deliberately read only from the persisted intent,
+    never from a profile or a present secret.  This keeps a scheduled job
+    billable only when its original manual dispatch recorded ``paid`` first.
+    """
+    try:
+        intent = json.loads((output / "campaign_intent.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (
+        isinstance(intent, dict)
+        and intent.get("provider") == "atria"
+        and intent.get("execution_mode") == "paid"
+    )
+
+
+def _is_explicit_actions_paid_dispatch() -> bool:
+    """Recognize the already-deployed campaign launcher's manual approval.
+
+    The deployed workflow predates the newer ``--allow-provider`` argument,
+    but a human ``workflow_dispatch`` of the named campaign workflow is an
+    explicit paid start.  This compatibility path is intentionally limited to
+    that workflow; local calls and arbitrary Actions jobs still need the flag.
+    """
+    return (
+        os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+        and os.environ.get("GITHUB_WORKFLOW") == "Atria covering campaign"
+    )
 
 
 def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
@@ -720,7 +802,17 @@ def main(argv: list[str] | None = None) -> int:
         "--gates-only", action="store_true",
         help="stop after provider-free gates; do not check credentials or call the provider",
     )
+    parser.add_argument(
+        "--allow-provider", action="store_true",
+        help=(
+            "explicitly authorize the paid phase after the provider-free gates; "
+            "without this flag the controller exits before credentials, Docker, "
+            "compatibility probes, or provider requests"
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.gates_only and args.allow_provider:
+        parser.error("--gates-only and --allow-provider are mutually exclusive")
     output = args.out
     try:
         started = time.monotonic()
@@ -828,6 +920,25 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         gate_context_sha = _gate_context_sha()
+        # New launchers pass --allow-provider.  The already-deployed launcher
+        # is also safe to use: its named manual workflow_dispatch is the one
+        # explicit paid approval, and every later scheduled job must inherit
+        # that authorization from the staged campaign_intent.json.
+        provider_access_allowed = (
+            not args.gates_only
+            and (
+                args.allow_provider
+                or _is_explicit_actions_paid_dispatch()
+                or _restored_paid_authorization(output)
+            )
+        )
+        execution_mode = "paid" if provider_access_allowed else "gates_only"
+        _record_campaign_intent(
+            output,
+            manifest,
+            execution_mode=execution_mode,
+            gate_context_sha=gate_context_sha,
+        )
         scheduler_kwargs: dict[str, Any] = {
             "output_dir": output,
             "provider": "atria",
@@ -954,8 +1065,59 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
+        # A profile change alone must never make an ordinary local invocation
+        # billable.  Provider access needs --allow-provider, an explicit
+        # dispatch of the named deployed campaign workflow, or a paid intent
+        # staged by one of those starts. Keep this before Docker and credential
+        # inspection so there is one auditable no-provider boundary.
+        if not provider_access_allowed:
+            write_json(output / "campaign_report.json", _add_omissions_to_report({
+                "schema_version": 1,
+                "event": "atria_covering_campaign",
+                "status": "prepared",
+                "pause_reason": "provider_access_not_explicitly_allowed",
+                "resumable": False,
+                "provider_calls": 0,
+                "provider_phase_started": False,
+                "gated_case_count": gate_record.get("gated_case_count"),
+                "compile_only_case_count": gate_record.get("compile_only_case_count"),
+                "gate_context_sha": gate_context_sha,
+            }, manifest))
+            _mark_terminal(
+                output,
+                "provider_access_not_explicitly_allowed",
+                "the exact-instance gates passed, but no explicit paid authorization was supplied; "
+                "no credential, Docker, compatibility, or provider operation was attempted",
+            )
+            print(
+                "Campaign gates passed but provider access was not explicitly authorized; "
+                "no provider call was made. Re-run with --allow-provider or dispatch the campaign workflow."
+            )
+            return 3
+
+        # Persist the authorization in state before any paid-side operation.
+        # Scheduled resumes refuse checkpoints without this marker, so a state
+        # created by a provider-free run can never become billable merely
+        # because a workflow or profile later changes.
+        checkpoint.setdefault("run", {})["provider_access_explicitly_allowed"] = True
+        checkpoint["run"]["provider_access_authorized_at"] = _utc_now()
+        write_json(output / "suite_checkpoint.json", checkpoint)
+
         runtime = _runtime_check()
         write_json(output / "runtime.json", runtime)
+        if not runtime.get("available", False):
+            checkpoint["paused"] = True
+            checkpoint["pause_reason"] = str(runtime.get("reason", "docker_unavailable"))
+            write_json(output / "suite_checkpoint.json", checkpoint)
+            write_json(output / "campaign_report.json", _add_omissions_to_report({
+                "status": "prepared", "pause_reason": checkpoint["pause_reason"],
+                "resumable": False,
+            }, manifest))
+            _mark_terminal(output, str(runtime.get("reason", "docker_unavailable")),
+                           "Docker unavailable; no provider credential or provider call was made")
+            print(f"Campaign prepared but Docker is unavailable; no provider credential or call: {output}")
+            return 4
+
         credentials = _optional_credentials(profile)
         write_json(output / "credential_check.json", {
             "configured": credentials is not None,
@@ -971,18 +1133,6 @@ def main(argv: list[str] | None = None) -> int:
                            "and re-dispatch manually")
             print("Campaign validated with no provider call; configure ATRIA_API_KEY privately.")
             return 3
-        if not runtime.get("available", False):
-            checkpoint["paused"] = True
-            checkpoint["pause_reason"] = str(runtime.get("reason", "docker_unavailable"))
-            write_json(output / "suite_checkpoint.json", checkpoint)
-            write_json(output / "campaign_report.json", _add_omissions_to_report({
-                "status": "prepared", "pause_reason": checkpoint["pause_reason"],
-                "resumable": False,
-            }, manifest))
-            _mark_terminal(output, str(runtime.get("reason", "docker_unavailable")),
-                           "Docker unavailable; no provider call was made")
-            print(f"Campaign prepared but Docker is unavailable; no provider call: {output}")
-            return 4
 
         # Phase 2: the paid compatibility probe, with outage patience bounded
         # by the remaining job budget.
