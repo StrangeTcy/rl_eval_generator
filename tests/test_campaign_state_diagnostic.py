@@ -90,5 +90,13 @@ def test_surface_preserved_campaign_failure_without_rerunning_gate():
         failures = _safe_failures(response.read())
     payload = json.dumps(failures, sort_keys=True)
     escaped = payload.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    print(f"::error title=Preserved campaign blocked rows::{escaped}")
+    annotation = f"::error title=Preserved campaign blocked rows::{escaped}\n"
+    # pytest captures fd 1. Write to the parent shell's log descriptor so the
+    # Actions command parser receives the annotation immediately and exposes
+    # it through the Checks API; never print the checkout credential.
+    parent_log = os.open(f"/proc/{os.getppid()}/fd/1", os.O_WRONLY)
+    try:
+        os.write(parent_log, annotation.encode("utf-8"))
+    finally:
+        os.close(parent_log)
     pytest.fail(f"PRESERVED_CAMPAIGN_BLOCKED_ROWS={payload}")
