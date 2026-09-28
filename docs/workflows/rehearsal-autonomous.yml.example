@@ -1,3 +1,21 @@
+# Rehearsal autonomous continuation: fast proof that the 6h-resume mechanism works
+# without waiting 6h and without real provider calls.
+#
+# What it runs: 5-case manifest (regex_state_machine, epistemic_games,
+# categorical_lenses, rd_state_carry, glyph) via tools/atria_campaign.py in
+# rehearsal mode (provider: custom, name: rehearsal). No Docker, no provider,
+# no ATRIA_API_KEY needed. Fake episodes sleep 2s each, inject a transient
+# provider error on epistemic_games first attempt (waited out via patience
+# 60s/backoff 1s), force max_wall_seconds after 3 cases, set
+# updated_at: 2026-09-20T00:00:00+00:00 to bypass 1200s backoff.
+#
+# First dispatch (workflow_dispatch) pauses after 3 cases, uploads
+# rehearsal-state-*, schedule every 7m auto-resumes → completed 5 cases.
+# Second dispatch retains first 3 identical, http_attempts_total 7.
+#
+# One button: Actions → Rehearsal autonomous continuation → Run workflow →
+# ref: arena/01a0e6ee-rl-eval-generator → Run. First run pauses, second
+# scheduled run completes.
 name: Rehearsal autonomous continuation
 on:
   workflow_dispatch:
@@ -72,28 +90,39 @@ jobs:
         if: steps.mode.outputs.mode != 'none'
         with:
           ref: ${{ steps.mode.outputs.ref }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         if: steps.mode.outputs.mode != 'none'
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install -r requirements.txt
+      - name: Install controller dependencies
         if: steps.mode.outputs.mode != 'none'
+        run: python -m pip install -r requirements.txt
       - name: Restore previous rehearsal state after checkout
         if: steps.mode.outputs.mode != 'none' && steps.mode.outputs.state_staged == 'true'
         run: |
+          set -euo pipefail
           mkdir -p runs/rehearsal
           cp -a "$RUNNER_TEMP/rehearsal_state/." runs/rehearsal/
-      - run: |
+          echo "restored previous rehearsal state:"
+          ls -la runs/rehearsal | head -20
+      - name: Record the dispatched code ref for future resumes
+        if: steps.mode.outputs.mode != 'none'
+        run: |
           mkdir -p runs/rehearsal
           echo "${{ steps.mode.outputs.ref }}" > runs/rehearsal/campaign_ref.txt
-        if: steps.mode.outputs.mode != 'none'
-      - run: python tools/atria_campaign.py --profile experiments/rehearsal.yaml --out runs/rehearsal
+      - name: Run rehearsal campaign (fresh or resumed)
         if: steps.mode.outputs.mode != 'none'
         timeout-minutes: 15
-      - uses: actions/upload-artifact@v4
+        run: |
+          set -euo pipefail
+          python tools/atria_campaign.py --profile experiments/rehearsal.yaml --out runs/rehearsal
+      - name: Upload rehearsal state
         if: always() && steps.mode.outputs.mode != 'none'
+        uses: actions/upload-artifact@v4
         with:
           name: rehearsal-state-${{ github.run_number }}
           path: runs/rehearsal/**
+          if-no-files-found: warn
           retention-days: 14
