@@ -43,8 +43,11 @@ def _profile() -> dict:
     }
 
 
+@pytest.mark.parametrize("use_profile_switch", [False, True])
 def test_gate_only_clears_stale_dispatch_state_and_never_enters_paid_phase(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    use_profile_switch: bool,
 ) -> None:
     output = tmp_path / "atria_campaign"
     output.mkdir()
@@ -62,7 +65,10 @@ def test_gate_only_clears_stale_dispatch_state_and_never_enters_paid_phase(
         encoding="utf-8",
     )
     profile_path = tmp_path / "profile.yaml"
-    profile_path.write_text(yaml.safe_dump(_profile()), encoding="utf-8")
+    profile = _profile()
+    if use_profile_switch:
+        profile["gate_only"] = True
+    profile_path.write_text(yaml.safe_dump(profile), encoding="utf-8")
 
     case = {
         "case_id": "epistemic_games__scenario=trap__seed-0",
@@ -113,11 +119,10 @@ def test_gate_only_clears_stale_dispatch_state_and_never_enters_paid_phase(
         lambda *_args, **_kwargs: pytest.fail("gate-only mode must not inspect provider credentials"),
     )
 
-    result = atria_campaign.main([
-        "--profile", str(profile_path),
-        "--out", str(output),
-        "--gates-only",
-    ])
+    argv = ["--profile", str(profile_path), "--out", str(output)]
+    if not use_profile_switch:
+        argv.append("--gates-only")
+    result = atria_campaign.main(argv)
 
     assert result == 0
     assert (output / "campaign_ref.txt").read_text(encoding="utf-8") == "main\n"
