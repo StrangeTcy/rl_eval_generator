@@ -144,7 +144,10 @@ def _restored_paid_authorization(output: Path) -> bool:
     try:
         intent = json.loads((output / "campaign_intent.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return False
+        try:
+            intent = json.loads((output / "campaign_bootstrap.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
     return (
         isinstance(intent, dict)
         and intent.get("provider") == "atria"
@@ -1106,17 +1109,34 @@ def main(argv: list[str] | None = None) -> int:
         runtime = _runtime_check()
         write_json(output / "runtime.json", runtime)
         if not runtime.get("available", False):
+            runtime_failures = int(checkpoint.get("runtime_failures", 0) or 0) + 1
+            checkpoint["runtime_failures"] = runtime_failures
             checkpoint["paused"] = True
-            checkpoint["pause_reason"] = str(runtime.get("reason", "docker_unavailable"))
+            checkpoint["pause_reason"] = (
+                "docker_unavailable"
+                if runtime_failures <= 3
+                else "docker_unavailable_retries_exhausted"
+            )
             write_json(output / "suite_checkpoint.json", checkpoint)
+            resumable = checkpoint["pause_reason"] == "docker_unavailable"
             write_json(output / "campaign_report.json", _add_omissions_to_report({
-                "status": "prepared", "pause_reason": checkpoint["pause_reason"],
-                "resumable": False,
+                "status": "paused" if resumable else "blocked",
+                "pause_reason": checkpoint["pause_reason"],
+                "resumable": resumable,
+                "runtime_failures": runtime_failures,
             }, manifest))
-            _mark_terminal(output, str(runtime.get("reason", "docker_unavailable")),
-                           "Docker unavailable; no provider credential or provider call was made")
-            print(f"Campaign prepared but Docker is unavailable; no provider credential or call: {output}")
-            return 4
+            if not resumable:
+                _mark_terminal(
+                    output,
+                    "docker_unavailable_retries_exhausted",
+                    "Docker remained unavailable for all three automatic scheduled retries; "
+                    "no provider credential or provider call was made",
+                )
+            print(
+                "Campaign paused for automatic Docker retry" if resumable
+                else "Campaign stopped after bounded Docker retries"
+            )
+            return 8 if resumable else 4
 
         credentials = _optional_credentials(profile)
         write_json(output / "credential_check.json", {
@@ -1191,12 +1211,55 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, RuntimeError, ValueError, DockerBackendError) as exc:
         diagnostics = _campaign_failure_diagnostics(output)
         detail = redact_text(str(exc)) + _format_failure_diagnostics(diagnostics)
+        # Host/Docker I/O failures can happen outside run_suite's per-case
+        # handler. They get the same bounded automatic restart treatment; a
+        # validation/configuration exception remains terminal and recorded.
+        transient = isinstance(exc, (OSError, DockerBackendError))
+        checkpoint_path = output / "suite_checkpoint.json"
+        checkpoint = _load_report_file(checkpoint_path)
+        wrapper_retry_path = output / "wrapper_transient_retry.json"
+        retry_record = _load_report_file(wrapper_retry_path)
+        transient_failures = max(
+            int(checkpoint.get("wrapper_transient_failures", 0) or 0),
+            int(retry_record.get("failures", 0) or 0),
+        ) + 1
+        if transient and transient_failures <= 3:
+            try:
+                output.mkdir(parents=True, exist_ok=True)
+                if checkpoint:
+                    checkpoint["wrapper_transient_failures"] = transient_failures
+                    checkpoint["paused"] = True
+                    checkpoint["pause_reason"] = "wrapper_transient_error"
+                    checkpoint["updated_at"] = _utc_now()
+                    write_json(checkpoint_path, checkpoint)
+                write_json(wrapper_retry_path, {
+                    "failures": transient_failures,
+                    "updated_at": _utc_now(),
+                })
+                write_json(output / "campaign_report.json", {
+                    "schema_version": 1,
+                    "event": "atria_covering_campaign",
+                    "status": "paused",
+                    "pause_reason": "wrapper_transient_error",
+                    "resumable": True,
+                    "wrapper_transient_failures": transient_failures,
+                    "detail": detail,
+                    "diagnostics": diagnostics,
+                    "updated_at": _utc_now(),
+                })
+            except OSError:
+                pass
+            print(f"atria_campaign paused for automatic transient-wrapper retry: {detail}")
+            return 8
         if diagnostics["generation_preflight_failed_cases"]:
             pause_reason = "generation_preflight_failed"
             provider_calls: int | None = 0
         elif diagnostics["exact_instance_failed_cases"]:
             pause_reason = "instance_oracle_coverage_incomplete"
             provider_calls = 0
+        elif transient:
+            pause_reason = "wrapper_transient_retries_exhausted"
+            provider_calls = None
         else:
             pause_reason = "wrapper_exception"
             provider_calls = None

@@ -25,6 +25,12 @@ RESUMABLE_PAUSE_REASONS = {
     "provider_error",
     "max_wall_seconds",
     "provider_infrastructure_error_compatibility",
+    # run_suite persists an attempt ledger and switches to the distinct,
+    # non-resumable infrastructure_error_retries_exhausted after the bounded
+    # automatic retry count is consumed.
+    "infrastructure_error",
+    "docker_unavailable",
+    "wrapper_transient_error",
 }
 
 # A freshly paused campaign is not retried immediately: give the provider
@@ -85,6 +91,11 @@ def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
     root = os.fspath(state_dir)
     recorded_ref = _read_text(os.path.join(root, "campaign_ref.txt"))
     intent = _read_json(os.path.join(root, "campaign_intent.json"))
+    if intent is None:
+        # Written by the workflow before checkout/dependency setup. It carries
+        # only the explicit manual mode and pinned ref; the controller replaces
+        # it with the manifest-bound campaign_intent once setup succeeds.
+        intent = _read_json(os.path.join(root, "campaign_bootstrap.json"))
     if not recorded_ref:
         return _decision(
             mode="none",
@@ -140,28 +151,36 @@ def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
 
     checkpoint = _read_json(os.path.join(root, "suite_checkpoint.json"))
     if checkpoint is None:
-        # Gate-wall interruption is the one valid pre-checkpoint state. The
-        # partial gate file is immutable progress; a new job safely continues
-        # from it. Any other missing checkpoint is fail-closed.
+        # Intent is committed before the exact-instance gate.  If the runner
+        # dies before its first checkpoint (or between atomically banked gate
+        # rows), the next scheduled job may safely redo only provider-free
+        # work.  This is not permission inferred from a profile: the manual
+        # dispatch has already persisted its exact mode in campaign_intent.
         partial_exists = os.path.isfile(os.path.join(root, "instance_oracles_partial.json"))
-        if report_status == "paused" and report_reason == "max_wall_seconds" and partial_exists:
+        return _decision(
+            mode="resume",
+            execution_mode=execution_mode,
+            ref=recorded_ref,
+            reason=(
+                "resuming provider-free gate after an interrupted partial row"
+                if partial_exists
+                else "restarting provider-free gate after a pre-checkpoint interruption"
+            ),
+        )
+
+    if not checkpoint.get("paused"):
+        execution_state = str(((checkpoint.get("run") or {}).get("execution_state")) or "")
+        if execution_state == "active":
+            # A result row is atomically recorded only after an episode has a
+            # definitive outcome. An active marker therefore means the prior
+            # worker disappeared between durable boundaries; resuming skips
+            # every recorded row and retries at most its named in-flight case.
             return _decision(
                 mode="resume",
                 execution_mode=execution_mode,
                 ref=recorded_ref,
-                reason="resuming provider-free gate after its wall budget",
+                reason="resuming after an interrupted active worker",
             )
-        return _decision(
-            mode="none",
-            execution_mode="",
-            ref="",
-            reason="state has no checkpoint outside a recorded gate-wall pause",
-        )
-
-    if not checkpoint.get("paused"):
-        # A gate pass is written to the checkpoint before the paid phase. If a
-        # worker died in that narrow window, starting provider work again would
-        # be unsafe; require an operator rather than guessing.
         return _decision(
             mode="none",
             execution_mode="",

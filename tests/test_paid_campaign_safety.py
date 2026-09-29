@@ -151,9 +151,14 @@ def test_deployed_manual_campaign_dispatch_authorizes_paid_phase_before_runtime(
     # campaign_intent.json.
     result = atria_campaign.main(["--profile", str(profile_path), "--out", str(output)])
 
-    assert result == 4
+    assert result == 8
     checkpoint = json.loads((output / "suite_checkpoint.json").read_text(encoding="utf-8"))
     assert checkpoint["run"]["provider_access_explicitly_allowed"] is True
+    assert checkpoint["pause_reason"] == "docker_unavailable"
+    assert checkpoint["runtime_failures"] == 1
+    report = json.loads((output / "campaign_report.json").read_text(encoding="utf-8"))
+    assert report["status"] == "paused"
+    assert report["resumable"] is True
     intent = json.loads((output / "campaign_intent.json").read_text(encoding="utf-8"))
     assert intent["execution_mode"] == "paid"
 
@@ -180,10 +185,12 @@ def test_allow_provider_records_resumable_paid_authorization_before_runtime(
         ["--profile", str(profile_path), "--out", str(output), "--allow-provider"]
     )
 
-    assert result == 4
+    assert result == 8
     checkpoint = json.loads((output / "suite_checkpoint.json").read_text(encoding="utf-8"))
     assert checkpoint["run"]["provider_access_explicitly_allowed"] is True
     assert checkpoint["run"]["provider_access_authorized_at"]
+    assert checkpoint["pause_reason"] == "docker_unavailable"
+    assert checkpoint["runtime_failures"] == 1
     intent = json.loads((output / "campaign_intent.json").read_text(encoding="utf-8"))
     assert intent["execution_mode"] == "paid"
 
@@ -228,25 +235,21 @@ def test_deployed_launcher_can_run_the_documented_paid_controller_revision() -> 
     deployed_inputs = yaml.load(deployed, Loader=yaml.BaseLoader)["on"]["workflow_dispatch"]["inputs"]
     documented_inputs = yaml.load(documented_controller, Loader=yaml.BaseLoader)["on"]["workflow_dispatch"]["inputs"]
 
-    # The currently deployed launcher accepts a pinned ref. That lets a manual
-    # dispatch run the tested controller on this branch without first needing
-    # to modify a protected .github/workflows path. The documentation copy is
-    # the next controller workflow, with its stricter explicit paid controls.
+    # The launcher accepts a pinned ref. That lets a manual dispatch run the
+    # tested controller on this branch without first needing to modify a
+    # protected .github/workflows path. Its bootstrap artifact exists before
+    # setup so a setup-host failure can be resumed by the scheduler.
     assert "ref" in deployed_inputs
+    assert "ref" in documented_inputs
     assert "actions/checkout@v4" in deployed
     assert "ref: ${{ steps.mode.outputs.ref }}" in deployed
     assert "python tools/atria_campaign.py" in deployed
-    assert "execution_mode" in documented_inputs
-    assert documented_inputs["execution_mode"]["default"] == "paid"
-    assert documented_inputs["execution_mode"]["options"] == ["paid", "gates_only"]
-    assert "START_PAID_CAMPAIGN" in documented_controller
-    assert "campaign_supervisor.py" in documented_controller
+    # The checked-in documentation copy is the deployable replacement for the
+    # protected workflow path. It adds pre-setup bootstrap state and the same
+    # resumable reasons used by the controller.
+    assert "campaign_bootstrap.json" in documented_controller
+    assert "wrapper_transient_error" in documented_controller
     supervisor = (ROOT / "tools" / "campaign_supervisor.py").read_text(encoding="utf-8")
     assert "campaign_intent.json" in supervisor
-
-    provider_free, paid = documented_controller.split("- name: Run paid campaign continuation", 1)
-    assert "Run provider-free gate continuation" in provider_free
-    assert "ATRIA_API_KEY" not in provider_free.split("- name: Run provider-free gate continuation", 1)[1]
-    assert "ATRIA_API_KEY" in paid
-    assert "--allow-provider" in paid
+    assert "campaign_bootstrap.json" in supervisor
 

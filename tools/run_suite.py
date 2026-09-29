@@ -54,6 +54,10 @@ PROVIDER_MARKERS = (
 # before the case's atomic partial-row checkpoint is written.
 GATE_JUDGE_TIMEOUT_SECONDS = 2_100
 GATE_CASE_FINISH_RESERVE_SECONDS = 180
+# A transient Docker/judge/controller loss gets a bounded automatic restart
+# across scheduled jobs.  A fourth failure is an explicit terminal reason,
+# rather than an unbounded paid retry loop.
+MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 3
 
 
 def _gate_case_wall_budget(case: dict[str, Any], references: dict[str, Any]) -> float:
@@ -788,6 +792,20 @@ def run_suite(
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
         return checkpoint
+
+    # Durable liveness marker.  A job can disappear outside the controller's
+    # graceful wall-budget path (runner eviction, host crash, cancelled
+    # subprocess).  Without this marker the supervisor sees a non-paused
+    # checkpoint and refuses the only safe continuation, stranding a campaign
+    # even though every already-recorded result is atomic and deduplicated.
+    # It is set before any paid-side work and cleared only after the full case
+    # list is durably recorded below.
+    checkpoint["run"]["execution_state"] = "active"
+    checkpoint["run"]["active_case_id"] = None
+    checkpoint["updated_at"] = _utc_now()
+    _write_json_atomic(checkpoint_path, checkpoint)
+    _write_coverage(output_dir, checkpoint)
+
     api_calls_reserved = sum(
         max_steps * (1 + invalid_retries)
         for row in checkpoint.get("results", [])
@@ -923,6 +941,14 @@ def run_suite(
             raise ValueError(f"API key environment variable {api_key_env!r} is not set")
         if min_interval_seconds > 0 and completed_this_run:
             time.sleep(min_interval_seconds)
+        # Persist the in-flight identity before spawning the isolated episode.
+        # If the runner dies here, a scheduled continuation retries only this
+        # unrecorded case; completed rows remain deduplicated in result_by_case.
+        checkpoint["run"]["active_case_id"] = case_id
+        checkpoint["updated_at"] = _utc_now()
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+
         case_output = output_dir / "episodes" / _safe_name(case_id)
         command = _build_command(
             case,
@@ -1131,13 +1157,38 @@ def run_suite(
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "provider_error"
         elif result.get("status") == "infrastructure_error":
-            # Docker/isolation/controller failures are not model answers. Stop
-            # before spending another request on a potentially unsafe runner.
+            # A Docker/judge/controller loss is not a model answer. Preserve
+            # the failed attempt, then let the scheduled supervisor retry the
+            # same unscored case from its atomic checkpoint. The retry ledger
+            # is durable and bounded: a persistent infrastructure defect ends
+            # explicitly rather than becoming an unbounded restart loop.
+            retry_ledger = checkpoint.setdefault("infrastructure_retries", {})
+            previous_retries = int(retry_ledger.get(case_id, 0) or 0)
+            next_retries = previous_retries + 1
+            retry_ledger[case_id] = next_retries
             checkpoint["paused"] = True
-            checkpoint["pause_reason"] = "infrastructure_error"
-        elif max_http_attempts is not None and http_attempts_reserved >= max_http_attempts:
+            checkpoint["pause_reason"] = (
+                "infrastructure_error"
+                if next_retries <= MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES
+                else "infrastructure_error_retries_exhausted"
+            )
+        elif (
+            max_http_attempts is not None
+            and http_attempts_reserved >= max_http_attempts
+            and case_index + 1 < len(cases)
+        ):
+            # Reaching the exact HTTP ceiling on the final required case is a
+            # successful bounded completion, not a non-resumable pause that
+            # strands an otherwise complete campaign at 194/194.
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "max_http_attempts"
+        else:
+            # A successful scored case closes any earlier transient failure
+            # ledger entry for the same vector.
+            retries = checkpoint.get("infrastructure_retries")
+            if isinstance(retries, dict):
+                retries.pop(case_id, None)
+        checkpoint["run"]["active_case_id"] = None
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
         if checkpoint.get("paused"):
@@ -1145,6 +1196,12 @@ def run_suite(
         case_index += 1
     if dry_run:
         checkpoint["results"] = list(result_by_case.values())
+        checkpoint["updated_at"] = _utc_now()
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+    if not checkpoint.get("paused"):
+        checkpoint["run"]["execution_state"] = "completed"
+        checkpoint["run"]["active_case_id"] = None
         checkpoint["updated_at"] = _utc_now()
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
