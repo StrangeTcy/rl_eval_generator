@@ -279,6 +279,30 @@ def test_campaign_failure_diagnostics_name_failed_exact_instance_and_variant(
     assert "reference_did_not_grade_as_expected" in formatted
 
 
+def test_report_distinguishes_resumable_infrastructure_retry_from_exhaustion() -> None:
+    common = {
+        "results": [],
+        "instance_gate": {"gated_case_count": 194, "compile_only_case_count": 0},
+    }
+    retrying = atria_campaign._report_from_checkpoint(
+        common,
+        compatibility=None,
+        compat_waited=0,
+        status="paused",
+        pause_reason="infrastructure_error",
+    )
+    exhausted = atria_campaign._report_from_checkpoint(
+        common,
+        compatibility=None,
+        compat_waited=0,
+        status="paused",
+        pause_reason="infrastructure_error_retries_exhausted",
+    )
+
+    assert retrying["resumable"] is True
+    assert exhausted["resumable"] is False
+
+
 def test_fresh_output_reset_refuses_to_remove_unrecognized_directory(tmp_path: Path) -> None:
     unrelated = tmp_path / "valuable-data"
     unrelated.mkdir()

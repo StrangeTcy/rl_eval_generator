@@ -64,6 +64,11 @@ RESUMABLE_PAUSE_REASONS = {
     "provider_error",
     "max_wall_seconds",
     "provider_infrastructure_error_compatibility",
+    # The supervisor resumes this only while run_suite's per-case ledger is
+    # below its fixed retry bound; it does not resume the exhausted reason.
+    "infrastructure_error",
+    "docker_unavailable",
+    "wrapper_transient_error",
 }
 
 
