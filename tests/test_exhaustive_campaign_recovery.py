@@ -190,6 +190,69 @@ def test_every_atomic_194_case_checkpoint_recovers_to_the_only_terminal_state(
         assert decide_tick(restored)["mode"] == "none"
 
 
+def test_wall_reserve_pauses_before_starting_an_episode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A near-deadline dispatch must not spend a retry on an ordinary wall stop."""
+    manifest = _manifest()
+    monkeypatch.setenv("ATRIA_API_KEY", "non-secret-test-value")
+    _install_provider_free_gate_stubs(monkeypatch)
+    monkeypatch.setattr(run_suite, "EPISODE_EXECUTION_TIMEOUT_SECONDS", 5)
+    monkeypatch.setattr(run_suite, "EPISODE_CHECKPOINT_RESERVE_SECONDS", 1)
+    output = tmp_path / "wall-reserve"
+    run_suite.run_suite(manifest, stop_after_gates=True, **_kwargs(output))
+    monkeypatch.setattr(
+        run_suite.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("the wall guard must run before subprocess launch"),
+    )
+
+    checkpoint = run_suite.run_suite(manifest, max_wall_seconds=5.9, **_kwargs(output))
+
+    assert checkpoint["paused"] is True
+    assert checkpoint["pause_reason"] == "max_wall_seconds"
+    assert checkpoint["results"] == []
+    assert checkpoint.get("infrastructure_retries") in (None, {})
+    assert checkpoint.get("http_attempts_total", 0) == 0
+    assert checkpoint["wall_limited_episode"]["case_id"] == "case-000"
+    persisted = json.loads((output / "suite_checkpoint.json").read_text(encoding="utf-8"))
+    assert persisted["pause_reason"] == "max_wall_seconds"
+    (output / "campaign_ref.txt").write_text(REF + "\n", encoding="utf-8")
+    (output / "campaign_intent.json").write_text(
+        json.dumps({"provider": "atria", "execution_mode": "paid"}), encoding="utf-8"
+    )
+    persisted["updated_at"] = "2020-01-01T00:00:00Z"
+    (output / "suite_checkpoint.json").write_text(json.dumps(persisted), encoding="utf-8")
+    assert decide_tick(output)["mode"] == "resume"
+
+
+def test_independent_episode_timeout_is_a_bounded_infrastructure_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the independent per-episode timeout enters the retry ledger."""
+    manifest = _manifest()
+    monkeypatch.setenv("ATRIA_API_KEY", "non-secret-test-value")
+    _install_provider_free_gate_stubs(monkeypatch)
+    monkeypatch.setattr(run_suite, "EPISODE_EXECUTION_TIMEOUT_SECONDS", 5)
+    monkeypatch.setattr(run_suite, "EPISODE_CHECKPOINT_RESERVE_SECONDS", 1)
+    output = tmp_path / "episode-timeout"
+    run_suite.run_suite(manifest, stop_after_gates=True, **_kwargs(output))
+
+    def timed_out(command, **kwargs):
+        raise run_suite.subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(run_suite.subprocess, "run", timed_out)
+    checkpoint = run_suite.run_suite(manifest, max_wall_seconds=60, **_kwargs(output))
+
+    row = checkpoint["results"][0]
+    assert checkpoint["pause_reason"] == "infrastructure_error"
+    assert checkpoint["infrastructure_retries"]["case-000"] == 1
+    assert row["http_attempts"] is None
+    assert row["http_attempts_upper_bound_reserved"] == 1
+    assert checkpoint["http_attempts_total"] == 0
+    assert checkpoint["http_attempts_unknown_upper_bound_total"] == 1
+
+
 def test_container_failure_is_automatically_retried_then_stops_at_its_bound(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
