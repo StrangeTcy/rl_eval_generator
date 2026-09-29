@@ -486,6 +486,7 @@ def run_suite(
     output_dir.mkdir(parents=True, exist_ok=True)
     # Telemetry is metadata-only and fail-open. It has no bearing on scheduler
     # decisions, checkpoints, providers, or judges.
+    from tools.campaign_progress import write_progress
     from tools.campaign_telemetry import get_campaign_telemetry
 
     telemetry = get_campaign_telemetry(output_dir)
@@ -637,6 +638,15 @@ def run_suite(
                             f"and {gate_fresh_validations} fresh rows banked to "
                             f"{partial_path}; resume to continue gating"
                         )
+                write_progress(
+                    output_dir,
+                    phase="exact-instance gate",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_reused=gate_rows_reused,
+                    current_case=gate_case_id,
+                    current_started_at=_utc_now(),
+                )
                 telemetry.log(
                     telemetry_phase="gate",
                     telemetry_event="case_started",
@@ -683,6 +693,16 @@ def run_suite(
                     "rows": partial_rows,
                     "updated_at": _utc_now(),
                 })
+                write_progress(
+                    output_dir,
+                    phase="exact-instance gate",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_reused=gate_rows_reused,
+                    current_case=None,
+                    last_case=gate_case_id,
+                    last_case_status=case_rows[0].get("status"),
+                )
                 telemetry.log(
                     telemetry_phase="gate",
                     telemetry_event="case_checkpointed",
@@ -969,6 +989,16 @@ def run_suite(
             raise ValueError(f"API key environment variable {api_key_env!r} is not set")
         if min_interval_seconds > 0 and completed_this_run:
             time.sleep(min_interval_seconds)
+        write_progress(
+            output_dir,
+            phase="episodes",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            current_case=case_id,
+            current_started_at=_utc_now(),
+            api_calls_reserved=api_calls_reserved,
+            http_attempts=http_attempts_reserved,
+        )
         telemetry.log(
             telemetry_phase="episodes",
             telemetry_event="case_started",
@@ -1235,6 +1265,18 @@ def run_suite(
         checkpoint["run"]["active_case_id"] = None
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
+        write_progress(
+            output_dir,
+            phase="episodes",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            current_case=None,
+            last_case=case_id,
+            last_case_status=result.get("status"),
+            api_calls_reserved=api_calls_reserved,
+            http_attempts=http_attempts_reserved,
+            pause_reason=checkpoint.get("pause_reason"),
+        )
         telemetry.log(
             telemetry_phase="episodes",
             telemetry_event="case_checkpointed",

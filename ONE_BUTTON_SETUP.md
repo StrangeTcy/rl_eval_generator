@@ -53,6 +53,13 @@ keys, prompts, model output, patches, or judge output. A missing key, failed
 W&B install, service outage, or full telemetry queue cannot pause, fail, or
 slow the campaign.
 
+The workflow also runs a GitHub-native status sidecar. It creates one Issue and
+updates one comment every 30 seconds using durable progress snapshots. It shows
+the current gate/episode case, checkpointed counts, elapsed time, and pause
+reason without sending evaluation data to a third party. The workflow requires
+`issues: write` solely for that comment; Issue API failures are ignored by the
+campaign.
+
 ## Provider-free diagnosis
 
 A local gate-only invocation makes no provider calls:

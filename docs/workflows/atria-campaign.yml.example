@@ -41,6 +41,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 
 # One campaign at a time; a queued tick waits for the running one to finish.
 concurrency:
@@ -304,11 +305,30 @@ jobs:
           # fail-open when this secret, package, or service is unavailable.
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           WANDB_PROJECT: atria-covering-campaign
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          python tools/campaign_status_sidecar.py \
+            --out runs/atria_campaign \
+            --wait-for-path runs/atria_campaign/campaign_intent.json \
+            --interval-seconds 30 &
+          sidecar_pid=$!
+          cleanup() {
+            # Stop the periodic process first so the final synchronous update
+            # below cannot be overwritten by an older periodic snapshot.
+            kill "$sidecar_pid" 2>/dev/null || true
+            wait "$sidecar_pid" 2>/dev/null || true
+            # campaign_report.json now records completed, paused, or blocked.
+            # This must remain best-effort and never alter the controller rc.
+            python tools/campaign_status_sidecar.py \
+              --out runs/atria_campaign --once || true
+          }
+          trap cleanup EXIT
           python tools/atria_campaign.py \
             --profile experiments/atria_campaign.yaml \
             --out runs/atria_campaign
+          rc=$?
+          exit "$rc"
 
       - name: Stage campaign state for upload
         if: always() && steps.mode.outputs.mode != 'none'
