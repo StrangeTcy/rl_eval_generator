@@ -258,3 +258,35 @@ def test_deployed_launcher_can_run_the_documented_paid_controller_revision() -> 
     assert "campaign_intent.json" in supervisor
     assert "campaign_bootstrap.json" in supervisor
 
+
+def _iter_if_conditions(node: object):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "if" and isinstance(value, str):
+                yield value
+            else:
+                yield from _iter_if_conditions(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _iter_if_conditions(item)
+
+
+def test_workflow_if_conditionals_never_reference_the_secrets_context() -> None:
+    # GitHub Actions does not make the secrets context available inside if:
+    # conditionals (only inside env:/with: mappings). A workflow file that
+    # tries is rejected wholesale with "Unrecognized named-value: 'secrets'",
+    # and every trigger of it — dispatch and schedule alike — dies as
+    # startup_failure. Guard both the deployed launcher and the documented
+    # deployable replacement, at any nesting level.
+    for path in (
+        ROOT / ".github" / "workflows" / "atria-campaign.yml",
+        ROOT / "docs" / "workflows" / "atria-campaign.yml.example",
+    ):
+        workflow = yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+        for condition in _iter_if_conditions(workflow):
+            assert "secrets." not in condition, (
+                f"{path.name}: if condition {condition!r} references the secrets "
+                "context, which GitHub Actions rejects at parse time; route the "
+                "secret through env: and test it in shell instead"
+            )
+
