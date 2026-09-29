@@ -140,7 +140,9 @@ jobs:
               raise SystemExit
           reason = str(checkpoint.get("pause_reason") or "")
           resumable = {"provider_error", "max_wall_seconds",
-                       "provider_infrastructure_error_compatibility"}
+                       "provider_infrastructure_error_compatibility",
+                       "infrastructure_error", "docker_unavailable",
+                       "wrapper_transient_error"}
           if reason not in resumable:
               print(f"none|operator pause: {reason} (supervisor never raises ceilings)")
               raise SystemExit
@@ -214,6 +216,20 @@ jobs:
             fi
           fi
 
+      - name: Initialize resumable bootstrap state
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          BOOTSTRAP="$RUNNER_TEMP/atria_bootstrap"
+          rm -rf "$BOOTSTRAP"
+          mkdir -p "$BOOTSTRAP"
+          printf '%s\n' "${{ steps.mode.outputs.ref }}" > "$BOOTSTRAP/campaign_ref.txt"
+          # The deployed launcher has a single manual paid mode. This tiny
+          # record exists before checkout/setup so a setup-host failure still
+          # leaves a schedulable continuation artifact rather than requiring
+          # a second manual campaign dispatch.
+          printf '%s\n' '{"provider":"atria","execution_mode":"paid"}' > "$BOOTSTRAP/campaign_bootstrap.json"
+
       - name: Check out pinned campaign code
         if: steps.mode.outputs.mode != 'none'
         uses: actions/checkout@v4
@@ -286,14 +302,29 @@ jobs:
             --profile experiments/atria_campaign.yaml \
             --out runs/atria_campaign
 
+      - name: Stage campaign state for upload
+        if: always() && steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          STAGED="$RUNNER_TEMP/atria_upload"
+          rm -rf "$STAGED"
+          mkdir -p "$STAGED"
+          if [ -d runs/atria_campaign ]; then
+            cp -a runs/atria_campaign/. "$STAGED/"
+          else
+            # Checkout/setup can fail before the repository workspace exists.
+            # Upload the pre-checkout bootstrap state so the next cron tick
+            # continues the original manual dispatch automatically.
+            cp -a "$RUNNER_TEMP/atria_bootstrap/." "$STAGED/"
+          fi
+
       - name: Upload campaign state
         if: always() && steps.mode.outputs.mode != 'none'
         uses: actions/upload-artifact@v4
         with:
           name: atria-campaign-state-${{ github.run_number }}
           path: |
-            runs/atria_campaign/**
-            !runs/atria_campaign/**/secret_key.json
-            !secret_key.json
-          if-no-files-found: warn
+            ${{ runner.temp }}/atria_upload/**
+            !${{ runner.temp }}/atria_upload/**/secret_key.json
+          if-no-files-found: error
           retention-days: 90
