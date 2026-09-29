@@ -19,8 +19,8 @@ def _write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
-def _state(tmp_path: Path, *, execution_mode: str = "paid") -> None:
-    (tmp_path / "campaign_ref.txt").write_text(REF + "\n", encoding="utf-8")
+def _state(tmp_path: Path, *, execution_mode: str = "paid", campaign_ref: str = REF) -> None:
+    (tmp_path / "campaign_ref.txt").write_text(campaign_ref + "\n", encoding="utf-8")
     _write_json(
         tmp_path / "campaign_intent.json",
         {
@@ -162,18 +162,28 @@ def test_completed_or_terminal_state_never_restarts_on_schedule(tmp_path: Path) 
     assert decide_tick(tmp_path)["mode"] == "none"
 
 
-def test_missing_or_mixed_continuation_state_fails_closed(tmp_path: Path) -> None:
+def test_missing_state_fails_closed_and_branch_name_dispatch_resumes_pinned(tmp_path: Path) -> None:
     (tmp_path / "campaign_ref.txt").write_text(REF + "\n", encoding="utf-8")
     assert decide_tick(tmp_path)["mode"] == "none"
 
-    _state(tmp_path)
+    # campaign_ref.txt holds the dispatched ref STRING (a branch name, or the
+    # default "main"), while the checkpoint records the commit SHA the
+    # controller executed. A mismatch must resume pinned to the checkpoint's
+    # commit — the exact code that produced the state — instead of refusing:
+    # a strict string comparison permanently blocks every branch-name
+    # dispatch, and the advertised cron continuation never runs.
+    _state(tmp_path, campaign_ref="arena/01a0ed2f-rl-eval-generator")
     _write_json(
         tmp_path / "suite_checkpoint.json",
         {
             "paused": True,
             "pause_reason": "max_wall_seconds",
             "updated_at": _old_timestamp(),
-            "run": {"manifest_commit": "e" * 40},
+            "run": {"manifest_commit": REF},
         },
     )
-    assert "disagrees" in decide_tick(tmp_path)["reason"]
+    decision = decide_tick(tmp_path)
+    assert decision["mode"] == "resume"
+    assert decision["execution_mode"] == "paid"
+    assert decision["ref"] == REF
+    assert "pinned to checkpoint commit" in decision["reason"]

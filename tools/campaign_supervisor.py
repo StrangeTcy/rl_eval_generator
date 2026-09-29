@@ -175,10 +175,13 @@ def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
             # definitive outcome. An active marker therefore means the prior
             # worker disappeared between durable boundaries; resuming skips
             # every recorded row and retries at most its named in-flight case.
+            # Pin to the checkpoint's commit, not the recorded ref string:
+            # campaign_ref.txt may hold a branch name that has since moved.
+            active_ref = str(((checkpoint.get("run") or {}).get("manifest_commit")) or "") or recorded_ref
             return _decision(
                 mode="resume",
                 execution_mode=execution_mode,
-                ref=recorded_ref,
+                ref=active_ref,
                 reason="resuming after an interrupted active worker",
             )
         return _decision(
@@ -205,17 +208,25 @@ def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
             reason=backoff_reason,
         )
 
+    # campaign_ref.txt records the dispatched ref STRING (a branch name or
+    # the default "main"); the checkpoint's run.manifest_commit records the
+    # commit SHA the controller resolved and actually executed. The two are
+    # equal only when the operator dispatched a full SHA, so a strict string
+    # comparison refuses every branch-name dispatch forever and the cron
+    # continuation the workflow advertises never runs. Resume pinned to the
+    # checkpoint's commit instead: it is the exact code that produced this
+    # state, and unlike a branch name it cannot have moved since the dispatch.
     checkpoint_ref = str(((checkpoint.get("run") or {}).get("manifest_commit")) or "")
+    resume_ref = checkpoint_ref or recorded_ref
+    reason = f"resuming after {pause_reason}"
     if checkpoint_ref and checkpoint_ref != recorded_ref:
-        return _decision(
-            mode="none",
-            execution_mode="",
-            ref="",
-            reason="checkpoint ref disagrees with campaign_ref; refusing mixed-code resume",
+        reason = (
+            f"resuming after {pause_reason} pinned to checkpoint commit "
+            f"{checkpoint_ref[:12]} (campaign_ref recorded {recorded_ref})"
         )
     return _decision(
         mode="resume",
         execution_mode=execution_mode,
-        ref=recorded_ref,
-        reason=f"resuming after {pause_reason}",
+        ref=resume_ref,
+        reason=reason,
     )
