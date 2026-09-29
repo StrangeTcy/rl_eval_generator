@@ -15,10 +15,10 @@ environment at seed 0), so a provider outage costs time instead of the run:
    provider failures are waited out with exponential backoff up to the
    profile's patience window.
 3. Episodes run through the checkpointed scheduler with the same in-run
-   outage patience; anything longer pauses the campaign with a resumable
-   checkpoint (``pause_reason`` in {provider_error, max_wall_seconds}) that
-   the supervisor workflow resumes.  Budget ceilings and infrastructure
-   failures pause non-resumably and wait for an operator.
+   outage patience. Provider errors, dispatch-wall boundaries, and bounded
+   per-case infrastructure retries pause with a resumable checkpoint that the
+   supervisor workflow resumes. Budget ceilings and exhausted infrastructure
+   retries pause for an operator.
 
 Exit codes: 0 completed (or provider-free gates-only pass); 2 blocked or unexpected error;
 3 no credentials; 4 Docker unavailable; 7 compatibility paused; 8 suite paused or incomplete.
