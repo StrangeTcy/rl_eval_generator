@@ -18,9 +18,9 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-# Pause reasons a scheduled tick may resume on its own. Everything else —
-# budget ceilings, floor effects, infrastructure, invalid gates — stops for an
-# operator; the supervisor never raises a ceiling.
+# Pause reasons a scheduled tick may resume on its own. Budget ceilings, floor
+# effects, invalid gates, and an exhausted infrastructure-retry ledger stop for
+# an operator; the supervisor never raises a ceiling.
 RESUMABLE_PAUSE_REASONS = {
     "provider_error",
     "max_wall_seconds",
