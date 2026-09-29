@@ -14,14 +14,14 @@
 # Why it survives provider interruptions:
 #   * in-run patience — provider outages are waited out with exponential
 #     backoff up to one hour per outage (profile: resilience.*);
-#   * checkpoint/resume — anything longer pauses with a resumable checkpoint
-#     (provider_error, max_wall_seconds, provider_infrastructure_error_
-#     compatibility); this workflow's own schedule trigger picks the state
-#     artifact back up and continues without human action;
+#   * checkpoint/resume — provider errors, dispatch-wall boundaries, and a
+#     bounded per-case infrastructure retry pause with a resumable checkpoint;
+#     this workflow's own schedule trigger picks the state artifact back up
+#     and continues without human action;
 #   * fail-closed on money — budget ceilings (max_api_calls,
-#     max_tokens_total, max_http_attempts), floor effects, and
-#     infrastructure errors pause NON-resumably and wait for an operator.
-#     The supervisor never raises a ceiling.
+#     max_tokens_total, max_http_attempts), floor effects, and exhausted
+#     infrastructure retries pause for an operator. The supervisor never
+#     raises a ceiling.
 #
 # The cron tick is a no-op (a few seconds, no checkout, no provider) unless a
 # resumable campaign state exists and no other Atria run is in progress.
@@ -41,6 +41,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 
 # One campaign at a time; a queued tick waits for the running one to finish.
 concurrency:
@@ -140,7 +141,9 @@ jobs:
               raise SystemExit
           reason = str(checkpoint.get("pause_reason") or "")
           resumable = {"provider_error", "max_wall_seconds",
-                       "provider_infrastructure_error_compatibility"}
+                       "provider_infrastructure_error_compatibility",
+                       "infrastructure_error", "docker_unavailable",
+                       "wrapper_transient_error"}
           if reason not in resumable:
               print(f"none|operator pause: {reason} (supervisor never raises ceilings)")
               raise SystemExit
@@ -214,6 +217,20 @@ jobs:
             fi
           fi
 
+      - name: Initialize resumable bootstrap state
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          BOOTSTRAP="$RUNNER_TEMP/atria_bootstrap"
+          rm -rf "$BOOTSTRAP"
+          mkdir -p "$BOOTSTRAP"
+          printf '%s\n' "${{ steps.mode.outputs.ref }}" > "$BOOTSTRAP/campaign_ref.txt"
+          # The deployed launcher has a single manual paid mode. This tiny
+          # record exists before checkout/setup so a setup-host failure still
+          # leaves a schedulable continuation artifact rather than requiring
+          # a second manual campaign dispatch.
+          printf '%s\n' '{"provider":"atria","execution_mode":"paid"}' > "$BOOTSTRAP/campaign_bootstrap.json"
+
       - name: Check out pinned campaign code
         if: steps.mode.outputs.mode != 'none'
         uses: actions/checkout@v4
@@ -240,6 +257,10 @@ jobs:
       - name: Install controller dependencies
         if: steps.mode.outputs.mode != 'none'
         run: python -m pip install -r requirements.txt
+
+      - name: Install optional W&B campaign telemetry
+        if: steps.mode.outputs.mode != 'none' && secrets.WANDB_API_KEY != ''
+        run: python -m pip install 'wandb>=0.19,<0.20'
 
       # The provider-free gates run the real judge code (and the Glyph/MoCo/
       # RoPE references train) on the host, so the pinned CPU torch stack is
@@ -280,11 +301,50 @@ jobs:
           # The host controller reads this value. It is never placed in a
           # Docker agent/judge environment, command argument, or artifact.
           ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+          # Optional, metadata-only progress telemetry. The controller is
+          # fail-open when this secret, package, or service is unavailable.
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+          WANDB_PROJECT: atria-covering-campaign
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          python tools/campaign_status_sidecar.py \
+            --out runs/atria_campaign \
+            --wait-for-path runs/atria_campaign/campaign_intent.json \
+            --interval-seconds 30 &
+          sidecar_pid=$!
+          cleanup() {
+            # Stop the periodic process first so the final synchronous update
+            # below cannot be overwritten by an older periodic snapshot.
+            kill "$sidecar_pid" 2>/dev/null || true
+            wait "$sidecar_pid" 2>/dev/null || true
+            # campaign_report.json now records completed, paused, or blocked.
+            # This must remain best-effort and never alter the controller rc.
+            python tools/campaign_status_sidecar.py \
+              --out runs/atria_campaign --once || true
+          }
+          trap cleanup EXIT
           python tools/atria_campaign.py \
             --profile experiments/atria_campaign.yaml \
             --out runs/atria_campaign
+          rc=$?
+          exit "$rc"
+
+      - name: Stage campaign state for upload
+        if: always() && steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          STAGED="$RUNNER_TEMP/atria_upload"
+          rm -rf "$STAGED"
+          mkdir -p "$STAGED"
+          if [ -d runs/atria_campaign ]; then
+            cp -a runs/atria_campaign/. "$STAGED/"
+          else
+            # Checkout/setup can fail before the repository workspace exists.
+            # Upload the pre-checkout bootstrap state so the next cron tick
+            # continues the original manual dispatch automatically.
+            cp -a "$RUNNER_TEMP/atria_bootstrap/." "$STAGED/"
+          fi
 
       - name: Upload campaign state
         if: always() && steps.mode.outputs.mode != 'none'
@@ -292,8 +352,7 @@ jobs:
         with:
           name: atria-campaign-state-${{ github.run_number }}
           path: |
-            runs/atria_campaign/**
-            !runs/atria_campaign/**/secret_key.json
-            !secret_key.json
-          if-no-files-found: warn
+            ${{ runner.temp }}/atria_upload/**
+            !${{ runner.temp }}/atria_upload/**/secret_key.json
+          if-no-files-found: error
           retention-days: 90
