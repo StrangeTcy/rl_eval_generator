@@ -257,6 +257,10 @@ jobs:
         if: steps.mode.outputs.mode != 'none'
         run: python -m pip install -r requirements.txt
 
+      - name: Install optional W&B campaign telemetry
+        if: steps.mode.outputs.mode != 'none' && secrets.WANDB_API_KEY != ''
+        run: python -m pip install 'wandb>=0.19,<0.20'
+
       # The provider-free gates run the real judge code (and the Glyph/MoCo/
       # RoPE references train) on the host, so the pinned CPU torch stack is
       # required before any validation can pass.
@@ -296,6 +300,10 @@ jobs:
           # The host controller reads this value. It is never placed in a
           # Docker agent/judge environment, command argument, or artifact.
           ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+          # Optional, metadata-only progress telemetry. The controller is
+          # fail-open when this secret, package, or service is unavailable.
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+          WANDB_PROJECT: atria-covering-campaign
         run: |
           set -euo pipefail
           python tools/atria_campaign.py \

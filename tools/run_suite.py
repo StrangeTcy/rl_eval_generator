@@ -484,6 +484,11 @@ def run_suite(
     if sandbox != "docker":
         raise ValueError("suite scheduler requires Docker isolation; use a separate local smoke test")
     output_dir.mkdir(parents=True, exist_ok=True)
+    # Telemetry is metadata-only and fail-open. It has no bearing on scheduler
+    # decisions, checkpoints, providers, or judges.
+    from tools.campaign_telemetry import get_campaign_telemetry
+
+    telemetry = get_campaign_telemetry(output_dir)
     checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
     referenced_envs: set[str] = set()
     oracle_report: dict[str, Any] | None = None
@@ -632,12 +637,27 @@ def run_suite(
                             f"and {gate_fresh_validations} fresh rows banked to "
                             f"{partial_path}; resume to continue gating"
                         )
-                case_report = validate_manifest_instances(
-                    {"cases": [gate_case]},
-                    root=ROOT,
-                    include_slow=True,
-                    timeout=GATE_JUDGE_TIMEOUT_SECONDS,
+                telemetry.log(
+                    telemetry_phase="gate",
+                    telemetry_event="case_started",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_reused=gate_rows_reused,
+                    gate_current_case=gate_case_id,
                 )
+                with telemetry.heartbeat(
+                    interval_seconds=60,
+                    telemetry_phase="gate",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_current_case=gate_case_id,
+                ):
+                    case_report = validate_manifest_instances(
+                        {"cases": [gate_case]},
+                        root=ROOT,
+                        include_slow=True,
+                        timeout=GATE_JUDGE_TIMEOUT_SECONDS,
+                    )
                 case_rows = case_report.get("cases") or []
                 if not case_rows:
                     raise ValueError(
@@ -663,6 +683,14 @@ def run_suite(
                     "rows": partial_rows,
                     "updated_at": _utc_now(),
                 })
+                telemetry.log(
+                    telemetry_phase="gate",
+                    telemetry_event="case_checkpointed",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_current_case=gate_case_id,
+                    gate_case_status=case_rows[0].get("status"),
+                )
             if gated_cases:
                 instance_report = {
                     "schema_version": 1,
@@ -941,6 +969,15 @@ def run_suite(
             raise ValueError(f"API key environment variable {api_key_env!r} is not set")
         if min_interval_seconds > 0 and completed_this_run:
             time.sleep(min_interval_seconds)
+        telemetry.log(
+            telemetry_phase="episodes",
+            telemetry_event="case_started",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            episodes_current_case=case_id,
+            episodes_api_calls_reserved=api_calls_reserved,
+            episodes_http_attempts=http_attempts_reserved,
+        )
         # Persist the in-flight identity before spawning the isolated episode.
         # If the runner dies here, a scheduled continuation retries only this
         # unrecorded case; completed rows remain deduplicated in result_by_case.
@@ -977,14 +1014,21 @@ def run_suite(
         if max_wall_seconds is not None:
             remaining_wall_seconds = max(0.1, max_wall_seconds - (case_started - started))
         try:
-            process = subprocess.run(
-                command,
-                cwd=ROOT,
-                env=os.environ.copy(),
-                capture_output=True,
-                text=True,
-                timeout=remaining_wall_seconds,
-            )
+            with telemetry.heartbeat(
+                interval_seconds=60,
+                telemetry_phase="episodes",
+                episodes_total=len(cases),
+                episodes_completed=len(result_by_case),
+                episodes_current_case=case_id,
+            ):
+                process = subprocess.run(
+                    command,
+                    cwd=ROOT,
+                    env=os.environ.copy(),
+                    capture_output=True,
+                    text=True,
+                    timeout=remaining_wall_seconds,
+                )
             stdout = _redact(process.stdout, secret)
             stderr = _redact(process.stderr, secret)
             parsed = _extract_result(process.stdout)
@@ -1191,6 +1235,17 @@ def run_suite(
         checkpoint["run"]["active_case_id"] = None
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
+        telemetry.log(
+            telemetry_phase="episodes",
+            telemetry_event="case_checkpointed",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            episodes_current_case=case_id,
+            episodes_case_status=result.get("status"),
+            episodes_api_calls_reserved=api_calls_reserved,
+            episodes_http_attempts=http_attempts_reserved,
+            campaign_pause_reason=checkpoint.get("pause_reason"),
+        )
         if checkpoint.get("paused"):
             break
         case_index += 1

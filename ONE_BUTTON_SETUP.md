@@ -39,6 +39,20 @@ Budget ceilings, failed gates, invalid credentials, Docker failure, and
 non-transient provider failures are explicit terminal/operator-stop reasons;
 the supervisor never silently raises a ceiling or starts a different campaign.
 
+## Optional live W&B telemetry
+
+Set a repository Actions secret named `WANDB_API_KEY` before dispatching a
+telemetry-enabled campaign. The workflow installs W&B only when that secret is
+present. It uses a persisted campaign run ID with W&B resume support, so every
+scheduled GitHub job contributes to one dashboard timeline.
+
+Telemetry is metadata-only and fail-open: it reports gate/episode totals,
+completed counts, current case IDs, elapsed time, bounded retry counts, and a
+60-second heartbeat while a gate or episode is running. It never sends provider
+keys, prompts, model output, patches, or judge output. A missing key, failed
+W&B install, service outage, or full telemetry queue cannot pause, fail, or
+slow the campaign.
+
 ## Provider-free diagnosis
 
 A local gate-only invocation makes no provider calls:

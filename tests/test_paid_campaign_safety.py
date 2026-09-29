@@ -249,6 +249,8 @@ def test_deployed_launcher_can_run_the_documented_paid_controller_revision() -> 
     # resumable reasons used by the controller.
     assert "campaign_bootstrap.json" in documented_controller
     assert "wrapper_transient_error" in documented_controller
+    assert "WANDB_API_KEY" in documented_controller
+    assert "Install optional W&B campaign telemetry" in documented_controller
     supervisor = (ROOT / "tools" / "campaign_supervisor.py").read_text(encoding="utf-8")
     assert "campaign_intent.json" in supervisor
     assert "campaign_bootstrap.json" in supervisor
