@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 
 from tools import campaign_status_sidecar  # noqa: E402
 from tools.campaign_progress import write_progress  # noqa: E402
-from tools.campaign_status_sidecar import _body  # noqa: E402
+from tools.campaign_status_sidecar import _body, _progress_bar  # noqa: E402
 
 
 def test_sidecar_renders_durable_gate_progress_without_network(tmp_path: Path) -> None:
@@ -30,6 +30,7 @@ def test_sidecar_renders_durable_gate_progress_without_network(tmp_path: Path) -
 
     assert "exact-instance gate" in body
     assert "18 / 72" in body
+    assert "**Gate progress:** `█████░░░░░░░░░░░░░░░`" in body
     assert "glyph__hard-data-clue" in body
     assert "fail-open sidecar" in body
 
@@ -51,7 +52,14 @@ def test_sidecar_renders_episode_checkpoint_progress_without_network(tmp_path: P
     body = _body(tmp_path)
 
     assert "7 / 194" in body
+    assert "**Episodes progress:** `░░░░░░░░░░░░░░░░░░░░`" in body
     assert "moco__queue-math-hard" in body
+
+
+def test_progress_bar_keeps_raw_count_display_separate() -> None:
+    assert _progress_bar(10, 20) == "██████████░░░░░░░░░░"
+    assert _progress_bar(20, 20) == "████████████████████"
+    assert _progress_bar(0, 0) is None
 
 
 def test_sidecar_renders_terminal_state_pause_reason_and_retries(tmp_path: Path) -> None:

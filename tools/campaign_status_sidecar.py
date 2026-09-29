@@ -70,6 +70,14 @@ def _elapsed(started_at: Any) -> str:
     return f"{hours}h {minutes}m {seconds}s"
 
 
+def _progress_bar(completed: int, total: int, width: int = 20) -> str | None:
+    """Render an informational Unicode bar without changing the raw counts."""
+    if total <= 0 or completed < 0:
+        return None
+    filled = min(width, (completed * width) // total)
+    return "█" * filled + "░" * (width - filled)
+
+
 def _retry_summary(checkpoint: dict[str, Any], report: dict[str, Any]) -> str | None:
     """Return only aggregate retry metadata; never expose diagnostics or payloads."""
     parts: list[str] = []
@@ -124,6 +132,10 @@ def _body(output: Path) -> str:
             completed = len(rows) if isinstance(rows, dict) else 0
         total = progress.get("gate_total")
         lines.append(f"- **Gate checkpointed:** `{completed} / {total if isinstance(total, int) else '?'}`")
+        if isinstance(total, int):
+            bar = _progress_bar(completed, total)
+            if bar is not None:
+                lines.append(f"- **Gate progress:** `{bar}`")
     if phase == "episodes" or checkpoint:
         results = checkpoint.get("results")
         completed = progress.get("episodes_completed")
@@ -131,6 +143,10 @@ def _body(output: Path) -> str:
             completed = len(results) if isinstance(results, list) else 0
         total = progress.get("episodes_total") or checkpoint.get("manifest_case_count")
         lines.append(f"- **Episodes checkpointed:** `{completed} / {total if isinstance(total, int) else '?'}`")
+        if isinstance(total, int):
+            bar = _progress_bar(completed, total)
+            if bar is not None:
+                lines.append(f"- **Episodes progress:** `{bar}`")
     pause_reason = progress.get("pause_reason") or checkpoint.get("pause_reason") or report.get("pause_reason")
     if pause_reason:
         lines.append(f"- **Pause reason:** `{pause_reason}`")

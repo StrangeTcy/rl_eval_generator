@@ -55,8 +55,9 @@ slow the campaign.
 
 The workflow also runs a GitHub-native status sidecar. It creates one Issue and
 updates one comment every 30 seconds using durable progress snapshots. It shows
-the current gate/episode case, checkpointed counts, elapsed time, and pause
-reason without sending evaluation data to a third party. The workflow requires
+the current gate/episode case, checkpointed counts alongside visual progress
+bars, elapsed time, and pause reason without sending evaluation data to a third
+party. The workflow requires
 `issues: write` solely for that comment; Issue API failures are ignored by the
 campaign.
 
