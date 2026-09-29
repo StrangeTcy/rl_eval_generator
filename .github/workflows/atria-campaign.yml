@@ -259,8 +259,16 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Install optional W&B campaign telemetry
-        if: steps.mode.outputs.mode != 'none' && secrets.WANDB_API_KEY != ''
-        run: python -m pip install 'wandb>=0.19,<0.20'
+        # The secrets context is not available inside if: conditionals
+        # (GitHub rejects the whole workflow file: "Unrecognized named-value:
+        # 'secrets'"); route it through env: and test emptiness in shell.
+        if: steps.mode.outputs.mode != 'none'
+        env:
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+        run: |
+          if [ -n "$WANDB_API_KEY" ]; then
+            python -m pip install 'wandb>=0.19,<0.20'
+          fi
 
       # The provider-free gates run the real judge code (and the Glyph/MoCo/
       # RoPE references train) on the host, so the pinned CPU torch stack is
