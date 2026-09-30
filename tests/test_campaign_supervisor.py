@@ -129,6 +129,35 @@ def test_bounded_container_failure_pause_resumes_but_exhaustion_does_not(tmp_pat
     assert decide_tick(tmp_path)["mode"] == "none"
 
 
+def test_explicit_manual_continue_bypasses_only_transient_cooldown(tmp_path: Path) -> None:
+    _state(tmp_path, execution_mode="paid")
+    recent = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat().replace("+00:00", "Z")
+    checkpoint = {
+        "paused": True,
+        "pause_reason": "infrastructure_error",
+        "updated_at": recent,
+        "infrastructure_retries": {"case-10": 3},
+        "run": {"manifest_commit": REF},
+    }
+    _write_json(tmp_path / "suite_checkpoint.json", checkpoint)
+
+    scheduled = decide_tick(tmp_path)
+    assert scheduled["mode"] == "none"
+    assert scheduled["reason"].startswith("backoff:")
+
+    manual = decide_tick(tmp_path, manual_continue=True)
+    assert manual["mode"] == "resume"
+    assert manual["execution_mode"] == "paid"
+    assert manual["ref"] == REF
+    assert "manual Continue bypassed cooldown" in manual["reason"]
+    # The policy decision must not rewrite the persisted cooldown timestamp.
+    assert json.loads((tmp_path / "suite_checkpoint.json").read_text(encoding="utf-8"))["updated_at"] == recent
+
+    checkpoint["pause_reason"] = "infrastructure_error_retries_exhausted"
+    _write_json(tmp_path / "suite_checkpoint.json", checkpoint)
+    assert decide_tick(tmp_path, manual_continue=True)["mode"] == "none"
+
+
 def test_interrupted_active_episode_worker_resumes_without_manual_restart(tmp_path: Path) -> None:
     _state(tmp_path, execution_mode="paid")
     _write_json(

@@ -50,8 +50,9 @@
 #   * checkpoint/resume — provider errors, dispatch-wall boundaries, and a
 #     bounded per-case infrastructure retry pause with a resumable checkpoint;
 #     this workflow's own schedule trigger picks the state artifact back up
-#     and continues without human action; an operator may also tick Continue
-#     to ask the same supervisor to resume the latest eligible artifact now;
+#     after a 20-minute cooldown; an operator may tick Continue to bypass only
+#     that cooldown and resume immediately. Manual Continue never bypasses
+#     terminal stops, campaign intent, concurrency, or budget safeguards;
 #   * fail-closed on money — budget ceilings (max_api_calls,
 #     max_tokens_total, max_http_attempts), floor effects, and exhausted
 #     infrastructure retries pause for an operator. The supervisor never
@@ -66,7 +67,7 @@ on:
     inputs:
       continuation:
         type: boolean
-        description: "Resume the latest eligible campaign artifact (supervisor cooldown and stop rules still apply); leave unchecked for a fresh campaign"
+        description: "Resume the latest eligible campaign artifact now (manual Continue overrides only the 20-minute cooldown; terminal and budget stops still apply); leave unchecked only to start fresh"
         required: false
         default: false
       ref:
@@ -103,6 +104,7 @@ jobs:
         run: |
           set -euo pipefail
           CONTINUATION="false"
+          MANUAL_CONTINUE="false"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CONTINUATION="${{ inputs.continuation }}"
           fi
@@ -112,8 +114,12 @@ jobs:
             echo "reason=manual fresh dispatch ref ${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$CONTINUATION" = "true" ]; then
+            MANUAL_CONTINUE="true"
+          fi
           # Scheduled tick or checked manual Continue: use the same state,
-          # pinned-ref, supervisor, and busy-run path. The UI ref is ignored.
+          # pinned-ref, supervisor, and busy-run path. The manual checkbox
+          # bypasses only the transient cooldown; the UI ref is ignored.
           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
             --jq '[.artifacts[]
                    | select(.name | startswith("atria-campaign-state-"))
@@ -165,9 +171,9 @@ jobs:
           SUPERVISOR="$RUNNER_TEMP/campaign_supervisor.py"
           if ! gh api "repos/${{ github.repository }}/contents/tools/campaign_supervisor.py?ref=$PINNED_REF" --jq '.content' | base64 -d > "$SUPERVISOR" 2>/dev/null || [ ! -s "$SUPERVISOR" ]; then
             # Fallback to inline decision logic if supervisor fetch fails
-            # (e.g., ref predates supervisor module).  This mirrors the
-            # original inline logic but still respects resumable vs operator
-            # pauses and backoff.
+            # (e.g., ref predates supervisor module). This mirrors the
+            # resumable/terminal checks and lets only an explicitly checked
+            # manual Continue bypass the transient cooldown.
             echo "supervisor fetch failed for ref $PINNED_REF, falling back to inline logic" >&2
             CHECKPOINT="$STATE_STAGE/suite_checkpoint.json"
             if [ ! -f "$CHECKPOINT" ]; then
@@ -176,10 +182,11 @@ jobs:
               echo "reason=restarting after pre-checkpoint death (inline fallback)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            DECISION=$(python3 - "$CHECKPOINT" <<'PY'
+            DECISION=$(python3 - "$CHECKPOINT" "$MANUAL_CONTINUE" <<'PY'
           import json, sys
           from datetime import datetime, timezone
           checkpoint = json.load(open(sys.argv[1]))
+          manual_continue = sys.argv[2].lower() == "true"
           if not checkpoint.get("paused"):
               print("none|campaign already completed")
               raise SystemExit
@@ -192,16 +199,19 @@ jobs:
               print(f"none|operator pause: {reason} (supervisor never raises ceilings)")
               raise SystemExit
           updated = str(checkpoint.get("updated_at") or "")
+          age = None
           if updated:
               try:
                   age = (datetime.now(timezone.utc)
                          - datetime.fromisoformat(updated.replace("Z", "+00:00"))).total_seconds()
               except ValueError:
                   age = None
-              if age is not None and age < 1200:
+              if age is not None and age < 1200 and not manual_continue:
                   print(f"none|backoff: paused {int(age)}s ago, retry in {int(1200-age)}s")
                   raise SystemExit
           ref = ((checkpoint.get("run") or {}).get("manifest_commit")) or ""
+          if manual_continue and age is not None and age < 1200:
+              reason = f"manual Continue bypassed cooldown; {reason}"
           print(f"resume|{reason}|{ref}")
           PY
             )
@@ -231,13 +241,45 @@ jobs:
             exit 0
           fi
           # Use the pinned supervisor module for decision
-          DECISION_JSON=$(python3 -c "
-          import importlib.util, json, sys
-          spec = importlib.util.spec_from_file_location('campaign_supervisor', sys.argv[1])
+          DECISION_JSON=$(python3 - "$SUPERVISOR" "$STATE_STAGE" "$MANUAL_CONTINUE" <<'PY'
+          import importlib.util
+          import inspect
+          import json
+          import os
+          import shutil
+          import sys
+          import tempfile
+
+          spec = importlib.util.spec_from_file_location("campaign_supervisor", sys.argv[1])
           module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
-          print(json.dumps(module.decide_tick(sys.argv[2])))
-          " "$SUPERVISOR" "$STATE_STAGE")
+          state_dir = sys.argv[2]
+          manual_continue = sys.argv[3].lower() == "true"
+          parameters = inspect.signature(module.decide_tick).parameters
+          if "manual_continue" in parameters:
+              decision = module.decide_tick(state_dir, manual_continue=manual_continue)
+          else:
+              # Older pinned controllers do not accept the explicit manual
+              # override. Preserve their validation, bypassing only their
+              # cooldown by evaluating a temporary copy with an old timestamp.
+              decision = module.decide_tick(state_dir)
+              if (manual_continue and decision.get("mode") == "none"
+                      and str(decision.get("reason", "")).startswith("backoff:")):
+                  with tempfile.TemporaryDirectory(prefix="atria-manual-continue-") as temp_dir:
+                      staged_copy = os.path.join(temp_dir, "state")
+                      shutil.copytree(state_dir, staged_copy)
+                      checkpoint_path = os.path.join(staged_copy, "suite_checkpoint.json")
+                      with open(checkpoint_path, encoding="utf-8") as handle:
+                          checkpoint = json.load(handle)
+                      checkpoint["updated_at"] = "1970-01-01T00:00:00Z"
+                      with open(checkpoint_path, "w", encoding="utf-8") as handle:
+                          json.dump(checkpoint, handle)
+                      decision = module.decide_tick(staged_copy)
+                  if decision.get("mode") == "resume":
+                      decision["reason"] = "manual Continue bypassed cooldown; " + decision.get("reason", "")
+          print(json.dumps(decision))
+          PY
+          )
           MODE=$(printf '%s' "$DECISION_JSON" | jq -r '.mode')
           REASON=$(printf '%s' "$DECISION_JSON" | jq -r '.reason')
           REF=$(printf '%s' "$DECISION_JSON" | jq -r '.ref // ""')

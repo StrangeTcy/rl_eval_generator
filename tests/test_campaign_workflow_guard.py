@@ -40,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -152,6 +153,11 @@ def test_safe_default_resume_uses_the_real_schedule_event() -> None:
     assert "GITHUB_EVENT_NAME=" not in campaign.get("run", "")
     assert "env -u GITHUB_EVENT_NAME" in campaign.get("run", "")
     assert "--allow-provider" in campaign.get("run", "")
+    body = mode.get("run", "")
+    assert 'MANUAL_CONTINUE="false"' in body
+    assert 'MANUAL_CONTINUE="true"' in body
+    assert "manual_continue=manual_continue" in body
+    assert "age < 1200 and not manual_continue" in body
 
 
 @pytest.mark.skipif(shutil.which("bash") is None or shutil.which("jq") is None,
@@ -229,14 +235,15 @@ def test_continue_checkbox_selects_artifact_resume_not_the_ui_ref(
     any(shutil.which(command) is None for command in ("bash", "jq", "unzip", "base64")),
     reason="needs bash, jq, unzip, and base64 to execute the artifact decision path",
 )
+@pytest.mark.parametrize("legacy_pinned_supervisor", [False, True], ids=["current", "legacy-pinned"])
 def test_checked_continue_restores_artifact_and_uses_its_pinned_ref(
-    tmp_path: Path,
+    tmp_path: Path, legacy_pinned_supervisor: bool,
 ) -> None:
-    """Run the actual manual-Continue mode step against a fake Actions API.
+    """A checked Continue resumes an in-cooldown artifact from its pinned ref.
 
-    The test provides a resumable artifact whose stored ref differs from the
-    UI's fresh-dispatch ref. A checked box must restore that artifact and output
-    its checkpoint commit, not treat the checkbox as a fresh launch.
+    Exercise both the new supervisor API and the one-argument supervisor
+    already pinned by an in-flight campaign. The manual override may bypass only
+    the transient cooldown; it must still reuse the checkpoint's exact code ref.
     """
     mode = _step(SAFE_DEFAULT, "Decide dispatch versus supervised resume")
     assert mode is not None
@@ -260,22 +267,40 @@ def test_checked_continue_restores_artifact_and_uses_its_pinned_ref(
         "case_manifest_sha256": "b" * 64,
         "gate_context_sha": pinned_ref,
     }), encoding="utf-8")
+    recent = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     (state_dir / "suite_checkpoint.json").write_text(json.dumps({
         "paused": True,
-        "pause_reason": "max_wall_seconds",
-        "updated_at": "2020-01-01T00:00:00Z",
+        "pause_reason": "infrastructure_error",
+        "updated_at": recent,
+        "infrastructure_retries": {"case-72": 3},
         "results": [{"case_id": f"case-{i}"} for i in range(73)],
         "run": {"manifest_commit": pinned_ref},
     }), encoding="utf-8")
     (state_dir / "campaign_report.json").write_text(json.dumps({
         "status": "paused",
-        "pause_reason": "max_wall_seconds",
+        "pause_reason": "infrastructure_error",
         "resumable": True,
     }), encoding="utf-8")
     archive = tmp_path / "state.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
         for path in state_dir.iterdir():
             bundle.write(path, path.name)
+
+    if legacy_pinned_supervisor:
+        supervisor_source = b"""
+import json, os
+from datetime import datetime, timezone
+def decide_tick(state_dir):
+    checkpoint = json.load(open(os.path.join(state_dir, "suite_checkpoint.json")))
+    updated = str(checkpoint.get("updated_at") or "")
+    if updated:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(updated.replace("Z", "+00:00"))).total_seconds()
+        if age < 1200:
+            return {"mode": "none", "reason": f"backoff: paused {int(age)}s ago, retry in {int(1200-age)}s"}
+    return {"mode": "resume", "execution_mode": "paid", "ref": checkpoint["run"]["manifest_commit"], "reason": f"resuming after {checkpoint['pause_reason']}"}
+"""
+    else:
+        supervisor_source = (ROOT / "tools" / "campaign_supervisor.py").read_bytes()
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -313,9 +338,7 @@ def test_checked_continue_restores_artifact_and_uses_its_pinned_ref(
         "FAKE_PROFILE_CONTENT": base64.b64encode(
             b"manual_gate_blocked_exclusions: []\\n"
         ).decode("ascii"),
-        "FAKE_SUPERVISOR_CONTENT": base64.b64encode(
-            (ROOT / "tools" / "campaign_supervisor.py").read_bytes()
-        ).decode("ascii"),
+        "FAKE_SUPERVISOR_CONTENT": base64.b64encode(supervisor_source).decode("ascii"),
     })
     subprocess.run(["bash", "-c", body], cwd=tmp_path, env=env,
                    check=True, capture_output=True, text=True, timeout=60)
@@ -323,6 +346,7 @@ def test_checked_continue_restores_artifact_and_uses_its_pinned_ref(
     output = (tmp_path / "github-output.txt").read_text(encoding="utf-8")
     assert "mode=resume" in output
     assert f"ref={pinned_ref}" in output
+    assert "reason=manual Continue bypassed cooldown;" in output
     assert "ref=ui-selected-fresh-ref" not in output
     calls = calls_path.read_text(encoding="utf-8").splitlines()
     assert any("actions/artifacts?per_page=100" in call for call in calls)

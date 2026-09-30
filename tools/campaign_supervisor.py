@@ -18,9 +18,10 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-# Pause reasons a scheduled tick may resume on its own. Budget ceilings, floor
-# effects, invalid gates, and an exhausted infrastructure-retry ledger stop for
-# an operator; the supervisor never raises a ceiling.
+# Pause reasons the schedule or an explicit manual Continue may resume.
+# Budget ceilings, floor effects, invalid gates, and an exhausted
+# infrastructure-retry ledger stop for an operator; manual Continue never
+# raises a ceiling.
 RESUMABLE_PAUSE_REASONS = {
     "provider_error",
     "max_wall_seconds",
@@ -33,8 +34,9 @@ RESUMABLE_PAUSE_REASONS = {
     "wrapper_transient_error",
 }
 
-# A freshly paused campaign is not retried immediately: give the provider
-# window (or the previous job's slot) time to clear first.
+# Scheduled ticks give a freshly paused campaign 20 minutes to let a provider
+# window or the previous job's slot clear. An explicit manual Continue may
+# override only this cooldown; all terminal and budget stops remain in force.
 RESUME_BACKOFF_SECONDS = 1200
 VALID_EXECUTION_MODES = {"gates_only", "paid"}
 
@@ -80,8 +82,15 @@ def _is_backoff_active(checkpoint: dict[str, Any]) -> str | None:
     return None
 
 
-def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
-    """Decide whether a scheduled tick may continue staged campaign state.
+def decide_tick(
+    state_dir: str | os.PathLike[str], *, manual_continue: bool = False
+) -> dict[str, str]:
+    """Decide whether a schedule tick or explicit manual Continue may resume.
+
+    ``manual_continue`` is supplied only for a checked workflow-dispatch
+    checkbox. It bypasses the 20-minute transient cooldown, not campaign
+    intent validation, terminal markers, pause-reason allowlists, budgets, or
+    concurrency checks in the workflow.
 
     Returns ``{"mode": "none"}`` for a terminal or untrusted state. A resume
     decision also contains the exact recorded ``ref`` and either ``gates_only``
@@ -200,7 +209,7 @@ def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
             reason=f"operator pause: {pause_reason} (supervisor never raises ceilings)",
         )
     backoff_reason = _is_backoff_active(checkpoint)
-    if backoff_reason:
+    if backoff_reason and not manual_continue:
         return _decision(
             mode="none",
             execution_mode="",
@@ -224,6 +233,8 @@ def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
             f"resuming after {pause_reason} pinned to checkpoint commit "
             f"{checkpoint_ref[:12]} (campaign_ref recorded {recorded_ref})"
         )
+    if backoff_reason and manual_continue:
+        reason = f"manual Continue bypassed cooldown; {reason}"
     return _decision(
         mode="resume",
         execution_mode=execution_mode,
