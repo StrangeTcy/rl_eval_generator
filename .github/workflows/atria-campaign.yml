@@ -1,60 +1,34 @@
-# MANUAL-RESUME variant. Not the default. Copy to
-# .github/workflows/atria-campaign.yml if you want to start every leg by hand.
+# DEPLOYABLE REPLACEMENT for .github/workflows/atria-campaign.yml.
 #
-# This is atria-campaign-chained.yml.example with the self-dispatch chain
-# REMOVED. Nothing dispatches itself: the campaign advances only when a human
-# ticks `continuation` on a manual dispatch, or when a cron tick lands. That is
-# the point of this file -- the chain is what turned one wipe into three
-# self-sustaining legs on 2026-09-30.
+# Copy this file to .github/workflows/atria-campaign.yml by hand. The branch
+# that carries it cannot push to that path: the GitHub App token used for
+# automation has no `workflows` permission, so a change to .github/workflows/ is
+# rejected outright. That is why the fix lives here and is copied, not pushed.
 #
-# WHY THIS EXISTS RATHER THAN atria-campaign.yml.example
+# This is the SAFE DEFAULT: cron-only continuation, WITH the state-regression
+# guard. It deliberately does NOT contain the self-dispatched chain. On
+# 2026-09-30 a chained continuation resumed via workflow_dispatch, and a
+# controller pinned to pre-7b3565f-era code inferred "fresh start" from the
+# event name alone and rmtree'd the state artifact it had just restored --
+# 73 banked episodes and ~12h of gate rows, compounding over three legs because
+# each damaged leg was uploaded as the newest artifact.
 #
-# The cron-only file has no `continuation` input, so a manual dispatch on it
-# takes the fresh path: the state artifact is never restored and the campaign
-# starts from zero. That file can only resume on a schedule. This one can be
-# resumed deliberately, leg by leg, which is what you want if you do not want a
-# campaign advancing on its own.
+# The guard is the part that matters, and it is workflow-level on purpose. A
+# campaign checks out a PINNED ref, so a fix in tools/ cannot reach an
+# in-flight campaign; this step is read from the default branch on the very
+# next leg. It compares the episode count restored on entry against the
+# checkpoint left on exit, and when progress went backwards it uploads the
+# RESTORED copy and fails the leg loudly, so a damaged state can never become
+# the newest artifact.
 #
-# IT STILL HAS THE SAFETY LAYERS
+# Copying this file adds the state-regression guard and, on resume, routes the
+# pinned sidecar's existing status comment to Issue #3. The routing changes only
+# observer metadata: it does not reset the checkpoint, create Issues, or change
+# provider authorization. A leg which loses progress still fails loudly.
 #
-#   * the state-regression guard, so a leg that ends with fewer episodes than
-#     it restored uploads the RESTORED copy and fails loudly instead of
-#     publishing the loss;
-#   * the GITHUB_EVENT_NAME override, so a resume presents itself to the pinned
-#     controller as the event that controller treats as a resume. Keep this: the
-#     campaign checks out a PINNED ref whose age is unknown, and an older
-#     controller still contains the rmtree-on-workflow_dispatch inference that
-#     destroyed 73 banked episodes.
-#
-# HOW TO USE IT
-#
-# Actions -> Atria covering campaign -> Run workflow:
-#   ref:          main     (or the ref the campaign is pinned to)
-#   continuation: TICK IT
-#
-# Tick it every time. Unticked is a deliberate restart from zero: it discards
-# the banked episodes in the state artifact, and it is the one remaining way to
-# lose them with no bug firing at all.
-#
-# CHAINED variant of the Atria covering campaign workflow. NOT the default.
-#
-# atria-campaign.yml.example is the safe default to deploy: cron-only, with the
-# state-regression guard. This file is that plus the self-dispatched
-# continuation, kept ready so the chaining decision stays separate from the
-# guard decision.
-#
-# Do not copy this file to .github/workflows/atria-campaign.yml until:
-#   1. atria-campaign.yml.example is deployed, so the regression guard is live;
-#   2. one guarded leg has been watched end to end.
-#
-# Why chaining needs the guard rather than the other way round: the chain
-# dispatches the next leg as a workflow_dispatch with continuation=true, which
-# is the exact shape that made the controller treat a resume as a fresh start
-# and delete the restored state. The GITHUB_EVENT_NAME override below is the
-# direct fix, but it has never been executed on a runner. The guard is what
-# holds when the override does not: it catches a wiped leg, re-uploads the good
-# state so it stays newest, and suppresses the chain. That is the difference
-# between losing one leg and losing the campaign.
+# The chained variant, which adds the self-dispatch step on top of all of this,
+# is kept ready in atria-campaign-chained.yml.example. Do not copy that one
+# until the guard here is deployed and a leg has been watched end to end.
 #
 # Resilient Atria covering campaign: every environment in envs/registry.yaml,
 # every difficulty-axis level exercised at least once (covering matrix,
@@ -74,9 +48,8 @@
 #     backoff up to one hour per outage (profile: resilience.*);
 #   * checkpoint/resume — provider errors, dispatch-wall boundaries, and a
 #     bounded per-case infrastructure retry pause with a resumable checkpoint;
-#     the job then self-dispatches its own continuation (see "Chain the next
-#     dispatch"), with the schedule trigger as a fallback, so the state
-#     artifact is picked back up and continued without human action;
+#     this workflow's own schedule trigger picks the state artifact back up
+#     and continues without human action;
 #   * fail-closed on money — budget ceilings (max_api_calls,
 #     max_tokens_total, max_http_attempts), floor effects, and exhausted
 #     infrastructure retries pause for an operator. The supervisor never
@@ -85,6 +58,7 @@
 # The cron tick is a no-op (a few seconds, no checkout, no provider) unless a
 # resumable campaign state exists and no other Atria run is in progress.
 name: Atria covering campaign
+
 on:
   workflow_dispatch:
     inputs:
@@ -92,36 +66,20 @@ on:
         description: "Branch or full commit SHA containing the pinned campaign code"
         required: true
         default: "main"
-      continuation:
-        # A checkbox, not a text field: an operator typing "True", "yes", or
-        # leaving a stray space in a string input would read as "not true"
-        # and silently take the fresh path, discarding a campaign's banked
-        # gate rows and episodes. Ticked = restore the state artifact and
-        # resume; unticked = deliberate restart from zero.
-        type: boolean
-        description: "Continue the paused campaign from its state artifact (leave unticked ONLY to restart from scratch)"
-        required: false
-        default: false
-  # NO schedule trigger on purpose. This variant advances only when a human
-  # dispatches it, so a campaign can never resume, retry or chain while nobody
-  # is watching. Two consequences worth knowing:
-  #   * if a leg fails or you stop dispatching, the campaign simply sits idle.
-  #     Nothing retries it. That is the trade for full manual control.
-  #   * the supervisor's backoff is still enforced: dispatching again too soon
-  #     returns mode=none and the leg exits immediately, doing nothing.
-  # To get a scheduled fallback back, add a `schedule:` entry to this same `on:`
-  # block whose crontab expression is "13,43 * * * *". Nothing else changes.
+  schedule:
+    # Twice hourly, off the hour. Every tick either resumes or no-ops.
+    - cron: "13,43 * * * *"
+
 permissions:
   contents: read
-  # Read-only on purpose: this variant never dispatches anything. The
-  # self-dispatch chain was removed, so a continuation is started by a human
-  # ticking `continuation`, or by a cron tick. No leg advances on its own.
   actions: read
   issues: write
+
 # One campaign at a time; a queued tick waits for the running one to finish.
 concurrency:
   group: atria-campaign
   cancel-in-progress: false
+
 jobs:
   campaign:
     runs-on: ubuntu-latest
@@ -137,18 +95,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          CONTINUATION="${{ github.event_name == 'workflow_dispatch' && inputs.continuation || 'false' }}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$CONTINUATION" != "true" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "mode=fresh" >> "$GITHUB_OUTPUT"
             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
             echo "reason=manual dispatch ref ${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Scheduled tick, or a self-dispatched continuation of a paused
-          # campaign. Both take the identical path from here: the state
-          # artifact plus the pinned supervisor decide, so a continuation can
-          # never do anything a cron tick could not.
-          # Is there a campaign state to resume?
+          # Scheduled tick: is there a campaign state to resume?
           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
             --jq '[.artifacts[]
                    | select(.name | startswith("atria-campaign-state-"))
@@ -266,37 +219,13 @@ jobs:
             exit 0
           fi
           # Use the pinned supervisor module for decision
-          decide() {
-            python3 -c "
+          DECISION_JSON=$(python3 -c "
           import importlib.util, json, sys
           spec = importlib.util.spec_from_file_location('campaign_supervisor', sys.argv[1])
           module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
           print(json.dumps(module.decide_tick(sys.argv[2])))
-          " "$SUPERVISOR" "$STATE_STAGE"
-          }
-          DECISION_JSON=$(decide)
-          # The supervisor's post-pause cooldown exists to let a provider
-          # window or a runner slot clear; it is not a reason to abandon the
-          # chain. A cron tick cannot wait, so it no-ops and hopes a later
-          # tick lands. A self-dispatched continuation is already holding the
-          # slot, so it waits the remainder out (bounded by the supervisor's
-          # own RESUME_BACKOFF_SECONDS) and asks exactly once more. The
-          # cooldown is still honoured in full: nothing resumes early.
-          if [ "$CONTINUATION" = "true" ]; then
-            REASON_NOW=$(printf '%s' "$DECISION_JSON" | jq -r '.reason')
-            case "$REASON_NOW" in
-              "backoff:"*"retry in "*)
-                WAIT=$(printf '%s' "$REASON_NOW" | sed -n 's/.*retry in \([0-9]\{1,\}\)s.*/\1/p')
-                if [ -n "$WAIT" ] && [ "$WAIT" -gt 0 ] 2>/dev/null; then
-                  if [ "$WAIT" -gt 1200 ]; then WAIT=1200; fi
-                  echo "continuation waiting out the supervisor cooldown: ${WAIT}s"
-                  sleep $((WAIT + 5))
-                  DECISION_JSON=$(decide)
-                fi
-                ;;
-            esac
-          fi
+          " "$SUPERVISOR" "$STATE_STAGE")
           MODE=$(printf '%s' "$DECISION_JSON" | jq -r '.mode')
           REASON=$(printf '%s' "$DECISION_JSON" | jq -r '.reason')
           REF=$(printf '%s' "$DECISION_JSON" | jq -r '.ref // ""')
@@ -319,6 +248,7 @@ jobs:
               exit 0
             fi
           fi
+
       - name: Initialize resumable bootstrap state
         if: steps.mode.outputs.mode != 'none'
         run: |
@@ -332,6 +262,7 @@ jobs:
           # leaves a schedulable continuation artifact rather than requiring
           # a second manual campaign dispatch.
           printf '%s\n' '{"provider":"atria","execution_mode":"paid"}' > "$BOOTSTRAP/campaign_bootstrap.json"
+
       - name: Check out pinned campaign code
         if: steps.mode.outputs.mode != 'none'
         uses: actions/checkout@v4
@@ -342,19 +273,23 @@ jobs:
           # from another branch (e.g. arena/01a0dc92) not in main's shallow history;
           # without full history checkout of a commit SHA fails in 38s with
           # "not found" (run 36393386990).
+
       # Fail closed on any ref that predates the exact-instance gate.
       - name: Refuse ungated code
         if: steps.mode.outputs.mode != 'none'
         run: test -f tools/instance_oracle_gate.py || { echo "ref lacks exact-instance gate"; exit 1; }
+
       - name: Set up Python
         if: steps.mode.outputs.mode != 'none'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
+
       - name: Install controller dependencies
         if: steps.mode.outputs.mode != 'none'
         run: python -m pip install -r requirements.txt
+
       - name: Install optional W&B campaign telemetry
         # The secrets context is not available inside if: conditionals
         # (GitHub rejects the whole workflow file: "Unrecognized named-value:
@@ -366,6 +301,7 @@ jobs:
           if [ -n "$WANDB_API_KEY" ]; then
             python -m pip install 'wandb>=0.19,<0.20'
           fi
+
       # The provider-free gates run the real judge code (and the Glyph/MoCo/
       # RoPE references train) on the host, so the pinned CPU torch stack is
       # required before any validation can pass.
@@ -374,6 +310,7 @@ jobs:
         run: |
           python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
           python -m pip install jinja2
+
       - name: Restore previous campaign state after checkout
         if: steps.mode.outputs.mode != 'none' && steps.mode.outputs.state_staged == 'true'
         run: |
@@ -384,13 +321,14 @@ jobs:
           cp -a "$RUNNER_TEMP/atria_state/." runs/atria_campaign/
           echo "restored previous campaign state:"
           ls -la runs/atria_campaign | head -20
+
       - name: Record the dispatched code ref for future resumes
         if: steps.mode.outputs.mode != 'none'
         run: |
           mkdir -p runs/atria_campaign
           echo "${{ steps.mode.outputs.ref }}" > runs/atria_campaign/campaign_ref.txt
+
       - name: Run the covering campaign (fresh or resumed)
-        id: campaign
         if: steps.mode.outputs.mode != 'none'
         # Step-level deadline below the 350-minute job cap: if the campaign
         # process itself ever hangs, this step fails while the job still has
@@ -408,115 +346,64 @@ jobs:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           WANDB_PROJECT: atria-covering-campaign
           GH_TOKEN: ${{ github.token }}
-          # CRITICAL. tools/atria_campaign.py infers "this is a fresh start"
-          # from the event name alone:
-          #
-          #   fresh_dispatch = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
-          #   if ... fresh_dispatch: _reset_fresh_campaign_output(output)   # rmtree
-          #
-          # with the assumption stated in its own comment: "workflow_dispatch
-          # is always a fresh run in atria-campaign.yml. Resumes arrive as
-          # schedule events." The self-dispatched continuation broke that
-          # invariant -- it resumes on a workflow_dispatch -- so the restored
-          # state artifact was deleted immediately after being restored. That
-          # is what destroyed 73 episodes and ~12h of banked gate rows across
-          # runs 36688365669 and 36720605647.
-          #
-          # This override restores the invariant the controller relies on:
-          # a resume presents itself as the event the controller treats as a
-          # resume. It is set here, in the workflow, precisely because the
-          # controller is PINNED code -- an in-flight campaign checks out an
-          # old commit, so a fix in tools/ can never rescue it, while this
-          # one applies to any pinned version. A genuine fresh dispatch
-          # (mode=fresh) still reports workflow_dispatch and still resets.
-          GITHUB_EVENT_NAME: ${{ steps.mode.outputs.mode == 'resume' && 'schedule' || github.event_name }}
         run: |
           set -uo pipefail
-          # The single Issue every status write goes to: the sidecar's
-          # comment (via the seed below) and this watchdog's body.
+          MODE="${{ steps.mode.outputs.mode }}"
           STATUS_ISSUE=3
-          # Pin the status Issue BEFORE the sidecar starts, by seeding the one
-          # piece of state it reads to decide where to report.
-          #
-          # The sidecar reuses an existing Issue when campaign_status_comment.json
-          # already names one; it only opens a new Issue when that number is
-          # absent. The campaign resumes pinned to the checkpoint's commit SHA, so
-          # its sidecar is a frozen revision that always takes the "absent" path
-          # -- which is how one campaign spread across Issues #3 through #9.
-          # Seeding the number here is the one lever that reaches it, because
-          # this file is read from the default branch while the sidecar is not.
-          #
-          # Only issue_number is seeded, deliberately. The sidecar needs both
-          # issue_number and comment_id to short-circuit; with just the number
-          # it skips Issue creation, posts one comment into #3, records that
-          # comment's id, and PATCHes it from then on. Seeding an id we could
-          # not verify would risk writing into a comment that is not the one
-          # being maintained.
+          STATUS_STATE=runs/atria_campaign/campaign_status_comment.json
           mkdir -p runs/atria_campaign
-          if [ ! -f runs/atria_campaign/campaign_status_comment.json ]; then
-            printf '{\n  "issue_number": %s\n}\n' "$STATUS_ISSUE" \
-              > runs/atria_campaign/campaign_status_comment.json
-            echo "pinned campaign status to Issue $STATUS_ISSUE"
+          if [ "$MODE" = "resume" ]; then
+            # The pinned observer reads this JSON state, not the newer text pin.
+            # Rebind the restored identity to the existing status comment on #3.
+            STATUS_COMMENT_ID=$(gh api \
+              "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE/comments?per_page=100" \
+              --paginate \
+              --jq '.[] | select(.body | startswith("## Atria campaign live status")) | .id' \
+              2>/dev/null | tail -n 1 || true)
+            STATUS_STATE_JSON=$(jq -c 'if type == "object" then . else {} end' \
+              "$STATUS_STATE" 2>/dev/null || printf '{}')
+            if [[ "$STATUS_COMMENT_ID" =~ ^[0-9]+$ ]]; then
+              printf '%s\n' "$STATUS_STATE_JSON" | jq \
+                --argjson issue "$STATUS_ISSUE" \
+                --argjson comment "$STATUS_COMMENT_ID" \
+                '.issue_number = $issue | .comment_id = $comment' \
+                > "$STATUS_STATE.tmp"
+            else
+              # With only issue_number set, the pinned sidecar creates a comment
+              # on #3; it cannot fall back to POSTing a new Issue.
+              printf '%s\n' "$STATUS_STATE_JSON" | jq \
+                --argjson issue "$STATUS_ISSUE" \
+                '.issue_number = $issue | del(.comment_id)' \
+                > "$STATUS_STATE.tmp"
+            fi
+            if ! mv "$STATUS_STATE.tmp" "$STATUS_STATE"; then
+              echo "::error::could not route the resumed campaign observer to Issue #$STATUS_ISSUE"
+              exit 1
+            fi
+            # Clear the old workflow-watchdog heading from the Issue body. The
+            # single live status remains in the sidecar comment below.
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE" \
+              -f body="Live Atria campaign status is maintained in the latest comment." \
+              >/dev/null 2>&1 || true
           fi
           python tools/campaign_status_sidecar.py \
             --out runs/atria_campaign \
             --wait-for-path runs/atria_campaign/campaign_intent.json \
             --interval-seconds 30 &
           sidecar_pid=$!
-          # Workflow-level watchdog: the campaign's only status channel.
-          #
-          # It writes the Issue BODY on a fixed interval. Every call is
-          # best-effort and discarded on failure -- an observer must never
-          # perturb the campaign -- and 120s keeps it to 30 writes/hour, far
-          # under GitHub's secondary rate limits.
-          #
-          # It lives in this file rather than in tools/ because this file is
-          # always read from the default branch regardless of the pinned ref,
-          # while the sidecar runs from the PINNED code that a resume is frozen
-          # to. That is what makes this loop the one status channel the pinned
-          # code cannot outrun, and it is why it reports a fixed Issue instead
-          # of following whatever Issue the sidecar last recorded.
-          #
-          # It triggers off campaign_progress.json, which the controller
-          # writes, so it goes quiet during setup and resumes the moment the
-          # campaign actually starts doing work.
-          watchdog() {
-            while true; do
-              sleep 120
-              ISSUE="$STATUS_ISSUE"
-              PROG=runs/atria_campaign/campaign_progress.json
-              [ -f "$PROG" ] || continue
-              SEEN=$(date -u -r "$PROG" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "?")
-              FIELD() { jq -r "$1 // \"-\"" "$PROG" 2>/dev/null || echo "-"; }
-              HB=runs/atria_campaign/campaign_status_heartbeat.json
-              SIDECAR="no heartbeat (observer never started)"
-              if [ -f "$HB" ]; then
-                SIDECAR=$(jq -r '"cycles \(.cycles), published \(.published), consecutive failures \(.consecutive_failures), last error \(.last_error // \"none\")"' "$HB" 2>/dev/null || echo "unreadable")
-              fi
-              BODY=$(printf '## Campaign watchdog (workflow-level)\n\nWritten by the workflow itself, independent of the pinned Python sidecar.\n\n- **Observed at:** %s\n- **Run:** https://github.com/%s/actions/runs/%s\n- **Progress file last written:** %s\n- **Phase:** `%s`\n- **Episodes:** `%s / %s`\n- **Current case:** `%s`\n- **Last case:** `%s` (`%s`)\n- **Sidecar heartbeat:** %s\n\nIf "progress file last written" stops advancing, the controller is stuck rather than slow.\n' \
-                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
-                "$SEEN" "$(FIELD .phase)" "$(FIELD .episodes_completed)" \
-                "$(FIELD .episodes_total)" "$(FIELD .current_case)" \
-                "$(FIELD .last_case)" "$(FIELD .last_case_status)" "$SIDECAR")
-              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$ISSUE" \
-                -f body="$BODY" >/dev/null 2>&1 || true
-            done
-          }
-          watchdog &
-          watchdog_pid=$!
           cleanup() {
-            # Stop the periodic processes first so the final synchronous update
+            # Stop the periodic process first so the final synchronous update
             # below cannot be overwritten by an older periodic snapshot.
-            kill "$watchdog_pid" 2>/dev/null || true
             kill "$sidecar_pid" 2>/dev/null || true
             wait "$sidecar_pid" 2>/dev/null || true
             # campaign_report.json now records completed, paused, or blocked.
             # This must remain best-effort and never alter the controller rc.
-            # It reuses the Issue seeded above, so it cannot open a new one.
             python tools/campaign_status_sidecar.py \
               --out runs/atria_campaign --once || true
           }
           trap cleanup EXIT
+          # This workflow resumes on schedule. Do not try to override the
+          # runner's protected GITHUB_EVENT_NAME default in an env: mapping.
           python tools/atria_campaign.py \
             --profile experiments/atria_campaign.yaml \
             --out runs/atria_campaign
@@ -543,8 +430,7 @@ jobs:
           # A leg may legitimately end with the SAME count (paused early) but
           # never with fewer: episodes are only ever appended to the restored
           # checkpoint. Fewer means the state was reset or corrupted, so the
-          # restored copy is uploaded instead and the job fails loudly. The
-          # chain is suppressed too: continuing would just repeat the damage.
+          # restored copy is uploaded instead and the job fails loudly.
           count_episodes() {
             jq '(.results // []) | length' "$1" 2>/dev/null || echo 0
           }
@@ -556,7 +442,7 @@ jobs:
           [ -f "$CURRENT" ] && AFTER=$(count_episodes "$CURRENT")
           echo "episodes before=$BEFORE after=$AFTER"
           if [ "$BEFORE" -gt 0 ] && [ "$AFTER" -lt "$BEFORE" ]; then
-            echo "::error::Campaign state regressed: $BEFORE recorded episodes on entry, $AFTER on exit. Uploading the RESTORED state instead so the good artifact stays newest, and suppressing the continuation."
+            echo "::error::Campaign state regressed: $BEFORE recorded episodes on entry, $AFTER on exit. Uploading the RESTORED state instead so the good artifact stays newest."
             cp -a "$RUNNER_TEMP/atria_state/." "$STAGED/"
             echo "regressed=true" >> "$GITHUB_OUTPUT"
             exit 1
@@ -570,6 +456,7 @@ jobs:
             # continues the original manual dispatch automatically.
             cp -a "$RUNNER_TEMP/atria_bootstrap/." "$STAGED/"
           fi
+
       - name: Upload campaign state
         if: always() && steps.mode.outputs.mode != 'none'
         uses: actions/upload-artifact@v4
