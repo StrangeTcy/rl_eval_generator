@@ -24,6 +24,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.campaign_progress import read_progress  # noqa: E402
+try:  # The sidecar is fail-open: it must import even if the controller cannot.
+    from tools.run_suite import MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES  # noqa: E402
+except Exception:  # pragma: no cover - defensive, mirrors run_suite's constant
+    MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 3
 
 COMMENT_STATE = "campaign_status_comment.json"
 
@@ -108,6 +112,50 @@ def _retry_summary(checkpoint: dict[str, Any], report: dict[str, Any]) -> str | 
     return "; ".join(parts) or None
 
 
+def _infrastructure_detail(checkpoint: dict[str, Any]) -> list[str]:
+    """Name the cases holding an infrastructure-retry budget, and how much is left.
+
+    An ``infrastructure_error`` pause is resumable only while a case stays under
+    ``MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES``; past that the campaign stops for an
+    operator. Without this, the case about to exhaust its budget is visible only
+    inside the state artifact. Only durable metadata is reported: the case id, the
+    integer count, and the controller's own short, pre-redacted ``error`` string.
+    Never stdout/stderr tails.
+    """
+    ledger = checkpoint.get("infrastructure_retries")
+    if not isinstance(ledger, dict):
+        return []
+    pending = sorted(
+        ((str(case), int(count)) for case, count in ledger.items() if isinstance(count, int) and count > 0),
+        key=lambda item: (-item[1], item[0]),
+    )
+    if not pending:
+        return []
+    errors: dict[str, str] = {}
+    results = checkpoint.get("results")
+    if isinstance(results, list):
+        for row in results:
+            if not isinstance(row, dict):
+                continue
+            case_id = row.get("case_id")
+            error = row.get("error")
+            if isinstance(case_id, str) and isinstance(error, str) and error:
+                errors[case_id] = error[:160]
+    lines = ["- **Infrastructure retries by case:**"]
+    for case_id, count in pending[:5]:
+        remaining = MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES - count
+        budget = (
+            f"{remaining} automatic retr{'y' if remaining == 1 else 'ies'} left"
+            if remaining > 0
+            else "budget exhausted, stops for an operator"
+        )
+        detail = f" — {errors[case_id]}" if case_id in errors else ""
+        lines.append(f"  - `{case_id}`: {count}/{MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES} ({budget}){detail}")
+    if len(pending) > 5:
+        lines.append(f"  - …and {len(pending) - 5} more")
+    return lines
+
+
 def _body(output: Path) -> str:
     progress = read_progress(output)
     checkpoint = _read_json(output / "suite_checkpoint.json")
@@ -158,6 +206,7 @@ def _body(output: Path) -> str:
     retry_summary = _retry_summary(checkpoint, report)
     if retry_summary:
         lines.append(f"- **Retries:** `{retry_summary}`")
+    lines.extend(_infrastructure_detail(checkpoint))
     if report.get("status"):
         lines.append(f"- **Campaign report:** `{report.get('status')}`")
     lines.extend([

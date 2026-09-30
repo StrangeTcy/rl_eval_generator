@@ -141,3 +141,45 @@ def test_sidecar_does_not_create_another_issue_when_comment_creation_retries(tmp
 
     assert calls.count(("POST", "/repos/owner/repository/issues")) == 1
     assert calls.count(("POST", "/repos/owner/repository/issues/42/comments")) == 2
+
+
+def _write_checkpoint(tmp_path: Path, checkpoint: dict) -> None:
+    (tmp_path / "suite_checkpoint.json").write_text(json.dumps(checkpoint), encoding="utf-8")
+
+
+def test_body_names_the_case_holding_the_infrastructure_retry_budget(tmp_path: Path) -> None:
+    _write_checkpoint(tmp_path, {
+        "paused": True,
+        "pause_reason": "infrastructure_error",
+        "infrastructure_retries": {"weird_machine/hard/0": 2, "glyph/easy/0": 1},
+        "results": [{
+            "case_id": "weird_machine/hard/0",
+            "status": "infrastructure_error",
+            "error": "arena controller or judge failed before producing a valid score",
+            "stdout_tail": "SHOULD-NOT-APPEAR",
+        }],
+    })
+
+    body = campaign_status_sidecar._body(tmp_path)
+
+    assert "Infrastructure retries by case" in body
+    assert "`weird_machine/hard/0`: 2/3 (1 automatic retry left)" in body
+    assert "`glyph/easy/0`: 1/3 (2 automatic retries left)" in body
+    # The sidecar reports durable metadata only, never captured process output.
+    assert "SHOULD-NOT-APPEAR" not in body
+
+
+def test_body_flags_an_exhausted_infrastructure_budget(tmp_path: Path) -> None:
+    _write_checkpoint(tmp_path, {
+        "paused": True,
+        "pause_reason": "infrastructure_error_retries_exhausted",
+        "infrastructure_retries": {"weird_machine/hard/0": 4},
+    })
+
+    assert "budget exhausted, stops for an operator" in campaign_status_sidecar._body(tmp_path)
+
+
+def test_body_omits_the_section_without_infrastructure_retries(tmp_path: Path) -> None:
+    _write_checkpoint(tmp_path, {"paused": False, "infrastructure_retries": {}})
+
+    assert "Infrastructure retries by case" not in campaign_status_sidecar._body(tmp_path)
