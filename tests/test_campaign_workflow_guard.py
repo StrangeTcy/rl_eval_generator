@@ -8,11 +8,10 @@ what the supervisor would otherwise resume from forever.
 
 This exists because the guard was already silently dropped once. It was present
 in the documentation copy and absent from the deployed workflow, nothing
-noticed, and the deployed chained workflow ended up relying solely on the
-GITHUB_EVENT_NAME override, which has never been executed on a runner. If that
-override silently fails, a chained leg wipes, the damaged state is uploaded as
-newest, and the chain continues -- the exact loop that destroyed 73 banked
-episodes and ~12h of gate rows on 2026-09-30.
+noticed, and the deployed workflow tried to override the protected GITHUB_EVENT_NAME
+in a step env mapping. Run 38 logged `schedule` there, but the controller still
+lost the restored 73-result checkpoint. The safe default below resumes on a
+real schedule event instead of relying on that ineffective override.
 
 Deployment model, which is why the rules below are not uniform:
 
@@ -23,10 +22,10 @@ Deployment model, which is why the rules below are not uniform:
   * docs/workflows/atria-campaign-chained.yml.example
         The same plus the self-dispatch chain, ready but not the default.
   * .github/workflows/atria-campaign.yml
-        Copied by hand, not pushed: the automation token has no `workflows`
-        permission, so this branch cannot modify that path. It is therefore
-        held to the safety-critical rule only -- if it chains, it must be
-        guarded -- and not to the unconditional one.
+        A hand-copied deployment snapshot. This task deliberately does not
+        modify it; operators apply the safe-default file above when deploying.
+        Tests treat the docs file as the source of truth, not this potentially
+        stale snapshot.
 
 The guard is workflow-level on purpose. A campaign checks out a pinned ref, so
 a fix in tools/ cannot reach an in-flight campaign, while this step is read from
@@ -48,14 +47,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-DEPLOYED = ROOT / ".github" / "workflows" / "atria-campaign.yml"
 SAFE_DEFAULT = ROOT / "docs" / "workflows" / "atria-campaign.yml.example"
 CHAINED = ROOT / "docs" / "workflows" / "atria-campaign-chained.yml.example"
 
-# The guard must be in both deployable sources; the deployed copy is hand-copied
-# and may legitimately lag, so it is only held to the chaining rule below.
+# These two docs workflows are deployable sources of truth. The hand-copied
+# deployed snapshot is intentionally outside the scope of this docs-only change.
 SOURCES_OF_TRUTH = (SAFE_DEFAULT, CHAINED)
-ALL_CAMPAIGN_WORKFLOWS = (DEPLOYED, SAFE_DEFAULT, CHAINED)
 
 STAGE_STEP_NAME = "Stage campaign state for upload"
 CHAIN_STEP_NAME = "Chain the next dispatch"
@@ -110,12 +107,13 @@ def test_deployable_sources_of_truth_keep_the_regression_guard() -> None:
             assert token in body, f"{path.name}: guard is missing {token!r} ({why})"
 
 
-def test_no_campaign_workflow_chains_without_the_guard() -> None:
-    """Chaining repeats a leg automatically, and repeating a destructive one is
-    how a single wipe became a self-sustaining loop. A workflow that dispatches
-    its own continuation is the dangerous configuration, so it is the one this
-    test refuses to let through unguarded -- in any of the three files."""
-    for path in ALL_CAMPAIGN_WORKFLOWS:
+def test_no_documented_campaign_workflow_chains_without_the_guard() -> None:
+    """The deployable docs templates may not chain without their state guard.
+
+    The live workflow is a hand-copied deployment snapshot and is not modified
+    by this docs-only change; operators copy the verified safe default to it.
+    """
+    for path in SOURCES_OF_TRUTH:
         chain = _step(path, CHAIN_STEP_NAME)
         if chain is None:
             continue
@@ -133,22 +131,101 @@ def test_no_campaign_workflow_chains_without_the_guard() -> None:
         )
 
 
-def test_a_chained_campaign_presents_a_resume_as_a_resume() -> None:
-    """The controller infers a fresh start from GITHUB_EVENT_NAME alone on the
-    pinned code it ships with, so once self-dispatch exists a resume arrives as
-    a workflow_dispatch and must be presented to the controller as an event it
-    treats as a resume. Only the chaining launcher needs this: with cron-only
-    continuation every resume really is a schedule event."""
-    for path in ALL_CAMPAIGN_WORKFLOWS:
-        if _step(path, CHAIN_STEP_NAME) is None:
-            continue
-        campaign = _step(path, CAMPAIGN_STEP_NAME)
-        assert campaign is not None, f"{path.name}: no campaign run step"
-        override = (campaign.get("env") or {}).get("GITHUB_EVENT_NAME", "")
-        assert "steps.mode.outputs.mode == 'resume'" in override, (
-            f"{path.name}: a chained resume must present GITHUB_EVENT_NAME as a "
-            f"resume; got {override!r}"
-        )
+def test_safe_default_resume_uses_the_real_schedule_event() -> None:
+    """The pinned controller infers freshness from GITHUB_EVENT_NAME. The
+    deployable safe default resumes on a real schedule event; it must not rely
+    on trying to overwrite GitHub's protected GITHUB_* variables."""
+    workflow = yaml.load(SAFE_DEFAULT.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    triggers = workflow["on"]
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
+
+    mode = _step(SAFE_DEFAULT, "Decide dispatch versus supervised resume")
+    campaign = _step(SAFE_DEFAULT, CAMPAIGN_STEP_NAME)
+    assert mode is not None and campaign is not None
+    assert 'if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then' in mode.get("run", "")
+    assert "mode=fresh" in mode.get("run", "")
+    assert "GITHUB_EVENT_NAME" not in (campaign.get("env") or {})
+    assert "GITHUB_EVENT_NAME=" not in campaign.get("run", "")
+
+
+def test_safe_default_resume_routes_the_restored_sidecar_to_issue_three() -> None:
+    campaign = _step(SAFE_DEFAULT, CAMPAIGN_STEP_NAME)
+    assert campaign is not None
+    body = campaign.get("run", "")
+    assert 'STATUS_ISSUE=3' in body
+    assert 'if [ "$MODE" = "resume" ]; then' in body
+    assert 'issues/$STATUS_ISSUE/comments?per_page=100' in body
+    assert "del(.comment_id)" in body
+    assert "campaign_status_comment.json" in body
+    assert "Live Atria campaign status is maintained in the latest comment." in body
+    assert "POST /repos" not in body
+    assert "## Campaign watchdog" not in body
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or shutil.which("jq") is None,
+                    reason="needs bash and jq to execute the workflow routing block")
+@pytest.mark.parametrize("comment_id", ["731", ""])
+def test_resume_routing_overwrites_stale_sidecar_identity_without_opening_issue(
+    tmp_path: Path, comment_id: str
+) -> None:
+    """Execute the actual routing block against a restored state that points to
+    Issue #10. A discovered Issue #3 comment is reused; otherwise the seed is
+    only issue_number=3, which makes the pinned sidecar create a comment on #3
+    rather than POST a new Issue.
+    """
+    campaign = _step(SAFE_DEFAULT, CAMPAIGN_STEP_NAME)
+    assert campaign is not None
+    body = campaign.get("run", "")
+    start = body.index("STATUS_ISSUE=3")
+    end = body.index("python tools/campaign_status_sidecar.py", start)
+    routing = body[start:end]
+    script = "set -euo pipefail\nMODE=resume\n" + routing + "\n"
+
+    state_dir = tmp_path / "runs" / "atria_campaign"
+    state_dir.mkdir(parents=True)
+    state_path = state_dir / "campaign_status_comment.json"
+    state_path.write_text(json.dumps({
+        "issue_number": 10,
+        "comment_id": 1010,
+        "campaign_started_at": "2026-09-29T13:34:40Z",
+    }), encoding="utf-8")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls_path = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$*\" >> \"$GH_CALLS\"\n"
+        "case \"$*\" in\n"
+        "  *'issues/3/comments?per_page=100'*)\n"
+        "    [ -z \"$FAKE_COMMENT_ID\" ] || printf '%s\\n' \"$FAKE_COMMENT_ID\"\n"
+        "    ;;\n"
+        "esac\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    env = os.environ.copy()
+    env.update({
+        "PATH": f"{fake_bin}:{env.get('PATH', '')}",
+        "GITHUB_REPOSITORY": "owner/repository",
+        "GH_CALLS": str(calls_path),
+        "FAKE_COMMENT_ID": comment_id,
+    })
+
+    subprocess.run(["bash", "-c", script], cwd=tmp_path, env=env,
+                   check=True, capture_output=True, text=True)
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["issue_number"] == 3
+    assert state.get("comment_id") == (int(comment_id) if comment_id else None)
+    assert state["campaign_started_at"] == "2026-09-29T13:34:40Z"
+    calls = calls_path.read_text(encoding="utf-8").splitlines()
+    assert any("issues/3/comments?per_page=100" in call for call in calls)
+    assert any("-X PATCH repos/owner/repository/issues/3" in call for call in calls)
+    assert not any("POST" in call and call.rstrip().endswith("/issues") for call in calls)
 
 
 def test_the_safe_default_does_not_re_enable_chaining() -> None:

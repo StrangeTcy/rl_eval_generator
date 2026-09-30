@@ -136,6 +136,66 @@ def test_sidecar_reuses_one_durable_issue_and_comment(tmp_path: Path, monkeypatc
     assert state["comment_id"] == 99
 
 
+def test_sidecar_updates_the_existing_issue_three_status_comment(tmp_path: Path, monkeypatch) -> None:
+    """The workflow's resume router stores the discovered #3 comment ID, so
+    the pinned observer must update that comment instead of creating an Issue.
+    """
+    calls: list[tuple[str, str]] = []
+    (tmp_path / "campaign_status_comment.json").write_text(
+        json.dumps({"issue_number": 3, "comment_id": 303}), encoding="utf-8"
+    )
+
+    def fake_api(_token, method, path, payload=None):
+        calls.append((method, path))
+        assert method == "PATCH"
+        assert path == "/repos/owner/repository/issues/comments/303"
+        return {"id": 303}
+
+    monkeypatch.setattr(campaign_status_sidecar, "_api", fake_api)
+
+    assert campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token") is None
+
+    assert calls == [("PATCH", "/repos/owner/repository/issues/comments/303")]
+    state = json.loads((tmp_path / "campaign_status_comment.json").read_text(encoding="utf-8"))
+    assert state["issue_number"] == 3
+    assert state["comment_id"] == 303
+
+
+def test_sidecar_uses_restored_issue_three_without_creating_a_new_issue(tmp_path: Path, monkeypatch) -> None:
+    """A resume seed of issue_number=3 pins the pinned sidecar to the existing
+    monitor. It must create/update a comment on that Issue, never POST /issues.
+    """
+    calls: list[tuple[str, str]] = []
+    state_path = tmp_path / "campaign_status_comment.json"
+    state_path.write_text(
+        json.dumps({"issue_number": 3, "campaign_started_at": "2026-09-29T13:34:40Z"}),
+        encoding="utf-8",
+    )
+
+    def fake_api(_token, method, path, payload=None):
+        calls.append((method, path))
+        if method == "POST":
+            assert path == "/repos/owner/repository/issues/3/comments"
+            return {"id": 303}
+        assert method == "PATCH"
+        assert path == "/repos/owner/repository/issues/comments/303"
+        return {"id": 303}
+
+    monkeypatch.setattr(campaign_status_sidecar, "_api", fake_api)
+
+    campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token")
+    campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token")
+
+    assert calls == [
+        ("POST", "/repos/owner/repository/issues/3/comments"),
+        ("PATCH", "/repos/owner/repository/issues/comments/303"),
+        ("PATCH", "/repos/owner/repository/issues/comments/303"),
+    ]
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["issue_number"] == 3
+    assert state["comment_id"] == 303
+
+
 def test_sidecar_does_not_create_another_issue_when_comment_creation_retries(tmp_path: Path, monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
     comment_attempts = 0

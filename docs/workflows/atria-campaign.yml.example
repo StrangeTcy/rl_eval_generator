@@ -21,10 +21,10 @@
 # RESTORED copy and fails the leg loudly, so a damaged state can never become
 # the newest artifact.
 #
-# Copying this file adds a guard to a cron-only workflow. It cannot make
-# anything resume more aggressively, cannot spend money, and cannot delete
-# anything on its own: the only behavioural change is that a leg which lost
-# progress fails loudly instead of quietly publishing the loss.
+# Copying this file adds the state-regression guard and, on resume, routes the
+# pinned sidecar's existing status comment to Issue #3. The routing changes only
+# observer metadata: it does not reset the checkpoint, create Issues, or change
+# provider authorization. A leg which loses progress still fails loudly.
 #
 # The chained variant, which adds the self-dispatch step on top of all of this,
 # is kept ready in atria-campaign-chained.yml.example. Do not copy that one
@@ -348,6 +348,44 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
+          MODE="${{ steps.mode.outputs.mode }}"
+          STATUS_ISSUE=3
+          STATUS_STATE=runs/atria_campaign/campaign_status_comment.json
+          mkdir -p runs/atria_campaign
+          if [ "$MODE" = "resume" ]; then
+            # The pinned observer reads this JSON state, not the newer text pin.
+            # Rebind the restored identity to the existing status comment on #3.
+            STATUS_COMMENT_ID=$(gh api \
+              "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE/comments?per_page=100" \
+              --paginate \
+              --jq '.[] | select(.body | startswith("## Atria campaign live status")) | .id' \
+              2>/dev/null | tail -n 1 || true)
+            STATUS_STATE_JSON=$(jq -c 'if type == "object" then . else {} end' \
+              "$STATUS_STATE" 2>/dev/null || printf '{}')
+            if [[ "$STATUS_COMMENT_ID" =~ ^[0-9]+$ ]]; then
+              printf '%s\n' "$STATUS_STATE_JSON" | jq \
+                --argjson issue "$STATUS_ISSUE" \
+                --argjson comment "$STATUS_COMMENT_ID" \
+                '.issue_number = $issue | .comment_id = $comment' \
+                > "$STATUS_STATE.tmp"
+            else
+              # With only issue_number set, the pinned sidecar creates a comment
+              # on #3; it cannot fall back to POSTing a new Issue.
+              printf '%s\n' "$STATUS_STATE_JSON" | jq \
+                --argjson issue "$STATUS_ISSUE" \
+                '.issue_number = $issue | del(.comment_id)' \
+                > "$STATUS_STATE.tmp"
+            fi
+            if ! mv "$STATUS_STATE.tmp" "$STATUS_STATE"; then
+              echo "::error::could not route the resumed campaign observer to Issue #$STATUS_ISSUE"
+              exit 1
+            fi
+            # Clear the old workflow-watchdog heading from the Issue body. The
+            # single live status remains in the sidecar comment below.
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$STATUS_ISSUE" \
+              -f body="Live Atria campaign status is maintained in the latest comment." \
+              >/dev/null 2>&1 || true
+          fi
           python tools/campaign_status_sidecar.py \
             --out runs/atria_campaign \
             --wait-for-path runs/atria_campaign/campaign_intent.json \
@@ -364,12 +402,13 @@ jobs:
               --out runs/atria_campaign --once || true
           }
           trap cleanup EXIT
+          # This workflow resumes on schedule. Do not try to override the
+          # runner's protected GITHUB_EVENT_NAME default in an env: mapping.
           python tools/atria_campaign.py \
             --profile experiments/atria_campaign.yaml \
             --out runs/atria_campaign
           rc=$?
           exit "$rc"
-
       - name: Stage campaign state for upload
         id: stage
         if: always() && steps.mode.outputs.mode != 'none'
