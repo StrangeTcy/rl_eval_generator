@@ -36,9 +36,15 @@ on:
         required: true
         default: "main"
       continuation:
-        description: "Internal: this dispatch continues a paused campaign (set by the previous job, not by an operator)"
+        # A checkbox, not a text field: an operator typing "True", "yes", or
+        # leaving a stray space in a string input would read as "not true"
+        # and silently take the fresh path, discarding a campaign's banked
+        # gate rows and episodes. Ticked = restore the state artifact and
+        # resume; unticked = deliberate restart from zero.
+        type: boolean
+        description: "Continue the paused campaign from its state artifact (leave unticked ONLY to restart from scratch)"
         required: false
-        default: "false"
+        default: false
       chain_depth:
         description: "Internal: how many self-dispatched continuations precede this one"
         required: false
