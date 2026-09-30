@@ -1,0 +1,43 @@
+# Rehearsal profile for autonomous continuation test (simulated provider, no real API calls)
+# This overwrites the covering campaign profile on this branch only, for rehearsal evidence.
+# Real validation of the 5-case manifest is done separately via instance_oracle_gate.
+name: rehearsal
+provider: custom
+api_base: https://example.invalid/v1
+model: offline/pinned
+api_key_env: REHEARSAL_API_KEY
+concurrency: 1
+temperature: 0.0
+top_p: null
+stream: false
+request_extra: {}
+reasoning_mode: provider_default_uncontrolled
+rate_limit:
+  documented_requests_per_minute: 60
+  min_interval_seconds: 0.1
+quota_ceiling_tokens: null
+resilience:
+  provider_outage_patience_seconds: 60
+  provider_outage_backoff_seconds: 1
+campaign_job_seconds: 60
+limits:
+  max_steps: 1
+  max_tokens: 7
+  invalid_retries: 0
+  max_retries: 1
+  max_http_attempts: 100
+  max_api_calls: 100
+  max_tokens_total: 66000000
+  floor_effect_after: 0
+  sandbox: docker
+cases:
+  - environment: regex_state_machine
+    difficulty: easy,easy
+  - environment: epistemic_games
+    difficulty: trap,ambiguous,paired,balanced,bare_table
+  - environment: categorical_lenses
+    difficulty: easy,easy
+  - environment: rd_state_carry
+    difficulty: easy,easy,easy,easy,easy
+  - environment: glyph
+    difficulty: easy,easy,easy,easy,easy,easy

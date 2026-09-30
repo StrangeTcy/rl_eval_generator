@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "provider_calls": 0,
+  "instance_coverage_complete": true,
+  "cases": [
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": []
+    },
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": []
+    },
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": []
+    },
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": []
+    },
+    {
+      "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+      "environment": "regex_state_machine",
+      "status": "passed",
+      "provider_calls": 0,
+      "variants": []
+    }
+  ],
+  "gate_rows_reused_from_partial": 0
+}

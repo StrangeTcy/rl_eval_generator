@@ -47,6 +47,67 @@ PROVIDER_MARKERS = (
     "credit",
 )
 
+# ``instance_oracle_gate.validate_case`` submits each patch variant separately.
+# A judge invocation is allowed this long before it is declared a gate failure.
+# Keep the gate-wall calculation in lockstep with that default: starting a
+# case without enough time for every variant risks Actions killing the worker
+# before the case's atomic partial-row checkpoint is written.
+GATE_JUDGE_TIMEOUT_SECONDS = 2_100
+GATE_CASE_FINISH_RESERVE_SECONDS = 180
+# A transient Docker/judge/controller loss gets a bounded automatic restart
+# across scheduled jobs.  Exceeding the count is an explicit terminal reason,
+# rather than an unbounded paid retry loop.
+#
+# Every retry is a FULL PAID EPISODE: the agent runs and spends provider calls,
+# and only then does the controller or judge fail to produce a score.  So this
+# number is a multiplier on wasted spend for any case that fails
+# deterministically rather than flakily.  It is deliberately not a ceiling:
+# max_api_calls and max_tokens_total still bound total spend and still pause
+# non-resumably, so raising this cannot run the budget away -- it only changes
+# how much of that budget a broken case may consume before the campaign stops
+# for an operator.
+MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 10
+# An episode gets an independent ceiling so a hung Docker/judge/controller
+# process is distinguishable from a normal end-of-dispatch wall boundary.
+# A new episode is never started unless this full interval plus checkpoint and
+# artifact headroom remains in the current Actions dispatch.
+EPISODE_EXECUTION_TIMEOUT_SECONDS = 1_800
+EPISODE_CHECKPOINT_RESERVE_SECONDS = 300
+
+
+def _episode_fits_remaining_wall(remaining_seconds: float) -> bool:
+    """Whether an episode has its own full timeout and durable-exit reserve."""
+    return remaining_seconds >= (
+        EPISODE_EXECUTION_TIMEOUT_SECONDS + EPISODE_CHECKPOINT_RESERVE_SECONDS
+    )
+
+
+def _gate_case_wall_budget(case: dict[str, Any], references: dict[str, Any]) -> float:
+    """Return a conservative wall-time bound for one exact-instance case.
+
+    Every reference validates no-op, plausible-wrong, and reference patches;
+    references with a transcription patch validate a fourth variant.  The
+    result includes workspace/reset and atomic-checkpoint headroom.  It is a
+    *start* guard, not a shorter judge timeout, so a temporary slow judge never
+    turns into a false/terminal gate result merely because a job is near its
+    Actions deadline.
+    """
+    reference = references.get(str(case.get("environment") or ""))
+    has_transcription = (
+        isinstance(reference, tuple)
+        and len(reference) > 2
+        and reference[2] is not None
+    )
+    variant_count = 4 if has_transcription else 3
+    return float(variant_count * GATE_JUDGE_TIMEOUT_SECONDS + GATE_CASE_FINISH_RESERVE_SECONDS)
+
+
+def _gate_case_fits_remaining_wall(
+    case: dict[str, Any], references: dict[str, Any], remaining_seconds: float
+) -> bool:
+    """Whether a complete atomic gate row can be attempted safely now."""
+    return remaining_seconds >= _gate_case_wall_budget(case, references)
+
 
 def _sleep(seconds: float) -> None:
     """Indirection so tests can observe provider-outage backoff without waiting."""
@@ -445,6 +506,12 @@ def run_suite(
     if sandbox != "docker":
         raise ValueError("suite scheduler requires Docker isolation; use a separate local smoke test")
     output_dir.mkdir(parents=True, exist_ok=True)
+    # Telemetry is metadata-only and fail-open. It has no bearing on scheduler
+    # decisions, checkpoints, providers, or judges.
+    from tools.campaign_progress import write_progress
+    from tools.campaign_telemetry import get_campaign_telemetry
+
+    telemetry = get_campaign_telemetry(output_dir)
     checkpoint_path = checkpoint_path or output_dir / "suite_checkpoint.json"
     referenced_envs: set[str] = set()
     oracle_report: dict[str, Any] | None = None
@@ -572,25 +639,57 @@ def run_suite(
                     )
                 # Otherwise (no row yet, or a failed row on its first retry)
                 # validate fresh below; the attempt counter bounds retries.
-                if (
-                    gate_wall_seconds is not None
-                    and gate_fresh_validations >= 1
-                    and time.monotonic() - gate_started_at >= gate_wall_seconds
-                ):
-                    # Banked rows are safe in the partial file; stop gating
-                    # before the runner's job deadline so the state upload
-                    # still happens.  Only pause once at least one fresh
-                    # validation completed this dispatch, so a resume always
-                    # makes forward progress.
-                    raise GateWallExceeded(
-                        "gate wall budget exhausted mid-gate; "
-                        f"{gate_rows_reused} rows reused and "
-                        f"{gate_fresh_validations} fresh rows banked to "
-                        f"{partial_path}; resume to continue gating"
-                    )
-                case_report = validate_manifest_instances(
-                    {"cases": [gate_case]}, root=ROOT, include_slow=True
+                #
+                # A partial row is atomic only *after* validate_case returns.
+                # Do not begin a three/four-variant judge sequence when the
+                # remaining in-process gate window could end first: the
+                # Actions job would then be cancelled before its progress can
+                # be uploaded, recreating the long-run failure this campaign
+                # controller is meant to avoid.  This also applies to the
+                # first fresh case in a resumed job; no-progress is safer
+                # than allowing the job-level timeout to destroy its state.
+                if gate_wall_seconds is not None:
+                    elapsed = time.monotonic() - gate_started_at
+                    required = _gate_case_wall_budget(gate_case, REFERENCES)
+                    remaining = gate_wall_seconds - elapsed
+                    if not _gate_case_fits_remaining_wall(gate_case, REFERENCES, remaining):
+                        raise GateWallExceeded(
+                            "gate wall budget is too small to safely start the next "
+                            f"exact-instance case ({remaining:.0f}s remaining, "
+                            f"{required:.0f}s required); {gate_rows_reused} rows reused "
+                            f"and {gate_fresh_validations} fresh rows banked to "
+                            f"{partial_path}; resume to continue gating"
+                        )
+                write_progress(
+                    output_dir,
+                    phase="exact-instance gate",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_reused=gate_rows_reused,
+                    current_case=gate_case_id,
+                    current_started_at=_utc_now(),
                 )
+                telemetry.log(
+                    telemetry_phase="gate",
+                    telemetry_event="case_started",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_reused=gate_rows_reused,
+                    gate_current_case=gate_case_id,
+                )
+                with telemetry.heartbeat(
+                    interval_seconds=60,
+                    telemetry_phase="gate",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_current_case=gate_case_id,
+                ):
+                    case_report = validate_manifest_instances(
+                        {"cases": [gate_case]},
+                        root=ROOT,
+                        include_slow=True,
+                        timeout=GATE_JUDGE_TIMEOUT_SECONDS,
+                    )
                 case_rows = case_report.get("cases") or []
                 if not case_rows:
                     raise ValueError(
@@ -616,6 +715,24 @@ def run_suite(
                     "rows": partial_rows,
                     "updated_at": _utc_now(),
                 })
+                write_progress(
+                    output_dir,
+                    phase="exact-instance gate",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_reused=gate_rows_reused,
+                    current_case=None,
+                    last_case=gate_case_id,
+                    last_case_status=case_rows[0].get("status"),
+                )
+                telemetry.log(
+                    telemetry_phase="gate",
+                    telemetry_event="case_checkpointed",
+                    gate_total=len(gated_cases),
+                    gate_completed=len(gate_rows),
+                    gate_current_case=gate_case_id,
+                    gate_case_status=case_rows[0].get("status"),
+                )
             if gated_cases:
                 instance_report = {
                     "schema_version": 1,
@@ -745,6 +862,20 @@ def run_suite(
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
         return checkpoint
+
+    # Durable liveness marker.  A job can disappear outside the controller's
+    # graceful wall-budget path (runner eviction, host crash, cancelled
+    # subprocess).  Without this marker the supervisor sees a non-paused
+    # checkpoint and refuses the only safe continuation, stranding a campaign
+    # even though every already-recorded result is atomic and deduplicated.
+    # It is set before any paid-side work and cleared only after the full case
+    # list is durably recorded below.
+    checkpoint["run"]["execution_state"] = "active"
+    checkpoint["run"]["active_case_id"] = None
+    checkpoint["updated_at"] = _utc_now()
+    _write_json_atomic(checkpoint_path, checkpoint)
+    _write_coverage(output_dir, checkpoint)
+
     api_calls_reserved = sum(
         max_steps * (1 + invalid_retries)
         for row in checkpoint.get("results", [])
@@ -752,16 +883,24 @@ def run_suite(
     )
     output_tokens_reserved = api_calls_reserved * max_tokens
     http_attempts_reserved = sum(
-        int(row.get("http_attempts", row.get("http_attempt_ceiling", 0)) or 0)
+        int(row.get("http_attempts", 0) or 0)
+        + int(row.get("http_attempts_upper_bound_reserved", 0) or 0)
         for row in checkpoint.get("results", [])
         if row.get("status") in {"scored", "infrastructure_error", "paused_provider_error"}
     )
-    # The row sum is a lower bound only: when a paused case is retried and
-    # scores on resume, its earlier spent attempts drop out of its row.  The
-    # persistent monotonic total keeps the global physical bound honest
-    # across resumes (never reset, never double-counted).
+    # A killed subprocess may have made an unknown number of provider calls.
+    # Keep a separate, conservative reservation for its upper bound rather
+    # than reporting that bound as if it were an observed HTTP-attempt count.
+    # Both totals are monotonic, so replacing a failed row on resume cannot
+    # silently relax the global physical budget.
     http_attempts_total = int(checkpoint.get("http_attempts_total", 0) or 0)
-    http_attempts_reserved = max(http_attempts_reserved, http_attempts_total)
+    http_attempts_unknown_upper_bound_total = int(
+        checkpoint.get("http_attempts_unknown_upper_bound_total", 0) or 0
+    )
+    http_attempts_reserved = max(
+        http_attempts_reserved,
+        http_attempts_total + http_attempts_unknown_upper_bound_total,
+    )
     if max_http_attempts is not None and http_attempts_reserved > max_http_attempts:
         raise ValueError("recorded HTTP attempts exceed the configured bounded budget")
     completed_this_run = 0
@@ -803,10 +942,22 @@ def run_suite(
         if existing and not retry_recorded and dry_run and existing.get("status") == "planned":
             case_index += 1
             continue
-        if max_wall_seconds is not None and time.monotonic() - started >= max_wall_seconds:
-            checkpoint["paused"] = True
-            checkpoint["pause_reason"] = "max_wall_seconds"
-            break
+        if max_wall_seconds is not None:
+            remaining_wall_seconds = max_wall_seconds - (time.monotonic() - started)
+            if not _episode_fits_remaining_wall(remaining_wall_seconds):
+                # Do not begin a new paid episode near the dispatch boundary.
+                # The resume job will retry this still-unrecorded case with a
+                # full per-episode allowance, rather than converting a normal
+                # wall expiry into a spurious infrastructure failure.
+                checkpoint["paused"] = True
+                checkpoint["pause_reason"] = "max_wall_seconds"
+                checkpoint["run"]["active_case_id"] = None
+                checkpoint["wall_limited_episode"] = {
+                    "case_id": case_id,
+                    "remaining_seconds": round(max(0.0, remaining_wall_seconds), 3),
+                    "recorded_at": _utc_now(),
+                }
+                break
         current_hash = _current_config_hash(ROOT, case)
         if current_hash != case.get("config_sha256") and not allow_config_drift:
             result = {
@@ -880,6 +1031,33 @@ def run_suite(
             raise ValueError(f"API key environment variable {api_key_env!r} is not set")
         if min_interval_seconds > 0 and completed_this_run:
             time.sleep(min_interval_seconds)
+        write_progress(
+            output_dir,
+            phase="episodes",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            current_case=case_id,
+            current_started_at=_utc_now(),
+            api_calls_reserved=api_calls_reserved,
+            http_attempts=http_attempts_reserved,
+        )
+        telemetry.log(
+            telemetry_phase="episodes",
+            telemetry_event="case_started",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            episodes_current_case=case_id,
+            episodes_api_calls_reserved=api_calls_reserved,
+            episodes_http_attempts=http_attempts_reserved,
+        )
+        # Persist the in-flight identity before spawning the isolated episode.
+        # If the runner dies here, a scheduled continuation retries only this
+        # unrecorded case; completed rows remain deduplicated in result_by_case.
+        checkpoint["run"]["active_case_id"] = case_id
+        checkpoint["updated_at"] = _utc_now()
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+
         case_output = output_dir / "episodes" / _safe_name(case_id)
         command = _build_command(
             case,
@@ -905,17 +1083,32 @@ def run_suite(
         )
         case_started = time.monotonic()
         remaining_wall_seconds = None
+        timeout_limited_by_dispatch_wall = False
+        episode_timeout_seconds = float(EPISODE_EXECUTION_TIMEOUT_SECONDS)
         if max_wall_seconds is not None:
             remaining_wall_seconds = max(0.1, max_wall_seconds - (case_started - started))
-        try:
-            process = subprocess.run(
-                command,
-                cwd=ROOT,
-                env=os.environ.copy(),
-                capture_output=True,
-                text=True,
-                timeout=remaining_wall_seconds,
+            timeout_limited_by_dispatch_wall = (
+                remaining_wall_seconds <= EPISODE_EXECUTION_TIMEOUT_SECONDS
             )
+            episode_timeout_seconds = min(
+                float(EPISODE_EXECUTION_TIMEOUT_SECONDS), remaining_wall_seconds
+            )
+        try:
+            with telemetry.heartbeat(
+                interval_seconds=60,
+                telemetry_phase="episodes",
+                episodes_total=len(cases),
+                episodes_completed=len(result_by_case),
+                episodes_current_case=case_id,
+            ):
+                process = subprocess.run(
+                    command,
+                    cwd=ROOT,
+                    env=os.environ.copy(),
+                    capture_output=True,
+                    text=True,
+                    timeout=episode_timeout_seconds,
+                )
             stdout = _redact(process.stdout, secret)
             stderr = _redact(process.stderr, secret)
             parsed = _extract_result(process.stdout)
@@ -976,6 +1169,21 @@ def run_suite(
                 "stderr_tail": stderr,
             }
         except subprocess.TimeoutExpired:
+            if timeout_limited_by_dispatch_wall:
+                # This is not a Docker/judge failure: the job's remaining
+                # wall allowance expired while the episode was running. Keep
+                # the case unrecorded, do not invent an HTTP-attempt count,
+                # and let the next dispatch start it with a full allowance.
+                checkpoint["paused"] = True
+                checkpoint["pause_reason"] = "max_wall_seconds"
+                checkpoint["run"]["active_case_id"] = None
+                checkpoint["wall_limited_episode"] = {
+                    "case_id": case_id,
+                    "remaining_seconds": round(episode_timeout_seconds, 3),
+                    "elapsed_seconds": round(time.monotonic() - case_started, 3),
+                    "recorded_at": _utc_now(),
+                }
+                break
             result = {
                 "case_id": case_id,
                 "environment": case.get("environment"),
@@ -984,9 +1192,10 @@ def run_suite(
                 "seed": case.get("seed"),
                 "status": "infrastructure_error",
                 "reasoning_enabled": reasoning_effort is not None,
-                "http_attempts": case_http_attempt_ceiling,
+                "http_attempts": None,
+                "http_attempts_upper_bound_reserved": case_http_attempt_ceiling,
                 "http_attempt_ceiling": case_http_attempt_ceiling,
-                "error": "scheduler subprocess timed out",
+                "error": "episode subprocess exceeded its independent timeout",
                 "elapsed_seconds": round(time.monotonic() - case_started, 3),
             }
         # Every attempt is individually bounded by the per-case HTTP-attempt
@@ -1079,29 +1288,114 @@ def run_suite(
         api_calls_reserved += estimated_calls
         output_tokens_reserved += estimated_tokens
         http_attempts_used = int(result.get("http_attempts", 0) or 0)
+        http_attempts_unknown_upper_bound = int(
+            result.get("http_attempts_upper_bound_reserved", 0) or 0
+        )
         checkpoint["http_attempts_total"] = (
             int(checkpoint.get("http_attempts_total", 0) or 0) + http_attempts_used
         )
+        checkpoint["http_attempts_unknown_upper_bound_total"] = (
+            int(checkpoint.get("http_attempts_unknown_upper_bound_total", 0) or 0)
+            + http_attempts_unknown_upper_bound
+        )
         if max_http_attempts is not None:
-            http_attempts_reserved += http_attempts_used
+            http_attempts_reserved += http_attempts_used + http_attempts_unknown_upper_bound
         if result.get("status") == "paused_provider_error":
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "provider_error"
         elif result.get("status") == "infrastructure_error":
-            # Docker/isolation/controller failures are not model answers. Stop
-            # before spending another request on a potentially unsafe runner.
+            # A Docker/judge/controller loss is not a model answer. Preserve
+            # the failed attempt, then let the scheduled supervisor retry the
+            # same unscored case from its atomic checkpoint. The retry ledger
+            # is durable and bounded: a persistent infrastructure defect ends
+            # explicitly rather than becoming an unbounded restart loop.
+            retry_ledger = checkpoint.setdefault("infrastructure_retries", {})
+            previous_retries = int(retry_ledger.get(case_id, 0) or 0)
+            next_retries = previous_retries + 1
+            retry_ledger[case_id] = next_retries
             checkpoint["paused"] = True
-            checkpoint["pause_reason"] = "infrastructure_error"
-        elif max_http_attempts is not None and http_attempts_reserved >= max_http_attempts:
+            checkpoint["pause_reason"] = (
+                "infrastructure_error"
+                if next_retries <= MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES
+                else "infrastructure_error_retries_exhausted"
+            )
+        elif (
+            max_http_attempts is not None
+            and http_attempts_reserved >= max_http_attempts
+            and case_index + 1 < len(cases)
+        ):
+            # Reaching the exact HTTP ceiling on the final required case is a
+            # successful bounded completion, not a non-resumable pause that
+            # strands an otherwise complete campaign at 194/194.
             checkpoint["paused"] = True
             checkpoint["pause_reason"] = "max_http_attempts"
+        else:
+            # A successful scored case closes any earlier transient failure
+            # ledger entry for the same vector.
+            retries = checkpoint.get("infrastructure_retries")
+            if isinstance(retries, dict):
+                retries.pop(case_id, None)
+        checkpoint["run"]["active_case_id"] = None
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)
+        write_progress(
+            output_dir,
+            phase="episodes",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            current_case=None,
+            last_case=case_id,
+            last_case_status=result.get("status"),
+            api_calls_reserved=api_calls_reserved,
+            http_attempts=http_attempts_reserved,
+            pause_reason=checkpoint.get("pause_reason"),
+        )
+        telemetry.log(
+            telemetry_phase="episodes",
+            telemetry_event="case_checkpointed",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            episodes_current_case=case_id,
+            episodes_case_status=result.get("status"),
+            episodes_api_calls_reserved=api_calls_reserved,
+            episodes_http_attempts=http_attempts_reserved,
+            campaign_pause_reason=checkpoint.get("pause_reason"),
+        )
         if checkpoint.get("paused"):
             break
         case_index += 1
     if dry_run:
         checkpoint["results"] = list(result_by_case.values())
+        checkpoint["updated_at"] = _utc_now()
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+    if checkpoint.get("paused"):
+        # Some pause paths occur before a result row is written (notably the
+        # pre-launch wall guard). Persist them explicitly; otherwise a later
+        # scheduler would see the earlier non-paused checkpoint and wrongly
+        # conclude that no continuation is needed.
+        checkpoint["run"]["active_case_id"] = None
+        checkpoint["updated_at"] = _utc_now()
+        _write_json_atomic(checkpoint_path, checkpoint)
+        _write_coverage(output_dir, checkpoint)
+        write_progress(
+            output_dir,
+            phase="episodes",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            current_case=None,
+            pause_reason=checkpoint.get("pause_reason"),
+        )
+        telemetry.log(
+            telemetry_phase="episodes",
+            telemetry_event="paused",
+            episodes_total=len(cases),
+            episodes_completed=len(result_by_case),
+            campaign_pause_reason=checkpoint.get("pause_reason"),
+        )
+    else:
+        checkpoint["run"]["execution_state"] = "completed"
+        checkpoint["run"]["active_case_id"] = None
         checkpoint["updated_at"] = _utc_now()
         _write_json_atomic(checkpoint_path, checkpoint)
         _write_coverage(output_dir, checkpoint)

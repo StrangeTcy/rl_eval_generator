@@ -33,15 +33,14 @@
     "estimated_total_api_calls": 5,
     "estimated_total_output_tokens": 35
   },
-  "updated_at": "2026-09-28T07:17:28.401712Z",
-  "paused": false,
-  "pause_reason": null,
+  "manifest_case_count": 5,
+  "started_at": "2026-09-28T07:17:15.068018Z",
+  "updated_at": "2026-09-20T00:00:00+00:00",
+  "paused": true,
+  "pause_reason": "max_wall_seconds",
   "floor_effect": false,
   "floor_effect_streak": 0,
-  "counts": {
-    "scored": 5
-  },
-  "rows": [
+  "results": [
     {
       "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
       "environment": "regex_state_machine",
@@ -108,50 +107,65 @@
       "stderr_tail": "",
       "judge_guarantee": "behavioral_reference",
       "floor_effect_streak": 0
-    },
-    {
-      "case_id": "rd_state_carry__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0",
-      "environment": "rd_state_carry",
-      "track": "recurrent_depth_behavioral",
-      "difficulty": "easy,easy,easy,easy,easy",
-      "seed": 0,
-      "status": "scored",
-      "verdict": "PASS",
-      "score": 1.0,
-      "failure_mode": "pass",
-      "returncode": 0,
-      "elapsed_seconds": 2.001,
-      "http_attempts": 1,
-      "http_attempt_ceiling": 2,
-      "run_dir": "runs/fake",
-      "reasoning_enabled": false,
-      "error": null,
-      "stdout_tail": "{\"run_dir\": \"runs/fake\", \"http_attempts\": 1, \"final\": {\"verdict\": \"PASS\", \"score\": 1.0, \"failure_mode\": \"pass\"}}",
-      "stderr_tail": "",
-      "judge_guarantee": "behavioral_reference",
-      "floor_effect_streak": 0
-    },
-    {
-      "case_id": "glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0",
-      "environment": "glyph",
-      "track": "ml_debugging",
-      "difficulty": "easy,easy,easy,easy,easy,easy",
-      "seed": 0,
-      "status": "scored",
-      "verdict": "PASS",
-      "score": 1.0,
-      "failure_mode": "pass",
-      "returncode": 0,
-      "elapsed_seconds": 2.0,
-      "http_attempts": 1,
-      "http_attempt_ceiling": 2,
-      "run_dir": "runs/fake",
-      "reasoning_enabled": false,
-      "error": null,
-      "stdout_tail": "{\"run_dir\": \"runs/fake\", \"http_attempts\": 1, \"final\": {\"verdict\": \"PASS\", \"score\": 1.0, \"failure_mode\": \"pass\"}}",
-      "stderr_tail": "",
-      "judge_guarantee": "behavioral_reference",
-      "floor_effect_streak": 0
     }
-  ]
+  ],
+  "instance_gate": {
+    "passed": true,
+    "gated_manifest_sha256": "c469e4b5637cf514ba16b03be0d587d095610e40fd8e6e151518045d68d6fd49",
+    "gate_context_sha": "rehearsal-context-sha",
+    "gated_case_count": 5,
+    "compile_only_case_count": 0,
+    "recorded_at": "2026-09-28T07:17:15.067993Z",
+    "report": {
+      "schema_version": 1,
+      "provider_calls": 0,
+      "instance_coverage_complete": true,
+      "cases": [
+        {
+          "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+          "environment": "regex_state_machine",
+          "status": "passed",
+          "provider_calls": 0,
+          "variants": []
+        },
+        {
+          "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+          "environment": "regex_state_machine",
+          "status": "passed",
+          "provider_calls": 0,
+          "variants": []
+        },
+        {
+          "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+          "environment": "regex_state_machine",
+          "status": "passed",
+          "provider_calls": 0,
+          "variants": []
+        },
+        {
+          "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+          "environment": "regex_state_machine",
+          "status": "passed",
+          "provider_calls": 0,
+          "variants": []
+        },
+        {
+          "case_id": "regex_state_machine__surface_deceptiveness=easy_hidden_depth=easy__seed-0",
+          "environment": "regex_state_machine",
+          "status": "passed",
+          "provider_calls": 0,
+          "variants": []
+        }
+      ],
+      "gate_rows_reused_from_partial": 0
+    }
+  },
+  "http_attempts_total": 5,
+  "provider_outage": {
+    "waited_seconds": 1.0,
+    "retries": 1,
+    "last_backoff_seconds": 1.0,
+    "last_case_id": "epistemic_games__scenario=trap_evidence=ambiguous_presentation=paired_prior=balanced_framing=bare_table__seed-0",
+    "updated_at": "2026-09-28T07:17:19.170202Z"
+  }
 }

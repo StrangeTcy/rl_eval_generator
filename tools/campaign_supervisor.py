@@ -1,36 +1,14 @@
-"""Supervisor decision for scheduled atria-campaign ticks.
+"""Provider-free continuation policy for the Atria covering campaign.
 
-The workflow's decision step stages the latest ``atria-campaign-state-*``
-artifact and asks :func:`decide_tick` what this tick should do.  The same
-function is exercised provider-free by ``tests/test_campaign_tools.py``,
-so the tick policy is tested rather than embedded untested in YAML.
+The scheduled workflow restores the latest ``atria-campaign-state-*`` artifact
+and calls :func:`decide_tick`.  This policy deliberately treats the artifact as
+the continuation contract: it identifies both the pinned code ref and the mode
+that the original manual dispatch authorized.
 
-The workflow fetches this module from the ref recorded in
-``campaign_ref.txt`` — the same pinned code whose wrapper wrote the staged
-state — so the marker schema and its reader stay versioned together.  A
-ref that predates this module gets an operator review from the workflow,
-never a restart loop.
-
-Decision contract (the incident that produced it: a blocked gate row was
-banked and replayed by every tick for 13 hours):
-
-* ``wrapper_failed.json`` present — the previous dispatch ended
-  non-resumably (wrapper exception, generation preflight failure, a gate
-  case blocked twice, missing credentials, Docker down, substantive
-  compatibility failure).  The wrapper clears the marker at the start of
-  every run, so a marker that survives into a tick means one automatic
-  restart already happened: stand down for an operator.
-* no ``suite_checkpoint.json`` — the dispatch died before any checkpoint
-  (typically mid-gate).  With a recorded ref this is RESUMABLE: restart
-  from the ref; the gate re-validates only failed rows and keeps the
-  passed ones.  Without a ref there is nothing to restart from.
-* ``suite_checkpoint.json`` present — completed campaigns and
-  non-resumable pauses (budget ceilings, floor effects, infrastructure)
-  are operator territory; resumable pauses (provider outage, wall
-  budget, provider-side compatibility) resume after a backoff window.
-
-Returned modes: ``fresh`` (dispatch the recorded ref), ``resume``
-(continue from the checkpoint), ``none`` (do nothing this tick).
+A campaign may take more than GitHub Actions' per-job limit because gate rows
+and episode checkpoints are persisted atomically.  A scheduled run is allowed
+to continue only an explicit ``campaign_intent.json`` written by the wrapper.
+It never guesses a mode from a profile, a secret, or a missing checkpoint.
 """
 
 from __future__ import annotations
@@ -38,19 +16,27 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+from typing import Any
 
-# Pause reasons a scheduled tick may resume on its own.  Everything else —
-# budget ceilings, floor effects, infrastructure — stops for the operator;
-# the supervisor never raises a ceiling.
+# Pause reasons a scheduled tick may resume on its own. Budget ceilings, floor
+# effects, invalid gates, and an exhausted infrastructure-retry ledger stop for
+# an operator; the supervisor never raises a ceiling.
 RESUMABLE_PAUSE_REASONS = {
     "provider_error",
     "max_wall_seconds",
     "provider_infrastructure_error_compatibility",
+    # run_suite persists an attempt ledger and switches to the distinct,
+    # non-resumable infrastructure_error_retries_exhausted after the bounded
+    # automatic retry count is consumed.
+    "infrastructure_error",
+    "docker_unavailable",
+    "wrapper_transient_error",
 }
 
 # A freshly paused campaign is not retried immediately: give the provider
 # window (or the previous job's slot) time to clear first.
 RESUME_BACKOFF_SECONDS = 1200
+VALID_EXECUTION_MODES = {"gates_only", "paid"}
 
 
 def _read_text(path: str) -> str:
@@ -61,90 +47,186 @@ def _read_text(path: str) -> str:
         return ""
 
 
-def _read_json(path: str):
+def _read_json(path: str) -> dict[str, Any] | None:
     try:
         with open(path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
+            value = json.load(handle)
     except (OSError, ValueError):
         return None
+    return value if isinstance(value, dict) else None
 
 
-def decide_tick(state_dir) -> dict:
-    """Decide what a scheduled tick does with a staged campaign state.
+def _decision(
+    *, mode: str, execution_mode: str, ref: str, reason: str
+) -> dict[str, str]:
+    result = {"mode": mode, "reason": reason}
+    if mode != "none":
+        result["ref"] = ref
+        result["execution_mode"] = execution_mode
+    return result
 
-    ``state_dir`` is the directory the workflow unzipped the latest state
-    artifact into.  Returns ``{"mode": ..., "reason": ...}`` plus, for
-    ``fresh``/``resume`` modes, the ``ref`` to run.  Pure and side-effect
-    free: no network, no provider, no filesystem writes.
+
+def _is_backoff_active(checkpoint: dict[str, Any]) -> str | None:
+    updated_at = str(checkpoint.get("updated_at") or "")
+    if not updated_at:
+        return None
+    try:
+        paused_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - paused_at).total_seconds()
+    except ValueError:
+        return None
+    if age < RESUME_BACKOFF_SECONDS:
+        return f"backoff: paused {int(age)}s ago, retry in {int(RESUME_BACKOFF_SECONDS - age)}s"
+    return None
+
+
+def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
+    """Decide whether a scheduled tick may continue staged campaign state.
+
+    Returns ``{"mode": "none"}`` for a terminal or untrusted state. A resume
+    decision also contains the exact recorded ``ref`` and either ``gates_only``
+    or ``paid`` as ``execution_mode``. The function is pure: no network,
+    provider, or write side effects.
     """
-    state_dir = os.fspath(state_dir)
+    root = os.fspath(state_dir)
+    recorded_ref = _read_text(os.path.join(root, "campaign_ref.txt"))
+    intent = _read_json(os.path.join(root, "campaign_intent.json"))
+    if intent is None:
+        # Written by the workflow before checkout/dependency setup. It carries
+        # only the explicit manual mode and pinned ref; the controller replaces
+        # it with the manifest-bound campaign_intent once setup succeeds.
+        intent = _read_json(os.path.join(root, "campaign_bootstrap.json"))
+    if not recorded_ref:
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason="state artifact has no recorded code ref",
+        )
+    if intent is None:
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason="state artifact has no campaign intent; scheduled continuation is refused",
+        )
+    execution_mode = str(intent.get("execution_mode") or "")
+    if execution_mode not in VALID_EXECUTION_MODES:
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason="state artifact has an invalid campaign execution mode",
+        )
+    if intent.get("provider") != "atria":
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason="state artifact intent is not an Atria campaign",
+        )
 
-    # A terminal marker that survived into this tick: the wrapper already
-    # had its one automatic restart (markers are cleared at run start).
-    # A repeat non-resumable failure is an operator decision.
-    marker = _read_json(os.path.join(state_dir, "wrapper_failed.json"))
+    # A terminal marker survives only when the wrapper made a deliberate,
+    # non-resumable decision. Never retry it on cron.
+    marker = _read_json(os.path.join(root, "wrapper_failed.json"))
     if marker is not None:
         reason = str(marker.get("pause_reason") or "unknown")
-        return {
-            "mode": "none",
-            "reason": f"operator stop: {reason} "
-                      f"(wrapper failed; fix and re-dispatch manually)",
-        }
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason=f"operator stop: {reason} (wrapper recorded a terminal failure)",
+        )
 
-    checkpoint_path = os.path.join(state_dir, "suite_checkpoint.json")
-    recorded_ref = _read_text(os.path.join(state_dir, "campaign_ref.txt"))
-    checkpoint = _read_json(checkpoint_path)
+    report = _read_json(os.path.join(root, "campaign_report.json")) or {}
+    report_status = str(report.get("status") or "")
+    report_reason = str(report.get("pause_reason") or "")
+    if report_status in {"completed", "gate_passed"}:
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason=f"campaign already {report_status}",
+        )
 
+    checkpoint = _read_json(os.path.join(root, "suite_checkpoint.json"))
     if checkpoint is None:
-        # Interrupted before the first checkpoint (typically mid-gate).
-        # Resumable: the pinned code re-validates only failed rows and
-        # keeps the banked passed ones, so a restart makes progress.
-        if recorded_ref:
-            return {
-                "mode": "fresh",
-                "ref": recorded_ref,
-                "reason": "restarting after pre-checkpoint death",
-            }
-        return {
-            "mode": "none",
-            "reason": "state artifact has no checkpoint and no recorded ref",
-        }
+        # Intent is committed before the exact-instance gate.  If the runner
+        # dies before its first checkpoint (or between atomically banked gate
+        # rows), the next scheduled job may safely redo only provider-free
+        # work.  This is not permission inferred from a profile: the manual
+        # dispatch has already persisted its exact mode in campaign_intent.
+        partial_exists = os.path.isfile(os.path.join(root, "instance_oracles_partial.json"))
+        return _decision(
+            mode="resume",
+            execution_mode=execution_mode,
+            ref=recorded_ref,
+            reason=(
+                "resuming provider-free gate after an interrupted partial row"
+                if partial_exists
+                else "restarting provider-free gate after a pre-checkpoint interruption"
+            ),
+        )
 
     if not checkpoint.get("paused"):
-        return {"mode": "none", "reason": "campaign already completed"}
+        execution_state = str(((checkpoint.get("run") or {}).get("execution_state")) or "")
+        if execution_state == "active":
+            # A result row is atomically recorded only after an episode has a
+            # definitive outcome. An active marker therefore means the prior
+            # worker disappeared between durable boundaries; resuming skips
+            # every recorded row and retries at most its named in-flight case.
+            # Pin to the checkpoint's commit, not the recorded ref string:
+            # campaign_ref.txt may hold a branch name that has since moved.
+            active_ref = str(((checkpoint.get("run") or {}).get("manifest_commit")) or "") or recorded_ref
+            return _decision(
+                mode="resume",
+                execution_mode=execution_mode,
+                ref=active_ref,
+                reason="resuming after an interrupted active worker",
+            )
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason="checkpoint is not paused; no scheduled continuation is needed",
+        )
 
     pause_reason = str(checkpoint.get("pause_reason") or "")
     if pause_reason not in RESUMABLE_PAUSE_REASONS:
-        return {
-            "mode": "none",
-            "reason": f"operator pause: {pause_reason} "
-                      f"(supervisor never raises ceilings)",
-        }
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason=f"operator pause: {pause_reason} (supervisor never raises ceilings)",
+        )
+    backoff_reason = _is_backoff_active(checkpoint)
+    if backoff_reason:
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason=backoff_reason,
+        )
 
-    updated_at = str(checkpoint.get("updated_at") or "")
-    if updated_at:
-        try:
-            paused_at = datetime.fromisoformat(
-                updated_at.replace("Z", "+00:00"))
-            age = (datetime.now(timezone.utc) - paused_at).total_seconds()
-        except ValueError:
-            age = None
-        if age is not None and age < RESUME_BACKOFF_SECONDS:
-            return {
-                "mode": "none",
-                "reason": f"backoff: paused {int(age)}s ago, "
-                          f"retry in {int(RESUME_BACKOFF_SECONDS - age)}s",
-            }
-
-    ref = str(((checkpoint.get("run") or {}).get("manifest_commit"))
-              or recorded_ref or "")
-    if not ref:
-        return {
-            "mode": "none",
-            "reason": "resumable pause but no code ref recorded",
-        }
-    return {
-        "mode": "resume",
-        "ref": ref,
-        "reason": f"resuming after {pause_reason}",
-    }
+    # campaign_ref.txt records the dispatched ref STRING (a branch name or
+    # the default "main"); the checkpoint's run.manifest_commit records the
+    # commit SHA the controller resolved and actually executed. The two are
+    # equal only when the operator dispatched a full SHA, so a strict string
+    # comparison refuses every branch-name dispatch forever and the cron
+    # continuation the workflow advertises never runs. Resume pinned to the
+    # checkpoint's commit instead: it is the exact code that produced this
+    # state, and unlike a branch name it cannot have moved since the dispatch.
+    checkpoint_ref = str(((checkpoint.get("run") or {}).get("manifest_commit")) or "")
+    resume_ref = checkpoint_ref or recorded_ref
+    reason = f"resuming after {pause_reason}"
+    if checkpoint_ref and checkpoint_ref != recorded_ref:
+        reason = (
+            f"resuming after {pause_reason} pinned to checkpoint commit "
+            f"{checkpoint_ref[:12]} (campaign_ref recorded {recorded_ref})"
+        )
+    return _decision(
+        mode="resume",
+        execution_mode=execution_mode,
+        ref=resume_ref,
+        reason=reason,
+    )

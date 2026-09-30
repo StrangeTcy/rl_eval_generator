@@ -242,7 +242,11 @@ scoring:
 
 constants:
   "%%PATCHABLE_FILES%%": '["dataset.py", "model.py", "train.py"]'
-  "%%EXTRA_ALLOWED_IMPORTS%%": '"dataset", "model", "train"'
+  # The hard data-clue variant intentionally decodes its class table using
+  # these two standard-library modules. They are part of the generated task,
+  # not an agent-side bypass, so the source validator must allow them for
+  # every vector of this environment.
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"dataset", "model", "train", "base64", "json"'
 
 static_files: []
 
