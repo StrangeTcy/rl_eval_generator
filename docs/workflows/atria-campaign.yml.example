@@ -376,9 +376,51 @@ jobs:
             --wait-for-path runs/atria_campaign/campaign_intent.json \
             --interval-seconds 30 &
           sidecar_pid=$!
+          # Workflow-level watchdog.  The Python sidecar above ships with the
+          # PINNED campaign code, so once a campaign is under way its observer
+          # can never be repaired: fixing it means abandoning the campaign's
+          # progress and starting fresh.  (Run 36688365669 went 3.5h with a
+          # dead observer and no way to tell whether it was working.)  This
+          # loop lives in the workflow file instead, which is always read from
+          # the default branch regardless of the pinned ref, so it reaches
+          # even an old-pinned campaign on its very next leg.
+          #
+          # It writes the Issue BODY; the sidecar owns its comment.  Two
+          # independent writers, no conflict over the same resource, and
+          # either one surviving is enough for visibility.  Every call is
+          # best-effort and discarded on failure: like the sidecar, an
+          # observer must never perturb the campaign.  120s keeps it to 30
+          # writes/hour, far under GitHub's secondary rate limits.
+          watchdog() {
+            while true; do
+              sleep 120
+              ISSUE=$(jq -r '.issue_number // empty' \
+                runs/atria_campaign/campaign_status_comment.json 2>/dev/null || true)
+              [ -n "$ISSUE" ] || continue
+              PROG=runs/atria_campaign/campaign_progress.json
+              SEEN="never"
+              [ -f "$PROG" ] && SEEN=$(date -u -r "$PROG" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "?")
+              FIELD() { jq -r "$1 // \"-\"" "$PROG" 2>/dev/null || echo "-"; }
+              HB=runs/atria_campaign/campaign_status_heartbeat.json
+              SIDECAR="no heartbeat (observer predates the heartbeat, or never started)"
+              if [ -f "$HB" ]; then
+                SIDECAR=$(jq -r '"cycles \(.cycles), published \(.published), consecutive failures \(.consecutive_failures), last error \(.last_error // "none")"' "$HB" 2>/dev/null || echo "unreadable")
+              fi
+              BODY=$(printf '## Campaign watchdog (workflow-level)\n\nWritten by the workflow itself, independent of the pinned Python sidecar.\n\n- **Observed at:** %s\n- **Run:** https://github.com/%s/actions/runs/%s\n- **Progress file last written:** %s\n- **Phase:** `%s`\n- **Episodes:** `%s / %s`\n- **Current case:** `%s`\n- **Last case:** `%s` (`%s`)\n- **Sidecar heartbeat:** %s\n\nIf "progress file last written" stops advancing, the controller is stuck rather than slow.\n' \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
+                "$SEEN" "$(FIELD .phase)" "$(FIELD .episodes_completed)" \
+                "$(FIELD .episodes_total)" "$(FIELD .current_case)" \
+                "$(FIELD .last_case)" "$(FIELD .last_case_status)" "$SIDECAR")
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$ISSUE" \
+                -f body="$BODY" >/dev/null 2>&1 || true
+            done
+          }
+          watchdog &
+          watchdog_pid=$!
           cleanup() {
-            # Stop the periodic process first so the final synchronous update
+            # Stop the periodic processes first so the final synchronous update
             # below cannot be overwritten by an older periodic snapshot.
+            kill "$watchdog_pid" 2>/dev/null || true
             kill "$sidecar_pid" 2>/dev/null || true
             wait "$sidecar_pid" 2>/dev/null || true
             # campaign_report.json now records completed, paused, or blocked.
