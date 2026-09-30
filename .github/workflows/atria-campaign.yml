@@ -5,8 +5,9 @@
 # automation has no `workflows` permission, so a change to .github/workflows/ is
 # rejected outright. That is why the fix lives here and is copied, not pushed.
 #
-# This is the SAFE DEFAULT: cron-only continuation, WITH the state-regression
-# guard. It deliberately does NOT contain the self-dispatched chain. On
+# This is the SAFE DEFAULT: scheduled continuation plus an operator-controlled
+# Continue checkbox for a manual resume, WITH the state-regression guard. It
+# deliberately does NOT contain the self-dispatched chain. On
 # 2026-09-30 a chained continuation resumed via workflow_dispatch, and a
 # controller pinned to pre-7b3565f-era code inferred "fresh start" from the
 # event name alone and rmtree'd the state artifact it had just restored --
@@ -49,7 +50,8 @@
 #   * checkpoint/resume — provider errors, dispatch-wall boundaries, and a
 #     bounded per-case infrastructure retry pause with a resumable checkpoint;
 #     this workflow's own schedule trigger picks the state artifact back up
-#     and continues without human action;
+#     and continues without human action; an operator may also tick Continue
+#     to ask the same supervisor to resume the latest eligible artifact now;
 #   * fail-closed on money — budget ceilings (max_api_calls,
 #     max_tokens_total, max_http_attempts), floor effects, and exhausted
 #     infrastructure retries pause for an operator. The supervisor never
@@ -62,8 +64,13 @@ name: Atria covering campaign
 on:
   workflow_dispatch:
     inputs:
+      continuation:
+        type: boolean
+        description: "Resume the latest eligible campaign artifact (supervisor cooldown and stop rules still apply); leave unchecked for a fresh campaign"
+        required: false
+        default: false
       ref:
-        description: "Branch or full commit SHA containing the pinned campaign code"
+        description: "Code ref for a fresh campaign only; Continue uses the ref saved in the state artifact"
         required: true
         default: "main"
   schedule:
@@ -95,13 +102,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          CONTINUATION="false"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CONTINUATION="${{ inputs.continuation }}"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$CONTINUATION" != "true" ]; then
             echo "mode=fresh" >> "$GITHUB_OUTPUT"
             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
-            echo "reason=manual dispatch ref ${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+            echo "reason=manual fresh dispatch ref ${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Scheduled tick: is there a campaign state to resume?
+          # Scheduled tick or checked manual Continue: use the same state,
+          # pinned-ref, supervisor, and busy-run path. The UI ref is ignored.
           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
             --jq '[.artifacts[]
                    | select(.name | startswith("atria-campaign-state-"))
@@ -257,10 +269,8 @@ jobs:
           rm -rf "$BOOTSTRAP"
           mkdir -p "$BOOTSTRAP"
           printf '%s\n' "${{ steps.mode.outputs.ref }}" > "$BOOTSTRAP/campaign_ref.txt"
-          # The deployed launcher has a single manual paid mode. This tiny
-          # record exists before checkout/setup so a setup-host failure still
-          # leaves a schedulable continuation artifact rather than requiring
-          # a second manual campaign dispatch.
+          # This tiny bootstrap record exists before checkout/setup so a
+          # setup-host failure still leaves a schedulable continuation artifact.
           printf '%s\n' '{"provider":"atria","execution_mode":"paid"}' > "$BOOTSTRAP/campaign_bootstrap.json"
 
       - name: Check out pinned campaign code
@@ -402,11 +412,20 @@ jobs:
               --out runs/atria_campaign --once || true
           }
           trap cleanup EXIT
-          # This workflow resumes on schedule. Do not try to override the
-          # runner's protected GITHUB_EVENT_NAME default in an env: mapping.
-          python tools/atria_campaign.py \
-            --profile experiments/atria_campaign.yaml \
-            --out runs/atria_campaign
+          # A checked manual Continue re-enters the controller as a local
+          # resume, so it preserves even gate-only state. Unset the protected
+          # event only in this child process; never override GITHUB_EVENT_NAME
+          # in the workflow env. The checkbox is explicit paid authorization.
+          if [ "$MODE" = "resume" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            env -u GITHUB_EVENT_NAME python tools/atria_campaign.py \
+              --profile experiments/atria_campaign.yaml \
+              --out runs/atria_campaign \
+              --allow-provider
+          else
+            python tools/atria_campaign.py \
+              --profile experiments/atria_campaign.yaml \
+              --out runs/atria_campaign
+          fi
           rc=$?
           exit "$rc"
       - name: Stage campaign state for upload
