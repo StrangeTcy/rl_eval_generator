@@ -369,6 +369,28 @@ jobs:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           WANDB_PROJECT: atria-covering-campaign
           GH_TOKEN: ${{ github.token }}
+          # CRITICAL. tools/atria_campaign.py infers "this is a fresh start"
+          # from the event name alone:
+          #
+          #   fresh_dispatch = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+          #   if ... fresh_dispatch: _reset_fresh_campaign_output(output)   # rmtree
+          #
+          # with the assumption stated in its own comment: "workflow_dispatch
+          # is always a fresh run in atria-campaign.yml. Resumes arrive as
+          # schedule events." The self-dispatched continuation broke that
+          # invariant -- it resumes on a workflow_dispatch -- so the restored
+          # state artifact was deleted immediately after being restored. That
+          # is what destroyed 73 episodes and ~12h of banked gate rows across
+          # runs 36688365669 and 36720605647.
+          #
+          # This override restores the invariant the controller relies on:
+          # a resume presents itself as the event the controller treats as a
+          # resume. It is set here, in the workflow, precisely because the
+          # controller is PINNED code -- an in-flight campaign checks out an
+          # old commit, so a fix in tools/ can never rescue it, while this
+          # one applies to any pinned version. A genuine fresh dispatch
+          # (mode=fresh) still reports workflow_dispatch and still resets.
+          GITHUB_EVENT_NAME: ${{ steps.mode.outputs.mode == 'resume' && 'schedule' || github.event_name }}
         run: |
           set -uo pipefail
           python tools/campaign_status_sidecar.py \
