@@ -1,7 +1,9 @@
 # DEPLOYABLE REPLACEMENT for .github/workflows/atria-campaign.yml.
 #
 # RETRY-BOUND-30 VARIANT. Built on the workflow currently on main (4ed0f8b) and
-# differs from it in exactly two places, both marked "RETRY30" below:
+# differs from it in exactly two behavioural places, both marked "RETRY30"
+# below (plus a read-only diagnostic step, RETRY30-DIAG, that prints why a case
+# failed into the job log):
 #
 #   1. In "Decide dispatch versus supervised resume", right after the state
 #      artifact is unzipped: a campaign paused with
@@ -539,6 +541,31 @@ jobs:
           fi
           rc=$?
           exit "$rc"
+      # RETRY30-DIAG: a retry bound cannot fix a case that fails the same way
+      # every time. Print why the case failed into the job log (read-only; no
+      # issue, comment or artifact is written). stdout_tail/stderr_tail are
+      # already redacted by the controller; the key is scrubbed again here.
+      - name: Show why the infrastructure-failed case failed
+        if: always() && steps.mode.outputs.mode != 'none'
+        env:
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+        run: |
+          CP=runs/atria_campaign/suite_checkpoint.json
+          [ -f "$CP" ] || { echo "no checkpoint"; exit 0; }
+          scrub() { if [ -n "${ATRIA_API_KEY:-}" ]; then sed "s|${ATRIA_API_KEY}|[REDACTED]|g"; else cat; fi; }
+          echo "pause_reason=$(jq -r '.pause_reason' "$CP") episodes=$(jq '.results|length' "$CP") ledger=$(jq -c '.infrastructure_retries // {}' "$CP")"
+          jq -r '.results[]? | select(.status == "infrastructure_error") | .case_id' "$CP" | while read -r CASE; do
+            echo "::group::infrastructure_error row: $CASE"
+            jq -r --arg c "$CASE" '.results[] | select(.case_id == $c) |
+              "status=\(.status) error=\(.error) failure_mode=\(.failure_mode) returncode=\(.returncode) elapsed=\(.elapsed_seconds)s http_attempts=\(.http_attempts) run_dir=\(.run_dir)",
+              "--- stderr_tail (last 60 lines) ---",
+              ((.stderr_tail // "") | split("\n") | .[-60:] | join("\n")),
+              "--- stdout_tail (last 60 lines) ---",
+              ((.stdout_tail // "") | split("\n") | .[-60:] | join("\n"))' "$CP" | scrub
+            echo "::endgroup::"
+          done
+          true
+
       - name: Stage campaign state for upload
         id: stage
         if: always() && steps.mode.outputs.mode != 'none'
