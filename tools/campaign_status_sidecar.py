@@ -30,6 +30,14 @@ except Exception:  # pragma: no cover - defensive, mirrors run_suite's constant
     MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 10
 
 COMMENT_STATE = "campaign_status_comment.json"
+STATUS_ISSUE_TITLE = "Atria covering campaign live status"
+# Optional explicit pin for the status Issue, as a bare number in a one-line
+# file. Set it when a campaign must report into an Issue that already exists
+# (one that an operator is following, or one opened before a restore). The file
+# is read from the checked-out ref, so it travels with the code rather than
+# with the state artifact, which is what makes it usable on a campaign whose
+# restored state predates the Issue it should report into.
+STATUS_ISSUE_PIN = "experiments/atria_status_issue.txt"
 # The sidecar is fail-open by construction: it swallows every API error so it
 # can never affect the campaign. That silence also made its own death
 # undiagnosable -- a killed process and a permanently 403-ing one look
@@ -61,7 +69,15 @@ def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
         return
 
 
-def _api(token: str, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def _api_any(
+    token: str, method: str, path: str, payload: dict[str, Any] | None = None
+) -> Any:
+    """Perform an API call and return the decoded JSON whatever its type.
+
+    Most endpoints answer with an object, but the Issues list endpoint answers
+    with an array, and the old _api could not express that: it coerced every
+    non-dict response to {} and so could not see a listing at all.
+    """
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     request = urllib.request.Request(
         "https://api.github.com" + path,
@@ -75,7 +91,11 @@ def _api(token: str, method: str, path: str, payload: dict[str, Any] | None = No
         },
     )
     with urllib.request.urlopen(request, timeout=10) as response:
-        value = json.loads(response.read().decode("utf-8"))
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _api(token: str, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    value = _api_any(token, method, path, payload)
     return value if isinstance(value, dict) else {}
 
 
@@ -258,6 +278,44 @@ def _write_heartbeat(output: Path, state: dict[str, Any]) -> None:
         return
 
 
+def _pinned_issue_number() -> int | None:
+    """The Issue number pinned in STATUS_ISSUE_PIN, or None if absent/invalid."""
+    try:
+        raw = (ROOT / STATUS_ISSUE_PIN).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    raw = raw.lstrip("#").strip()
+    return int(raw) if raw.isdigit() and int(raw) > 0 else None
+
+
+def _newest_open_status_issue(token: str, repository: str) -> int | None:
+    """Reuse the most recently opened live-status Issue, if there is one.
+
+    The sidecar used to create a new Issue unconditionally whenever the restored
+    state carried no issue number, so every dispatch of a campaign whose state
+    predates a given Issue opened another one. A campaign being watched in one
+    Issue then scattered its status across a new Issue per leg, and the number
+    an operator was following went silent. Reusing the newest open Issue keeps a
+    single campaign's status in one place across restores.
+    """
+    listing = _api_any(
+        token,
+        "GET",
+        f"/repos/{repository}/issues?state=open&sort=created&direction=desc&per_page=100",
+    )
+    if not isinstance(listing, list):
+        return None
+    for entry in listing:
+        if not isinstance(entry, dict) or entry.get("pull_request"):
+            continue
+        if entry.get("title") != STATUS_ISSUE_TITLE:
+            continue
+        number = entry.get("number")
+        if isinstance(number, int):
+            return number
+    return None
+
+
 def _ensure_comment(
     output: Path, repository: str, token: str
 ) -> tuple[tuple[int, int] | None, str | None]:
@@ -282,18 +340,24 @@ def _ensure_comment(
         return (issue, comment), None
     try:
         if not isinstance(issue, int):
-            issue_response = _api(
-                token,
-                "POST",
-                f"/repos/{repository}/issues",
-                {
-                    "title": "Atria covering campaign live status",
-                    "body": "Live campaign status comment created by the workflow sidecar.",
-                },
-            )
-            issue = issue_response.get("number")
+            # Prefer an explicitly pinned Issue, then an existing open one, and
+            # only create a new Issue when there is nothing to reuse. Every one
+            # of these is best-effort: a failure falls through to the next
+            # option, and the sidecar is fail-open regardless.
+            issue = _pinned_issue_number() or _newest_open_status_issue(token, repository)
             if not isinstance(issue, int):
-                return None, "Issue creation returned no number"
+                issue_response = _api(
+                    token,
+                    "POST",
+                    f"/repos/{repository}/issues",
+                    {
+                        "title": STATUS_ISSUE_TITLE,
+                        "body": "Live campaign status comment created by the workflow sidecar.",
+                    },
+                )
+                issue = issue_response.get("number")
+            if not isinstance(issue, int):
+                return None, "Issue selection returned no number"
             # Persist the Issue before creating its comment. If the comment API
             # has a transient failure, a later poll reuses this Issue instead
             # of creating one Issue per retry.

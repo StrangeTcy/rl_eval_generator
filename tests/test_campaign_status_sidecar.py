@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -11,6 +13,22 @@ if str(ROOT) not in sys.path:
 from tools import campaign_status_sidecar  # noqa: E402
 from tools.campaign_progress import write_progress  # noqa: E402
 from tools.campaign_status_sidecar import _body, _progress_bar  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _issue_selection_is_off(monkeypatch):
+    """Keep Issue selection out of every test in this file.
+
+    Choosing an Issue consults the pin file in the checked-out ref and then the
+    Issues API. These tests are about the comment lifecycle once an Issue exists,
+    so both are stubbed off: it forces the create path they were written
+    against, and it keeps a unit test from reaching the network. Issue selection
+    has its own coverage in test_campaign_status_issue_selection.py.
+    """
+    monkeypatch.setattr(campaign_status_sidecar, "_pinned_issue_number", lambda: None)
+    monkeypatch.setattr(
+        campaign_status_sidecar, "_newest_open_status_issue", lambda *a, **k: None
+    )
 
 
 def test_sidecar_renders_durable_gate_progress_without_network(tmp_path: Path) -> None:
