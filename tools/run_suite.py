@@ -55,9 +55,18 @@ PROVIDER_MARKERS = (
 GATE_JUDGE_TIMEOUT_SECONDS = 2_100
 GATE_CASE_FINISH_RESERVE_SECONDS = 180
 # A transient Docker/judge/controller loss gets a bounded automatic restart
-# across scheduled jobs.  A fourth failure is an explicit terminal reason,
+# across scheduled jobs.  Exceeding the count is an explicit terminal reason,
 # rather than an unbounded paid retry loop.
-MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 3
+#
+# Every retry is a FULL PAID EPISODE: the agent runs and spends provider calls,
+# and only then does the controller or judge fail to produce a score.  So this
+# number is a multiplier on wasted spend for any case that fails
+# deterministically rather than flakily.  It is deliberately not a ceiling:
+# max_api_calls and max_tokens_total still bound total spend and still pause
+# non-resumably, so raising this cannot run the budget away -- it only changes
+# how much of that budget a broken case may consume before the campaign stops
+# for an operator.
+MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 10
 # An episode gets an independent ceiling so a hung Docker/judge/controller
 # process is distinguishable from a normal end-of-dispatch wall boundary.
 # A new episode is never started unless this full interval plus checkpoint and

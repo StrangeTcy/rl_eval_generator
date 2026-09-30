@@ -283,5 +283,8 @@ def test_container_failure_is_automatically_retried_then_stops_at_its_bound(
 
     checkpoint = run_suite.run_suite(manifest, **_kwargs(output))
     assert checkpoint["pause_reason"] == "infrastructure_error_retries_exhausted"
-    assert checkpoint["infrastructure_retries"]["case-000"] == 4
+    assert (
+        checkpoint["infrastructure_retries"]["case-000"]
+        == run_suite.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1
+    )
     assert decide_tick(output)["mode"] == "none"

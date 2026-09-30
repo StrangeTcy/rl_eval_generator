@@ -27,7 +27,7 @@ from tools.campaign_progress import read_progress  # noqa: E402
 try:  # The sidecar is fail-open: it must import even if the controller cannot.
     from tools.run_suite import MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES  # noqa: E402
 except Exception:  # pragma: no cover - defensive, mirrors run_suite's constant
-    MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 3
+    MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 10
 
 COMMENT_STATE = "campaign_status_comment.json"
 

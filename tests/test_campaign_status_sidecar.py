@@ -151,7 +151,10 @@ def test_body_names_the_case_holding_the_infrastructure_retry_budget(tmp_path: P
     _write_checkpoint(tmp_path, {
         "paused": True,
         "pause_reason": "infrastructure_error",
-        "infrastructure_retries": {"weird_machine/hard/0": 2, "glyph/easy/0": 1},
+        "infrastructure_retries": {
+            "weird_machine/hard/0": campaign_status_sidecar.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES - 1,
+            "glyph/easy/0": campaign_status_sidecar.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES - 2,
+        },
         "results": [{
             "case_id": "weird_machine/hard/0",
             "status": "infrastructure_error",
@@ -163,8 +166,9 @@ def test_body_names_the_case_holding_the_infrastructure_retry_budget(tmp_path: P
     body = campaign_status_sidecar._body(tmp_path)
 
     assert "Infrastructure retries by case" in body
-    assert "`weird_machine/hard/0`: 2/3 (1 automatic retry left)" in body
-    assert "`glyph/easy/0`: 1/3 (2 automatic retries left)" in body
+    bound = campaign_status_sidecar.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES
+    assert f"`weird_machine/hard/0`: {bound - 1}/{bound} (1 automatic retry left)" in body
+    assert f"`glyph/easy/0`: {bound - 2}/{bound} (2 automatic retries left)" in body
     # The sidecar reports durable metadata only, never captured process output.
     assert "SHOULD-NOT-APPEAR" not in body
 
@@ -173,7 +177,9 @@ def test_body_flags_an_exhausted_infrastructure_budget(tmp_path: Path) -> None:
     _write_checkpoint(tmp_path, {
         "paused": True,
         "pause_reason": "infrastructure_error_retries_exhausted",
-        "infrastructure_retries": {"weird_machine/hard/0": 4},
+        "infrastructure_retries": {
+            "weird_machine/hard/0": campaign_status_sidecar.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1,
+        },
     })
 
     assert "budget exhausted, stops for an operator" in campaign_status_sidecar._body(tmp_path)
