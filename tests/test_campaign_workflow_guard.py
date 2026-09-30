@@ -10,8 +10,8 @@ This exists because the guard was already silently dropped once. It was present
 in the documentation copy and absent from the deployed workflow, nothing
 noticed, and the deployed workflow tried to override the protected GITHUB_EVENT_NAME
 in a step env mapping. Run 38 logged `schedule` there, but the controller still
-lost the restored 73-result checkpoint. The safe default below resumes on a
-real schedule event instead of relying on that ineffective override.
+lost the restored 73-result checkpoint. The safe default below resumes on a real schedule event or an explicit
+Continue checkbox instead of relying on that ineffective override.
 
 Deployment model, which is why the rules below are not uniform:
 
@@ -33,11 +33,13 @@ the default branch on the very next leg.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -144,9 +146,232 @@ def test_safe_default_resume_uses_the_real_schedule_event() -> None:
     campaign = _step(SAFE_DEFAULT, CAMPAIGN_STEP_NAME)
     assert mode is not None and campaign is not None
     assert 'if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then' in mode.get("run", "")
+    assert '[ "$CONTINUATION" != "true" ]' in mode.get("run", "")
     assert "mode=fresh" in mode.get("run", "")
     assert "GITHUB_EVENT_NAME" not in (campaign.get("env") or {})
     assert "GITHUB_EVENT_NAME=" not in campaign.get("run", "")
+    assert "env -u GITHUB_EVENT_NAME" in campaign.get("run", "")
+    assert "--allow-provider" in campaign.get("run", "")
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or shutil.which("jq") is None,
+                    reason="needs bash and jq to execute the workflow mode decision")
+@pytest.mark.parametrize(
+    ("event_name", "continuation", "expected_mode", "expected_artifact_lookup"),
+    [
+        ("workflow_dispatch", "false", "fresh", False),
+        ("workflow_dispatch", "true", "none", True),
+        ("schedule", "false", "none", True),
+    ],
+)
+def test_continue_checkbox_selects_artifact_resume_not_the_ui_ref(
+    tmp_path: Path,
+    event_name: str,
+    continuation: str,
+    expected_mode: str,
+    expected_artifact_lookup: bool,
+) -> None:
+    """Execute the workflow's real mode step with a stub API.
+
+    An unticked manual dispatch is fresh and uses the entered code ref. A
+    checked dispatch and a schedule both go to the artifact lookup path; the
+    test's empty artifact list makes those paths no-op safely.
+    """
+    mode = _step(SAFE_DEFAULT, "Decide dispatch versus supervised resume")
+    assert mode is not None
+    body = mode.get("run", "")
+    for expression, value in (
+        ("${{ github.event_name }}", event_name),
+        ("${{ inputs.continuation }}", continuation),
+        ("${{ inputs.ref }}", "ui-selected-code-ref"),
+        ("${{ github.repository }}", "owner/repository"),
+    ):
+        body = body.replace(expression, value)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls_path = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$*\" >> \"$GH_CALLS\"\n"
+        "case \"$*\" in\n"
+        "  *'actions/artifacts?per_page=100'*) printf 'null\\n' ;;\n"
+        "esac\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    output_path = tmp_path / "github-output.txt"
+    env = os.environ.copy()
+    env.update({
+        "PATH": f"{fake_bin}:{env.get('PATH', '')}",
+        "GITHUB_REPOSITORY": "owner/repository",
+        "GITHUB_OUTPUT": str(output_path),
+        "GH_CALLS": str(calls_path),
+        "RUNNER_TEMP": str(tmp_path / "runner-temp"),
+    })
+    subprocess.run(["bash", "-c", body], cwd=tmp_path, env=env,
+                   check=True, capture_output=True, text=True)
+
+    output = output_path.read_text(encoding="utf-8")
+    calls = calls_path.read_text(encoding="utf-8").splitlines() if calls_path.exists() else []
+    assert f"mode={expected_mode}" in output
+    assert ("actions/artifacts?per_page=100" in " ".join(calls)) is expected_artifact_lookup
+    if event_name == "workflow_dispatch" and continuation == "false":
+        assert "ref=ui-selected-code-ref" in output
+    else:
+        assert "ref=ui-selected-code-ref" not in output
+
+
+
+@pytest.mark.skipif(
+    any(shutil.which(command) is None for command in ("bash", "jq", "unzip", "base64")),
+    reason="needs bash, jq, unzip, and base64 to execute the artifact decision path",
+)
+def test_checked_continue_restores_artifact_and_uses_its_pinned_ref(
+    tmp_path: Path,
+) -> None:
+    """Run the actual manual-Continue mode step against a fake Actions API.
+
+    The test provides a resumable artifact whose stored ref differs from the
+    UI's fresh-dispatch ref. A checked box must restore that artifact and output
+    its checkpoint commit, not treat the checkbox as a fresh launch.
+    """
+    mode = _step(SAFE_DEFAULT, "Decide dispatch versus supervised resume")
+    assert mode is not None
+    body = mode.get("run", "")
+    for expression, value in (
+        ("${{ github.event_name }}", "workflow_dispatch"),
+        ("${{ inputs.continuation }}", "true"),
+        ("${{ inputs.ref }}", "ui-selected-fresh-ref"),
+        ("${{ github.repository }}", "owner/repository"),
+    ):
+        body = body.replace(expression, value)
+
+    pinned_ref = "a" * 40
+    state_dir = tmp_path / "artifact-state"
+    state_dir.mkdir()
+    (state_dir / "campaign_ref.txt").write_text("operator-branch\n", encoding="utf-8")
+    (state_dir / "campaign_intent.json").write_text(json.dumps({
+        "schema_version": 1,
+        "provider": "atria",
+        "execution_mode": "paid",
+        "case_manifest_sha256": "b" * 64,
+        "gate_context_sha": pinned_ref,
+    }), encoding="utf-8")
+    (state_dir / "suite_checkpoint.json").write_text(json.dumps({
+        "paused": True,
+        "pause_reason": "max_wall_seconds",
+        "updated_at": "2020-01-01T00:00:00Z",
+        "results": [{"case_id": f"case-{i}"} for i in range(73)],
+        "run": {"manifest_commit": pinned_ref},
+    }), encoding="utf-8")
+    (state_dir / "campaign_report.json").write_text(json.dumps({
+        "status": "paused",
+        "pause_reason": "max_wall_seconds",
+        "resumable": True,
+    }), encoding="utf-8")
+    archive = tmp_path / "state.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        for path in state_dir.iterdir():
+            bundle.write(path, path.name)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls_path = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$*\" >> \"$GH_CALLS\"\n"
+        "case \"$*\" in\n"
+        "  *'actions/artifacts?per_page=100'*) printf '%s\\n' \"$FAKE_ARTIFACT_JSON\" ;;\n"
+        "  *'actions/artifacts/55/zip'*) cat \"$FAKE_STATE_ZIP\" ;;\n"
+        "  *'contents/experiments/atria_campaign.yaml?ref='*) printf '%s\\n' \"$FAKE_PROFILE_CONTENT\" ;;\n"
+        "  *'contents/tools/campaign_supervisor.py?ref='*) printf '%s\\n' \"$FAKE_SUPERVISOR_CONTENT\" ;;\n"
+        "  *'actions/runs?status=in_progress&per_page=100'*) printf '0\\n' ;;\n"
+        "  *) echo \"unexpected gh call: $*\" >&2; exit 2 ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+
+    env = os.environ.copy()
+    env.update({
+        "PATH": f"{fake_bin}:{env.get('PATH', '')}",
+        "GITHUB_REPOSITORY": "owner/repository",
+        "GITHUB_OUTPUT": str(tmp_path / "github-output.txt"),
+        "GH_CALLS": str(calls_path),
+        "RUNNER_TEMP": str(tmp_path / "runner-temp"),
+        "FAKE_ARTIFACT_JSON": json.dumps({
+            "id": 55,
+            "name": "atria-campaign-state-38",
+            "created_at": "2026-09-30T20:05:48Z",
+            "expired": False,
+        }),
+        "FAKE_STATE_ZIP": str(archive),
+        "FAKE_PROFILE_CONTENT": base64.b64encode(
+            b"manual_gate_blocked_exclusions: []\\n"
+        ).decode("ascii"),
+        "FAKE_SUPERVISOR_CONTENT": base64.b64encode(
+            (ROOT / "tools" / "campaign_supervisor.py").read_bytes()
+        ).decode("ascii"),
+    })
+    subprocess.run(["bash", "-c", body], cwd=tmp_path, env=env,
+                   check=True, capture_output=True, text=True, timeout=60)
+
+    output = (tmp_path / "github-output.txt").read_text(encoding="utf-8")
+    assert "mode=resume" in output
+    assert f"ref={pinned_ref}" in output
+    assert "ref=ui-selected-fresh-ref" not in output
+    calls = calls_path.read_text(encoding="utf-8").splitlines()
+    assert any("actions/artifacts?per_page=100" in call for call in calls)
+    assert any("actions/artifacts/55/zip" in call for call in calls)
+    assert any("campaign_supervisor.py?ref=operator-branch" in call for call in calls)
+
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash to execute the manual resume command")
+def test_manual_continue_unsets_event_only_for_controller_child(tmp_path: Path) -> None:
+    """A checked manual resume must not override the runner event, but its
+    controller child must take the non-destructive resume path and explicit
+    provider authorization.
+    """
+    campaign = _step(SAFE_DEFAULT, CAMPAIGN_STEP_NAME)
+    assert campaign is not None
+    body = campaign.get("run", "")
+    start = body.index("# A checked manual Continue")
+    end = body.index("rc=$?", start)
+    command_block = body[start:end]
+    command_block = command_block.replace("${{ github.event_name }}", "workflow_dispatch")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python"
+    fake_python.write_text(
+        """#!/usr/bin/env bash
+printf '%s\\n' "${GITHUB_EVENT_NAME-UNSET}" > "$CONTROLLER_EVENT"
+printf '%s\\n' "$*" > "$CONTROLLER_ARGS"
+""",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    env = os.environ.copy()
+    env.update({
+        "PATH": f"{fake_bin}:{env.get('PATH', '')}",
+        "GITHUB_EVENT_NAME": "workflow_dispatch",
+        "CONTROLLER_EVENT": str(tmp_path / "child-event.txt"),
+        "CONTROLLER_ARGS": str(tmp_path / "child-args.txt"),
+    })
+    script = "set -euo pipefail\nMODE=resume\n" + command_block + "\nrc=$?\nexit $rc\n"
+    subprocess.run(["bash", "-c", script], cwd=tmp_path, env=env,
+                   check=True, capture_output=True, text=True)
+
+    assert (tmp_path / "child-event.txt").read_text(encoding="utf-8").strip() == "UNSET"
+    args = (tmp_path / "child-args.txt").read_text(encoding="utf-8")
+    assert "--allow-provider" in args
+    assert "--profile experiments/atria_campaign.yaml" in args
+    assert "--out runs/atria_campaign" in args
 
 
 def test_safe_default_resume_routes_the_restored_sidecar_to_issue_three() -> None:
@@ -229,23 +454,26 @@ def test_resume_routing_overwrites_stale_sidecar_identity_without_opening_issue(
 
 
 def test_the_safe_default_does_not_re_enable_chaining() -> None:
-    """atria-campaign.yml.example is what gets copied onto the live workflow, so
-    it must not smuggle in the self-dispatch chain. Adding the guard is meant to
-    be behaviourally inert; adding a chain is not. The chained variant is kept
-    as a separate, explicit file so that decision stays separate."""
+    """The safe default may resume by schedule or explicit operator checkbox,
+    but it must not self-dispatch. The chained variant stays separate because
+    it requires actions: write and can repeat a bad leg automatically."""
     workflow = yaml.load(SAFE_DEFAULT.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
     triggers = workflow["on"]
     inputs = triggers["workflow_dispatch"].get("inputs") or {}
     steps = [s.get("name") for s in workflow["jobs"]["campaign"]["steps"]]
 
     assert CHAIN_STEP_NAME not in steps, (
-        "the safe default must stay cron-only; the chain belongs in "
-        "atria-campaign-chained.yml.example"
+        "the safe default may offer an operator Continue checkbox, but it must "
+        "not self-dispatch; chaining belongs in atria-campaign-chained.yml.example"
     )
-    assert "continuation" not in inputs, (
-        "the safe default must not accept a continuation input; a ticked box "
-        "turns a copy into a chained dispatch"
+    assert inputs.get("continuation", {}).get("type") == "boolean", (
+        "manual resume must be an explicit boolean checkbox, not an ambiguous "
+        "text field or an automatic self-dispatch"
     )
+    assert inputs["continuation"].get("default") == "false"
+    assert "latest eligible campaign artifact" in inputs["continuation"].get("description", "")
+    assert "fresh campaign only" in inputs.get("ref", {}).get("description", "")
+    assert "chain_depth" not in inputs
     assert workflow["permissions"].get("actions") == "read", (
         "the safe default does not dispatch anything, so it must not request "
         "actions: write"

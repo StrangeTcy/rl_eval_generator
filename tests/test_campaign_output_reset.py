@@ -59,6 +59,31 @@ def test_scheduled_resume_keeps_its_state(tmp_path: Path) -> None:
     assert reset is False
 
 
+def test_manual_continue_preserves_gate_only_state_without_overriding_event(tmp_path: Path) -> None:
+    """A checked Continue runs the controller child with GITHUB_EVENT_NAME
+    unset. This is essential before the first episode: a workflow_dispatch
+    would otherwise infer freshness and discard banked gate rows.
+    """
+    output = _state(tmp_path, 0)
+    (output / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {"gate-case": {"status": "passed"}}}), encoding="utf-8"
+    )
+
+    reset_as_dispatch, _ = _should_reset_output(
+        output,
+        explicit_fresh=False,
+        profile=PROFILE,
+        environ={"GITHUB_EVENT_NAME": "workflow_dispatch"},
+    )
+    reset_as_manual_resume, reason = _should_reset_output(
+        output, explicit_fresh=False, profile=PROFILE, environ={}
+    )
+
+    assert reset_as_dispatch is True, "a raw workflow_dispatch is a fresh start with no episodes"
+    assert reset_as_manual_resume is False, "the explicit Continue child must retain all gate rows"
+    assert "local" in reason
+
+
 def test_explicit_fresh_still_resets_even_with_progress(tmp_path: Path) -> None:
     """An operator may still discard a campaign deliberately."""
     output = _state(tmp_path, 73)
