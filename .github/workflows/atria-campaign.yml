@@ -452,15 +452,26 @@ jobs:
           # best-effort and discarded on failure: like the sidecar, an
           # observer must never perturb the campaign.  120s keeps it to 30
           # writes/hour, far under GitHub's secondary rate limits.
+          # The campaign resumes pinned to the checkpoint's commit SHA, not to
+          # a branch, so it can never pick up a newer sidecar: the observer it
+          # runs is frozen at whatever commit produced the state. That sidecar
+          # opens a fresh Issue on every leg, and this watchdog used to follow
+          # whichever Issue that sidecar last recorded -- which is how one
+          # campaign ended up spread across Issues #3 through #8.
+          #
+          # Report to a fixed Issue instead. This runs in the workflow, not the
+          # pinned code, so it is the one status channel the campaign cannot
+          # outrun. It also stops depending on the sidecar having created an
+          # Issue at all: the progress files it reads are written by the
+          # controller, so this reports even if the observer never starts.
+          STATUS_ISSUE=3
           watchdog() {
             while true; do
               sleep 120
-              ISSUE=$(jq -r '.issue_number // empty' \
-                runs/atria_campaign/campaign_status_comment.json 2>/dev/null || true)
-              [ -n "$ISSUE" ] || continue
+              ISSUE="$STATUS_ISSUE"
               PROG=runs/atria_campaign/campaign_progress.json
-              SEEN="never"
-              [ -f "$PROG" ] && SEEN=$(date -u -r "$PROG" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "?")
+              [ -f "$PROG" ] || continue
+              SEEN=$(date -u -r "$PROG" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "?")
               FIELD() { jq -r "$1 // \"-\"" "$PROG" 2>/dev/null || echo "-"; }
               HB=runs/atria_campaign/campaign_status_heartbeat.json
               SIDECAR="no heartbeat (observer predates the heartbeat, or never started)"
