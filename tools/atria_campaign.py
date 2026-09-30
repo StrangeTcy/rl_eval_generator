@@ -396,6 +396,55 @@ def _format_failure_diagnostics(diagnostics: Mapping[str, Any]) -> str:
     return suffix[:6000]
 
 
+def _recorded_episode_count(output: Path) -> int:
+    """How many episodes the restored checkpoint has already banked."""
+    try:
+        checkpoint = json.loads(
+            (output / "suite_checkpoint.json").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return 0
+    results = checkpoint.get("results")
+    return len(results) if isinstance(results, list) else 0
+
+
+def _should_reset_output(
+    output: Path,
+    *,
+    explicit_fresh: bool,
+    profile: Mapping[str, Any],
+    environ: Mapping[str, str],
+) -> tuple[bool, str]:
+    """Decide whether to delete the campaign output directory.
+
+    History: this decision used to be inline and inferred a fresh start from
+    ``GITHUB_EVENT_NAME == "workflow_dispatch"`` alone, on the assumption that
+    "resumes arrive as schedule events". When the workflow gained a
+    self-dispatched continuation, resumes started arriving as
+    workflow_dispatch, and the restored state artifact was deleted immediately
+    after being restored -- destroying 73 banked episodes and ~12h of gate
+    rows over several legs before anyone noticed.
+
+    The lesson is not "fix the event name" (that is done in the workflow); it
+    is that an *inferred* fresh start must never be destructive. Deleting
+    recorded work now requires explicit operator intent via --fresh. Any
+    future wiring mistake costs a redundant no-op, not the campaign.
+    """
+    if profile.get("provider") != "atria":
+        return False, "non-atria profile keeps its output directory"
+    if explicit_fresh:
+        return True, "explicit --fresh"
+    if environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
+        return False, f"event {environ.get('GITHUB_EVENT_NAME') or 'local'} is a resume"
+    recorded = _recorded_episode_count(output)
+    if recorded > 0:
+        return False, (
+            f"refusing to infer a fresh start: {recorded} recorded episodes "
+            f"would be destroyed; pass --fresh to discard them deliberately"
+        )
+    return True, "workflow_dispatch with no recorded episodes"
+
+
 def _reset_fresh_campaign_output(output: Path) -> None:
     """Remove stale checked-in rehearsal artifacts on an explicit fresh run.
 
@@ -827,16 +876,11 @@ def main(argv: list[str] | None = None) -> int:
         profile = _load_yaml(args.profile)
         _validate_campaign_profile(profile)
 
-        # workflow_dispatch is always a fresh run in atria-campaign.yml. The
-        # repository currently tracks stale five-case rehearsal outputs under
-        # runs/atria_campaign; do not let those seed a covering run. Resumes
-        # arrive as schedule events and must keep the artifact restored by the
-        # workflow. --fresh provides the same explicit behavior to local users.
-        fresh_dispatch = (
-            os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
-            and profile.get("provider") == "atria"
+        reset, reset_reason = _should_reset_output(
+            output, explicit_fresh=bool(args.fresh), profile=profile, environ=os.environ
         )
-        if profile.get("provider") == "atria" and (args.fresh or fresh_dispatch):
+        print(f"campaign output reset={reset} ({reset_reason})")
+        if reset:
             _reset_fresh_campaign_output(output)
         else:
             output.mkdir(parents=True, exist_ok=True)

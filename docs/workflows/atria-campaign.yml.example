@@ -458,12 +458,45 @@ jobs:
           exit "$rc"
 
       - name: Stage campaign state for upload
+        id: stage
         if: always() && steps.mode.outputs.mode != 'none'
         run: |
           set -euo pipefail
           STAGED="$RUNNER_TEMP/atria_upload"
           rm -rf "$STAGED"
           mkdir -p "$STAGED"
+          # REGRESSION GUARD.
+          #
+          # The supervisor always resumes from the NEWEST state artifact. So
+          # any leg that ends with less progress than it started with does not
+          # merely waste itself -- it buries the good state and makes every
+          # later leg resume from the damaged one. That is what turned a
+          # single wipe into three legs of compounding loss on 2026-09-30
+          # (2.55MB/73 episodes -> 609KB -> 410KB -> 73KB), and it is why
+          # recovery needed an operator to hand-delete artifacts.
+          #
+          # A leg may legitimately end with the SAME count (paused early) but
+          # never with fewer: episodes are only ever appended to the restored
+          # checkpoint. Fewer means the state was reset or corrupted, so the
+          # restored copy is uploaded instead and the job fails loudly. The
+          # chain is suppressed too: continuing would just repeat the damage.
+          count_episodes() {
+            jq '(.results // []) | length' "$1" 2>/dev/null || echo 0
+          }
+          BEFORE=0
+          RESTORED="$RUNNER_TEMP/atria_state/suite_checkpoint.json"
+          [ -f "$RESTORED" ] && BEFORE=$(count_episodes "$RESTORED")
+          AFTER=0
+          CURRENT=runs/atria_campaign/suite_checkpoint.json
+          [ -f "$CURRENT" ] && AFTER=$(count_episodes "$CURRENT")
+          echo "episodes before=$BEFORE after=$AFTER"
+          if [ "$BEFORE" -gt 0 ] && [ "$AFTER" -lt "$BEFORE" ]; then
+            echo "::error::Campaign state regressed: $BEFORE recorded episodes on entry, $AFTER on exit. Uploading the RESTORED state instead so the good artifact stays newest, and suppressing the continuation."
+            cp -a "$RUNNER_TEMP/atria_state/." "$STAGED/"
+            echo "regressed=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "regressed=false" >> "$GITHUB_OUTPUT"
           if [ -d runs/atria_campaign ]; then
             cp -a runs/atria_campaign/. "$STAGED/"
           else
@@ -499,7 +532,14 @@ jobs:
       - name: Chain the next dispatch
         # Only after the campaign actually ran: a setup/checkout failure must
         # not spin a dispatch loop, and cron still covers that case.
+<<<<<<< Updated upstream
         if: always() && steps.campaign.conclusion != 'skipped' && steps.mode.outputs.mode != 'none'
+=======
+        # steps.stage.outputs.regressed blocks the chain when this leg lost
+        # progress: repeating a destructive leg automatically is exactly how
+        # one wipe became a self-sustaining loop.
+        if: always() && steps.campaign.conclusion != 'skipped' && steps.mode.outputs.mode != 'none' && steps.stage.outputs.regressed != 'true'
+>>>>>>> Stashed changes
         env:
           GH_TOKEN: ${{ github.token }}
           CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
