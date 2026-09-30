@@ -1,3 +1,41 @@
+# MANUAL-RESUME variant. Not the default. Copy to
+# .github/workflows/atria-campaign.yml if you want to start every leg by hand.
+#
+# This is atria-campaign-chained.yml.example with the self-dispatch chain
+# REMOVED. Nothing dispatches itself: the campaign advances only when a human
+# ticks `continuation` on a manual dispatch, or when a cron tick lands. That is
+# the point of this file -- the chain is what turned one wipe into three
+# self-sustaining legs on 2026-09-30.
+#
+# WHY THIS EXISTS RATHER THAN atria-campaign.yml.example
+#
+# The cron-only file has no `continuation` input, so a manual dispatch on it
+# takes the fresh path: the state artifact is never restored and the campaign
+# starts from zero. That file can only resume on a schedule. This one can be
+# resumed deliberately, leg by leg, which is what you want if you do not want a
+# campaign advancing on its own.
+#
+# IT STILL HAS THE SAFETY LAYERS
+#
+#   * the state-regression guard, so a leg that ends with fewer episodes than
+#     it restored uploads the RESTORED copy and fails loudly instead of
+#     publishing the loss;
+#   * the GITHUB_EVENT_NAME override, so a resume presents itself to the pinned
+#     controller as the event that controller treats as a resume. Keep this: the
+#     campaign checks out a PINNED ref whose age is unknown, and an older
+#     controller still contains the rmtree-on-workflow_dispatch inference that
+#     destroyed 73 banked episodes.
+#
+# HOW TO USE IT
+#
+# Actions -> Atria covering campaign -> Run workflow:
+#   ref:          main     (or the ref the campaign is pinned to)
+#   continuation: TICK IT
+#
+# Tick it every time. Unticked is a deliberate restart from zero: it discards
+# the banked episodes in the state artifact, and it is the one remaining way to
+# lose them with no bug firing at all.
+#
 # CHAINED variant of the Atria covering campaign workflow. NOT the default.
 #
 # atria-campaign.yml.example is the safe default to deploy: cron-only, with the
@@ -64,26 +102,21 @@ on:
         description: "Continue the paused campaign from its state artifact (leave unticked ONLY to restart from scratch)"
         required: false
         default: false
-      chain_depth:
-        description: "Internal: how many self-dispatched continuations precede this one"
-        required: false
-        default: "0"
-  schedule:
-    # Fallback only. Self-dispatch (see "Chain the next dispatch") is the
-    # primary continuation path; GitHub drops most scheduled ticks on a busy
-    # repository, so a campaign that relied on cron alone advanced about once
-    # every few hours instead of twice an hour. Every tick either resumes or
-    # no-ops, so the two paths are safe to run together: whichever arrives
-    # first resumes, and the other finds an unpaused or already-running
-    # campaign and exits.
-    - cron: "13,43 * * * *"
+  # NO schedule trigger on purpose. This variant advances only when a human
+  # dispatches it, so a campaign can never resume, retry or chain while nobody
+  # is watching. Two consequences worth knowing:
+  #   * if a leg fails or you stop dispatching, the campaign simply sits idle.
+  #     Nothing retries it. That is the trade for full manual control.
+  #   * the supervisor's backoff is still enforced: dispatching again too soon
+  #     returns mode=none and the leg exits immediately, doing nothing.
+  # To get a scheduled fallback back, add a `schedule:` entry to this same `on:`
+  # block whose crontab expression is "13,43 * * * *". Nothing else changes.
 permissions:
   contents: read
-  # actions: write is required for the self-dispatched continuation below.
-  # It grants no provider access and cannot raise a budget ceiling: the
-  # continuation still has to satisfy the same supervisor policy as a cron
-  # tick before it runs anything.
-  actions: write
+  # Read-only on purpose: this variant never dispatches anything. The
+  # self-dispatch chain was removed, so a continuation is started by a human
+  # ticking `continuation`, or by a cron tick. No leg advances on its own.
+  actions: read
   issues: write
 # One campaign at a time; a queued tick waits for the running one to finish.
 concurrency:
@@ -520,63 +553,3 @@ jobs:
             !${{ runner.temp }}/atria_upload/**/secret_key.json
           if-no-files-found: error
           retention-days: 90
-      # Primary continuation path. The campaign exits 8 when it pauses
-      # resumably, and historically waited for a cron tick that GitHub
-      # frequently never delivered. Dispatching the next leg here makes the
-      # chain deterministic: the concurrency group queues it behind this very
-      # job, so it starts as soon as this one releases the slot.
-      #
-      # This step grants no new authority. The continuation re-enters the
-      # same supervisor decision as a cron tick, against the state artifact
-      # this job just uploaded, so a terminal marker, an operator pause, an
-      # exhausted retry ledger, or a completed campaign all still stop the
-      # chain there. That is also what terminates the loop: a continuation
-      # whose decision is "none" skips this step and dispatches nothing.
-      - name: Chain the next dispatch
-        # Only after the campaign fuckingly ran: a setup/checkout failure must
-        # not spin a dispatch loop, and cron still covers that case.
-        # steps.stage.outputs.regressed blocks the chain when this leg lost
-        # progress: repeating a destructive leg automatically is exactly how
-        # one wipe became a self-sustaining loop.
-        if: always() && steps.campaign.conclusion != 'skipped' && steps.mode.outputs.mode != 'none' && steps.stage.outputs.regressed != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
-          CHAIN_REF: ${{ steps.mode.outputs.ref }}
-        run: |
-          set -uo pipefail
-          # Backstop against a pathological loop the supervisor fails to stop.
-          # A full campaign is a few dozen legs; 500 is far above that and far
-          # below anything expensive, and cron still continues past it.
-          CHAIN_MAX=500
-          DEPTH=$(printf '%s' "${CHAIN_DEPTH:-0}" | tr -cd '0-9')
-          DEPTH=${DEPTH:-0}
-          if [ "$DEPTH" -ge "$CHAIN_MAX" ]; then
-            echo "chain depth $DEPTH reached the $CHAIN_MAX backstop; leaving continuation to cron"
-            exit 0
-          fi
-          # A terminal marker is the wrapper's explicit "do not retry".
-          if [ -f runs/atria_campaign/wrapper_failed.json ]; then
-            echo "wrapper recorded a terminal failure; not chaining"
-            cat runs/atria_campaign/wrapper_failed.json || true
-            exit 0
-          fi
-          STATUS=$(jq -r '.status // ""' runs/atria_campaign/campaign_report.json 2>/dev/null || true)
-          case "$STATUS" in
-            completed|gate_passed)
-              echo "campaign $STATUS; nothing to continue"
-              exit 0
-              ;;
-          esac
-          NEXT=$((DEPTH + 1))
-          echo "chaining continuation $NEXT (status='${STATUS:-unknown}', ref=$CHAIN_REF)"
-          # Best-effort: a failed dispatch must not fail the job, because cron
-          # remains the fallback continuation path.
-          gh workflow run atria-campaign.yml \
-            --ref "${{ github.ref_name }}" \
-            -f ref="$CHAIN_REF" \
-            -f continuation=true \
-            -f chain_depth="$NEXT" \
-            || echo "continuation dispatch failed; cron will pick the state up instead"
-
-docs/workflows/atria-campaign-manual.yml.example
