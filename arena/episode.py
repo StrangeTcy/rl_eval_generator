@@ -333,7 +333,17 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     oracle_dir.mkdir(parents=True, exist_ok=True)
     oracle_path = oracle_dir / f"{uuid.uuid4().hex}.json"
     oracle_path.write_text(json.dumps(oracle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    if oracle["status"] != "passed":
+    # A campaign may deliberately run environments that have no behavioral
+    # reference (run_suite labels every such row judge_guarantee=compile_only).
+    # Only that one blocked reason is tolerated, and only when the controller
+    # opted in through the environment; every other gate failure still stops
+    # the episode before provider access, and direct runs stay strict.
+    compile_only_episode = (
+        oracle["status"] != "passed"
+        and oracle.get("reason") == "reference_not_configured"
+        and os.environ.get("ARENA_ALLOW_COMPILE_ONLY") == "1"
+    )
+    if oracle["status"] != "passed" and not compile_only_episode:
         raise ValueError(
             "Exact-instance judge oracle failed before provider access; "
             f"inspect {oracle_path} ({oracle.get('reason')})"
@@ -406,9 +416,10 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
 
         # This is the actual reset the agent will see. The earlier oracle
         # generation is not sufficient unless its judge/workspace bytes match.
-        verify_reset_matches_oracle(
-            oracle, episode_dir, options.env, options.difficulty, options.seed
-        )
+        if not compile_only_episode:
+            verify_reset_matches_oracle(
+                oracle, episode_dir, options.env, options.difficulty, options.seed
+            )
         agent_info = reset_info.get("agent_image") if isinstance(reset_info.get("agent_image"), dict) else {}
         judge_info = reset_info.get("judge_image") if isinstance(reset_info.get("judge_image"), dict) else {}
         artifacts.update_manifest(

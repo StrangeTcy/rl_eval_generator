@@ -23,6 +23,26 @@
 #      episodes stay valid. If the constant cannot be found the step fails
 #      before any provider call.
 #
+# RETRY30-COMPILE-ONLY (added after run 36790139309): the retries were never the
+# problem. Case batchnorm_ema__...__seed-0 failed every attempt in ~0.1s with
+#   "Exact-instance judge oracle failed before provider access (reference_not_configured)"
+# arena/episode.py re-runs the exact-instance gate for every episode and refuses
+# any environment that has no behavioral reference (tools/instance_oracle_gate.py
+# REFERENCES lists only 12), while the campaign profile deliberately runs those
+# environments compile-only (unreferenced_compile_only: true, rows labeled
+# judge_guarantee=compile_only). The first 72 cases all had references; case 73
+# is the first compile-only one, so every compile-only case would fail the same
+# way. Two additions fix this for the PINNED campaign without touching its commit:
+#   3. A step after the retry-bound step patches the checked-out
+#      arena/episode.py (working tree only) so that ONLY the blocked reason
+#      "reference_not_configured" is tolerated, and only when the environment
+#      variable ARENA_ALLOW_COMPILE_ONLY=1 is set. Every other gate failure
+#      still stops the episode before provider access. The step fails loudly
+#      if the expected code is not found.
+#   4. The campaign step's env sets ARENA_ALLOW_COMPILE_ONLY=1.
+# The same change, done properly, is on branch arena/01a0f473-rl-eval-generator
+# (arena/episode.py + tools/run_suite.py) for future campaigns.
+#
 # The 31st failure of a case exhausts it again and stays exhausted (31 > 30).
 # Every retry is a full paid episode; a case that fails deterministically will
 # spend up to 30 of them before this stops. Scheduled ticks will do this
@@ -445,6 +465,51 @@ jobs:
           echo "after:  $(grep -nE '^MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = ' "$TARGET")"
           echo "HEAD unchanged: $(git rev-parse HEAD)"
 
+      # RETRY30-COMPILE-ONLY: the pinned episode entry refuses compile-only
+      # environments (see header). Working-tree edit only; HEAD is unchanged.
+      - name: Let the pinned episode entry run compile-only environments
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib, sys
+          path = pathlib.Path("arena/episode.py")
+          src = path.read_text(encoding="utf-8")
+          if "ARENA_ALLOW_COMPILE_ONLY" in src:
+              print("already patched / native support; nothing to do")
+              raise SystemExit(0)
+          gate_old = '''    if oracle["status"] != "passed":
+                  raise ValueError(
+                      "Exact-instance judge oracle failed before provider access; "'''
+          gate_new = '''    compile_only_episode = (
+                  oracle["status"] != "passed"
+                  and oracle.get("reason") == "reference_not_configured"
+                  and os.environ.get("ARENA_ALLOW_COMPILE_ONLY") == "1"
+              )
+              if oracle["status"] != "passed" and not compile_only_episode:
+                  raise ValueError(
+                      "Exact-instance judge oracle failed before provider access; "'''
+          verify_old = '''        verify_reset_matches_oracle(
+                      oracle, episode_dir, options.env, options.difficulty, options.seed
+                  )
+          '''
+          verify_new = '''        if not compile_only_episode:
+                      verify_reset_matches_oracle(
+                          oracle, episode_dir, options.env, options.difficulty, options.seed
+                      )
+          '''
+          for name, old in (("gate", gate_old), ("verify", verify_old)):
+              if src.count(old) != 1:
+                  print(f"::error::pinned arena/episode.py: expected exactly one {name} block, found {src.count(old)}")
+                  raise SystemExit(1)
+          if not any(line.strip() == "import os" for line in src.splitlines()):
+              print("::error::pinned arena/episode.py does not import os")
+              raise SystemExit(1)
+          path.write_text(src.replace(gate_old, gate_new).replace(verify_old, verify_new), encoding="utf-8")
+          print("patched arena/episode.py: reference_not_configured tolerated when ARENA_ALLOW_COMPILE_ONLY=1")
+          PY
+          git rev-parse HEAD
+
       - name: Record the dispatched code ref for future resumes
         if: steps.mode.outputs.mode != 'none'
         run: |
@@ -469,6 +534,9 @@ jobs:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           WANDB_PROJECT: atria-covering-campaign
           GH_TOKEN: ${{ github.token }}
+          # RETRY30-COMPILE-ONLY: read by the patched arena/episode.py, and only
+          # to tolerate reference_not_configured. See the step above.
+          ARENA_ALLOW_COMPILE_ONLY: "1"
         run: |
           set -uo pipefail
           MODE="${{ steps.mode.outputs.mode }}"
