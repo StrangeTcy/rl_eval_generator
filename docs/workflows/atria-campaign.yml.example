@@ -532,14 +532,10 @@ jobs:
       - name: Chain the next dispatch
         # Only after the campaign actually ran: a setup/checkout failure must
         # not spin a dispatch loop, and cron still covers that case.
-<<<<<<< Updated upstream
-        if: always() && steps.campaign.conclusion != 'skipped' && steps.mode.outputs.mode != 'none'
-=======
         # steps.stage.outputs.regressed blocks the chain when this leg lost
         # progress: repeating a destructive leg automatically is exactly how
         # one wipe became a self-sustaining loop.
         if: always() && steps.campaign.conclusion != 'skipped' && steps.mode.outputs.mode != 'none' && steps.stage.outputs.regressed != 'true'
->>>>>>> Stashed changes
         env:
           GH_TOKEN: ${{ github.token }}
           CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
