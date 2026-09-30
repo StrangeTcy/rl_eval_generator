@@ -432,39 +432,54 @@ jobs:
           GITHUB_EVENT_NAME: ${{ steps.mode.outputs.mode == 'resume' && 'schedule' || github.event_name }}
         run: |
           set -uo pipefail
+          # The single Issue every status write goes to: the sidecar's
+          # comment (via the seed below) and this watchdog's body.
+          STATUS_ISSUE=3
+          # Pin the status Issue BEFORE the sidecar starts, by seeding the one
+          # piece of state it reads to decide where to report.
+          #
+          # The sidecar reuses an existing Issue when campaign_status_comment.json
+          # already names one; it only opens a new Issue when that number is
+          # absent. The campaign resumes pinned to the checkpoint's commit SHA, so
+          # its sidecar is a frozen revision that always takes the "absent" path
+          # -- which is how one campaign spread across Issues #3 through #9.
+          # Seeding the number here is the one lever that reaches it, because
+          # this file is read from the default branch while the sidecar is not.
+          #
+          # Only issue_number is seeded, deliberately. The sidecar needs both
+          # issue_number and comment_id to short-circuit; with just the number
+          # it skips Issue creation, posts one comment into #3, records that
+          # comment's id, and PATCHes it from then on. Seeding an id we could
+          # not verify would risk writing into a comment that is not the one
+          # being maintained.
+          mkdir -p runs/atria_campaign
+          if [ ! -f runs/atria_campaign/campaign_status_comment.json ]; then
+            printf '{\n  "issue_number": %s\n}\n' "$STATUS_ISSUE" \
+              > runs/atria_campaign/campaign_status_comment.json
+            echo "pinned campaign status to Issue $STATUS_ISSUE"
+          fi
           python tools/campaign_status_sidecar.py \
             --out runs/atria_campaign \
             --wait-for-path runs/atria_campaign/campaign_intent.json \
             --interval-seconds 30 &
           sidecar_pid=$!
-          # Workflow-level watchdog.  The Python sidecar above ships with the
-          # PINNED campaign code, so once a campaign is under way its observer
-          # can never be repaired: fixing it means abandoning the campaign's
-          # progress and starting fresh.  (Run 36688365669 went 3.5h with a
-          # dead observer and no way to tell whether it was working.)  This
-          # loop lives in the workflow file instead, which is always read from
-          # the default branch regardless of the pinned ref, so it reaches
-          # even an old-pinned campaign on its very next leg.
+          # Workflow-level watchdog: the campaign's only status channel.
           #
-          # It writes the Issue BODY; the sidecar owns its comment.  Two
-          # independent writers, no conflict over the same resource, and
-          # either one surviving is enough for visibility.  Every call is
-          # best-effort and discarded on failure: like the sidecar, an
-          # observer must never perturb the campaign.  120s keeps it to 30
-          # writes/hour, far under GitHub's secondary rate limits.
-          # The campaign resumes pinned to the checkpoint's commit SHA, not to
-          # a branch, so it can never pick up a newer sidecar: the observer it
-          # runs is frozen at whatever commit produced the state. That sidecar
-          # opens a fresh Issue on every leg, and this watchdog used to follow
-          # whichever Issue that sidecar last recorded -- which is how one
-          # campaign ended up spread across Issues #3 through #8.
+          # It writes the Issue BODY on a fixed interval. Every call is
+          # best-effort and discarded on failure -- an observer must never
+          # perturb the campaign -- and 120s keeps it to 30 writes/hour, far
+          # under GitHub's secondary rate limits.
           #
-          # Report to a fixed Issue instead. This runs in the workflow, not the
-          # pinned code, so it is the one status channel the campaign cannot
-          # outrun. It also stops depending on the sidecar having created an
-          # Issue at all: the progress files it reads are written by the
-          # controller, so this reports even if the observer never starts.
-          STATUS_ISSUE=3
+          # It lives in this file rather than in tools/ because this file is
+          # always read from the default branch regardless of the pinned ref,
+          # while the sidecar runs from the PINNED code that a resume is frozen
+          # to. That is what makes this loop the one status channel the pinned
+          # code cannot outrun, and it is why it reports a fixed Issue instead
+          # of following whatever Issue the sidecar last recorded.
+          #
+          # It triggers off campaign_progress.json, which the controller
+          # writes, so it goes quiet during setup and resumes the moment the
+          # campaign actually starts doing work.
           watchdog() {
             while true; do
               sleep 120
@@ -474,9 +489,9 @@ jobs:
               SEEN=$(date -u -r "$PROG" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "?")
               FIELD() { jq -r "$1 // \"-\"" "$PROG" 2>/dev/null || echo "-"; }
               HB=runs/atria_campaign/campaign_status_heartbeat.json
-              SIDECAR="no heartbeat (observer predates the heartbeat, or never started)"
+              SIDECAR="no heartbeat (observer never started)"
               if [ -f "$HB" ]; then
-                SIDECAR=$(jq -r '"cycles \(.cycles), published \(.published), consecutive failures \(.consecutive_failures), last error \(.last_error // "none")"' "$HB" 2>/dev/null || echo "unreadable")
+                SIDECAR=$(jq -r '"cycles \(.cycles), published \(.published), consecutive failures \(.consecutive_failures), last error \(.last_error // \"none\")"' "$HB" 2>/dev/null || echo "unreadable")
               fi
               BODY=$(printf '## Campaign watchdog (workflow-level)\n\nWritten by the workflow itself, independent of the pinned Python sidecar.\n\n- **Observed at:** %s\n- **Run:** https://github.com/%s/actions/runs/%s\n- **Progress file last written:** %s\n- **Phase:** `%s`\n- **Episodes:** `%s / %s`\n- **Current case:** `%s`\n- **Last case:** `%s` (`%s`)\n- **Sidecar heartbeat:** %s\n\nIf "progress file last written" stops advancing, the controller is stuck rather than slow.\n' \
                 "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
@@ -497,6 +512,7 @@ jobs:
             wait "$sidecar_pid" 2>/dev/null || true
             # campaign_report.json now records completed, paused, or blocked.
             # This must remain best-effort and never alter the controller rc.
+            # It reuses the Issue seeded above, so it cannot open a new one.
             python tools/campaign_status_sidecar.py \
               --out runs/atria_campaign --once || true
           }
