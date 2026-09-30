@@ -30,6 +30,18 @@ except Exception:  # pragma: no cover - defensive, mirrors run_suite's constant
     MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 10
 
 COMMENT_STATE = "campaign_status_comment.json"
+# The sidecar is fail-open by construction: it swallows every API error so it
+# can never affect the campaign. That silence also made its own death
+# undiagnosable -- a killed process and a permanently 403-ing one look
+# identical from outside, because both simply stop changing the comment. The
+# heartbeat is the missing failure channel: it is rewritten locally every
+# cycle, needs no network, and rides along in the uploaded state artifact, so
+# "did the observer die, and why" is answerable after the fact.
+HEARTBEAT = "campaign_status_heartbeat.json"
+# The workflow's cleanup trap runs a second, --once invocation. It must not
+# overwrite the periodic observer's record, which is the forensic evidence of
+# how the long-running process fared.
+FINAL_HEARTBEAT = "campaign_status_heartbeat_final.json"
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -216,21 +228,58 @@ def _body(output: Path) -> str:
     return "\n".join(lines)
 
 
-def _ensure_comment(output: Path, repository: str, token: str) -> tuple[int, int] | None:
-    """Create at most one Issue and then one durable status comment in it."""
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _describe_error(exc: BaseException) -> str:
+    """Summarize a failure without leaking request payloads or credentials.
+
+    The token travels in a header, never in the URL or these fields, so code
+    and reason are safe to persist. The result is truncated because it lands
+    in an artifact an operator reads, not a log.
+    """
+    if isinstance(exc, urllib.error.HTTPError):
+        description = f"HTTPError {exc.code} {exc.reason}"
+    elif isinstance(exc, urllib.error.URLError):
+        description = f"URLError {exc.reason}"
+    else:
+        description = f"{type(exc).__name__}: {exc}"
+    return description[:200]
+
+
+def _write_heartbeat(output: Path, state: dict[str, Any]) -> None:
+    """Persist observer liveness. Best-effort: never raises, never blocks."""
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        name = FINAL_HEARTBEAT if state.get("role") == "final" else HEARTBEAT
+        _write_json_atomic(output / name, state)
+    except Exception:
+        return
+
+
+def _ensure_comment(
+    output: Path, repository: str, token: str
+) -> tuple[tuple[int, int] | None, str | None]:
+    """Create at most one Issue and then one durable status comment in it.
+
+    Returns ``(identity, error)``. The error is propagated rather than
+    swallowed so the heartbeat can distinguish "refused by the API" from
+    "never ran"; the function itself still never raises.
+    """
     try:
         # The sidecar starts just before the controller creates its output.
         # Persist identity before any API call, or a fast first poll could
         # create an orphaned Issue that a later poll cannot recognize.
         output.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        return None
+    except OSError as exc:
+        return None, _describe_error(exc)
     state_path = output / COMMENT_STATE
     state = _read_json(state_path)
     issue = state.get("issue_number")
     comment = state.get("comment_id")
     if isinstance(issue, int) and isinstance(comment, int):
-        return issue, comment
+        return (issue, comment), None
     try:
         if not isinstance(issue, int):
             issue_response = _api(
@@ -244,7 +293,7 @@ def _ensure_comment(output: Path, repository: str, token: str) -> tuple[int, int
             )
             issue = issue_response.get("number")
             if not isinstance(issue, int):
-                return None
+                return None, "Issue creation returned no number"
             # Persist the Issue before creating its comment. If the comment API
             # has a transient failure, a later poll reuses this Issue instead
             # of creating one Issue per retry.
@@ -261,25 +310,31 @@ def _ensure_comment(output: Path, repository: str, token: str) -> tuple[int, int
         )
         comment = comment_response.get("id")
         if not isinstance(comment, int):
-            return None
+            return None, "comment creation returned no id"
         state["issue_number"] = issue
         state["comment_id"] = comment
         state.setdefault("campaign_started_at", datetime.now(UTC).isoformat().replace("+00:00", "Z"))
         _write_json_atomic(state_path, state)
-        return issue, comment
-    except (urllib.error.URLError, urllib.error.HTTPError, ValueError, TimeoutError):
-        return None
+        return (issue, comment), None
+    except (urllib.error.URLError, urllib.error.HTTPError, ValueError, TimeoutError) as exc:
+        return None, _describe_error(exc)
 
 
-def report_once(output: Path, repository: str, token: str) -> None:
-    target = _ensure_comment(output, repository, token)
+def report_once(output: Path, repository: str, token: str) -> str | None:
+    """Publish one update. Returns None on success, else a short error string.
+
+    The return value is the only change to the contract: the function still
+    never raises, so existing callers that ignore it behave exactly as before.
+    """
+    target, error = _ensure_comment(output, repository, token)
     if target is None:
-        return
+        return error or "comment identity unavailable"
     _issue, comment = target
     try:
         _api(token, "PATCH", f"/repos/{repository}/issues/comments/{comment}", {"body": _body(output)})
-    except (urllib.error.URLError, urllib.error.HTTPError, ValueError, TimeoutError):
-        return
+    except (urllib.error.URLError, urllib.error.HTTPError, ValueError, TimeoutError) as exc:
+        return _describe_error(exc)
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -308,13 +363,44 @@ def main(argv: list[str] | None = None) -> int:
         # into that directory just before the controller deliberately resets it.
         while not args.wait_for_path.exists():
             time.sleep(min(5.0, interval))
+    heartbeat: dict[str, Any] = {
+        "schema_version": 1,
+        "role": "final" if args.once else "periodic",
+        "pid": os.getpid(),
+        "started_at": _utc_now(),
+        "interval_seconds": interval,
+        "cycles": 0,
+        "published": 0,
+        "failures": 0,
+        "consecutive_failures": 0,
+        "last_published_at": None,
+        "last_error": None,
+        "last_error_at": None,
+    }
     while True:
+        heartbeat["cycles"] += 1
+        heartbeat["updated_at"] = _utc_now()
         try:
-            report_once(args.out, repository, token)
-        except Exception:
+            error = report_once(args.out, repository, token)
+        except Exception as exc:  # noqa: BLE001
             # The observer has no campaign-side effect, even on an unexpected
             # serialization/API failure.
-            pass
+            error = _describe_error(exc)
+        if error is None:
+            heartbeat["published"] += 1
+            heartbeat["last_published_at"] = heartbeat["updated_at"]
+            heartbeat["consecutive_failures"] = 0
+        else:
+            heartbeat["failures"] += 1
+            heartbeat["consecutive_failures"] += 1
+            heartbeat["last_error"] = error
+            heartbeat["last_error_at"] = heartbeat["updated_at"]
+        # Written after every cycle, including failing ones. A heartbeat whose
+        # updated_at stops advancing means the process itself is gone; one that
+        # keeps advancing while consecutive_failures climbs means the process
+        # is alive and the GitHub API is refusing it. Those two were previously
+        # indistinguishable.
+        _write_heartbeat(args.out, heartbeat)
         if args.once:
             return 0
         time.sleep(interval)

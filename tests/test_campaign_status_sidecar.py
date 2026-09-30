@@ -189,3 +189,72 @@ def test_body_omits_the_section_without_infrastructure_retries(tmp_path: Path) -
     _write_checkpoint(tmp_path, {"paused": False, "infrastructure_retries": {}})
 
     assert "Infrastructure retries by case" not in campaign_status_sidecar._body(tmp_path)
+
+
+def _run_sidecar_once(tmp_path: Path, monkeypatch, api) -> dict:
+    monkeypatch.setattr(campaign_status_sidecar, "_api", api)
+    monkeypatch.setenv("GH_TOKEN", "non-secret-test-value")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repository")
+    campaign_status_sidecar.main(["--out", str(tmp_path), "--once"])
+    return json.loads(
+        (tmp_path / campaign_status_sidecar.FINAL_HEARTBEAT).read_text(encoding="utf-8")
+    )
+
+
+def test_heartbeat_records_a_published_update(tmp_path: Path, monkeypatch) -> None:
+    def ok(_token, method, path, payload=None):
+        return {"number": 7, "id": 99}
+
+    heartbeat = _run_sidecar_once(tmp_path, monkeypatch, ok)
+
+    assert heartbeat["published"] == 1
+    assert heartbeat["failures"] == 0
+    assert heartbeat["consecutive_failures"] == 0
+    assert heartbeat["last_error"] is None
+    assert heartbeat["last_published_at"]
+    assert isinstance(heartbeat["pid"], int)
+
+
+def test_heartbeat_records_why_the_api_refused(tmp_path: Path, monkeypatch) -> None:
+    def forbidden(_token, _method, path, payload=None):
+        raise campaign_status_sidecar.urllib.error.HTTPError(
+            path, 403, "rate limit exceeded", {}, None
+        )
+
+    heartbeat = _run_sidecar_once(tmp_path, monkeypatch, forbidden)
+
+    # The distinction the old sidecar could not express: it ran, and was
+    # refused, rather than silently dying.
+    assert heartbeat["published"] == 0
+    assert heartbeat["failures"] == 1
+    assert heartbeat["consecutive_failures"] == 1
+    assert "403" in heartbeat["last_error"]
+    assert heartbeat["last_error_at"]
+    assert heartbeat["updated_at"]
+
+
+def test_final_heartbeat_does_not_clobber_the_periodic_record(tmp_path: Path, monkeypatch) -> None:
+    periodic = {"role": "periodic", "cycles": 240, "published": 239, "failures": 1}
+    campaign_status_sidecar._write_heartbeat(tmp_path, periodic)
+
+    _run_sidecar_once(tmp_path, monkeypatch, lambda *_a, **_k: {"number": 7, "id": 99})
+
+    preserved = json.loads(
+        (tmp_path / campaign_status_sidecar.HEARTBEAT).read_text(encoding="utf-8")
+    )
+    assert preserved["cycles"] == 240
+
+
+def test_report_once_reports_the_failure_but_still_never_raises(tmp_path: Path, monkeypatch) -> None:
+    def broken(_token, _method, path, payload=None):
+        raise campaign_status_sidecar.urllib.error.URLError("connection reset")
+
+    monkeypatch.setattr(campaign_status_sidecar, "_api", broken)
+
+    assert campaign_status_sidecar.report_once(tmp_path, "owner/repository", "t") is not None
+
+
+def test_describe_error_truncates_and_names_the_type() -> None:
+    long = campaign_status_sidecar._describe_error(ValueError("x" * 500))
+    assert long.startswith("ValueError: ")
+    assert len(long) <= 200
