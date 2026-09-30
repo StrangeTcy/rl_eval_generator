@@ -66,7 +66,7 @@ GATE_CASE_FINISH_RESERVE_SECONDS = 180
 # non-resumably, so raising this cannot run the budget away -- it only changes
 # how much of that budget a broken case may consume before the campaign stops
 # for an operator.
-MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 10
+MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 30
 # An episode gets an independent ceiling so a hung Docker/judge/controller
 # process is distinguishable from a normal end-of-dispatch wall boundary.
 # A new episode is never started unless this full interval plus checkpoint and
