@@ -16,8 +16,9 @@
 #     backoff up to one hour per outage (profile: resilience.*);
 #   * checkpoint/resume — provider errors, dispatch-wall boundaries, and a
 #     bounded per-case infrastructure retry pause with a resumable checkpoint;
-#     this workflow's own schedule trigger picks the state artifact back up
-#     and continues without human action;
+#     the job then self-dispatches its own continuation (see "Chain the next
+#     dispatch"), with the schedule trigger as a fallback, so the state
+#     artifact is picked back up and continued without human action;
 #   * fail-closed on money — budget ceilings (max_api_calls,
 #     max_tokens_total, max_http_attempts), floor effects, and exhausted
 #     infrastructure retries pause for an operator. The supervisor never
@@ -34,13 +35,31 @@ on:
         description: "Branch or full commit SHA containing the pinned campaign code"
         required: true
         default: "main"
+      continuation:
+        description: "Internal: this dispatch continues a paused campaign (set by the previous job, not by an operator)"
+        required: false
+        default: "false"
+      chain_depth:
+        description: "Internal: how many self-dispatched continuations precede this one"
+        required: false
+        default: "0"
   schedule:
-    # Twice hourly, off the hour. Every tick either resumes or no-ops.
+    # Fallback only. Self-dispatch (see "Chain the next dispatch") is the
+    # primary continuation path; GitHub drops most scheduled ticks on a busy
+    # repository, so a campaign that relied on cron alone advanced about once
+    # every few hours instead of twice an hour. Every tick either resumes or
+    # no-ops, so the two paths are safe to run together: whichever arrives
+    # first resumes, and the other finds an unpaused or already-running
+    # campaign and exits.
     - cron: "13,43 * * * *"
 
 permissions:
   contents: read
-  actions: read
+  # actions: write is required for the self-dispatched continuation below.
+  # It grants no provider access and cannot raise a budget ceiling: the
+  # continuation still has to satisfy the same supervisor policy as a cron
+  # tick before it runs anything.
+  actions: write
   issues: write
 
 # One campaign at a time; a queued tick waits for the running one to finish.
@@ -63,13 +82,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          CONTINUATION="${{ github.event_name == 'workflow_dispatch' && inputs.continuation || 'false' }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$CONTINUATION" != "true" ]; then
             echo "mode=fresh" >> "$GITHUB_OUTPUT"
             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
             echo "reason=manual dispatch ref ${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Scheduled tick: is there a campaign state to resume?
+          # Scheduled tick, or a self-dispatched continuation of a paused
+          # campaign. Both take the identical path from here: the state
+          # artifact plus the pinned supervisor decide, so a continuation can
+          # never do anything a cron tick could not.
+          # Is there a campaign state to resume?
           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
             --jq '[.artifacts[]
                    | select(.name | startswith("atria-campaign-state-"))
@@ -187,13 +211,37 @@ jobs:
             exit 0
           fi
           # Use the pinned supervisor module for decision
-          DECISION_JSON=$(python3 -c "
+          decide() {
+            python3 -c "
           import importlib.util, json, sys
           spec = importlib.util.spec_from_file_location('campaign_supervisor', sys.argv[1])
           module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
           print(json.dumps(module.decide_tick(sys.argv[2])))
-          " "$SUPERVISOR" "$STATE_STAGE")
+          " "$SUPERVISOR" "$STATE_STAGE"
+          }
+          DECISION_JSON=$(decide)
+          # The supervisor's post-pause cooldown exists to let a provider
+          # window or a runner slot clear; it is not a reason to abandon the
+          # chain. A cron tick cannot wait, so it no-ops and hopes a later
+          # tick lands. A self-dispatched continuation is already holding the
+          # slot, so it waits the remainder out (bounded by the supervisor's
+          # own RESUME_BACKOFF_SECONDS) and asks exactly once more. The
+          # cooldown is still honoured in full: nothing resumes early.
+          if [ "$CONTINUATION" = "true" ]; then
+            REASON_NOW=$(printf '%s' "$DECISION_JSON" | jq -r '.reason')
+            case "$REASON_NOW" in
+              "backoff:"*"retry in "*)
+                WAIT=$(printf '%s' "$REASON_NOW" | sed -n 's/.*retry in \([0-9]\{1,\}\)s.*/\1/p')
+                if [ -n "$WAIT" ] && [ "$WAIT" -gt 0 ] 2>/dev/null; then
+                  if [ "$WAIT" -gt 1200 ]; then WAIT=1200; fi
+                  echo "continuation waiting out the supervisor cooldown: ${WAIT}s"
+                  sleep $((WAIT + 5))
+                  DECISION_JSON=$(decide)
+                fi
+                ;;
+            esac
+          fi
           MODE=$(printf '%s' "$DECISION_JSON" | jq -r '.mode')
           REASON=$(printf '%s' "$DECISION_JSON" | jq -r '.reason')
           REF=$(printf '%s' "$DECISION_JSON" | jq -r '.ref // ""')
@@ -297,6 +345,7 @@ jobs:
           echo "${{ steps.mode.outputs.ref }}" > runs/atria_campaign/campaign_ref.txt
 
       - name: Run the covering campaign (fresh or resumed)
+        id: campaign
         if: steps.mode.outputs.mode != 'none'
         # Step-level deadline below the 350-minute job cap: if the campaign
         # process itself ever hangs, this step fails while the job still has
@@ -364,3 +413,59 @@ jobs:
             !${{ runner.temp }}/atria_upload/**/secret_key.json
           if-no-files-found: error
           retention-days: 90
+
+      # Primary continuation path. The campaign exits 8 when it pauses
+      # resumably, and historically waited for a cron tick that GitHub
+      # frequently never delivered. Dispatching the next leg here makes the
+      # chain deterministic: the concurrency group queues it behind this very
+      # job, so it starts as soon as this one releases the slot.
+      #
+      # This step grants no new authority. The continuation re-enters the
+      # same supervisor decision as a cron tick, against the state artifact
+      # this job just uploaded, so a terminal marker, an operator pause, an
+      # exhausted retry ledger, or a completed campaign all still stop the
+      # chain there. That is also what terminates the loop: a continuation
+      # whose decision is "none" skips this step and dispatches nothing.
+      - name: Chain the next dispatch
+        # Only after the campaign actually ran: a setup/checkout failure must
+        # not spin a dispatch loop, and cron still covers that case.
+        if: always() && steps.campaign.conclusion != 'skipped' && steps.mode.outputs.mode != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
+          CHAIN_REF: ${{ steps.mode.outputs.ref }}
+        run: |
+          set -uo pipefail
+          # Backstop against a pathological loop the supervisor fails to stop.
+          # A full campaign is a few dozen legs; 500 is far above that and far
+          # below anything expensive, and cron still continues past it.
+          CHAIN_MAX=500
+          DEPTH=$(printf '%s' "${CHAIN_DEPTH:-0}" | tr -cd '0-9')
+          DEPTH=${DEPTH:-0}
+          if [ "$DEPTH" -ge "$CHAIN_MAX" ]; then
+            echo "chain depth $DEPTH reached the $CHAIN_MAX backstop; leaving continuation to cron"
+            exit 0
+          fi
+          # A terminal marker is the wrapper's explicit "do not retry".
+          if [ -f runs/atria_campaign/wrapper_failed.json ]; then
+            echo "wrapper recorded a terminal failure; not chaining"
+            cat runs/atria_campaign/wrapper_failed.json || true
+            exit 0
+          fi
+          STATUS=$(jq -r '.status // ""' runs/atria_campaign/campaign_report.json 2>/dev/null || true)
+          case "$STATUS" in
+            completed|gate_passed)
+              echo "campaign $STATUS; nothing to continue"
+              exit 0
+              ;;
+          esac
+          NEXT=$((DEPTH + 1))
+          echo "chaining continuation $NEXT (status='${STATUS:-unknown}', ref=$CHAIN_REF)"
+          # Best-effort: a failed dispatch must not fail the job, because cron
+          # remains the fallback continuation path.
+          gh workflow run atria-campaign.yml \
+            --ref "${{ github.ref_name }}" \
+            -f ref="$CHAIN_REF" \
+            -f continuation=true \
+            -f chain_depth="$NEXT" \
+            || echo "continuation dispatch failed; cron will pick the state up instead"
