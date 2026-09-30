@@ -1,5 +1,31 @@
 # DEPLOYABLE REPLACEMENT for .github/workflows/atria-campaign.yml.
 #
+# RETRY-BOUND-30 VARIANT. Built on the workflow currently on main (4ed0f8b) and
+# differs from it in exactly two places, both marked "RETRY30" below:
+#
+#   1. In "Decide dispatch versus supervised resume", right after the state
+#      artifact is unzipped: a campaign paused with
+#      infrastructure_error_retries_exhausted is turned back into a resumable
+#      infrastructure_error pause, but ONLY while every per-case retry count in
+#      the ledger is <= 30. The supervisor refuses the exhausted reason by
+#      design and a manual Continue cannot override that, so this rewrite has to
+#      happen before the supervisor decides. The retry counts themselves are
+#      never reduced, and budget ceilings (max_api_calls, max_tokens_total,
+#      max_http_attempts, floor effect) are untouched.
+#   2. A new step after "Restore previous campaign state after checkout" sets
+#      MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES to 30 in the checked-out, PINNED
+#      tools/run_suite.py. A campaign runs pinned code, so the bound raised in
+#      the repo never reached it (the pinned code stops at 3). The edit is to
+#      the working tree only: `git rev-parse HEAD` (the gate-context hash) and
+#      the checkpoint's manifest_commit do not change, so banked gate rows and
+#      episodes stay valid. If the constant cannot be found the step fails
+#      before any provider call.
+#
+# The 31st failure of a case exhausts it again and stays exhausted (31 > 30).
+# Every retry is a full paid episode; a case that fails deterministically will
+# spend up to 30 of them before this stops. Scheduled ticks will do this
+# unattended, same as any other resumable pause.
+#
 # Copy this file to .github/workflows/atria-campaign.yml by hand. The branch
 # that carries it cannot push to that path: the GitHub App token used for
 # automation has no `workflows` permission, so a change to .github/workflows/ is
@@ -144,6 +170,34 @@ jobs:
           gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
             > "$RUNNER_TEMP/state.zip"
           unzip -q "$RUNNER_TEMP/state.zip" -d "$STATE_STAGE"
+          # RETRY30: undo an exhausted infrastructure-retry pause while the
+          # bound is 30. Must run before the supervisor decides (it treats
+          # infrastructure_error_retries_exhausted as an operator stop).
+          RETRY_BOUND=30
+          RETRY_CP="$STATE_STAGE/suite_checkpoint.json"
+          if [ -f "$RETRY_CP" ] && jq -e --argjson max "$RETRY_BOUND" '
+                .paused == true
+                and .pause_reason == "infrastructure_error_retries_exhausted"
+                and ((.infrastructure_retries // {}) | length > 0)
+                and ([(.infrastructure_retries // {})[]] | all(type == "number" and . <= $max))
+              ' "$RETRY_CP" >/dev/null 2>&1; then
+            jq --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson max "$RETRY_BOUND" '
+                .pause_reason = "infrastructure_error"
+                | .retry_bound_override = {
+                    "reopened_at": $now,
+                    "from_reason": "infrastructure_error_retries_exhausted",
+                    "bound": $max,
+                    "ledger_at_reopen": .infrastructure_retries
+                  }
+              ' "$RETRY_CP" > "$RETRY_CP.tmp"
+            mv "$RETRY_CP.tmp" "$RETRY_CP"
+            echo "retry bound $RETRY_BOUND: reopened an exhausted infrastructure-retry pause; ledger=$(jq -c '.infrastructure_retries' "$RETRY_CP")"
+            RETRY_REPORT="$STATE_STAGE/campaign_report.json"
+            if [ -f "$RETRY_REPORT" ]; then
+              jq '.pause_reason = "infrastructure_error" | .resumable = true' "$RETRY_REPORT" > "$RETRY_REPORT.tmp" \
+                && mv "$RETRY_REPORT.tmp" "$RETRY_REPORT" || rm -f "$RETRY_REPORT.tmp"
+            fi
+          fi
           # Fetch the supervisor module from the pinned ref recorded in the
           # state artifact, so the marker schema and its reader stay versioned
           # together.  This is the same module exercised provider-free by
@@ -373,6 +427,21 @@ jobs:
           cp -a "$RUNNER_TEMP/atria_state/." runs/atria_campaign/
           echo "restored previous campaign state:"
           ls -la runs/atria_campaign | head -20
+
+      # RETRY30: the pinned checkout carries its own (old) retry bound.
+      - name: Apply the 30-retry infrastructure bound to the pinned code
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          TARGET=tools/run_suite.py
+          echo "before: $(grep -nE '^MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = [0-9]+$' "$TARGET" || echo 'NOT FOUND')"
+          sed -i -E 's/^(MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = )[0-9]+$/\130/' "$TARGET"
+          if ! grep -qE '^MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = 30$' "$TARGET"; then
+            echo "::error::could not set MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES=30 in pinned $TARGET; refusing to run with an unknown retry bound"
+            exit 1
+          fi
+          echo "after:  $(grep -nE '^MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES = ' "$TARGET")"
+          echo "HEAD unchanged: $(git rev-parse HEAD)"
 
       - name: Record the dispatched code ref for future resumes
         if: steps.mode.outputs.mode != 'none'
