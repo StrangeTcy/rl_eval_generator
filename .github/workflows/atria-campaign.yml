@@ -1,5 +1,33 @@
 # DEPLOYABLE REPLACEMENT for .github/workflows/atria-campaign.yml.
 #
+# CHAINED + RETRY30 VARIANT. This is the retry30 workflow that has been run end
+# to end (72 -> 91 episodes in run 36791154490) plus ONE addition, marked
+# "CHAIN" below: when a leg ends in a resumable pause, the job dispatches its own
+# continuation instead of waiting for a cron tick (GitHub drops most scheduled
+# ticks on this repo: after run 36791154490 ended at 04:35 UTC nothing ran for
+# 2+ hours). Nothing else about the decision logic, the retry bound, the
+# compile-only patch, the state-regression guard or the Issue #3 routing changed.
+#
+# What the chain step does, and does not do:
+#   * It dispatches workflow_dispatch with continuation=true, i.e. exactly what a
+#     manual "Resume the latest eligible campaign artifact now" click does. The
+#     next leg still goes through the same supervisor decision, so an operator
+#     pause, a budget stop, a completed campaign or a terminal marker all end the
+#     chain there. It cannot raise a ceiling or authorize anything new.
+#   * It chains only when the leg ended paused with a RESUMABLE reason
+#     (max_wall_seconds, provider_error, infrastructure_error, docker_unavailable,
+#     wrapper_transient_error, provider_infrastructure_error_compatibility), or
+#     paused mid-gate with a resumable report. max_wall_seconds hands over at once;
+#     every other reason waits 10 minutes first so a provider outage or a
+#     failing case cannot tight-loop.
+#   * It never chains after a cancelled run, a regressed state (the guard already
+#     failed the leg), a wrapper_failed.json marker, or a completed campaign, and
+#     it stops after 40 chained legs. Cron remains the fallback.
+#   * To stop the chain at any time: cancel the running leg (a cancelled run does
+#     not chain), or disable the workflow.
+#   * Needs `actions: write` (added to permissions). That grants no provider
+#     access.
+#
 # RETRY-BOUND-30 VARIANT. Built on the workflow currently on main (4ed0f8b) and
 # differs from it in exactly two behavioural places, both marked "RETRY30"
 # below (plus a read-only diagnostic step, RETRY30-DIAG, that prints why a case
@@ -42,6 +70,10 @@
 #   4. The campaign step's env sets ARENA_ALLOW_COMPILE_ONLY=1.
 # The same change, done properly, is on branch arena/01a0f473-rl-eval-generator
 # (arena/episode.py + tools/run_suite.py) for future campaigns.
+#
+# RETRY30-TIMEOUT (added after run 36825979450): a step also raises the pinned
+# per-episode ceiling EPISODE_EXECUTION_TIMEOUT_SECONDS from 1,800s to 3,600s,
+# because slow compositional_optimizer episodes were hitting it.
 #
 # The 31st failure of a case exhausts it again and stays exhausted (31 > 30).
 # Every retry is a full paid episode; a case that fails deterministically will
@@ -122,13 +154,18 @@ on:
         description: "Code ref for a fresh campaign only; Continue uses the ref saved in the state artifact"
         required: true
         default: "main"
+      chain_depth:
+        description: "Internal: how many self-dispatched continuations precede this one"
+        required: false
+        default: "0"
   schedule:
     # Twice hourly, off the hour. Every tick either resumes or no-ops.
     - cron: "13,43 * * * *"
 
 permissions:
   contents: read
-  actions: read
+  # CHAIN: actions: write is required for the self-dispatched continuation.
+  actions: write
   issues: write
 
 # One campaign at a time; a queued tick waits for the running one to finish.
@@ -467,6 +504,28 @@ jobs:
 
       # RETRY30-COMPILE-ONLY: the pinned episode entry refuses compile-only
       # environments (see header). Working-tree edit only; HEAD is unchanged.
+      # RETRY30-TIMEOUT: compositional_optimizer episodes legitimately take 22-27
+      # minutes and one hit the pinned 1,800s ceiling (run 36825979450:
+      # "episode subprocess exceeded its independent timeout", elapsed=1800.093s,
+      # no stdout/stderr). Working-tree edit only; HEAD is unchanged. The ceiling
+      # also sets how much wall a leg must have left before it STARTS an episode
+      # (ceiling + 300s), so a larger value only costs a longer idle tail per leg.
+      - name: Raise the pinned per-episode execution ceiling to 3600s
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          TARGET=tools/run_suite.py
+          PATTERN='^EPISODE_EXECUTION_TIMEOUT_SECONDS = [0-9_]+$'
+          echo "before: $(grep -nE "$PATTERN" "$TARGET" || echo 'NOT FOUND')"
+          sed -i -E 's/^(EPISODE_EXECUTION_TIMEOUT_SECONDS = )[0-9_]+$/\13_600/' "$TARGET"
+          if ! grep -qE '^EPISODE_EXECUTION_TIMEOUT_SECONDS = 3_600$' "$TARGET"; then
+            echo "::error::could not set EPISODE_EXECUTION_TIMEOUT_SECONDS=3600 in pinned $TARGET; refusing to run with an unknown episode ceiling"
+            exit 1
+          fi
+          echo "after:  $(grep -nE '^EPISODE_EXECUTION_TIMEOUT_SECONDS = ' "$TARGET")"
+          python3 -c "import ast,sys;ast.parse(open('$TARGET').read())"
+          echo "HEAD unchanged: $(git rev-parse HEAD)"
+
       - name: Let the pinned episode entry run compile-only environments
         if: steps.mode.outputs.mode != 'none'
         run: |
@@ -517,6 +576,7 @@ jobs:
           echo "${{ steps.mode.outputs.ref }}" > runs/atria_campaign/campaign_ref.txt
 
       - name: Run the covering campaign (fresh or resumed)
+        id: campaign
         if: steps.mode.outputs.mode != 'none'
         # Step-level deadline below the 350-minute job cap: if the campaign
         # process itself ever hangs, this step fails while the job still has
@@ -692,3 +752,71 @@ jobs:
             !${{ runner.temp }}/atria_upload/**/secret_key.json
           if-no-files-found: error
           retention-days: 90
+
+      # CHAIN: primary continuation path (cron stays as fallback).
+      - name: Chain the next dispatch
+        if: ${{ !cancelled() && steps.campaign.conclusion != 'skipped' && steps.mode.outputs.mode != 'none' && steps.stage.outputs.regressed != 'true' }}
+        timeout-minutes: 20
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
+          CHAIN_REF: ${{ steps.mode.outputs.ref }}
+        run: |
+          set -uo pipefail
+          CHAIN_MAX=40
+          DEPTH=$(printf '%s' "${CHAIN_DEPTH:-0}" | tr -cd '0-9')
+          DEPTH=${DEPTH:-0}
+          if [ "$DEPTH" -ge "$CHAIN_MAX" ]; then
+            echo "chain depth $DEPTH reached the $CHAIN_MAX backstop; leaving continuation to cron or an operator"
+            exit 0
+          fi
+          OUT=runs/atria_campaign
+          if [ -f "$OUT/wrapper_failed.json" ]; then
+            echo "wrapper recorded a terminal failure; not chaining"
+            cat "$OUT/wrapper_failed.json" || true
+            exit 0
+          fi
+          STATUS=$(jq -r '.status // ""' "$OUT/campaign_report.json" 2>/dev/null || true)
+          case "$STATUS" in
+            completed|gate_passed)
+              echo "campaign $STATUS; nothing to continue"
+              exit 0
+              ;;
+          esac
+          CP="$OUT/suite_checkpoint.json"
+          REASON=""
+          if [ -f "$CP" ]; then
+            PAUSED=$(jq -r '.paused // false' "$CP" 2>/dev/null || echo false)
+            REASON=$(jq -r '.pause_reason // ""' "$CP" 2>/dev/null || true)
+            if [ "$PAUSED" != "true" ]; then
+              echo "checkpoint is not paused (status='${STATUS:-unknown}'); not chaining"
+              exit 0
+            fi
+            case "$REASON" in
+              max_wall_seconds|provider_error|provider_infrastructure_error_compatibility|infrastructure_error|docker_unavailable|wrapper_transient_error) ;;
+              *)
+                echo "pause reason '$REASON' is not resumable; leaving it to an operator"
+                exit 0
+                ;;
+            esac
+          else
+            # Paused mid-gate, before the first episode checkpoint exists.
+            if [ "$(jq -r '.resumable // false' "$OUT/campaign_report.json" 2>/dev/null || echo false)" != "true" ]; then
+              echo "no checkpoint and the report is not resumable; not chaining"
+              exit 0
+            fi
+            REASON="max_wall_seconds"
+          fi
+          if [ "$REASON" != "max_wall_seconds" ]; then
+            echo "pause '$REASON': waiting 10 minutes before the continuation so an outage or failing case cannot tight-loop"
+            sleep 600
+          fi
+          NEXT=$((DEPTH + 1))
+          echo "chaining continuation $NEXT (status='${STATUS:-unknown}', pause='$REASON', ref=$CHAIN_REF)"
+          # Best-effort: a failed dispatch must not fail the job; cron remains the fallback.
+          gh workflow run atria-campaign.yml \
+            --ref "${{ github.ref_name }}" \
+            -f ref="$CHAIN_REF" \
+            -f continuation=true \
+            -f chain_depth="$NEXT" \
+            || echo "continuation dispatch failed; cron or an operator will pick the state up instead"
