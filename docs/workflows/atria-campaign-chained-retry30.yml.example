@@ -71,6 +71,10 @@
 # The same change, done properly, is on branch arena/01a0f473-rl-eval-generator
 # (arena/episode.py + tools/run_suite.py) for future campaigns.
 #
+# RETRY30-TIMEOUT (added after run 36825979450): a step also raises the pinned
+# per-episode ceiling EPISODE_EXECUTION_TIMEOUT_SECONDS from 1,800s to 3,600s,
+# because slow compositional_optimizer episodes were hitting it.
+#
 # The 31st failure of a case exhausts it again and stays exhausted (31 > 30).
 # Every retry is a full paid episode; a case that fails deterministically will
 # spend up to 30 of them before this stops. Scheduled ticks will do this
@@ -500,6 +504,28 @@ jobs:
 
       # RETRY30-COMPILE-ONLY: the pinned episode entry refuses compile-only
       # environments (see header). Working-tree edit only; HEAD is unchanged.
+      # RETRY30-TIMEOUT: compositional_optimizer episodes legitimately take 22-27
+      # minutes and one hit the pinned 1,800s ceiling (run 36825979450:
+      # "episode subprocess exceeded its independent timeout", elapsed=1800.093s,
+      # no stdout/stderr). Working-tree edit only; HEAD is unchanged. The ceiling
+      # also sets how much wall a leg must have left before it STARTS an episode
+      # (ceiling + 300s), so a larger value only costs a longer idle tail per leg.
+      - name: Raise the pinned per-episode execution ceiling to 3600s
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          TARGET=tools/run_suite.py
+          PATTERN='^EPISODE_EXECUTION_TIMEOUT_SECONDS = [0-9_]+$'
+          echo "before: $(grep -nE "$PATTERN" "$TARGET" || echo 'NOT FOUND')"
+          sed -i -E 's/^(EPISODE_EXECUTION_TIMEOUT_SECONDS = )[0-9_]+$/\13_600/' "$TARGET"
+          if ! grep -qE '^EPISODE_EXECUTION_TIMEOUT_SECONDS = 3_600$' "$TARGET"; then
+            echo "::error::could not set EPISODE_EXECUTION_TIMEOUT_SECONDS=3600 in pinned $TARGET; refusing to run with an unknown episode ceiling"
+            exit 1
+          fi
+          echo "after:  $(grep -nE '^EPISODE_EXECUTION_TIMEOUT_SECONDS = ' "$TARGET")"
+          python3 -c "import ast,sys;ast.parse(open('$TARGET').read())"
+          echo "HEAD unchanged: $(git rev-parse HEAD)"
+
       - name: Let the pinned episode entry run compile-only environments
         if: steps.mode.outputs.mode != 'none'
         run: |
