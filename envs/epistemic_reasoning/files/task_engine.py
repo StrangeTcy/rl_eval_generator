@@ -11,9 +11,16 @@ import random
 import re
 from collections.abc import Callable, Mapping
 from fractions import Fraction
+from itertools import product
 from types import MappingProxyType
 from typing import Any
 
+from bayesian_games import (
+    MAX_PURE_STRATEGY_PROFILES,
+    BayesianGame,
+    enumerate_pure_bayesian_nash_equilibria,
+    pure_strategy_profile_count,
+)
 from common_knowledge import common_knowledge
 from epistemic_relations import (
     EpistemicModel as RelationalModel,
@@ -66,6 +73,7 @@ VARIANT_TITLES = {
     "common_knowledge_empty_group": "common knowledge for an empty agent group",
     "information_pool": "individual and pooled information",
     "information_empty_group": "pooled information for an empty group",
+    "pure_bne": "complete pure-strategy Bayesian-Nash equilibrium set",
 }
 
 SIZE_LEVELS = ("compact", "expanded")
@@ -93,7 +101,7 @@ _FRACTION_RE = re.compile(r"-?(?:0|[1-9][0-9]*)/[1-9][0-9]*\Z")
 def encode_fraction(value: Fraction) -> str:
     """Serialize an exact Fraction as a reduced ``numerator/denominator`` string."""
     if type(value) is not Fraction:
-        raise TypeError("only Fraction values may be serialized as probabilities")
+        raise TypeError("only Fraction values may be serialized as exact rationals")
     return f"{value.numerator}/{value.denominator}"
 
 
@@ -109,6 +117,155 @@ def decode_fraction(value: object, *, label: str = "rational") -> Fraction:
     if encode_fraction(exact) != value:
         raise TaskSpecError(f"{label} must be reduced with a positive denominator")
     return exact
+
+
+def bayesian_game_from_json(public: object) -> BayesianGame:
+    """Deserialize ordered type/action tuples and an exact complete payoff table."""
+    required = {
+        "variant",
+        "equilibrium_concept",
+        "agents",
+        "types",
+        "actions",
+        "common_prior",
+        "payoff_table",
+    }
+    if type(public) is not dict or set(public) != required:
+        raise TaskSpecError("pure-BNE task must contain exactly the declared game fields")
+    if public["variant"] != "pure_bne" or public["equilibrium_concept"] != "pure_bayesian_nash":
+        raise TaskSpecError("task does not declare the pure Bayesian-Nash concept")
+
+    raw_agents = public["agents"]
+    if (
+        type(raw_agents) is not list
+        or not raw_agents
+        or any(type(agent) is not str or not agent for agent in raw_agents)
+        or len(raw_agents) != len(set(raw_agents))
+    ):
+        raise TaskSpecError("agents must be an ordered array of unique nonempty IDs")
+    agents = tuple(raw_agents)
+    raw_types = public["types"]
+    raw_actions = public["actions"]
+    if type(raw_types) is not dict or set(raw_types) != set(agents):
+        raise TaskSpecError("types must define exactly the declared agents")
+    if type(raw_actions) is not dict or set(raw_actions) != set(agents):
+        raise TaskSpecError("actions must define exactly the declared agents")
+
+    def read_labels(raw: object, *, label: str) -> tuple[str, ...]:
+        if (
+            type(raw) is not list
+            or not raw
+            or any(type(value) is not str or not value for value in raw)
+            or len(raw) != len(set(raw))
+        ):
+            raise TaskSpecError(f"{label} must be a nonempty array of unique string IDs")
+        return tuple(raw)
+
+    types = {agent: read_labels(raw_types[agent], label=f"types[{agent}]") for agent in agents}
+    actions = {
+        agent: read_labels(raw_actions[agent], label=f"actions[{agent}]") for agent in agents
+    }
+    strategy_count = pure_strategy_profile_count(agents, types, actions)
+    if strategy_count > MAX_PURE_STRATEGY_PROFILES:
+        raise TaskSpecError(
+            f"pure strategy profile count {strategy_count} exceeds cap {MAX_PURE_STRATEGY_PROFILES}"
+        )
+
+    def read_profile(
+        raw: object, domains: Mapping[str, tuple[str, ...]], label: str
+    ) -> tuple[str, ...]:
+        if type(raw) is not list or len(raw) != len(agents):
+            raise TaskSpecError(f"{label} must be an ordered array matching the agents")
+        profile = tuple(raw)
+        if any(
+            type(profile[index]) is not str or profile[index] not in domains[agent]
+            for index, agent in enumerate(agents)
+        ):
+            raise TaskSpecError(f"{label} contains an undeclared value")
+        return profile
+
+    raw_prior = public["common_prior"]
+    if type(raw_prior) is not list or not raw_prior:
+        raise TaskSpecError("common_prior must be a nonempty array of profile rows")
+    common_prior: dict[tuple[str, ...], Fraction] = {}
+    for index, row in enumerate(raw_prior):
+        if type(row) is not dict or set(row) != {"type_profile", "probability"}:
+            raise TaskSpecError(f"common_prior row {index} has an invalid schema")
+        type_profile = read_profile(
+            row["type_profile"], types, f"common_prior[{index}].type_profile"
+        )
+        if type_profile in common_prior:
+            raise TaskSpecError("common_prior contains a duplicate type profile")
+        common_prior[type_profile] = decode_fraction(
+            row["probability"], label=f"common_prior[{index}].probability"
+        )
+
+    type_profile_count = 1
+    action_profile_count = 1
+    for agent in agents:
+        type_profile_count *= len(types[agent])
+        action_profile_count *= len(actions[agent])
+    expected_payoff_rows = type_profile_count * action_profile_count
+    raw_payoffs = public["payoff_table"]
+    if type(raw_payoffs) is not list or len(raw_payoffs) != expected_payoff_rows:
+        raise TaskSpecError(
+            "payoff_table must contain every ordered type/action profile exactly once"
+        )
+    payoff_table: dict[tuple[tuple[str, ...], tuple[str, ...]], Mapping[str, Fraction]] = {}
+    for index, row in enumerate(raw_payoffs):
+        if type(row) is not dict or set(row) != {
+            "type_profile",
+            "action_profile",
+            "utilities",
+        }:
+            raise TaskSpecError(f"payoff_table row {index} has an invalid schema")
+        type_profile = read_profile(
+            row["type_profile"], types, f"payoff_table[{index}].type_profile"
+        )
+        action_profile = read_profile(
+            row["action_profile"], actions, f"payoff_table[{index}].action_profile"
+        )
+        key = (type_profile, action_profile)
+        if key in payoff_table:
+            raise TaskSpecError("payoff_table contains a duplicate profile")
+        raw_utilities = row["utilities"]
+        if type(raw_utilities) is not dict or set(raw_utilities) != set(agents):
+            raise TaskSpecError(f"payoff_table row {index} needs one utility per agent")
+        payoff_table[key] = MappingProxyType(
+            {
+                agent: decode_fraction(
+                    raw_utilities[agent], label=f"payoff_table[{index}].utilities[{agent}]"
+                )
+                for agent in agents
+            }
+        )
+    if len(payoff_table) != expected_payoff_rows:
+        raise TaskSpecError("payoff_table does not cover the complete ordered profile space")
+
+    frozen_table = MappingProxyType(dict(payoff_table))
+
+    def utility(
+        type_assignment: Mapping[str, str], action_assignment: Mapping[str, str]
+    ) -> Mapping[str, Fraction]:
+        key = (
+            tuple(type_assignment[agent] for agent in agents),
+            tuple(action_assignment[agent] for agent in agents),
+        )
+        try:
+            return frozen_table[key]
+        except KeyError as exc:
+            raise TaskSpecError("utility requested for an absent payoff-table profile") from exc
+
+    try:
+        return BayesianGame(
+            agents=agents,
+            types=types,
+            common_prior=common_prior,
+            actions=actions,
+            utility=utility,
+        )
+    except SpecError as exc:
+        raise TaskSpecError(f"invalid Bayesian game: {exc}") from exc
 
 
 def serialize_formula(spec: object) -> dict[str, Any]:
@@ -476,6 +633,11 @@ def evaluate_public_task(variant: str, public: Mapping[str, Any]) -> dict[str, A
             "pooled": _ordered_worlds(pooled, public),
         }
 
+    if variant == "pure_bne":
+        game = bayesian_game_from_json(public)
+        equilibria = enumerate_pure_bayesian_nash_equilibria(game)
+        return {"equilibria": equilibria}
+
     raise TaskSpecError(f"no oracle for variant: {variant!r}")
 
 
@@ -500,6 +662,7 @@ def validate_answer(variant: str, answer: object, public: Mapping[str, Any]) -> 
         "announcement_checked": {"accepted", "worlds"},
         "information_pool": {"individual", "pooled"},
         "information_empty_group": {"individual", "pooled"},
+        "pure_bne": {"equilibria"},
     }
     expected_keys = keys_by_variant.get(variant)
     if expected_keys is None:
@@ -545,10 +708,101 @@ def validate_answer(variant: str, answer: object, public: Mapping[str, Any]) -> 
                     errors.append("accepted checked sequence must retain the actual world")
         elif answer["worlds"] is not None:
             errors.append("rejected checked sequence must use worlds: None")
+    elif variant == "pure_bne":
+        try:
+            game = bayesian_game_from_json(public)
+        except (TaskSpecError, SpecError) as exc:
+            return [f"public Bayesian game invalid: {exc}"]
+        equilibria = answer["equilibria"]
+        if type(equilibria) is not list:
+            return ["equilibria must be an array"]
+        seen_profiles: set[tuple[tuple[str, tuple[str, ...]], ...]] = set()
+        for index, equilibrium in enumerate(equilibria):
+            if type(equilibrium) is not dict or set(equilibrium) != set(game.agents):
+                errors.append(f"equilibria[{index}] must define exactly the declared agents")
+                continue
+            signature: list[tuple[str, tuple[str, ...]]] = []
+            valid_profile = True
+            for agent in game.agents:
+                strategy = equilibrium[agent]
+                if type(strategy) is not dict or set(strategy) != set(game.types[agent]):
+                    errors.append(f"equilibria[{index}][{agent}] must define exactly every type")
+                    valid_profile = False
+                    continue
+                actions_for_types = tuple(
+                    strategy[player_type] for player_type in game.types[agent]
+                )
+                if any(
+                    type(action) is not str or action not in game.actions[agent]
+                    for action in actions_for_types
+                ):
+                    errors.append(f"equilibria[{index}][{agent}] uses an undeclared action")
+                    valid_profile = False
+                    continue
+                signature.append((agent, actions_for_types))
+            if valid_profile and len(signature) == len(game.agents):
+                key = tuple(signature)
+                if key in seen_profiles:
+                    errors.append(
+                        f"equilibria[{index}] duplicates an earlier pure strategy profile"
+                    )
+                seen_profiles.add(key)
     else:
         for key in ("individual", "pooled"):
             errors.extend(_validate_world_list(answer[key], public, key, allow_none=False))
     return errors
+
+
+def answers_equal(
+    variant: str,
+    answer: object,
+    expected: object,
+    public: Mapping[str, Any],
+) -> bool:
+    """Compare answers under each contract; pure-BNE equilibrium order is immaterial."""
+    if variant != "pure_bne":
+        return answer == expected
+    if (
+        type(answer) is not dict
+        or set(answer) != {"equilibria"}
+        or type(answer["equilibria"]) is not list
+        or type(expected) is not dict
+        or set(expected) != {"equilibria"}
+        or type(expected["equilibria"]) is not list
+    ):
+        return False
+    try:
+        game = bayesian_game_from_json(public)
+    except (TaskSpecError, SpecError):
+        return False
+
+    def signatures(
+        value: dict[str, Any],
+    ) -> tuple[tuple[tuple[str, tuple[str, ...]], ...], ...] | None:
+        result: list[tuple[tuple[str, tuple[str, ...]], ...]] = []
+        for equilibrium in value["equilibria"]:
+            if type(equilibrium) is not dict or set(equilibrium) != set(game.agents):
+                return None
+            rows: list[tuple[str, tuple[str, ...]]] = []
+            for agent in game.agents:
+                strategy = equilibrium[agent]
+                if type(strategy) is not dict or set(strategy) != set(game.types[agent]):
+                    return None
+                actions_for_types = tuple(
+                    strategy[player_type] for player_type in game.types[agent]
+                )
+                if any(
+                    type(action) is not str or action not in game.actions[agent]
+                    for action in actions_for_types
+                ):
+                    return None
+                rows.append((agent, actions_for_types))
+            result.append(tuple(rows))
+        return tuple(sorted(result))
+
+    answer_profiles = signatures(answer)
+    expected_profiles = signatures(expected)
+    return answer_profiles is not None and answer_profiles == expected_profiles
 
 
 def _validate_world_list(
@@ -792,6 +1046,79 @@ def _make_public(variant: str, size: str, seed: int) -> dict[str, Any]:
         worlds = _world_ids(rng, n)
         return _binary_information_public(worlds, variant, seed)
 
+    if variant == "pure_bne":
+        agents = ["A", "B"]
+        type_count = 2 if size == "compact" else 3
+        types = {
+            "A": [f"alpha|type_{index}" for index in range(type_count)],
+            "B": [f"beta|type_{index}" for index in range(type_count)],
+        }
+        actions = {agent: ["left", "right"] for agent in agents}
+        type_profiles = list(product(*(types[agent] for agent in agents)))
+        action_profiles = list(product(*(actions[agent] for agent in agents)))
+        mode = seed % 3
+        if mode == 2:
+            # Independent, unequal type marginals prevent pure type-contingent
+            # strategies from implementing the half/half mix in matching pennies.
+            marginal_weights = [1, 2] if type_count == 2 else [1, 1, 4]
+            profile_weights = {
+                profile: marginal_weights[types["A"].index(profile[0])]
+                * marginal_weights[types["B"].index(profile[1])]
+                for profile in type_profiles
+            }
+        else:
+            profile_weights = {profile: rng.randint(1, 5) for profile in type_profiles}
+        total_weight = sum(profile_weights.values())
+        common_prior = [
+            {
+                "type_profile": list(profile),
+                "probability": encode_fraction(Fraction(profile_weights[profile], total_weight)),
+            }
+            for profile in type_profiles
+        ]
+
+        type_indices = {
+            agent: {player_type: index for index, player_type in enumerate(types[agent])}
+            for agent in agents
+        }
+        payoff_table = []
+        for type_profile in type_profiles:
+            types_at_profile = dict(zip(agents, type_profile, strict=True))
+            for action_profile in action_profiles:
+                actions_at_profile = dict(zip(agents, action_profile, strict=True))
+                if mode == 0:
+                    utilities = {
+                        agent: Fraction(actions_at_profile["A"] == actions_at_profile["B"])
+                        for agent in agents
+                    }
+                elif mode == 1:
+                    utilities = {
+                        agent: Fraction(
+                            actions_at_profile[agent]
+                            == actions[agent][type_indices[agent][types_at_profile[agent]] % 2]
+                        )
+                        for agent in agents
+                    }
+                else:
+                    matched = actions_at_profile["A"] == actions_at_profile["B"]
+                    utilities = {"A": Fraction(matched), "B": Fraction(not matched)}
+                payoff_table.append(
+                    {
+                        "type_profile": list(type_profile),
+                        "action_profile": list(action_profile),
+                        "utilities": {agent: encode_fraction(utilities[agent]) for agent in agents},
+                    }
+                )
+        return {
+            "variant": variant,
+            "equilibrium_concept": "pure_bayesian_nash",
+            "agents": agents,
+            "types": types,
+            "actions": actions,
+            "common_prior": common_prior,
+            "payoff_table": payoff_table,
+        }
+
     raise TaskSpecError(f"unknown task variant: {variant!r}")
 
 
@@ -820,6 +1147,8 @@ def _answer_template(variant: str, public: Mapping[str, Any]) -> dict[str, Any]:
         return {"accepted": False, "worlds": None}
     if variant in {"information_pool", "information_empty_group"}:
         return {"individual": [], "pooled": []}
+    if variant == "pure_bne":
+        return {"equilibria": []}
     raise TaskSpecError(f"no answer template for variant: {variant!r}")
 
 
@@ -906,14 +1235,24 @@ def answer_guide(variant: str, public: Mapping[str, Any]) -> str:
             "Return the named agent's individual information set. The pooled group is empty, so its "
             "intersection is the full world set; this is not communication or common knowledge."
         ),
+        "pure_bne": (
+            "Find the complete set of pure-strategy Bayesian-Nash equilibria. A pure strategy maps "
+            "each of an agent's types to one action. Use the exact common prior and payoff table; "
+            "for each type, compare exact conditional expected utilities against every available "
+            "action. Return `equilibria` as a list of profiles, each shaped as agent -> type -> "
+            "action. Include every pure equilibrium, return an empty list if none exist, and do not "
+            "include mixed-strategy equilibria. The order of profiles in the list does not matter. "
+            "Type profiles in prior/payoff rows are ordered arrays aligned with the `agents` list."
+        ),
     }
     return (
         f"Task variant: {VARIANT_TITLES[variant]}.\n\n"
         f"{descriptions[variant]}\n\n"
         f"Read `task.json` for the complete learner-visible finite instance. Edit only `answer.py` "
-        "and assign the requested literal dictionary to `ANSWER`. Posterior values must be exact, "
-        "reduced rational strings such as `2/5`; do not use floats. For world lists, use the order "
-        "in `task.json`. Run `python visible_tests.py` before submitting."
+        "and assign the requested literal dictionary to `ANSWER`. Probabilities and payoffs in "
+        "`task.json` are exact reduced rational strings; do not round or convert them to floats. "
+        "Any posterior answer values must also be exact rational strings such as `2/5`. For world "
+        "lists, use the order in `task.json`. Run `python visible_tests.py` before submitting."
     )
 
 
@@ -931,6 +1270,8 @@ __all__ = [
     "SIZE_LEVELS",
     "TaskSpecError",
     "VARIANT_TITLES",
+    "answers_equal",
+    "bayesian_game_from_json",
     "answer_guide",
     "answer_template",
     "build_instance",

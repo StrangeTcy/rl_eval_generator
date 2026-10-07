@@ -117,6 +117,30 @@ def test_answer_shape() -> None:
         world_ids = {item["id"] for item in task["worlds"]}
         assert _world_list(answer["individual"], world_ids)
         assert _world_list(answer["pooled"], world_ids)
+    elif variant == "pure_bne":
+        assert set(answer) == {"equilibria"}
+        assert type(answer["equilibria"]) is list
+        agents = task["agents"]
+        seen_profiles = set()
+        for equilibrium in answer["equilibria"]:
+            assert type(equilibrium) is dict
+            assert set(equilibrium) == set(agents)
+            signature = []
+            for agent in agents:
+                strategy = equilibrium[agent]
+                assert type(strategy) is dict
+                assert set(strategy) == set(task["types"][agent])
+                actions_for_types = tuple(
+                    strategy[player_type] for player_type in task["types"][agent]
+                )
+                assert all(
+                    type(action) is str and action in task["actions"][agent]
+                    for action in actions_for_types
+                )
+                signature.append((agent, actions_for_types))
+            profile = tuple(signature)
+            assert profile not in seen_profiles
+            seen_profiles.add(profile)
     else:
         raise AssertionError(f"unsupported task variant {variant!r}")
 

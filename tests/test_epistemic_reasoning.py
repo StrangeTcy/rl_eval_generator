@@ -268,6 +268,16 @@ def _wrong_but_well_formed_answer(expected: dict, public: dict) -> dict:
             wrong["worlds"] = None
     elif "worlds" in wrong:
         wrong["worlds"] = [] if expected["worlds"] else [public["worlds"][0]["id"]]
+    elif "equilibria" in wrong:
+        if expected["equilibria"]:
+            wrong["equilibria"] = expected["equilibria"][1:]
+        else:
+            wrong["equilibria"] = [
+                {
+                    agent: dict.fromkeys(public["types"][agent], public["actions"][agent][0])
+                    for agent in public["agents"]
+                }
+            ]
     else:
         wrong["individual"] = []
     return wrong

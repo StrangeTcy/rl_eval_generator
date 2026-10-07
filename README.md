@@ -10,7 +10,7 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 
 *   **Research-Style ML Debugging:** `glyph`, `batchnorm_ema`, `moco`
 *   **Paper-to-Code & Stateful Investigation:** `rope`
-*   **Finite Epistemic Reasoning:** `epistemic_reasoning` (deterministic exact Bayesian and modal variants; [scope and limits](docs/epistemic_reasoning.md))
+*   **Finite Epistemic Reasoning:** `epistemic_reasoning` (deterministic Bayesian, pure-equilibrium, and modal variants; [scope and limits](docs/epistemic_reasoning.md))
 *   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (17 environments)
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
 *   **Latent Substrate & Weird Machine Discovery:** `weird_machine/*` (6 environments)

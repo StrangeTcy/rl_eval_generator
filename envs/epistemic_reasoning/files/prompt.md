@@ -6,4 +6,4 @@ This is a deterministic, direct-answer task over a finite model. All learner-vis
 
 ## Submission format
 
-Edit only `answer.py`. Keep it as one Python literal assignment, `ANSWER = {...}`; do not add imports, functions, or code. The variant-specific answer fields are prefilled as a schema-shaped starter. Posterior probabilities must be reduced exact rational strings, never floats. Run `python visible_tests.py`, then submit with `python /tools/submit.py`.
+Edit only `answer.py`. Keep it as one Python literal assignment, `ANSWER = {...}`; do not add imports, functions, or code. The variant-specific answer fields are prefilled as a schema-shaped starter. If the task asks for probabilities or payoffs, write them as reduced exact rational strings, never floats. Run `python visible_tests.py`, then submit with `python /tools/submit.py`.

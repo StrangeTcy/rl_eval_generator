@@ -233,7 +233,7 @@ def main() -> None:
     schema_valid = not errors
     if errors:
         result["notes"].extend(errors)
-    exact_correct = schema_valid and answer == expected
+    exact_correct = schema_valid and task_engine.answers_equal(variant, answer, expected, public)
     checks = {
         "answer_schema_valid": schema_valid,
         "answer_exactly_correct": exact_correct,

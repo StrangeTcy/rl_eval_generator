@@ -3,9 +3,9 @@
 # learner-visible data and judge-only oracle data are rendered separately.
 name: epistemic_reasoning
 description: >-
-  Direct-answer finite epistemic tasks covering exact Bayesian updates, modal
+  Direct-answer finite reasoning tasks covering exact Bayesian updates, modal
   relations, public announcements, deterministic silence, common knowledge,
-  and individual or pooled information.
+  individual or pooled information, and pure Bayesian-game equilibrium sets.
 
 renderer: renderer.py
 
@@ -19,7 +19,7 @@ benchmark:
 
 axes:
   - id: variant
-    description: "Which accepted epistemic contract the finite task exercises"
+    description: "Which accepted finite reasoning contract the task exercises"
     levels:
       event_sparse:
         "%%VARIANT%%": "event_sparse"
@@ -49,9 +49,11 @@ axes:
         "%%VARIANT%%": "information_pool"
       information_empty_group:
         "%%VARIANT%%": "information_empty_group"
+      pure_bne:
+        "%%VARIANT%%": "pure_bne"
 
   - id: size
-    description: "Number of finite worlds or states in the generated task"
+    description: "Size of the finite world, type, or state space in the generated task"
     levels:
       compact:
         "%%SIZE%%": "compact"
@@ -85,6 +87,7 @@ layout:
   judge/judge.py: judge.py
   judge/instance_spec.py: instance_spec.py
   judge/task_engine.py: task_engine.py
+  judge/bayesian_games.py: bayesian_games.py
   judge/event_bayes.py: event_bayes.py
   judge/epistemic_relations.py: epistemic_relations.py
   judge/supplied_policy.py: supplied_policy.py

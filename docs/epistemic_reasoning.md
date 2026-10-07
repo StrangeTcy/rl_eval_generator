@@ -2,7 +2,7 @@
 
 `epistemic_reasoning` is a direct-answer family of deterministic, finite tasks. It is generated with the repository's `generate_env.py` pipeline and seed-aware renderer. The learner receives `prompt.md`, public `task.json`, a schema-shaped `answer.py`, and format-only `visible_tests.py`; the answer key remains in the judge image. The judge re-derives the complete instance from its variant, size, and seed before grading.
 
-The implementation carries the accepted components from `StrangeTcy/epistemic-compiler` commit `cdd03a2365174250d32b89d970be85bae21c7998`. The source checkout was kept separate. The accepted source baseline is 82 passing unittest cases. Source IDs CS004, CS006, CS008, and CS010 are accepted regression-test blocks; they are retained as tests, not treated as extra inference implementations.
+The implementation carries accepted components from `StrangeTcy/epistemic-compiler` commit `cdd03a2365174250d32b89d970be85bae21c7998`. The source checkout was kept separate. The retained CS001–CS012 unittest suite has 84 passing cases; CS004, CS006, CS008, CS010, and CS012 are regression-test blocks, not extra inference implementations. CS013 E6 was implemented with the user's approved choices and validated; CS014 onward remain unprocessed.
 
 ## Generate and run
 
@@ -34,21 +34,23 @@ The first difficulty axis selects a task variant; the second selects `compact` o
 | `common_knowledge_empty_group` | The accepted empty-group convention: the closure contains only the starting world. |
 | `information_pool` | Individual information set and pooled information as the intersection of selected agents' cells. |
 | `information_empty_group` | Individual information plus the full-world-set result for an empty pooled group. |
+| `pure_bne` | Complete finite pure-strategy Bayesian-Nash equilibrium set under an exact common prior and callable exact-rational utilities adapted from an explicit payoff table; empty and multiple sets are both represented, mixed equilibria are out of scope. |
 
 ## Serialization and grading
 
-Probabilities are serialized as reduced `numerator/denominator` strings (including `0/1`), then decoded to `fractions.Fraction` before calling the accepted update functions. Floats and decimal strings are rejected. The exact public callable-formula interfaces remain in the copied accepted modules. The task adapter uses an explicit JSON AST with only `atom`, `neg`, and `knows` nodes; it constructs the accepted callables rather than replacing them with string-evaluated formulas. Adapter equivalence is tested against direct callable construction.
+Probabilities and utility payoffs are serialized as reduced `numerator/denominator` strings (including `0/1`), then decoded to `fractions.Fraction`; floats and decimal strings are rejected. For `pure_bne`, type profiles are ordered JSON arrays aligned with the declared agent order and become tuple keys internally, never delimiter-joined strings. The complete payoff table is validated and snapshotted behind the preserved callable utility interface. The exact public callable-formula interfaces remain in the copied accepted modules. The task adapter uses an explicit JSON AST with only `atom`, `neg`, and `knows` nodes; it constructs the accepted callables rather than replacing them with string-evaluated formulas. Adapter equivalence is tested against direct callable construction.
 
 The answer is parsed from one literal `ANSWER = {...}` assignment and never executed. Configured `check_fraction` scoring uses two checks—schema validity and exact oracle equality—plus the target's required-file anti-gaming cap. `visible_tests.py` validates answer shape only and does not reveal the expected result.
 
 ## Limits and non-claims
 
-- Instances are finite symbolic tasks (currently 3–8 worlds, depending on variant and size), not empirical evaluations of a learned agent.
+- Instances are finite symbolic tasks (world-based variants currently use 3–8 worlds; pure-BNE games use 2 or 3 types per agent and 2 actions), not empirical evaluations of a learned agent. Pure-strategy enumeration rejects games with more than 20,000 joint pure-strategy profiles.
+- The BNE task asks only for the complete pure-strategy set; it neither computes mixed equilibria nor asserts uniqueness when multiple pure equilibria exist.
 - Silence protocols are deterministic. No support for probabilistic-agent rules, and no independence assumption between agents is claimed.
 - Pooled information is set intersection only; it does not implement communication and is not common knowledge.
 - General relational accessibility and validated S5 partitions remain separate interfaces.
 - The JSON formula grammar is an explicit finite adapter, not a serializer for arbitrary Python callbacks.
-- This family integrates only the eleven accepted source blocks. It does not cover the remaining source blocks, the full v3 proposal, or the broader research portfolio, and passing tests is not evidence of scientific validity.
+- The target integrates CS001–CS013; CS014 onward remain unprocessed. This does not cover the full v3 proposal or broader research portfolio, and passing tests is not evidence of scientific validity.
 
 ## Accepted-source mapping
 
@@ -65,3 +67,5 @@ The answer is parsed from one literal `ANSWER = {...}` assignment and never exec
 | CS009 | `files/common_knowledge.py`; nonempty- and empty-group variants | `test_common_knowledge.py`; `test_source_e4_fixtures.py`; integration tests |
 | CS010 | No new inference implementation; accepted E4 test fixtures retained unchanged | `test_source_e4_fixtures.py` |
 | CS011 | `files/fragmented_observation.py`; individual and pooled-information variants | `test_fragmented_observation.py`; integration tests |
+| CS012 | Distinct four-world crossed-partition regression and eager rejection of overlapping S5 cells; no new inference implementation | `tests/epistemic_source/test_source_e5_fixtures.py` |
+| CS013 | `files/bayesian_games.py`; exact common-prior finite pure-BNE enumeration and JSON payoff-table adapter | `tests/epistemic_source/test_cs013_finite_bne.py`; generated-environment tests in `tests/test_epistemic_reasoning.py` |
