@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+
+# The accepted core and all finite-instance checks use only the standard library.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends patch \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 10001 judge
+
+COPY judge/ /judge/
+COPY agent/workspace/ /originals/
+
+RUN rm -f /originals/judge.py /originals/patch_validator.py /originals/source_validator.py \
+    && chmod -R a+rX /judge /originals
+
+USER judge
+WORKDIR /judge
+CMD ["python", "judge.py"]

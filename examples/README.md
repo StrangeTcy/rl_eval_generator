@@ -62,3 +62,17 @@ log inspection after the final patch.
 
 The trace is a demonstration of environment mechanics and a reference solution
 path, not a benchmark result for any particular model.
+
+## Epistemic reasoning examples
+
+`epistemic_reasoning_demo.sh` generates two ordinary registered environments—a
+sparse exact-rational update and an actual-world-checked announcement task—and
+runs their visible answer-format checks. It makes no model/API calls. From the
+repository root, run:
+
+```bash
+bash examples/epistemic_reasoning_demo.sh
+```
+
+See [the family documentation](../docs/epistemic_reasoning.md) for all variants,
+serialization rules, and limitations.

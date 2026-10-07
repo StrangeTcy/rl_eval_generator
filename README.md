@@ -10,6 +10,7 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 
 *   **Research-Style ML Debugging:** `glyph`, `batchnorm_ema`, `moco`
 *   **Paper-to-Code & Stateful Investigation:** `rope`
+*   **Finite Epistemic Reasoning:** `epistemic_reasoning` (deterministic exact Bayesian and modal variants; [scope and limits](docs/epistemic_reasoning.md))
 *   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (17 environments)
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
 *   **Latent Substrate & Weird Machine Discovery:** `weird_machine/*` (6 environments)
@@ -19,6 +20,7 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 
 *   **MoCo** for testing realistic, multi-file ML debugging.
 *   **RoPE** for testing paper-to-implementation reading and offset calculations.
+*   **epistemic_reasoning** for deterministic finite Bayesian and modal reasoning variants.
 *   **tensor_functor** or **equivariant_diagram** (in `envs/cat_theo/`) to test category-theoretic compositionality.
 *   **sql_fixed_point** or **regex_state_machine** (in `envs/weird_machine/`) to test recognizing and exploiting latent computational substrates.
 
@@ -190,6 +192,8 @@ rl_eval_generator/
 │   ├── batchnorm_ema/
 │   ├── moco/
 │   ├── rope/
+│   ├── epistemic_games/
+│   ├── epistemic_reasoning/
 │   ├── cat_theo/
 │   │   ├── <individual_ct_envs>/
 │   │   ├── semiring/

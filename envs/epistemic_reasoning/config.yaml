@@ -1,0 +1,99 @@
+# Finite exact-rational and modal-reasoning tasks built from the accepted
+# epistemic-compiler components. Each generated instance is seed-reproducible;
+# learner-visible data and judge-only oracle data are rendered separately.
+name: epistemic_reasoning
+description: >-
+  Direct-answer finite epistemic tasks covering exact Bayesian updates, modal
+  relations, public announcements, deterministic silence, common knowledge,
+  and individual or pooled information.
+
+renderer: renderer.py
+
+benchmark:
+  track: accepted_epistemic_components
+  scoreboard: epistemic_reasoning
+  primary_direct_answer: true
+  interpretation: >-
+    Deterministic symbolic reasoning over explicitly supplied finite instances;
+    not a claim of probabilistic-agent support or scientific validity.
+
+axes:
+  - id: variant
+    description: "Which accepted epistemic contract the finite task exercises"
+    levels:
+      event_sparse:
+        "%%VARIANT%%": "event_sparse"
+      event_strict:
+        "%%VARIANT%%": "event_strict"
+      policy_sparse:
+        "%%VARIANT%%": "policy_sparse"
+      policy_strict:
+        "%%VARIANT%%": "policy_strict"
+      relational_modal:
+        "%%VARIANT%%": "relational_modal"
+      s5_knowledge:
+        "%%VARIANT%%": "s5_knowledge"
+      announcement_unpointed:
+        "%%VARIANT%%": "announcement_unpointed"
+      announcement_checked:
+        "%%VARIANT%%": "announcement_checked"
+      deterministic_silence:
+        "%%VARIANT%%": "deterministic_silence"
+      silence_empty_protocol:
+        "%%VARIANT%%": "silence_empty_protocol"
+      common_knowledge:
+        "%%VARIANT%%": "common_knowledge"
+      common_knowledge_empty_group:
+        "%%VARIANT%%": "common_knowledge_empty_group"
+      information_pool:
+        "%%VARIANT%%": "information_pool"
+      information_empty_group:
+        "%%VARIANT%%": "information_empty_group"
+
+  - id: size
+    description: "Number of finite worlds or states in the generated task"
+    levels:
+      compact:
+        "%%SIZE%%": "compact"
+      expanded:
+        "%%SIZE%%": "expanded"
+
+scoring:
+  mode: check_fraction
+  total_checks: 2
+
+constants:
+  "%%PATCHABLE_FILES%%": '["answer.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '""'
+
+static_files: []
+
+layout:
+  agent/workspace/prompt.md: prompt.md
+  agent/workspace/task.json: task.json
+  agent/workspace/answer.py: answer.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge.py: judge.py
+  judge/instance_spec.py: instance_spec.py
+  judge/task_engine.py: task_engine.py
+  judge/event_bayes.py: event_bayes.py
+  judge/epistemic_relations.py: epistemic_relations.py
+  judge/supplied_policy.py: supplied_policy.py
+  judge/public_announcements.py: public_announcements.py
+  judge/silence.py: silence.py
+  judge/common_knowledge.py: common_knowledge.py
+  judge/fragmented_observation.py: fragmented_observation.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: Dockerfile.judge
+
+  run_eval.sh: shared/run_eval.sh
