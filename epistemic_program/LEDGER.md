@@ -395,7 +395,7 @@ semantic_equivalence_id/matched_control_id scheme untouched — the pilot is a
 new shared primitive, not a fork of the relay benchmark), shared-primitives
 notes #4 (paired-arm construction) and #6 (canonical semantic hash).
 
-### Batch 5 — E6 game-theory family (implemented 2026-10-08, pending result acceptance)
+### Batch 5 — E6 game-theory family (implemented + accepted 2026-10-08, committed `404a53c`)
 
 Scope (user-approved D5): E6 ONLY - finite type spaces and common priors.
 E7/E8 remain deferred for later re-decision and are NOT touched.
@@ -451,6 +451,43 @@ Boundaries honored: no common-knowledge or mechanism claims; uniqueness is a
 registered task property, not a hint about the equilibrium's content; E7/E8
 untouched; frozen CS001-CS011 and all earlier batches unmodified.
 
+### Batch 6 — S-line scope assessment (completed 2026-10-08, decision requested)
+
+Scope: verification/assessment batch per roadmap ("S3 blocked; E7/E8
+deferred") — no S-line implementation exists or was attempted; every S-card
+status is grounded in corpus text plus target-repo inspection.
+
+What was done:
+1. `epistemic_program/S_LINE_ASSESSMENT.md` — durable assessment of S1–S4:
+   corpus grounding (portfolio draft section B; critique S1–S4 sections;
+   dependency plan), what Batches 1–5 already supply (six registered
+   families with generation-time `family`/`question` identity tags —
+   the critique's S2 label-side primitive is ALREADY satisfied; T1
+   matched-arm data structures; deterministic provenance; independent
+   verification), per-question statuses and blockers:
+   - S1: arm utility implementable; the question itself needs a prior-art
+     check on generic-advice content; execution needs model-call
+     authorization (not granted).
+   - S2: label side done in-target; matcher deliberately absent pending the
+     V2 prerequisite (gold-labeled calibration set + reliability).
+   - S3: `currently too underspecified` per corpus — rubric authorship +
+     human annotation required first (matches roadmap "S3 blocked").
+   - S4: analysis-only, gated on S1 infrastructure + difficulty-matching
+     controls + prior-art check.
+2. Verified non-actions recorded (no matcher, no obligation checker, no
+   transfer metric, no model calls) — each is the corpus-mandated refusal,
+   not a unilateral deferral.
+3. Four explicit options for the user recorded in the assessment (hold /
+   spec-authoring only / offline arm primitive / model-call pilot with
+   explicit authorization).
+
+Source-to-code matrix rows added (S-line): S1 -> assessment only
+(blockers: prior-art check; model-call authorization); S2 -> label side
+satisfied by spec family/question tags (verified), matcher blocked on V2;
+S3 -> blocked on rubric authorship (no code by corpus instruction);
+S4 -> blocked on S1 infrastructure + confound controls. E7/E8 -> deferred
+per D5 (re-decide later), untouched.
+
 ## D6 fix record (2026-10-07)
 
 - Failure: tests/test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume
@@ -502,14 +539,17 @@ as `f35123c` (verified on origin).
 Batch 4 (T1 presentation pilot, offline): ACCEPTED 2026-10-08 and
 committed/pushed as `342d302` (verified on origin).
 
-Batch 5 (E6 game-theory family) awaits result acceptance and commit/push
-authorization. Working tree: envs/epistemic_type_games/,
-tests/test_epistemic_type_games.py, envs/registry.yaml,
-tools/epistemic_verifier.py, tests/test_epistemic_verification.py,
-epistemic_program/LEDGER.md.
+Batch 5 (E6 game-theory family): ACCEPTED 2026-10-08 and committed/pushed
+as `404a53c` (verified on origin).
 
-After authorization and commit: Batch 6 (S-line scope assessment; S3
-blocked per roadmap, E7/E8 deferred) per roadmap. Parallel
+Batch 6 (S-line scope assessment) awaits result acceptance and commit/push
+authorization. Working tree: epistemic_program/S_LINE_ASSESSMENT.md,
+epistemic_program/LEDGER.md. A USER DECISION is requested on the four
+S-line options recorded in the assessment (hold / spec-authoring / offline
+arm primitive / authorized model-call pilot).
+
+Next after acceptance: per the user's S-line choice; E7/E8 remain deferred
+pending re-decision per D5. Parallel
 reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–F12/
 F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
 sections, critique mid-round details (for the source-to-code matrix rows of
