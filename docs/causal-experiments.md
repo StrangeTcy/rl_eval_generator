@@ -31,6 +31,23 @@ example is deliberately `design_only`; its output contains
 `safety.unmaterialized_interventions`. A scheduler must check this field before
 starting an environment or spending provider budget.
 
+The three prioritized basis vectors have a concrete crossed example:
+
+```bash
+/tmp/rl-eval-venv/bin/python tools/experiment_family.py \
+  --spec experiments/epistemic_basis_axes.yaml \
+  --out /tmp/epistemic-basis.json
+```
+
+That specification compiles eight cells from the product of public/private
+event structure, hypergame/level-k profiles, and static/adaptive information
+environments. Each cell gets a baseline and three counterfactual variants,
+for 32 design cases total. The profile records an explicit game model, actual
+`level_k`, and beliefs about the opponent's depth; the information cell records
+horizon, source ecology, state-contingent signalling, endogenous attention,
+and negative information. These are crossed basis vectors, not E0-to-E15
+intelligence levels.
+
 ## Twin contract
 
 `arena.experiment_schema.expand_counterfactual_twins` creates a baseline and

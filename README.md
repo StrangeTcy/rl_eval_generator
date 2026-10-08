@@ -63,9 +63,10 @@ The existing registry and generator can also be used as substrates for matched
 counterfactual experiments. `arena.experiment_schema` keeps latent task state,
 causal mechanism, observation, reward/proxy, evaluator state, and reported
 belief as explicit factors, while interventions and difficulty vectors remain
-separate. The first example crosses presentation, epistemic-event, evaluator,
-and source-ecology interventions over `epistemic_games` without treating them
-as a sequential intelligence ladder.
+separate. The first examples also expose three crossed basis vectors over
+`epistemic_games`: public/private epistemic events, explicit hypergame and
+level-k profiles, and multi-step/adaptive information environments. These are
+orthogonal experimental cells, not a sequential intelligence ladder.
 
 Compile the design-only family with no provider or Docker calls:
 

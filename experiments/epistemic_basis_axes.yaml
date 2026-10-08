@@ -1,0 +1,171 @@
+# Design-only basis-vector family for the three initial causal axes:
+# epistemic events, hypergame/level-k mismatch, and multi-step information ecology.
+experiment:
+  schema_version: 1
+  id: epistemic_basis_axes_v1
+  title: Epistemic events, hypergame mismatch, and adaptive information ecology
+  hypothesis: "Behavior should be compared across crossed event, game-model/depth, and information-process cells rather than ordered as an intelligence ladder."
+  base_environment: epistemic_games
+  design_only: true
+  capability_requirements:
+    - maintain a belief over latent task states
+    - distinguish world state from the process that generated evidence
+    - select discriminating information over a multi-step trajectory
+  difficulty_axes: [scenario, evidence, presentation, prior, framing]
+  latent_factors:
+    - id: task_state
+      role: task_state
+      description: "Latent world/type configuration."
+    - id: causal_mechanism
+      role: causal_mechanism
+      description: "Policy producing announcements and signals."
+    - id: observable_state
+      role: observable_state
+      description: "Delivered events, source provenance, and acknowledgements."
+    - id: hidden_state
+      role: hidden_state
+      description: "Undelivered world and source state."
+    - id: agent_belief
+      role: agent_belief
+      description: "Observable belief updates or answer justifications, not private chain of thought."
+    - id: evaluator_state
+      role: evaluator_state
+      description: "Declared terminal and trajectory judge regime."
+  observation_function:
+    id: event_aware_observation
+    description: "Deliver observations with publicity, recipient, acknowledgement, provenance, and negative-information metadata."
+  reward_proxy:
+    id: process_and_outcome_reward
+    description: "Keep terminal correctness separate from inquiry quality and proxy exploitation."
+  evaluator_policy:
+    id: twin_trajectory_judge
+    description: "Compare task outcome, event-sensitive trajectory validity, and cross-cell behavior."
+  basis_axes:
+    epistemic_events:
+      - id: public_acknowledged
+        event_type: announcement
+        publicity: public
+        acknowledgement: true
+        common_knowledge: true
+        parameters:
+          order: one_shot
+      - id: private_uncertain
+        event_type: message
+        publicity: private
+        delivery_uncertainty: true
+        acknowledgement: false
+        common_knowledge: false
+        recipients: [defender]
+        parameters:
+          order: one_shot
+    game_models:
+      - id: defender_shared_game
+        players: [sender, defender]
+        actions: [inspect, infer, stop]
+        objectives:
+          sender: hide_state
+          defender: infer_state
+        observation_rules:
+          defender_sees: [public_events]
+      - id: defender_mispecified_hypergame
+        players: [sender, defender]
+        actions: [inspect, infer, stop]
+        objectives:
+          sender: hide_state
+          defender: infer_state
+        observation_rules:
+          defender_sees: [public_events]
+          defender_believes_sender_is_nonstrategic: true
+    strategic_profiles:
+      - id: shallow_shared_model
+        agent_id: defender
+        game_model_id: defender_shared_game
+        level_k: 1
+        opponent_depth_beliefs:
+          sender: 0
+        opponent_model_ids:
+          sender: defender_shared_game
+      - id: depth_mismatch_hypergame
+        agent_id: defender
+        game_model_id: defender_mispecified_hypergame
+        level_k: 2
+        opponent_depth_beliefs:
+          sender: 1
+        opponent_model_ids:
+          sender: defender_shared_game
+    information_environments:
+      - id: static_single_source
+        horizon: 1
+        observation_mode: static
+        source_ecology: single
+        signal_policy: truthful
+        attention_mode: fixed
+        negative_information: false
+        belief_trajectory: false
+      - id: adaptive_coordinated_sources
+        horizon: 3
+        observation_mode: adaptive
+        source_ecology: coordinated
+        signal_policy: state_contingent
+        attention_mode: endogenous
+        negative_information: true
+        belief_trajectory: true
+        state_contingent_signalling: true
+        steps:
+          - id: initial_public_signal
+            trigger: initial
+            offered_sources: [source_a, source_b, source_c]
+          - id: diagnostic_response
+            trigger: after_action
+            environment_update: change_monitoring_regime
+          - id: negative_information_check
+            trigger: after_observation
+            environment_update: expose_missing_response
+        parameters:
+          source_count: 3
+          change_after_action: true
+  interventions:
+    - id: event_structure_shift
+      kind: epistemic_event
+      relation: epistemically_equivalent
+      description: "Change public acknowledgement into private uncertain delivery while preserving the latent world."
+    - id: hypergame_depth_shift
+      kind: strategic_depth
+      relation: task_equivalent
+      description: "Cross level-k depth and agent-specific game-model mismatch without changing the base capability requirement."
+    - id: evaluator_substitution
+      kind: evaluator_substitution
+      relation: evaluator_changing
+      description: "Substitute outcome-only judging with a trajectory and event-sensitive evaluator."
+  measurements:
+    - id: outcome_score
+      metric: outcome_score
+      source: outcome
+      description: "Terminal task correctness."
+    - id: event_sensitive_validity
+      metric: trajectory_validity
+      source: trajectory
+      description: "Whether event-aware inquiry semantics were satisfied."
+    - id: hypothesis_switches
+      metric: hypothesis_switch_count
+      source: derived
+      description: "Observable hypothesis changes across the inquiry trajectory."
+    - id: evaluator_dependence
+      metric: evaluator_dependence
+      source: derived
+      description: "Behavioral delta under evaluator substitution."
+  controls:
+    - "same latent task state, capability requirements, difficulty vector, and seed within each twin group"
+    - "public acknowledged event as event-topology control"
+    - "static single-source information environment as temporal control"
+  expected_invariances: [evaluator_substitution]
+  expected_differences: [event_structure_shift, hypergame_depth_shift]
+  provenance:
+    compiler_contract: H_to_X_to_M_to_E_to_C
+    source_family: epistemic_games
+    basis_vectors: [epistemic_event, hypergame_level_k, multi_step_information_environment]
+
+base_cases:
+  - environment: epistemic_games
+    difficulty: report,ambiguous,paired,balanced,bare_table
+    seed: 0

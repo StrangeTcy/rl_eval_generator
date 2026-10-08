@@ -94,6 +94,24 @@ def test_twin_expansion_preserves_capability_and_marks_unmaterialized() -> None:
     assert set(rows[0]["counterfactual_partner_ids"]) == {rows[1]["case_id"], rows[2]["case_id"]}
 
 
+def test_basis_axes_cross_product_is_explicit_and_safe(tmp_path: Path) -> None:
+    output = tmp_path / "basis-family.json"
+    result = compile_family(ROOT / "experiments" / "epistemic_basis_axes.yaml", output)
+    loaded = json.loads(output.read_text(encoding="utf-8"))
+    assert result["basis_cell_count"] == 8
+    assert result["case_count"] == 32  # 8 basis cells times baseline plus 3 interventions
+    assert loaded["ready_for_scheduler"] is False
+    assert len({case["basis_cell_id"] for case in loaded["cases"]}) == 8
+    assert all(case["difficulty_vector"]["scenario"] == "report" for case in loaded["cases"])
+    assert all(case["capability_requirements"] for case in loaded["cases"])
+    adaptive_cells = [
+        case for case in loaded["cases"]
+        if case["basis_cell"]["information_environment"]["id"] == "adaptive_coordinated_sources"
+    ]
+    assert adaptive_cells[0]["basis_cell"]["information_environment"]["steps"][1]["trigger"] == "after_action"
+    assert all(case["experiment_materialized"] is False for case in loaded["cases"])
+
+
 def test_example_compiles_without_provider_or_docker(tmp_path: Path) -> None:
     output = tmp_path / "family.json"
     result = compile_family(ROOT / "experiments" / "epistemic_invariance.yaml", output)

@@ -1120,6 +1120,8 @@ def run_suite(
                             "experiment_id",
                             "experiment_spec_sha256",
                             "twin_group_id",
+                            "basis_cell_id",
+                            "basis_cell",
                             "variant_id",
                             "intervention_id",
                             "intervention",

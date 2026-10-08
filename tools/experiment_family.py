@@ -68,9 +68,9 @@ def compile_family(spec_path: Path, out: Path, *, matrix: str = "representative"
         raise ValueError(f"no inventory cases found for base environment {spec.base_environment!r}")
     cases = expand_counterfactual_twins(spec, base_cases)
     unmaterialized = [
-        row["variant_id"]
+        row["case_id"]
         for row in cases
-        if row["variant_id"] != "baseline" and not row["experiment_materialized"]
+        if not row["experiment_materialized"]
     ]
     result = {
         "schema_version": 1,
@@ -86,11 +86,13 @@ def compile_family(spec_path: Path, out: Path, *, matrix: str = "representative"
             "base_case_count": len(base_cases),
         },
         "counterfactual_group_count": len({row["twin_group_id"] for row in cases}),
+        "basis_cell_count": len({row["basis_cell_id"] for row in cases}),
         "case_count": len(cases),
         "cases": cases,
         "safety": {
             "provider_calls": 0,
             "docker_started": False,
+            "unmaterialized_variants": sorted(set(unmaterialized)),
             "unmaterialized_interventions": sorted(set(unmaterialized)),
             "reason_not_schedulable": (
                 "design_only_spec" if spec.design_only else "intervention_materializer_missing"
@@ -118,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
                 "out": str(args.out),
                 "experiment_id": result["experiment"]["id"],
                 "case_count": result["case_count"],
+                "basis_cell_count": result["basis_cell_count"],
                 "ready_for_scheduler": result["ready_for_scheduler"],
                 "provider_calls": 0,
             },
