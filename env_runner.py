@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from arena.diffing import files_differ, has_symlink_in_path, text_for_diff, unified_text_diff
+from shared import generation_manifest as gm
 from arena.docker_backend import DockerBackend, DockerBackendError
 from arena.episode_id import validate_episode_id
 
@@ -41,6 +42,99 @@ def _safe_join(root: Path, rel: str) -> Path:
     except ValueError as exc:
         raise ValueError(f"Path escapes workspace: {rel}") from exc
     return candidate
+
+
+def _intervention_list(value: Any) -> list[str]:
+    """Normalize a comma-separated intervention spec into ids, order kept."""
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [part.strip() for part in str(value or "").split(",") if part.strip()]
+
+
+def _declared_interventions(env_dir: Path) -> list[str]:
+    try:
+        manifest = gm.read_manifest(env_dir)
+    except (OSError, ValueError):
+        return []
+    return [str(item.get("id")) for item in manifest.get("interventions") or []]
+
+
+def _provenance(env_dir: Path) -> dict[str, Any]:
+    """Pull the identity fields out of the generation record, if there is one.
+
+    A tree without ``generation.json`` predates the manifest: that is reported as
+    ``absent``, not treated as verified.
+    """
+    try:
+        manifest = gm.read_manifest(env_dir)
+    except (OSError, ValueError):
+        return {"status": "absent"}
+    return {
+        "status": "recorded",
+        "generation_id": manifest.get("generation_id"),
+        "pair_id": manifest.get("pair_id"),
+        "pair_id_basis": manifest.get("pair_id_basis"),
+        "config_path": manifest.get("config_path"),
+        "tree_sha256": manifest.get("tree_sha256"),
+        "judge_sha256": manifest.get("judge_sha256"),
+        "equivalences": sorted(
+            {str(item.get("equivalence")) for item in manifest.get("interventions") or []}
+        ),
+        "expected_invariances": manifest.get("expected_invariances") or [],
+        "expected_differences": manifest.get("expected_differences") or [],
+    }
+
+
+def _verify_provenance(state: dict[str, Any]) -> list[str]:
+    """Recompute the generation record before the judge is paid for.
+
+    The agent may edit ``agent/workspace`` and nothing else, so the check is split
+    the same way: every recorded file outside the workspace must still match what was
+    generated, and the *pristine* workspace must match it too.  Only recorded paths
+    are required to match - a stray ``__pycache__`` from the agent running python is
+    not evidence of anything - which is why this does not compare ``tree_sha256``.
+
+    A mismatch denies the reward instead of zeroing it: the score would belong to an
+    artifact nobody certified, not to a model that failed a task.
+    """
+    env_dir = Path(state.get("env_dir") or "")
+    if not env_dir.is_dir():
+        return ["the generated tree is missing from the episode state"]
+    try:
+        manifest = gm.read_manifest(env_dir)
+    except (OSError, ValueError):
+        return ["no generation.json in the generated tree"]
+    recorded = manifest.get("files") or {}
+    if not recorded:
+        return ["generation.json records no file hashes"]
+    prefix = "agent/workspace/"
+    problems: list[str] = []
+    for rel in gm.iter_files(env_dir):
+        if rel.startswith(prefix):
+            continue
+        digest = recorded.get(rel)
+        if digest is None:
+            continue
+        if gm.sha256_bytes((env_dir / rel).read_bytes()) != digest:
+            problems.append(f"{rel} no longer matches its recorded hash")
+    pristine = Path(state.get("original_workspace") or "")
+    if not pristine.is_dir():
+        problems.append("the pristine workspace copy is missing")
+    else:
+        original = gm.file_hashes(pristine)
+        for rel, digest in sorted(recorded.items()):
+            if not rel.startswith(prefix):
+                continue
+            if original.get(rel[len(prefix):]) != digest:
+                problems.append(f"pristine {rel} no longer matches its recorded hash")
+    applied = _declared_interventions(env_dir)
+    requested = list(state.get("interventions") or [])
+    if applied != requested:
+        problems.append(
+            f"interventions applied to the instance ({applied or 'none'}) are not the "
+            f"ones this episode requested ({requested or 'none'})"
+        )
+    return problems
 
 
 def _episode_dir(episode_id: str) -> Path:
@@ -131,6 +225,10 @@ def reset(args: argparse.Namespace) -> None:
     keep_images = bool(getattr(args, "keep_images", False))
     keep_workspace = bool(getattr(args, "keep_workspace", False))
     episode_id = args.episode_id or f"{args.env}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    # Interventions are part of the instance, not a wrapper around it: the runner
+    # regenerates the member rather than mutating a base tree, so a twin episode is
+    # byte-for-byte what tools/family.py planned and verified.
+    interventions = _intervention_list(getattr(args, "interventions", ""))
     episode_dir = _episode_dir(episode_id)
     EPISODES_DIR.mkdir(exist_ok=True)
     if episode_dir.exists():
@@ -154,6 +252,8 @@ def reset(args: argparse.Namespace) -> None:
         "--seed",
         str(args.seed),
     ]
+    if interventions:
+        cmd.extend(["--interventions", ",".join(interventions)])
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if proc.returncode != 0:
         raise SystemExit(proc.stdout + proc.stderr)
@@ -164,6 +264,7 @@ def reset(args: argparse.Namespace) -> None:
     original_workspace = episode_dir / "original_workspace"
     shutil.copytree(workspace, original_workspace)
 
+    provenance = _provenance(env_dir)
     patchable_files = _parse_list_literal_from_file(env_dir / "judge" / "source_validator.py", "PATCHABLE")
     required_files = _parse_required_files(env_dir / "judge" / "judge.py")
     agent_image: dict[str, Any] | None = None
@@ -183,6 +284,8 @@ def reset(args: argparse.Namespace) -> None:
         "env": args.env,
         "difficulty": args.difficulty,
         "seed": args.seed,
+        "interventions": interventions,
+        "provenance": provenance,
         "step": 0,
         "max_steps": args.max_steps,
         "done": False,
@@ -216,6 +319,9 @@ def reset(args: argparse.Namespace) -> None:
             "env": args.env,
             "difficulty": args.difficulty,
             "seed": args.seed,
+            "interventions": interventions,
+            "generation_id": provenance.get("generation_id"),
+            "pair_id": provenance.get("pair_id"),
             "sandbox": sandbox,
             "agent_image": agent_image,
             "judge_image": judge_image,
@@ -230,6 +336,11 @@ def reset(args: argparse.Namespace) -> None:
             "env": args.env,
             "difficulty": args.difficulty,
             "seed": args.seed,
+            "interventions": interventions,
+            "generation_id": provenance.get("generation_id"),
+            "pair_id": provenance.get("pair_id"),
+            "pair_id_basis": provenance.get("pair_id_basis"),
+            "provenance": provenance.get("status"),
             "step": 0,
             "max_steps": args.max_steps,
             "workspace": str(workspace),
@@ -531,6 +642,14 @@ def _submit(
 
     env_dir = Path(state["env_dir"])
     episode_dir = Path(state["episode_dir"])
+    problems = _verify_provenance(state)
+    if problems:
+        return _submission_failure(
+            "reward_denial",
+            "generated instance does not match its provenance record: "
+            + "; ".join(problems[:4]),
+            provenance_problems=problems,
+        )
     try:
         patch_path, _ = _make_submission_patch(state)
     except ValueError as exc:
@@ -765,6 +884,11 @@ def main() -> None:
     p_reset.add_argument("--difficulty", required=True)
     p_reset.add_argument("--seed", type=int, default=0)
     p_reset.add_argument("--episode-id", default="")
+    p_reset.add_argument(
+        "--interventions",
+        default="",
+        help="comma-separated intervention ids to apply on top of the difficulty vector",
+    )
     p_reset.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     p_reset.add_argument("--sandbox", choices=("local", "docker"), default="local")
     p_reset.add_argument("--keep-images", action="store_true")

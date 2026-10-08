@@ -355,7 +355,12 @@ def _instance_hash(state: dict[str, Any]) -> str:
 
 
 def verify_reset_matches_oracle(
-    oracle: dict[str, Any], episode_dir: Path, environment: str, difficulty: str, seed: int
+    oracle: dict[str, Any],
+    episode_dir: Path,
+    environment: str,
+    difficulty: str,
+    seed: int,
+    interventions: Any = "",
 ) -> str:
     """Fail closed unless the agent's *actual* reset is byte-identical to the oracle.
 
@@ -373,6 +378,18 @@ def verify_reset_matches_oracle(
         environment, difficulty, seed
     ):
         raise ValueError("Reset instance vector/seed differs from the oracle case")
+    expected_interventions = env_runner._intervention_list(interventions)
+    if list(state.get("interventions") or []) != expected_interventions:
+        raise ValueError(
+            "Reset interventions differ from the oracle case: the episode would run "
+            f"{list(state.get('interventions') or []) or 'none'} while the gate graded "
+            f"{expected_interventions or 'none'}"
+        )
+    certified = oracle.get("interventions") or []
+    if list(certified) != expected_interventions:
+        raise ValueError(
+            "Exact-instance oracle certified a different intervention set than the episode"
+        )
     actual = _instance_hash(state)
     if actual != expected:
         raise ValueError("Agent-visible reset differs from the reference-graded generated instance")
@@ -426,9 +443,14 @@ def validate_case(
 ) -> dict[str, Any]:
     """Grade three variants on a single, identical generated (vector, seed)."""
     environment = str(case.get("environment", ""))
+    # An overlay can move the observable instance without moving the difficulty
+    # vector, so certifying the base is not evidence about a twin.  Grade exactly the
+    # instance the episode will run.
+    interventions = env_runner._intervention_list(case.get("interventions") or "")
     result: dict[str, Any] = {
         "case_id": case.get("case_id"), "environment": environment,
         "difficulty": case.get("difficulty"), "seed": case.get("seed"),
+        "interventions": interventions,
         "status": "blocked", "provider_calls": 0, "variants": [],
     }
     if environment not in REFERENCES:
@@ -465,6 +487,7 @@ def validate_case(
                 episode_id=episode_id, env=environment, difficulty=difficulty,
                 seed=case["seed"], max_steps=1, sandbox="local",
                 keep_images=False, keep_workspace=True,
+                interventions=",".join(interventions),
             )
             with contextlib.redirect_stdout(io.StringIO()):
                 env_runner.reset(args)

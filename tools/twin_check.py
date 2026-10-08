@@ -294,6 +294,39 @@ def compare(base_dir: Path, twin_dir: Path) -> dict[str, Any]:
     report["unnormalizable_placeholders"] = unnormalizable
     report["aliases"] = sorted({alias for alias, _ in renames_twin.items()})
 
+    # "Did the overlay fire?" is a narrower question than "do the trees differ?", and
+    # the difference matters: two directories always differ in the instance label, so
+    # answering it from the file diff would let that label masquerade as an
+    # intervention.  What has to have moved is a value this overlay actually sets -
+    # a substitution key, a rename with real occurrences, or a layout override.
+    declared_keys: set[str] = set()
+    layout_declared = False
+    for item in interventions:
+        for key in (item.get("substitutions") or {}):
+            declared_keys.add(gm.strip_placeholders(str(key)))
+        if item.get("layout"):
+            layout_declared = True
+    # `pairs` holds the differing placeholders that normalization can anchor; the ones
+    # it cannot (an inserted or deleted block) are in `unnormalizable`.  Both count as
+    # the overlay having fired - only the second kind is not textually provable.
+    differing = set(pairs) | set(unnormalizable)
+    fired_substitutions = sorted(name for name in differing if name in declared_keys)
+    fired_renames = sorted(
+        str(name)
+        for item in interventions
+        if str(item.get("mechanism")) == "rename"
+        for name, info in (item.get("renames") or {}).items()
+        if int((info or {}).get("occurrences") or 0) > 0
+    )
+    report["overlay_fired"] = {
+        "substitutions": fired_substitutions,
+        "renames": fired_renames,
+        "layout_overridden": layout_declared,
+    }
+    report["checks"]["overlay_fired"] = bool(
+        fired_substitutions or fired_renames or layout_declared
+    )
+
     raw_base = snapshot(base_dir)
     raw_twin = snapshot(twin_dir)
     norm_base = raw_base
@@ -332,6 +365,14 @@ def compare(base_dir: Path, twin_dir: Path) -> dict[str, Any]:
             )
         elif normalized_equal:
             report["checks"]["normalized_trees_identical"] = True
+            if not report["checks"]["overlay_fired"]:
+                report["status"] = "fail"
+                report["problems"] = problems + [
+                    "the declared renaming changed nothing at this difficulty vector, so "
+                    "the two members are one instance: the invariance would be vacuous "
+                    "rather than uninformative"
+                ]
+                return report
             report["status"] = "pass"
         else:
             report["checks"]["normalized_trees_identical"] = False
@@ -347,6 +388,14 @@ def compare(base_dir: Path, twin_dir: Path) -> dict[str, Any]:
             return report
     elif equivalence in ("observation_changing", "task_changing"):
         report["checks"]["normalized_trees_differ"] = not normalized_equal
+        if not report["checks"]["overlay_fired"]:
+            report["problems"] = problems + [
+                "the overlay sets no value that differs at this difficulty vector: the "
+                "twin is its base, so there is no experiment to run. This is a config "
+                "bug, not an invariance result"
+            ]
+            report["status"] = "fail"
+            return report
         if normalized_equal:
             report["problems"] = problems + [
                 "declared as changing what the agent can observe, but once the instance "

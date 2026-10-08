@@ -72,6 +72,10 @@ class EpisodeOptions:
     env: str
     difficulty: str
     seed: int = 0
+    # Causal overlays applied on top of the difficulty vector.  They belong to the
+    # instance, not to the run: two episodes that differ only here are twins of one
+    # task, and the pair identity is what makes the comparison meaningful.
+    interventions: str = ""
     max_steps: int = 30
     max_tokens: int = 1024
     temperature: float = 0.0
@@ -248,6 +252,8 @@ def _reset_args(options: EpisodeOptions, episode_id: str) -> list[str]:
         "--sandbox",
         options.sandbox,
     ]
+    if (options.interventions or "").strip():
+        args += ["--interventions", options.interventions.strip()]
     if options.keep_images:
         args.append("--keep-images")
     if options.keep_workspace:
@@ -324,9 +330,13 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     # are resolved or a model request is sent; failures are not task scores.
     from tools.instance_oracle_gate import validate_case
 
+    interventions = [
+        part.strip() for part in (options.interventions or "").split(",") if part.strip()
+    ]
     oracle = validate_case(
         {"case_id": options.episode_id or "direct", "environment": options.env,
-         "difficulty": options.difficulty, "seed": options.seed},
+         "difficulty": options.difficulty, "seed": options.seed,
+         "interventions": interventions},
         root=ROOT, include_slow=True,
     )
     oracle_dir = Path(options.out) / "_instance_oracles"
@@ -407,13 +417,19 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         # This is the actual reset the agent will see. The earlier oracle
         # generation is not sufficient unless its judge/workspace bytes match.
         verify_reset_matches_oracle(
-            oracle, episode_dir, options.env, options.difficulty, options.seed
+            oracle, episode_dir, options.env, options.difficulty, options.seed,
+            interventions,
         )
         agent_info = reset_info.get("agent_image") if isinstance(reset_info.get("agent_image"), dict) else {}
         judge_info = reset_info.get("judge_image") if isinstance(reset_info.get("judge_image"), dict) else {}
         artifacts.update_manifest(
             {
                 "episode_id": episode_id,
+                "interventions": interventions,
+                "generation_id": reset_info.get("generation_id"),
+                "pair_id": reset_info.get("pair_id"),
+                "pair_id_basis": reset_info.get("pair_id_basis"),
+                "provenance": reset_info.get("provenance"),
                 "agent_image_id": reset_info.get("agent_image_id") or agent_info.get("id"),
                 "judge_image_id": reset_info.get("judge_image_id") or judge_info.get("id"),
                 "agent_image_digest": agent_info.get("digest"),

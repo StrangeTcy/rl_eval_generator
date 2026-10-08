@@ -2,8 +2,9 @@
 
 Status: **all 27 recorded — 16 from part 1 (items 1–16) + 11 from part 2 (P2.1–P2.11), all
 `CONFIRMED`.** Each answer is recorded verbatim in *Answers*; the resulting build order is in
-*Build order*. **PR-A is implemented** (see *PR-A: what landed* at the end of this file);
-PR-B…PR-E are not.
+*Build order*. **PR-A is implemented**, plus the first slice of PR-B (*families are
+runnable*); PR-B's measurement items, PR-C, PR-D and PR-E are not. Both records are at the
+end of this file.
 Repository revision reviewed: `e1b038a4efb7343afd713f4e981c90fc0fb0485c` (`main`), branch `arena/81157642-rl-eval-generator`.
 Method: every proposal below was checked against the actual generator, registry, judge library,
 suite tooling and test suite at that revision. The two upstream analyses also cite
@@ -749,3 +750,61 @@ valid oracle exists.
 `test_a_chained_campaign_presents_a_resume_as_a_resume` from `e1b038a` documented under
 *Census*, untouched by this branch. `tools/suite_inventory.py --matrix covering` still
 reports 218 cases, `registry_clean: true`, `issue_count: 0`.
+
+---
+
+## PR-B.1: families are runnable
+
+The one gap PR-A left: a family could be generated and verified but not *run*. This
+wires the intervention through the campaign lane and closes the loop from plan to
+verdict, still without `torch`, a provider, or a container.
+
+| File | Change |
+|---|---|
+| `env_runner.py` | `reset --interventions`; the runner **regenerates** the member rather than mutating a base tree; `generation_id` / `pair_id` / `provenance` recorded in state, in the reset event, and in the reset `info`; `_verify_provenance` runs inside `_submit` **before** the judge |
+| `tools/instance_oracle_gate.py` | `validate_case` grades the intervened instance (it used to certify the base and let the episode run a twin); `verify_reset_matches_oracle` also compares intervention sets in both directions |
+| `arena.py`, `arena/episode.py` | `--interventions` on the run parser, `EpisodeOptions.interventions`, threaded into `_reset_args`, the pre-provider oracle case, and the episode manifest |
+| `tools/run_suite.py` | `_build_command` passes `--interventions`; each result row carries `interventions`, `family`, and the identity read back from the episode manifest; `reward_denial` is routed to `infrastructure_error` with an explicit message |
+| `tools/suite_inventory.py` | `--family DIR` (repeatable): family cases instead of a matrix expansion, blocked on config drift / failed twin check, `--preflight` recomputes every member's `generation.json` |
+| `tools/family.py` | member records now carry the runnable coordinates (`environment`, `config_path`, `seed`, `difficulty_levels`, `difficulty`, `interventions`) and `twin_check`; `expect` falls back to the taxonomy's declaration |
+| `tools/family_report.py` | joins a suite manifest with a run checkpoint into per-pair verdicts, pooled by intervention id, with the claim ceiling attached |
+| `tests/test_family_campaign.py` | 11 tests over all of the above |
+
+**The bug this stage found, which PR-A's verification had hidden.** A
+difference-proof declaration (`observation_changing`, `task_changing`) used to pass when
+the two trees differed at all. But two generated directories *always* differ — the
+instance label is in `run_eval.sh` — and a long member name exceeds the 128-character
+limit that marks a value as normalizable, so an inert overlay at
+`moco easy,easy,medium,medium,easy,easy` produced a **false pass**: the label was the
+only difference and the check called that "the observation changed". Textual
+invariance and textual difference both need the same anchor, so the criterion is now
+"did a value this overlay actually sets move" — a substitution key it writes, a rename
+with non-zero occurrences, or a layout override — computed from the recomputed
+substitution tables rather than from file bytes. `semantically_equivalent` got the
+dual rule: a renaming that fires nothing at this vector is refused as vacuous instead
+of passing as an uninformative invariance.
+
+Two consequences worth carrying forward:
+
+1. **Provenance denial is not a scored zero.** `reward_denial` reaches the report as
+   `infrastructure_error`, and the family report says `not_measurable`. A run whose
+   bytes cannot be attributed to the plan that produced it has no model claim in it,
+   and pooling it as `score = 0` would silently convert a harness defect into
+   evidence that the agent failed.
+2. **`pair_id` is now visible on the paid path.** Episode manifests and result rows
+   carry it, so the same-task/two-artifacts structure that the whole design rests on is
+   something a run report can check instead of something the generator asserted once
+   at planning time.
+
+**Still open in PR-B:** `#10` evaluator views (the taxonomy's `evaluator`/`reward_proxy`
+ids remain unimplemented because a second valid oracle does not exist), `#7` shortcut
+patches with a blocking `tools/shortcut_gate.py`, `#16`'s static measurement-adversary
+tier, and `#8`'s canonical event vocabulary in `shared/tool_state.py`. The
+`run_eval.sh` transport still cannot emit `trajectory_gated` results, so anything
+depending on the trajectory microscope stays `not_measurable` by design until `#8`.
+
+**Verified:** `tests/test_family_campaign.py` + `tests/test_causal_layer.py` = 30
+passed; `tests/test_env_runner.py tests/test_scoring.py tests/test_paid_campaign_safety.py
+tests/test_atria_campaign.py tests/test_exhaustive_campaign_recovery.py
+tests/test_campaign_completion_contract.py tests/test_integration.py` = 30 passed;
+`suite_inventory --matrix covering` unchanged at 218 cases with `issue_count: 0`.

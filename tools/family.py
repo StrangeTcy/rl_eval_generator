@@ -138,10 +138,36 @@ def generate_family(
                 interventions=interventions,
                 parent_generation_id=parent_id,
             )
+            declared_expectations = sorted(
+                {
+                    str(overlay["expect"])
+                    for overlay in manifest["interventions"]
+                    if overlay.get("expect")
+                }
+            )
             record = {
                 "name": name,
                 "path": str(directory.relative_to(out_dir)),
                 "role": item["role"],
+                # The runnable coordinates.  A campaign does not read a member off
+                # disk: it regenerates this exact instance from these fields, so the
+                # family manifest is a plan as well as a record.
+                "environment": item["environment"],
+                "config_path": manifest["config_path"],
+                "seed": int(item["seed"]),
+                "difficulty_levels": levels,
+                "difficulty": ",".join(
+                    str(value) for value in manifest["difficulty_vector"].values()
+                ),
+                "interventions": interventions,
+                "mechanisms": sorted({str(overlay.get("mechanism")) for overlay in manifest["interventions"]}),
+                "defect_classes": sorted(
+                    {
+                        str(overlay["defect_class"])
+                        for overlay in manifest["interventions"]
+                        if overlay.get("defect_class")
+                    }
+                ),
                 "generation_id": manifest["generation_id"],
                 "parent_generation_id": manifest.get("parent_generation_id"),
                 "pair_id": manifest["pair_id"],
@@ -154,6 +180,19 @@ def generate_family(
                 "config_sha256": manifest["config_sha256"],
                 "tree_sha256": manifest["tree_sha256"],
                 "spec_id": item.get("spec_id"),
+                "spec_member_id": item.get("spec_member_id"),
+                # A spec may state an expectation of its own; otherwise the taxonomy's
+                # declaration for the applied overlay is the expectation, and a member
+                # with two overlays whose declarations disagree reports "mixed" rather
+                # than picking one.
+                "expect": item.get("expect")
+                or (
+                    declared_expectations[0]
+                    if len(declared_expectations) == 1
+                    else "mixed" if declared_expectations else None
+                ),
+                "measurements": list(item.get("measurements") or []),
+                "hypotheses": list(item.get("hypotheses") or []),
             }
             if not interventions:
                 baselines[(item["environment"], int(item["seed"]))] = record
@@ -167,9 +206,12 @@ def generate_family(
                 else:
                     report = twin_check.compare(out_dir / baseline["name"], directory)
                     record["check"] = report
+                    record["twin_check"] = report["status"]
                     record["shares_pair_id_with_baseline"] = report["pair_id_base"] == report[
                         "pair_id_twin"
                     ]
+            elif interventions:
+                record["twin_check"] = "unchecked"
             members.append(record)
 
         family = {
@@ -286,6 +328,7 @@ def main(argv: list[str] | None = None) -> int:
                         "seed": int(seed),
                         "interventions": list(member["interventions"]),
                         "spec_id": str(spec.get("id")),
+                        "spec_member_id": member["id"],
                         "expect": member["expect"],
                         "measurements": member["measurements"],
                         "hypotheses": member["hypotheses"],

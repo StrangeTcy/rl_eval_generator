@@ -85,6 +85,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--env", required=True)
     run.add_argument("--difficulty", required=True, help="comma-separated difficulty levels")
     run.add_argument("--seed", type=int, default=0)
+    run.add_argument(
+        "--interventions",
+        default="",
+        help=(
+            "comma-separated intervention ids applied on top of the difficulty vector "
+            "(see generate_env.py --list-interventions)"
+        ),
+    )
     run.add_argument("--max-steps", type=int, default=30)
     run.add_argument("--max-tokens", type=int, default=1024)
     run.add_argument("--temperature", type=float, default=0.0)
@@ -200,6 +208,7 @@ def _run(args: argparse.Namespace) -> int:
         env=args.env,
         difficulty=args.difficulty,
         seed=args.seed,
+        interventions=args.interventions,
         max_steps=args.max_steps,
         max_tokens=args.max_tokens,
         temperature=args.temperature,
