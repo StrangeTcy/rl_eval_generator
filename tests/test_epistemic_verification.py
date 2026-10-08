@@ -50,10 +50,17 @@ E2 = _load_core("ver_e2_core", "envs/epistemic_announcements/files/core.py")
 E4 = _load_core("ver_e4_core", "envs/epistemic_nested_knowledge/files/core.py")
 E5 = _load_core("ver_e5_core", "envs/epistemic_fragmented_observation/files/core.py")
 E3 = _load_core("ver_e3_core", "envs/epistemic_silence/files/core.py")
+E6 = _load_core("ver_e6_core", "envs/epistemic_type_games/files/core.py")
 
 SEEDS = (0, 1, 2)
 
 GRIDS = {
+    "epistemic_type_games": [
+        dict(types=t, payoffs=p, scenario=s, seed=seed)
+        for t, p, s, seed in itertools.product(
+            ("small", "large"), ("mild", "sharp"),
+            ("expedition", "office"), SEEDS)
+    ],
     "epistemic_announcements": [
         dict(worlds=w, depth=d, query=q, scenario=s, seed=seed)
         for w, d, q, s, seed in itertools.product(
@@ -81,6 +88,7 @@ GRIDS = {
 }
 
 CORES = {
+    "epistemic_type_games": E6,
     "epistemic_announcements": E2,
     "epistemic_nested_knowledge": E4,
     "epistemic_fragmented_observation": E5,
@@ -100,6 +108,7 @@ def test_verifier_is_structurally_independent_of_generators() -> None:
     assert "epistemic_nested_knowledge/files" not in source
     assert "epistemic_fragmented_observation/files" not in source
     assert "epistemic_silence/files" not in source
+    assert "epistemic_type_games/files" not in source
     # Only the accepted substrate may drive recomputation.
     for forbidden in ("import core", "from core", "build_instance"):
         assert forbidden not in source
@@ -137,7 +146,7 @@ def test_v1_exact_reconstruction_on_full_grids() -> None:
             assert not errors, f"{family} {inst.seed}: {errors}"
             mismatches = VERIFIER.v1_compare(reconstruction, inst.to_spec(), family)
             assert not mismatches, f"{family} {inst.to_spec()}: {mismatches}"
-    assert total == 48 + 36 + 24 + 48  # 156 instances across the four grids
+    assert total == 24 + 48 + 36 + 24 + 48  # 180 instances across the five grids
 
 
 def test_v3_independent_verification_on_full_grids() -> None:

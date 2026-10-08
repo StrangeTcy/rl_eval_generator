@@ -334,7 +334,7 @@ E-line dependency); dependency-plan steps 2 and 7 (assess V1/V3 on the
 substrate families; repeat where families change formal or rendering
 assumptions — the four Batch-2 families are all covered).
 
-### Batch 4 — T1 presentation pilot (implemented 2026-10-08, pending result acceptance)
+### Batch 4 — T1 presentation pilot (implemented + accepted 2026-10-08, committed `342d302`)
 
 Scope (user-approved D4): T1 / matched-fact presentation PILOT, offline only.
 Per the corpus, T1 is a separate research line kept separate from the 15; the
@@ -395,6 +395,62 @@ semantic_equivalence_id/matched_control_id scheme untouched — the pilot is a
 new shared primitive, not a fork of the relay benchmark), shared-primitives
 notes #4 (paired-arm construction) and #6 (canonical semantic hash).
 
+### Batch 5 — E6 game-theory family (implemented 2026-10-08, pending result acceptance)
+
+Scope (user-approved D5): E6 ONLY - finite type spaces and common priors.
+E7/E8 remain deferred for later re-decision and are NOT touched.
+
+What was done:
+1. `envs/epistemic_type_games/` (E6). Axes: types {small=2x2, large=3x2} x
+   payoffs {mild=[-1,1], sharp=[-3,3]} x scenario {expedition,office}.
+   Operational definitions per the portfolio feasibility rule: two players,
+   finite type spaces, common prior with FULL SUPPORT (exact rationals, so
+   interim beliefs always exist), type partitions as information, two
+   actions, simultaneous play.
+2. ORACLE (formal solution check, not a textbook appeal): exact brute-force
+   enumeration of all pure strategy profiles with the standard tie rule
+   (>= in the interim best-response test), exact Fraction arithmetic.
+   Independent oracle checks in the test suite on hand-built games with
+   known solution sets: matching pennies -> 0 pure equilibria; coordination
+   -> exactly {(X,X),(Y,Y)}; prisoner's-dilemma-shaped -> unique (Y,Y).
+3. Construction certificates (rejection at construction): UNIQUENESS (the
+   portfolio restricts E6 to unique-equilibrium instances) and PARTITION
+   SENSITIVITY (some equilibrium strategy varies across types, otherwise
+   the instance cannot discriminate partition-sensitive choice from
+   payoff-only/surface choice). Measured per-attempt certificate rates:
+   25.6-43.8% across the axis levels, so MAX_ATTEMPTS=256 bounds per-cell
+   failure near zero.
+4. Answer protocol: exact strategy profile ({player_a,player_b} type->action
+   maps) + justification; binary grading (pass / wrong_equilibrium /
+   answer_format_invalid). Judge: v0-style provenance rebuild; NO substrate
+   shipping needed - the oracle is self-contained deterministic
+   enumeration (documented in config.yaml).
+5. V1/V3 REPEATED for E6 per the corpus rule ("repeat V1/V3 where a new
+   family changes the formal or language-generation assumptions"):
+   tools/epistemic_verifier.py gained an E6 task parser (types, prior,
+   payoff matrices) and - critically - an INDEPENDENTLY WRITTEN BNE
+   enumerator (different data structures and loop structure from the family
+   oracle) for the V3 check. Verification grid extended: 24 E6 cells; total
+   now 180 instances, all V1-exact and V3-verified, including independent
+   enumerator == family oracle on every E6 cell.
+6. Registry: epistemic_type_games entry (line 42).
+
+Verification evidence (2026-10-08):
+- `pytest tests/test_epistemic_type_games.py -q`: 9 passed (3 oracle
+  known-answer checks, 48-cell deterministic grid, certificates recomputed
+  from specs, full-support/normalized prior, leak checks, binary grading,
+  unknown-axis errors).
+- `pytest tests/test_epistemic_verification.py -q`: 6 passed on the
+  extended 180-instance grid.
+- Full repo suite (slow exhaustive test excluded as disclosed): exit 0.
+- Generation smoke + judge-container simulation (large,sharp,office seed 6):
+  provenance rebuild exact; grade(ground truth)=pass; visible tests pass on
+  the template; verifier CLI reports v1 exact + v3 verified.
+
+Boundaries honored: no common-knowledge or mechanism claims; uniqueness is a
+registered task property, not a hint about the equilibrium's content; E7/E8
+untouched; frozen CS001-CS011 and all earlier batches unmodified.
+
 ## D6 fix record (2026-10-07)
 
 - Failure: tests/test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume
@@ -443,13 +499,17 @@ Batch 2 (E2/E4/E5/E3 families): ACCEPTED 2026-10-08 and committed/pushed as
 Batch 3 (V1/V3 verification track): ACCEPTED 2026-10-08 and committed/pushed
 as `f35123c` (verified on origin).
 
-Batch 4 (T1 presentation pilot, offline) awaits result acceptance and
-commit/push authorization. Working tree: shared/presentation_identity.py,
-tools/presentation_pilot.py, tests/test_presentation_identity.py,
+Batch 4 (T1 presentation pilot, offline): ACCEPTED 2026-10-08 and
+committed/pushed as `342d302` (verified on origin).
+
+Batch 5 (E6 game-theory family) awaits result acceptance and commit/push
+authorization. Working tree: envs/epistemic_type_games/,
+tests/test_epistemic_type_games.py, envs/registry.yaml,
+tools/epistemic_verifier.py, tests/test_epistemic_verification.py,
 epistemic_program/LEDGER.md.
 
-After authorization and commit: Batch 5 (E6 game-theory family, the only
-E7/E8-adjacent scope approved in D5) per roadmap. Parallel
+After authorization and commit: Batch 6 (S-line scope assessment; S3
+blocked per roadmap, E7/E8 deferred) per roadmap. Parallel
 reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–F12/
 F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
 sections, critique mid-round details (for the source-to-code matrix rows of

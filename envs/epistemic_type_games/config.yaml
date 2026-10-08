@@ -1,0 +1,69 @@
+# epistemic_type_games: finite common-prior Bayesian games (E6).
+#
+# Source grounding: Mission 02 question E6 from the epistemic-compiler
+# corpus - predicted action profiles vs the independently enumerated unique
+# pure Bayesian-Nash equilibrium under each type partition. Operational
+# definitions live in files/core.py: full-support common prior (exact
+# rationals), type partitions as information, pure strategies, exact
+# brute-force enumeration with the standard tie rule, and two construction
+# certificates (unique equilibrium; partition sensitivity). No shared
+# epistemic_semantics modules are needed: the oracle is self-contained
+# deterministic enumeration, so the judge ships no substrate files.
+
+renderer: renderer.py
+
+axes:
+  - id: types
+    description: "Type-space size: small (2x2 types) or large (3x2 types)"
+    levels:
+      small:
+        "%%TYPES_ID%%": "small"
+      large:
+        "%%TYPES_ID%%": "large"
+
+  - id: payoffs
+    description: "Payoff scale: mild (utilities in [-1, 1]) or sharp (utilities in [-3, 3])"
+    levels:
+      mild:
+        "%%PAYOFFS_ID%%": "mild"
+      sharp:
+        "%%PAYOFFS_ID%%": "sharp"
+
+  - id: scenario
+    description: "Surface scenario template (varies names and labels to reduce retrieval cues)"
+    levels:
+      expedition:
+        "%%SCENARIO_ID%%": "expedition"
+      office:
+        "%%SCENARIO_ID%%": "office"
+
+scoring:
+  mode: exact_classification
+
+constants:
+  "%%PATCHABLE_FILES%%": '["answer.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '""'
+
+static_files: []
+
+layout:
+  agent/workspace/task.md: task.md
+  agent/workspace/answer.py: answer.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge.py: judge.py
+  judge/core.py: core.py
+  judge/instance_spec.py: instance_spec.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: Dockerfile.judge
+
+  run_eval.sh: shared/run_eval.sh

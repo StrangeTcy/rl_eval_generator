@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import itertools
 import json
 import re
 import sys
@@ -366,7 +367,142 @@ def parse_silence_task(text: str) -> dict:
     }
 
 
+def parse_type_games_task(text: str) -> dict:
+    """Parse the public Bayesian-game description (E6)."""
+    game = _section(text, "The game (common knowledge)")
+    types_a: List[str] = []
+    types_b: List[str] = []
+    current = None
+    for line in game.splitlines():
+        stripped = line.strip()
+        if "possible types:" in line:
+            current = types_a if "Alice" in line or _first_player_name(text) in line \
+                else types_b
+            continue
+        match = re.match(r"^- `(t\d+)`: ", stripped)
+        if match and current is not None and line.startswith("  -"):
+            current.append(match.group(1))
+    prior: Dict[str, str] = {}
+    for ta, tb, value in re.findall(r"P\(`(t\d+)`, `(t\d+)`\) = ([0-9/\-]+)", game):
+        prior[f"{ta},{tb}"] = value
+    payoffs: Dict[str, Dict[str, List[str]]] = {}
+    current_key = None
+    for line in game.splitlines():
+        key_match = re.match(r"  - types \(`(t\d+)`, `(t\d+)`\):$", line)
+        if key_match:
+            current_key = f"{key_match.group(1)},{key_match.group(2)}"
+            payoffs[current_key] = {}
+            continue
+        pair_match = re.match(r"    - \(`([XY])`, `([XY])`\): \(([^,]+), ([^)]+)\)$", line)
+        if pair_match and current_key is not None:
+            ua = Fraction(pair_match.group(3).strip())
+            ub = Fraction(pair_match.group(4).strip())
+            payoffs[current_key][f"{pair_match.group(1)},{pair_match.group(2)}"] = [
+                str(ua), str(ub)
+            ]
+    if not types_a or not types_b or not prior or not payoffs:
+        raise VerificationError("incomplete E6 game description")
+    return {
+        "family": "epistemic_type_games",
+        "types_a": types_a,
+        "types_b": types_b,
+        "prior": prior,
+        "payoff_matrices": payoffs,
+    }
+
+
+def _first_player_name(text: str) -> str:
+    match = re.search(r"(\w+) moves simultaneously", text)
+    return match.group(1) if match else "Alice"
+
+
+def _independent_enumerate_bne(types_a: List[str], types_b: List[str],
+                               prior: Dict[str, str],
+                               payoffs: Dict[str, Dict[str, List[str]]]):
+    """Independently written pure-BNE enumerator (oracle independence).
+
+    Deliberately structured differently from the family core: belief tables
+    are fractional conditional distributions keyed by both players, and the
+    best-response loop iterates candidate deviations for both players in a
+    single combined pass.
+    """
+    actions = ("X", "Y")
+    prior_f = {tuple(k.split(",")): Fraction(v) for k, v in prior.items()}
+    util = {
+        tuple(k.split(",")): {
+            tuple(pk.split(",")): (Fraction(u[0]), Fraction(u[1]))
+            for pk, u in m.items()
+        }
+        for k, m in payoffs.items()
+    }
+
+    def cond_b(eliciting_player: str, own: str) -> Dict[str, Fraction]:
+        others = types_b if eliciting_player == "a" else types_a
+        marg = sum(
+            (prior_f[(own, o)] if eliciting_player == "a" else prior_f[(o, own)])
+            for o in others
+        )
+        return {
+            o: (prior_f[(own, o)] if eliciting_player == "a" else prior_f[(o, own)]) / marg
+            for o in others
+        }
+
+    beliefs = {
+        ("a", ta): cond_b("a", ta) for ta in types_a
+    }
+    beliefs.update({("b", tb): cond_b("b", tb) for tb in types_b})
+
+    def value(player: str, own: str, act: str, opp_strategy: Dict[str, str]) -> Fraction:
+        total = Fraction(0)
+        for opp, prob in beliefs[(player, own)].items():
+            opp_act = opp_strategy[opp]
+            if player == "a":
+                ua, ub = util[(own, opp)][(act, opp_act)]
+                total += prob * ua
+            else:
+                ua, ub = util[(opp, own)][(opp_act, act)]
+                total += prob * ub
+        return total
+
+    profiles_a = [dict(zip(types_a, c)) for c in itertools.product(actions, repeat=len(types_a))]
+    profiles_b = [dict(zip(types_b, c)) for c in itertools.product(actions, repeat=len(types_b))]
+    out = []
+    for sa in profiles_a:
+        for sb in profiles_b:
+            best = True
+            for ta in types_a:
+                v = value("a", ta, sa[ta], sb)
+                if any(value("a", ta, d, sb) > v for d in actions if d != sa[ta]):
+                    best = False
+            if best:
+                for tb in types_b:
+                    v = value("b", tb, sb[tb], sa)
+                    if any(value("b", tb, d, sa) > v for d in actions if d != sb[tb]):
+                        best = False
+            if best:
+                out.append({"player_a": dict(sa), "player_b": dict(sb)})
+    return out
+
+
+def v3_verify_type_games(task_md: str, spec: dict) -> dict:
+    parsed = PARSERS["epistemic_type_games"](task_md)
+    equilibria = _independent_enumerate_bne(
+        parsed["types_a"], parsed["types_b"], parsed["prior"],
+        parsed["payoff_matrices"]
+    )
+    if len(equilibria) != 1:
+        return {"verified": False,
+                "failure_mode": f"expected unique equilibrium, found {len(equilibria)}"}
+    ok = equilibria[0] == spec["equilibrium"]
+    return {
+        "verified": ok,
+        "failure_mode": None if ok else "ground_truth_mismatch",
+        "equilibrium": equilibria[0],
+    }
+
+
 PARSERS = {
+    "epistemic_type_games": parse_type_games_task,
     "epistemic_announcements": parse_announcements_task,
     "epistemic_nested_knowledge": parse_nested_knowledge_task,
     "epistemic_fragmented_observation": parse_fragmented_observation_task,
@@ -376,6 +512,7 @@ PARSERS = {
 # Spec fields compared by V1 (formal state + registered proposition only;
 # semantic results such as ground truth are deliberately excluded).
 V1_FIELDS = {
+    "epistemic_type_games": ("types_a", "types_b", "prior", "payoff_matrices"),
     "epistemic_announcements": (
         "valuation", "partitions", "announcements", "query_formula",
     ),
@@ -528,6 +665,7 @@ def v3_verify_silence(task_md: str, spec: dict) -> dict:
 
 
 V3_VERIFIERS = {
+    "epistemic_type_games": v3_verify_type_games,
     "epistemic_announcements": v3_verify_announcements,
     "epistemic_nested_knowledge": v3_verify_nested_knowledge,
     "epistemic_fragmented_observation": v3_verify_fragmented_observation,
