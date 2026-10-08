@@ -134,20 +134,39 @@ def test_no_campaign_workflow_chains_without_the_guard() -> None:
 
 
 def test_a_chained_campaign_presents_a_resume_as_a_resume() -> None:
-    """The controller infers a fresh start from GITHUB_EVENT_NAME alone on the
-    pinned code it ships with, so once self-dispatch exists a resume arrives as
-    a workflow_dispatch and must be presented to the controller as an event it
-    treats as a resume. Only the chaining launcher needs this: with cron-only
-    continuation every resume really is a schedule event."""
+    """Once self-dispatch exists a resume arrives as a workflow_dispatch, and
+    the controller must not observe that event name on a resume. Only the
+    chaining launcher needs this: with cron-only continuation every resume
+    really is a schedule event.
+
+    Two mechanisms are accepted, because the deployed workflow legitimately
+    moved from (1) to (2) after the workflow-level override had never been
+    executed on a runner:
+
+      1. a step-level env override that presents a resume as a non-dispatch
+         event (`steps.mode.outputs.mode == 'resume'` in GITHUB_EVENT_NAME),
+         as in the chained example source of truth;
+      2. unsetting GITHUB_EVENT_NAME in the controller's child process on a
+         resume-gated branch (`env -u GITHUB_EVENT_NAME`), as in the deployed
+         workflow, which additionally passes explicit --allow-provider there.
+
+    Both guarantee the controller treats the leg as a resume; the controller
+    separately refuses any destructive inferred fresh start without --fresh."""
     for path in ALL_CAMPAIGN_WORKFLOWS:
         if _step(path, CHAIN_STEP_NAME) is None:
             continue
         campaign = _step(path, CAMPAIGN_STEP_NAME)
         assert campaign is not None, f"{path.name}: no campaign run step"
         override = (campaign.get("env") or {}).get("GITHUB_EVENT_NAME", "")
-        assert "steps.mode.outputs.mode == 'resume'" in override, (
-            f"{path.name}: a chained resume must present GITHUB_EVENT_NAME as a "
-            f"resume; got {override!r}"
+        via_override = "steps.mode.outputs.mode == 'resume'" in override
+        body = campaign.get("run", "")
+        resume_gate = body.find('[ "$MODE" = "resume" ]')
+        unset_at = body.find("env -u GITHUB_EVENT_NAME")
+        via_unset = resume_gate != -1 and unset_at != -1 and resume_gate < unset_at
+        assert via_override or via_unset, (
+            f"{path.name}: a chained resume must reach the controller without "
+            f"GITHUB_EVENT_NAME=workflow_dispatch; env override is {override!r} "
+            "and no resume-gated `env -u GITHUB_EVENT_NAME` branch was found"
         )
 
 

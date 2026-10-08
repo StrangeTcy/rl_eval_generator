@@ -89,6 +89,14 @@ layout:
   judge/instance_spec.py: instance_spec.py
   judge/patch_validator.py: shared/patch_validator.py
   judge/source_validator.py: shared/source_validator.py
+  # Shared exact-semantics package (single source of truth for the Bayes core
+  # and verdict bands; judge-side only - nothing here reaches the agent
+  # workspace). Shipped as a plain `epistemic_semantics` package next to
+  # core.py, which is the import name core.py falls back to in the container.
+  judge/epistemic_semantics/__init__.py: shared/epistemic_semantics/__init__.py
+  judge/epistemic_semantics/bayes.py: shared/epistemic_semantics/bayes.py
+  judge/epistemic_semantics/event_bayes.py: shared/epistemic_semantics/event_bayes.py
+  judge/epistemic_semantics/supplied_policy.py: shared/epistemic_semantics/supplied_policy.py
   judge/Dockerfile: Dockerfile.judge
 
   run_eval.sh: shared/run_eval.sh

@@ -1,0 +1,225 @@
+# Epistemic Compiler → rl_eval_generator: Program Ledger
+
+Durable handoff ledger for the source-to-implementation program. Updated each batch.
+
+## Revisions
+
+- Source repo: `StrangeTcy/epistemic-compiler`, branch `arena/01a107c8-epistemic-compiler`
+- Source revision inspected: `cdd03a2365174250d32b89d970be85bae21c7998` = HEAD of branch
+  = the known accepted baseline. **No post-baseline additions exist on this branch**,
+  so everything in the corpus is at-or-below the accepted baseline (no "later additions"
+  to distrust). Verified: `git merge-base --is-ancestor` → ancestor; HEAD == baseline sha.
+- Target repo: `StrangeTcy/rl_eval_generator`, session branch
+  `arena/e6e70c43-rl-eval-generator`, base `e1b038a4efb7343afd713f4e981c90fc0fb0485c`
+  (single squashed commit in local clone).
+- Source checkout kept separate at `/home/user/epistemic-compiler` (read-only use).
+
+## Corpus inventory and read status
+
+### mission-02/sources/ (30 files, ~1.4 MB)
+
+| ID | File | Bytes | Read | Role / preliminary disposition |
+|----|------|-------|------|--------------------|
+| F01 | 2026-09-29_arena_round_note.md | 9823 | YES | Compiler note on the 09-29 dialogue + Arena round. Verified-vs-not table; "PR1 shipped" claim NOT supported; pilot numbers quarantined. Key: epistemic-trajectories v0.1 track summary; tools/epistemic_probe.py already embodies scripted-target pattern. |
+| F02 | 2026-10-02_instruction_revision_note.md | 2743 | YES | Note on raw Arena output (F30). Not executed, not adopted; collides with existing mission state. Disposition: background, do-not-execute. |
+| F03 | epistemic_games_dialogue_representation.md | 16386 | headers | Turn-by-turn attribution record for the primary dialogue. Provenance/attribution rules. |
+| F04 | epistemic_games_generator_development_paths.md | 5636 | YES | Routing note: 3 independent generator paths (intervention operators / domain variants / episode engine) + separate empirical question. Not an approved architecture. |
+| F05 | epistemic_games_genre_index_v2.json | 14272 | headers | Genre catalog index (JSON). |
+| F06 | epistemic_games_genre_sorted_v2.md | 236088 | NO (batch B) | Raw genre-sorted dialogue extract v2 (LARGE). |
+| F07 | epistemic_games_genre_sorted_v5.md | 220505 | NO (batch B) | Raw genre-sorted dialogue extract v5 (LARGE). Relationship to F06: v5 is a later re-sorting; supersession NOT established by filename alone; both retained. |
+| F08 | epistemic_games_genre_v5_01_ideas.md | 17908 | headers | Ideas: Pelevin/reflexive-control/desontology bridge, MI-13, magic/misdirection primitive. Assistant proposals. |
+| F09 | epistemic_games_genre_v5_01_ideas_v2.md | 5859 | headers | Disposition register v2 for F08 ideas. |
+| F10 | epistemic_games_genre_v5_02_evaluation_experiment_proposals.md | 31589 | KEY parts | Arena synthesis (trajectory = central observable), intervention-operator register (same_fact_presentation / truthful_subset / observation_budget / source_cue / causal_attribution), reporting boundary. Points to docs/epistemic_trajectories*.md (read, see below). |
+| F11 | epistemic_games_genre_v5_03_notation_formalism.md | 16480 | headers | Formal core: trajectories + three metrics; notation discipline; semantic quotient σ. |
+| F12 | epistemic_games_genre_v5_04_code_drafts.md | 20715 | headers | Code drafts: v0.1 spec materials (overlaps F13). |
+| F13 | epistemic_games_genre_v5_05_implementation_generator_specifications.md | 33201 | YES | Generator specs: (1) v2.0 "Epistemic Process Control" spec (grand, unapproved), (2) epistemic-trajectories v0.1 impl spec, (3) six critique changes (no v2.0 rename; strict v0.1 claim; four_way=fixture; structured facts; small primary endpoint; deterministic semantic IDs) + PR order 1–6, (4) actionable spec: exclusion_8x6 primary template, three metrics ℶ/ℷ/ℸ never collapsed, naming lint (presentation ≠ attention), budget sweep {1,2,3}, four validity checks NULL/EFFECT/ABL-1/ABL-2, scripted targets exact_bayesian + bounded(m=3), PR ladder incl. "PR1.5 pilot + four checks". |
+| F14–F16 | genre_v5_06_writing_drafts{,_v2,_v3}.md | 63K+58K+44K | NO (batch B) | Writing/blog drafts. |
+| F17 | epistemic_games_genre_v5_07_research_prior_art.md | 11952 | headers | Prior-art assessment. |
+| F18 | epistemic_games_genre_v5_08_critique_corrections_audit.md | 13822 | headers | Corrections: belief-vs-process boundary, magic foundation, дезонтология correction, causal tests requirement, claims discipline. |
+| F19 | epistemic_games_genre_v5_09_context_model_capability_discussion.md | 8677 | headers | Model-news tangent (OpenAI Astra etc.) — background, not eval content. |
+| F20 | epistemic_games_hierarchies.md | 13486 | headers+§5 | Hierarchies/recursive structures; §5 user corrections & non-adoption rules (behavior≠mechanism; no single ladder; 15-question portfolio preserved). |
+| F21 | epistemic_games_ladders.md | 13055 | YES §1,§10 | Ladder record: E0–E8 ladder = assistant-proposed, UNAPPROVED; belief→process ladder explicitly REJECTED; §10 standing interpretation rules. |
+| F22 | epistemic_games_proposed_minimal_test.md | 3510 | YES | Minimal-test candidate (ΔG/ΔQ/ΔR separation; message conditions; A0–A2 as conditions not ladder). Decisions needed before pilot. |
+| F23 | epistemic_games_sources_index.md | 22690 | YES | Bibliography/provenance index of dialogue mentions; verification warnings preserved. Category: quoted/external claims. |
+| F24 | epistemic_games_without_references_and_hierarchies.md | 226044 | NO (batch B) | Combined dialogue extract (LARGE). |
+| F25 | epistemic_trajectories_repo_evolution_battle_prompt.md | 10998 | headers | Battle prompt v1 (methodology artifact). |
+| F26 | epistemic_trajectories_repo_evolution_battle_prompt_v2.md | 13157 | headers | Battle prompt v2 with access gate (methodology artifact). |
+| F27 | epistemic_trajectories_v2_luna_design_review.md | 2518 | YES | Review: E0–E8 factorization = promising CANDIDATE, not settled architecture; do not promote without adoption + repo audit. |
+| F28 | epistemic_trajectories_v2_luna_review.md | 5901 | YES | Review: access receipt matched; attribution error preserved; matched-presentation = candidate operationalization, not approved core. |
+| F29 | evolution_responses | 204388 | NO (batch C) | Raw battle-prompt responses (LARGE). |
+| F30 | raw/2026-10-02_instruction_revision.gpt_5.6_luna.md | 12734 | via F02 | Verbatim raw output; not adopted. |
+
+### Authoritative context (mission-02, outside sources/)
+
+| Item | Read | Notes |
+|---|---|---|
+| code snippets critique.md (4463 ln) | STRUCTURE + key rounds | 6 review rounds: gemini-3-flash (CS001–002), gpt6-luna refusal, opus-4.8 retraction, sonnet-5 (CS003–033), grok-4.5 r1 (CS034–066), grok-4.5 r2 (CS067–074), refusal, gemini r2 (CS075–078), **fable-5 final round (CS079–110)** with the complete `shared/epistemic_semantics/*` blueprint, non-negotiable invariants, build order. 110 python blocks ↔ CS001–CS110 confirmed by fence enumeration. |
+| initial_code_snippets_proposal_v1.md | part | The critiqued v1 proposal (float Bayes, world-filter PAL, BNE-checker, import-graph V3, text-hash T1). |
+| initial_code_snippets_proposal_v2.md | KEY parts | Critique-responsive rewrite: separation of concerns; exact FiniteDist (rejects floats); per-question sections E1–E8/S1–S4/V1–V3/T1; module boundaries + build order mirroring fable-5; integration-point caveats ("verify in the target session before editing"). |
+| snippet_reconciliation/approved/ | verified | CS001–CS011: 7 modules (event_bayes, supplied_policy, public_announcements, silence, common_knowledge, epistemic_relations, fragmented_observation) + 11 test files + 11 acceptance records. **82 passed, 37 subtests passed** (re-run here 2026-10-07). Contracts pinned. CS011 record: "User separately requested a new-session prompt to integrate accepted snippets into a new rl_eval_generator environment family; that integration has not run here." → our program IS that integration. |
+| gates/question_portfolio_draft.md | YES | E1–E8, S1–S4, V1–V3 definitions + serial development plan (E1 anchor → V3/V1 checks → V2 → S2/S3 → E2–E8 one at a time → S1/S4). All 15 retained by human direction; statuses track progress without pruning. |
+| gates/question_cards/E1_supplied_policy_update.md | YES | E1 card: logit response model (β0,β_prior,β_LR)=(0,1,1) target; signed LR (not unsigned R); v0 grid facts; V3 finding (judge not independent), V1 finding (no text→model audit). |
+| seed.yaml | part | Mission framing; v0 facts restated; theory pool = leads not evidence; cards frozen before Council. |
+| freeze/game_cards.freeze.yaml | part | Freeze bookkeeping for strategy cards. |
+| docs/epistemic_trajectories.md, _scope.md, rl_eval_generator_..._proposal.md | YES | Track status: proposed working name; alongside epistemic_games, not a rename; gates before implementation (inspect actual repo first — done here); engine-validated interventions; replay. |
+| council/, context/, gates/* (rest), workbench.yaml, retrieval_seed.yaml | NO (batch D) | Council round materials; to be inventoried as provenance, not specs. |
+
+## Target repo inspection (complete for program-relevant seams)
+
+- Registry-driven env families; `generate_env.py` placeholder substitution + opt-in
+  deterministic `renderer:` hook (pure fn of subs; sibling imports allowed); baked judge
+  files; strict unresolved-placeholder errors; `--difficulty` axis vectors; output dir
+  confined to cwd.
+- `envs/epistemic_games` v0: verified live — generated an instance (seed 7),
+  `tools/public_bayes_oracle.py` solved it from task.md alone (public-info sufficiency),
+  judge spec baked with exact posterior. 5 axes → 48 cells.
+- `tools/epistemic_probe.py`: verified — baselines (incl. calibrated, seductive,
+  framing_sensitive_qNN scripted positives), paired stats, seed-level aggregation.
+- Arena layer: `arena.py` subcommands run/trajectory/trajectory-plan/trajectory-analysis/
+  summarize/review; `arena/trajectory.py` = direct-answer behavioral probe pattern with
+  SYSTEM_ANSWER_ONLY prompts; providers/artifacts/call-guards exist. Model calls NOT
+  authorized for this program without explicit permission.
+- `envs/trajectory_semantics/*` + `shared/trajectory_semantics`: relay-machine
+  solver-synthesis track — UNRELATED to the corpus's "epistemic trajectories" despite
+  similar naming. Name-collision noted; do not conflate.
+- Tests (local run 2026-10-07): all pass EXCEPT
+  (a) `tests/test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume`
+      — pre-existing failure at main HEAD (guard expects text the last atria-campaign.yml
+      update removed);
+  (b) `tests/test_exhaustive_campaign_recovery.py` — very slow (>120s), not fully run.
+
+## Cross-checks established
+
+1. Approved baseline 82 tests: VERIFIED at source HEAD.
+2. CS001–CS011 NOT integrated into target (no counterpart modules).
+3. Target v0 epistemic_games matches seed.yaml/E1-card descriptions exactly (priors
+   0.5/0.6, R-bands 1/3, 48 cells, weights 0.5/0.3/0.2, strict tol 0.02).
+4. "PR1 shipped (arena/epistemic.py)" claim from dialogue is FALSE for target — no such
+   file; consistent with F01's "not supported" finding. The presentation/trajectory track
+   must be built from scratch (good: also serves as the independent second implementation
+   opportunity).
+5. Standing rules extracted: no capability ladder; behavior≠mechanism in naming; exact
+   Fraction for any categorical label; closed public schemas + GT forbid-list; reject
+   non-discriminating instances at generation; provenance ≠ independence; S3 blocked on
+   rubric; E6/E8 oracle-before-dataset; T1 separate line; portfolio items stay identifiable.
+
+## Decision log
+
+- 2026-10-07 D1 Foundation batch: **ON HOLD** — user chose "discuss first". Open sub-points
+  recorded in "D1 discussion" below; no foundation code written yet.
+- 2026-10-07 D2 v0 core: **refactor onto shared bayes NOW** (user overrode the
+  keep-untouched recommendation). Constraint I will enforce: observable behavior must stay
+  byte-identical (renderer task.md, baked judge spec, grading numerics), proven by a
+  differential regression over a seed grid before/after. Known consequence to resolve in
+  D1 discussion: core.py is shipped into generated judge images; if it imports
+  shared.epistemic_semantics, the layout/Dockerfiles must ship the shared module too.
+- 2026-10-07 D3 E-probe shape: **generator env families** (answer-only, v0-style) for
+  E2/E3/E4/E5.
+- 2026-10-07 D4 T1/presentation pilot: **approved**, offline-only, later batch (after
+  foundation/E-families). exclusion_8x6, ℶ/ℷ/ℸ separate, 4 validity checks, budget sweep.
+- 2026-10-07 D5 game theory: **E6 only** approved (oracle-first, enumerate-with-reject,
+  unique-equilibrium-or-reject, hand-verified fixtures). E7/E8 re-decided later.
+- 2026-10-07 D6 pre-existing CI failure: **fix approved and DONE** (see below).
+
+## Implementation log
+
+### Batch 1 — Foundation (implemented 2026-10-07, pending result acceptance)
+
+Scope (user-approved): verbatim vendor of CS001–CS011 + shared exact core + D2
+refactor of v0 onto shared bayes + packets/leakage primitives + boundary tests.
+
+What was done:
+1. `shared/epistemic_semantics/` package created. The 7 approved modules vendored
+   body-byte-identical (verified by epistemic_program/vendor_approved.py; source
+   blob SHAs recorded in APPROVED_SOURCES.md); only import lines transformed
+   (sibling→relative; tests→absolute). The 11 approved test files vendored to
+   tests/epistemic_semantics/ the same way. **82 passed, 37 subtests passed.**
+2. `bayes.py` (blueprint layer) wraps/extends approved contracts: re-exports
+   FiniteDist/SpecError/calculate_posterior*/SuppliedPolicyInstance/bayes_update,
+   adds `posterior_world1` and `likelihood_ratio_band` (v0 bands, exact).
+3. `packets.py` (V1): closed PacketSchema with GT forbid-list + validate_packet +
+   render_injectivity_probe. `leakage.py` (V2/V1 support): gt_render_forms
+   (exact + decimal + percent + complement disguises) + leakage_report.
+4. D2 refactor: envs/epistemic_games/files/core.py now takes posterior and
+   verdict band from shared.epistemic_semantics.bayes (dual import: repo package,
+   judge-shipped package, self-located-root fallback). config.yaml ships the
+   package into judge/epistemic_semantics/ only (agent workspace untouched —
+   knowledge boundary verified).
+5. Differential guard: fixtures/v0_differential.jsonl captured from the
+   PRE-refactor core (144 instances = 48 axis cells x seeds 0..2) pinning
+   task.md, to_spec(), and 4 grading traces each; test_v0_differential.py
+   requires byte-identical regeneration. PASSED after refactor.
+6. Boundary tests: LR==3 band edge, asymmetric-prior transposition (band-blind,
+   posterior-catching), zero-evidence rejection, float rejection, 1/3 exactness;
+   closed-schema unknown/forbidden/missing rejection + injectivity collisions;
+   leakage decimal disguises (4/7 vs 0.571), complement leak, no-suppression rule.
+
+Verification evidence (2026-10-07):
+- `pytest tests/epistemic_semantics -q`: 243 passed (82 approved + 144
+  differential parametrizations + primitive/boundary tests).
+- `pytest tests -q` (full suite except slow test_exhaustive_campaign_recovery):
+  all pass, including the D6-fixed workflow guard (6/6).
+- Generation smoke (report,strong,paired,skewed,bare_table seed 3): judge/
+  epistemic_semantics shipped; agent workspace contains 0 shared files;
+  tools/public_bayes_oracle.py solved the task from task.md alone
+  (posterior 3/31, verdict distinguishable).
+- Judge-container simulation: fresh interpreter, sys.path=[generated judge/] →
+  `import core`; rebuilt spec == baked INSTANCE_SPEC; grade(ground truth)=pass.
+- tools/epistemic_probe.py runs unchanged on the refactored core.
+
+Source units addressed by Batch 1: CS001–CS011 acceptance records (vendored);
+critique final-round shared primitives bayes/packets/leakage (CS079/CS103/CS104
+lineage, wrapped-not-replaced per approved-contract rule); proposal v2 "shared
+exact arithmetic"; E1-card signed-LR note (documented in bayes.py); standing
+rules (exactness, closed schemas, GT forbid-list, behavior-only naming).
+
+## D6 fix record (2026-10-07)
+
+- Failure: tests/test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume
+  at main HEAD. Root cause: the last main commit ("Update atria-campaign.yml") replaced the
+  workflow-level `GITHUB_EVENT_NAME` override (presenting a chained resume as 'schedule')
+  with a child-process `env -u GITHUB_EVENT_NAME` on the resume-gated branch plus explicit
+  `--allow-provider`. This matches the hardened controller (`_should_reset_output` refuses
+  destructive inferred fresh without --fresh; docstring: "the lesson is not 'fix the event
+  name'"). The guard test asserted the OLD mechanism verbatim.
+- Fix: rewrote that test to assert the semantic safety property — a chained resume must
+  reach the controller without GITHUB_EVENT_NAME=workflow_dispatch — accepting either (1)
+  the env override (chained example source of truth) or (2) the resume-gated unset branch
+  (deployed workflow), with ordering checked. No workflow file changed; the user's latest
+  atria-campaign.yml intent is preserved.
+- Evidence: verified deployed file uses unset-mechanism only, chained example uses
+  override-mechanism only; `pytest tests/test_campaign_workflow_guard.py` 6 passed; all
+  other test files pass (slow test_exhaustive_campaign_recovery.py still not run to
+  completion — >120s).
+
+## D1 discussion (RESOLVED 2026-10-07 — approved as refined)
+
+Sub-decisions surfaced for the user:
+1. Vendor policy for CS001–CS011: verbatim copy into shared/epistemic_semantics/ with a
+   provenance manifest (module → acceptance record → critique line range) vs adapted
+   rewrite vs spec-and-reimplement. My recommendation: verbatim (contracts frozen; CI only
+   runs pytest so no lint conflict; approved tests are already pytest-compatible).
+2. Overlap rule: approved modules vs fable-5 blueprint modules (e.g. event_bayes vs
+   bayes.py core): approved code may be wrapped/extended by blueprint modules, never
+   silently replaced or semantically altered without explicit approval.
+3. D2 shipping detail: core.py importing shared.epistemic_semantics requires the generated
+   judge workspace/image to ship the shared module (layout entries + Dockerfile/sys.path),
+   mirroring how shared/patch_validator.py is shipped. Alternative: keep core.py
+   self-contained in the family (violates single-source-of-truth). Recommendation: ship
+   the shared module into judge/ via layout.
+4. Test placement: approved + new tests under tests/epistemic_semantics/ (pyproject
+   testpaths=["tests"]).
+
+## Next action
+
+Batch 1 + D6 fix await result acceptance and commit/push authorization (working
+tree: envs/epistemic_games/config.yaml, envs/epistemic_games/files/core.py,
+tests/test_campaign_workflow_guard.py + new epistemic_program/,
+shared/epistemic_semantics/, tests/epistemic_semantics/).
+
+After authorization and commit: Batch 2 (E2 announcements family first, then E4,
+E5, E3) per roadmap — approved scope, no further permission needed to begin.
+Parallel reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–
+F12/F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
+sections, critique mid-round details (for the source-to-code matrix rows of
+CS012–CS110 dispositions).
