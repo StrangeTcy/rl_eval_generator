@@ -2,7 +2,7 @@
 
 `epistemic_reasoning` is a direct-answer family of deterministic, finite tasks. It is generated with the repository's `generate_env.py` pipeline and seed-aware renderer. The learner receives `prompt.md`, public `task.json`, a schema-shaped `answer.py`, and format-only `visible_tests.py`; the answer key remains in the judge image. The judge re-derives the complete instance from its variant, size, and seed before grading.
 
-The implementation carries accepted components from `StrangeTcy/epistemic-compiler` commit `cdd03a2365174250d32b89d970be85bae21c7998`. The source checkout was kept separate. The retained CS001–CS012 unittest suite has 84 passing cases; CS004, CS006, CS008, CS010, and CS012 are regression-test blocks, not extra inference implementations. CS013 E6 was implemented with the user's approved choices and committed as `ea9e11d`. CS014's tests-only behavior-preservation block was committed separately as `1de48b2`. CS015 adds a non-scored descriptive predictor and separate experiment helper, committed as `14225b3`. CS016's tests-only behavior-preservation block was committed separately. CS017 E8 adds a domain-only pure-PBE module, committed separately; CS018 onward remain unprocessed.
+The implementation carries accepted components from `StrangeTcy/epistemic-compiler` commit `cdd03a2365174250d32b89d970be85bae21c7998`. The source checkout was kept separate. The retained CS001–CS012 unittest suite has 84 passing cases; CS004, CS006, CS008, CS010, and CS012 are regression-test blocks, not extra inference implementations. CS013 E6 was implemented with the user's approved choices and committed as `ea9e11d`. CS014's tests-only behavior-preservation block was committed separately as `1de48b2`. CS015 adds a non-scored descriptive predictor and separate experiment helper, committed as `14225b3`. CS016's tests-only behavior-preservation block was committed separately. CS017 E8 adds a domain-only pure-PBE module, committed separately. CS018's tests-only behavior-preservation block was committed separately; CS019 onward remain unprocessed.
 
 ## Generate and run
 
@@ -52,7 +52,7 @@ The answer is parsed from one literal `ANSWER = {...}` assignment and never exec
 - Pooled information is set intersection only; it does not implement communication and is not common knowledge.
 - General relational accessibility and validated S5 partitions remain separate interfaces.
 - The JSON formula grammar is an explicit finite adapter, not a serializer for arbitrary Python callbacks.
-- The target integrates CS001–CS013, with CS014 and CS016 represented by separate behavior-preservation regression tests only. CS015 is a descriptive utility, not a scored ground-truth variant. CS017 adds a domain-only pure-PBE module; no signaling task variant is implied. CS018 onward remain unprocessed. This does not cover the full v3 proposal or broader research portfolio, and passing tests is not evidence of scientific validity.
+- The target integrates CS001–CS013, with CS014, CS016, and CS018 represented by separate behavior-preservation regression tests only. CS015 is a descriptive utility, not a scored ground-truth variant. CS017 adds a domain-only pure-PBE module; no signaling task variant is implied. CS019 onward remain unprocessed. This does not cover the full v3 proposal or broader research portfolio, and passing tests is not evidence of scientific validity.
 
 ## Accepted-source mapping
 
@@ -75,3 +75,4 @@ The answer is parsed from one literal `ANSWER = {...}` assignment and never exec
 | CS015 | `files/level_k.py` implements explicit-anchor, set-valued Level-k iteration; `experiments/instance_selection.py` selects predictor disagreements only | `tests/epistemic_source/test_cs015_level_k.py` |
 | CS016 (tests only) | Separate regression fixtures for a hand-solved Level-2 result and the discriminator's inability to identify shared errors | `tests/epistemic_source/test_cs016_level_k_fixtures.py` |
 | CS017 | `files/signaling_game.py`; exact on/off-path beliefs and complete pure PBE-assessment enumeration | `tests/epistemic_source/test_cs017_signaling_game.py` |
+| CS018 (tests only) | Separate regression fixtures for sender-deviation detection and explicit off-path beliefs | `tests/epistemic_source/test_cs018_pbe_fixtures.py` |
