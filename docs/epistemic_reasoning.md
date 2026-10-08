@@ -2,7 +2,7 @@
 
 `epistemic_reasoning` is a direct-answer family of deterministic, finite tasks. It is generated with the repository's `generate_env.py` pipeline and seed-aware renderer. The learner receives `prompt.md`, public `task.json`, a schema-shaped `answer.py`, and format-only `visible_tests.py`; the answer key remains in the judge image. The judge re-derives the complete instance from its variant, size, and seed before grading.
 
-The implementation carries accepted components from `StrangeTcy/epistemic-compiler` commit `cdd03a2365174250d32b89d970be85bae21c7998`. The source checkout was kept separate. The retained CS001–CS012 unittest suite has 84 passing cases; CS004, CS006, CS008, CS010, and CS012 are regression-test blocks, not extra inference implementations. CS013 E6 was implemented with the user's approved choices and committed as `ea9e11d`. CS014's tests-only behavior-preservation block was committed separately as `1de48b2`; CS015 onward remain unprocessed.
+The implementation carries accepted components from `StrangeTcy/epistemic-compiler` commit `cdd03a2365174250d32b89d970be85bae21c7998`. The source checkout was kept separate. The retained CS001–CS012 unittest suite has 84 passing cases; CS004, CS006, CS008, CS010, and CS012 are regression-test blocks, not extra inference implementations. CS013 E6 was implemented with the user's approved choices and committed as `ea9e11d`. CS014's tests-only behavior-preservation block was committed separately as `1de48b2`. CS015 adds a non-scored descriptive predictor and separate experiment helper; CS016 onward remain unprocessed.
 
 ## Generate and run
 
@@ -46,11 +46,12 @@ The answer is parsed from one literal `ANSWER = {...}` assignment and never exec
 
 - Instances are finite symbolic tasks (world-based variants currently use 3–8 worlds; pure-BNE games use 2 or 3 types per agent and 2 actions), not empirical evaluations of a learned agent. Pure-strategy enumeration rejects games with more than 20,000 joint pure-strategy profiles.
 - The BNE task asks only for the complete pure-strategy set; it neither computes mixed equilibria nor asserts uniqueness when multiple pure equilibria exist.
+- The Level-k utility is descriptive and conditional on an explicit caller-supplied Level-0 strategy; it is not a scoring oracle. Instance discrimination is experiment selection only, not a correctness test.
 - Silence protocols are deterministic. No support for probabilistic-agent rules, and no independence assumption between agents is claimed.
 - Pooled information is set intersection only; it does not implement communication and is not common knowledge.
 - General relational accessibility and validated S5 partitions remain separate interfaces.
 - The JSON formula grammar is an explicit finite adapter, not a serializer for arbitrary Python callbacks.
-- The target integrates CS001–CS013, with CS014 represented by separate behavior-preservation regression tests only. CS015 onward remain unprocessed. This does not cover the full v3 proposal or broader research portfolio, and passing tests is not evidence of scientific validity.
+- The target integrates CS001–CS013, with CS014 represented by separate behavior-preservation regression tests only. CS015 is a descriptive utility, not a scored ground-truth variant; CS016 onward remain unprocessed. This does not cover the full v3 proposal or broader research portfolio, and passing tests is not evidence of scientific validity.
 
 ## Accepted-source mapping
 
@@ -70,3 +71,4 @@ The answer is parsed from one literal `ANSWER = {...}` assignment and never exec
 | CS012 | Distinct four-world crossed-partition regression and eager rejection of overlapping S5 cells; no new inference implementation | `tests/epistemic_source/test_source_e5_fixtures.py` |
 | CS013 | `files/bayesian_games.py`; exact common-prior finite pure-BNE enumeration and JSON payoff-table adapter | `tests/epistemic_source/test_cs013_finite_bne.py`; generated-environment tests in `tests/test_epistemic_reasoning.py` |
 | CS014 (tests only) | Separate regression fixtures for multiple coordination equilibria and common-prior normalization | `tests/epistemic_source/test_cs014_bne_fixtures.py` |
+| CS015 | `files/level_k.py` implements explicit-anchor, set-valued Level-k iteration; `experiments/instance_selection.py` selects predictor disagreements only | `tests/epistemic_source/test_cs015_level_k.py` |
