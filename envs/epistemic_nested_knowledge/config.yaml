@@ -1,0 +1,76 @@
+# epistemic_nested_knowledge: nested-knowledge-order evaluation (E4).
+#
+# Source grounding: Mission 02 question E4 ("Nested knowledge order") from the
+# epistemic-compiler corpus - exact truth classification of registered
+# knowledge formulas K_i p / K_i K_j p / bounded third order, with formula
+# order as the varying factor. Built on the accepted CS002/CS005 S5 substrate
+# shipped from shared/epistemic_semantics. Emitted only when the registered
+# formula's truth varies between two worlds that agree on all first-order
+# facts (discrimination certificate; rejection at construction), so the
+# factual layer alone never decides the answer. Bounded finite models only:
+# no common-knowledge or general theory-of-mind claims.
+
+renderer: renderer.py
+
+axes:
+  - id: worlds
+    description: "Model size: number of scenarios in the S5 model"
+    levels:
+      four:
+        "%%WORLDS_ID%%": "four"
+      six:
+        "%%WORLDS_ID%%": "six"
+
+  - id: order
+    description: "Registered formula order: first (K_i p), second (K_i K_j p), or third (bounded K_i K_j K_i p)"
+    levels:
+      first:
+        "%%ORDER_ID%%": "first"
+      second:
+        "%%ORDER_ID%%": "second"
+      third:
+        "%%ORDER_ID%%": "third"
+
+  - id: scenario
+    description: "Surface scenario template (varies names and labels to reduce retrieval cues)"
+    levels:
+      expedition:
+        "%%SCENARIO_ID%%": "expedition"
+      office:
+        "%%SCENARIO_ID%%": "office"
+
+scoring:
+  mode: exact_classification
+
+constants:
+  "%%PATCHABLE_FILES%%": '["answer.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '""'
+
+static_files: []
+
+layout:
+  agent/workspace/task.md: task.md
+  agent/workspace/answer.py: answer.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge.py: judge.py
+  judge/core.py: core.py
+  judge/instance_spec.py: instance_spec.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  # Shared exact-semantics package (accepted CS002/CS005 substrate; judge-side
+  # only - nothing here reaches the agent workspace).
+  judge/epistemic_semantics/__init__.py: shared/epistemic_semantics/__init__.py
+  judge/epistemic_semantics/epistemic_relations.py: shared/epistemic_semantics/epistemic_relations.py
+  judge/epistemic_semantics/public_announcements.py: shared/epistemic_semantics/public_announcements.py
+  judge/Dockerfile: Dockerfile.judge
+
+  run_eval.sh: shared/run_eval.sh

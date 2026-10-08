@@ -35,6 +35,10 @@ environments:
 
   # Epistemic reasoning games
   epistemic_games: envs/epistemic_games/config.yaml
+  epistemic_announcements: envs/epistemic_announcements/config.yaml
+  epistemic_nested_knowledge: envs/epistemic_nested_knowledge/config.yaml
+  epistemic_fragmented_observation: envs/epistemic_fragmented_observation/config.yaml
+  epistemic_silence: envs/epistemic_silence/config.yaml
 
   # Recurrent-depth environments
   rd_state_carry: envs/recurrent_depth/state_carry/config.yaml

@@ -1,0 +1,88 @@
+# epistemic_announcements: sequential public-announcement evaluation (E2).
+#
+# Source grounding: Mission 02 question E2 ("Sequential public-announcement
+# updates") from the epistemic-compiler corpus - exact truth classification
+# of a registered knowledge proposition after truthful public announcements,
+# with a matched one-step control (depth=one). Built on the accepted CS002/
+# CS005 S5 + public-announcement substrate shipped from
+# shared/epistemic_semantics. Nested-query instances that do not discriminate
+# update depth are rejected at construction (truncation-flip certificate), so
+# every emitted nested instance requires relational updating, not just world
+# filtering; factual queries are the depth-invariant matched control.
+# The instance is generated symbolically by files/renderer.py (via the
+# generate_env.py renderer hook) from files/core.py, which is also shipped to
+# the judge, which re-derives the ground truth from the axes + seed
+# (provenance check) and grades the agent's ANSWER.
+
+renderer: renderer.py
+
+axes:
+  - id: worlds
+    description: "Model size: number of scenarios in the S5 model"
+    levels:
+      three:
+        "%%WORLDS_ID%%": "three"
+      four:
+        "%%WORLDS_ID%%": "four"
+
+  - id: depth
+    description: "Announcement sequence length: one (matched single-step control) or chain (targets three sequential informative announcements; realizes 2-3, capped by model size)"
+    levels:
+      one:
+        "%%DEPTH_ID%%": "one"
+      chain:
+        "%%DEPTH_ID%%": "chain"
+
+  - id: query
+    description: "Registered query family: factual (atomic control) or nested (knowledge formulas, depth 1-2)"
+    levels:
+      factual:
+        "%%QUERY_ID%%": "factual"
+      nested:
+        "%%QUERY_ID%%": "nested"
+
+  - id: scenario
+    description: "Surface scenario template (varies names and labels to reduce retrieval cues)"
+    levels:
+      expedition:
+        "%%SCENARIO_ID%%": "expedition"
+      office:
+        "%%SCENARIO_ID%%": "office"
+
+scoring:
+  mode: exact_classification
+
+constants:
+  "%%PATCHABLE_FILES%%": '["answer.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '""'
+
+static_files: []
+
+layout:
+  agent/workspace/task.md: task.md
+  agent/workspace/answer.py: answer.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge.py: judge.py
+  judge/core.py: core.py
+  judge/instance_spec.py: instance_spec.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  # Shared exact-semantics package (accepted CS002/CS005 substrate; judge-side
+  # only - nothing here reaches the agent workspace). Shipped as a plain
+  # `epistemic_semantics` package next to core.py, which is the import name
+  # core.py falls back to in the container.
+  judge/epistemic_semantics/__init__.py: shared/epistemic_semantics/__init__.py
+  judge/epistemic_semantics/epistemic_relations.py: shared/epistemic_semantics/epistemic_relations.py
+  judge/epistemic_semantics/public_announcements.py: shared/epistemic_semantics/public_announcements.py
+  judge/Dockerfile: Dockerfile.judge
+
+  run_eval.sh: shared/run_eval.sh

@@ -173,6 +173,99 @@ lineage, wrapped-not-replaced per approved-contract rule); proposal v2 "shared
 exact arithmetic"; E1-card signed-LR note (documented in bayes.py); standing
 rules (exactness, closed schemas, GT forbid-list, behavior-only naming).
 
+### Batch 2 — E-line generator families E2/E4/E5/E3 (implemented 2026-10-08, pending result acceptance)
+
+Scope (user-approved via D3 + batch authorization): E2/E3/E4/E5 as generator
+environment families (answer-only, v0-style), not arena probes. All four
+families consume ONLY the accepted shared substrate from Batch 1 and ship it
+judge-side only (agent workspace contains 0 shared files, verified).
+
+What was done:
+1. `envs/epistemic_announcements/` (E2, sequential PAL). Axes: worlds
+   {three,four} x depth {one=exactly 1, chain=realizes 2–3, capped by
+   n_worlds−1 informative steps} x query {factual=atomic matched control,
+   nested} x scenario {expedition,office}. Consumes CS005
+   public_announcements. Certificates: (a) truncation-flip on NESTED queries
+   only — factual controls are depth-invariant BY DESIGN because atom truths
+   survive every truthful restriction, so the depth contrast lives across the
+   query axis; (b) public derivability fairness invariant — the registered
+   question must be constant across all worlds surviving the full transcript
+   (otherwise no reasoner could answer from public information and accuracy
+   would measure luck). Rejection sampling over derived seeds `{seed}:{attempt}`.
+2. `envs/epistemic_nested_knowledge/` (E4, knowledge order). Axes: worlds
+   {four,six} x order {first=K_i p, second=K_i K_j p, third=bounded K_i K_j
+   K_i p} x scenario {expedition,office}. Consumes CS002/CS005. Task shape is
+   NAMED-TARGET model checking (the evaluated scenario is public), since
+   hidden-actual nested queries are not publicly answerable. Certificate: the
+   named scenario must have a same-valuation twin at which the registered
+   formula flips (generation biases valuations toward twins). Worlds axis is
+   four/six because measured per-attempt discrimination rates at three worlds
+   are ~0.5–2.9% (structurally near-unreachable for third order) vs
+   ~6.5–41% at four/six; MAX_ATTEMPTS=256 bounds per-cell failure near 1e-8.
+3. `envs/epistemic_fragmented_observation/` (E5, observation matrices). Axes:
+   worlds {four,six} x fragment {symmetric=shared partition, asymmetric=
+   distinct partitions} x scenario {expedition,office}. Consumes CS005 + CS011
+   fragmented_observation (joint_information). Registered propositions are
+   about the pooled cell; named-target shape. Certificates per level:
+   asymmetric → pooled set is a PROPER subset of each individual cell
+   (pooling strictly informative); symmetric → the named scenario's own facts
+   do not decide the payload (some cell member evaluates it differently).
+   CS011 boundary honored in task semantics: pooling is cell intersection,
+   not communication; no individual/common knowledge claims.
+4. `envs/epistemic_silence/` (E3, silence vs matched message). Axes:
+   observation {silence,message} x protocol {single,pair} x prior
+   {uniform 1/3, skewed 1/2-1/4-1/4} x scenario {expedition,office}. Consumes
+   CS007 silence + CS003/CS008 supplied_policy (bayes_update) + CS001
+   event_bayes. THREE worlds because deterministic rules over two worlds admit
+   only degenerate (0/1) informative posteriors. Answer = exact rational
+   posterior of scenario one + direction (increased/decreased/unchanged).
+   Certificates: realized event mass strictly in (0,1) and posterior differs
+   from prior. Spec records the matched counter-observation posterior
+   (judge-side only) for research contrast. Grading failure modes:
+   pass / wrong_magnitude / wrong_direction / wrong_posterior /
+   answer_format_invalid.
+5. Shared scaffolding mirrored from the v0 family: per-env renderer baking
+   TASK_MD + JUDGE_INSTANCE, instance_spec.py provenance rebuild contract,
+   v0-style judge.py (patch/source validation → rebuild == baked spec →
+   bounded literal ANSWER extraction → binary grading), visible_tests.py
+   (format-only, template-passing), answer.py, Dockerfiles, config.yaml with
+   judge-only `epistemic_semantics/` layout. Registry: 4 new entries
+   (envs/registry.yaml lines 38–41).
+6. Scoring: new mode `exact_classification` (binary exact match; no
+   thresholds by design) registered in tests/test_scoring.py with an
+   explicit documented branch. This is a documented extension of the scoring
+   guard, not a change to existing modes.
+
+Verification evidence (2026-10-08):
+- Family suites: E2 9 tests, E4 7, E5 7, E3 7 — all pass (30 tests). Coverage:
+  full deterministic grids (96/72/48/96 cells), certificates recomputed
+  independently from the spec through the accepted substrate, ground-truth
+  recomputation, public-task knowledge boundary (no ground-truth fields or
+  values in task.md), binary grading, unknown-axis ValueError, spec rebuild.
+- `pytest tests -q` (full suite except slow test_exhaustive_campaign_recovery):
+  all pass, including the documented exact_classification guard extension.
+- Generation smoke for all four families via generate_env.py: judge bundles
+  shipped (CS005+CS002 / +CS011 / CS007+CS003+CS001 respectively); agent
+  workspace contains 0 shared files; visible_tests pass on the shipped
+  template answer.
+- Judge-container simulation (fresh interpreter, sys.path=[generated judge/])
+  for all four families: rebuild == baked INSTANCE_SPEC; grade(ground
+  truth)=pass; wrong-answer grading verified (wrong_truth / wrong_magnitude).
+
+Consequential design decisions taken inside the approved batch (disclosed for
+acceptance review): (D-E2) flip certificate applies to nested queries only,
+factual controls depth-invariant by design; public-derivability invariant.
+(D-E4) named-target task shape; worlds axis four/six (empirically justified).
+(D-E5) named-target shape with per-level certificates. (D-E3) three-world
+models (empirically justified); exact-fraction answers. All families are
+answer-only and make no mechanism claims beyond the accepted substrate's own
+documented boundaries.
+
+Source units addressed by Batch 2: portfolio questions E2/E4/E5/E3 (feasibility
+rules honored: bounded finite models; no common-knowledge or general
+theory-of-mind claims); approved substrate consumption matrix: E2→CS002/CS005,
+E4→CS002/CS005, E5→CS005/CS011, E3→CS001/CS003/CS007.
+
 ## D6 fix record (2026-10-07)
 
 - Failure: tests/test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume
@@ -212,14 +305,19 @@ Sub-decisions surfaced for the user:
 
 ## Next action
 
-Batch 1 + D6 fix await result acceptance and commit/push authorization (working
-tree: envs/epistemic_games/config.yaml, envs/epistemic_games/files/core.py,
-tests/test_campaign_workflow_guard.py + new epistemic_program/,
-shared/epistemic_semantics/, tests/epistemic_semantics/).
+Batch 1 + D6 fix: ACCEPTED and committed/pushed as `f1e552a` (verified on
+origin 2026-10-07).
 
-After authorization and commit: Batch 2 (E2 announcements family first, then E4,
-E5, E3) per roadmap — approved scope, no further permission needed to begin.
-Parallel reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–
-F12/F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
+Batch 2 (E2/E4/E5/E3 families) awaits result acceptance and commit/push
+authorization. Working tree: envs/registry.yaml, tests/test_scoring.py,
+envs/epistemic_announcements/, envs/epistemic_nested_knowledge/,
+envs/epistemic_fragmented_observation/, envs/epistemic_silence/,
+tests/test_epistemic_announcements.py, tests/test_epistemic_nested_knowledge.py,
+tests/test_epistemic_fragmented_observation.py, tests/test_epistemic_silence.py.
+
+After authorization and commit: Batch 3 (V1/V3 presentation track) per
+roadmap — approved scope, no further permission needed to begin. Parallel
+reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–F12/
+F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
 sections, critique mid-round details (for the source-to-code matrix rows of
 CS012–CS110 dispositions).

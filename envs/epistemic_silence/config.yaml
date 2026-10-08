@@ -1,0 +1,83 @@
+# epistemic_silence: belief update when the expected message is absent (E3).
+#
+# Source grounding: Mission 02 question E3 from the epistemic-compiler corpus
+# - correct belief update under silence compared to matched trials where a
+# message is observed. Built on the accepted CS007 deterministic-silence
+# module and the CS008 supplied-policy Bayes update shipped from
+# shared/epistemic_semantics; posteriors are exact rationals.
+#
+# Construction certificate (rejection): the realized observation event must
+# have prior mass strictly between 0 and 1, which guarantees the posterior
+# differs from the prior (direction defined, instance discriminating).
+
+renderer: renderer.py
+
+axes:
+  - id: observation
+    description: "Observed public event: silence (nobody announced) or message (at least one announced)"
+    levels:
+      silence:
+        "%%OBSERVATION_ID%%": "silence"
+      message:
+        "%%OBSERVATION_ID%%": "message"
+
+  - id: protocol
+    description: "Announcement protocol size: single agent or a pair of agents"
+    levels:
+      single:
+        "%%PROTOCOL_ID%%": "single"
+      pair:
+        "%%PROTOCOL_ID%%": "pair"
+
+  - id: prior
+    description: "Prior over the three scenarios: uniform (1/3 each) or skewed (1/2, 1/4, 1/4)"
+    levels:
+      balanced:
+        "%%PRIOR_ID%%": "balanced"
+      skewed:
+        "%%PRIOR_ID%%": "skewed"
+
+  - id: scenario
+    description: "Surface scenario template (varies names and labels to reduce retrieval cues)"
+    levels:
+      expedition:
+        "%%SCENARIO_ID%%": "expedition"
+      office:
+        "%%SCENARIO_ID%%": "office"
+
+scoring:
+  mode: exact_classification
+
+constants:
+  "%%PATCHABLE_FILES%%": '["answer.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '""'
+
+static_files: []
+
+layout:
+  agent/workspace/task.md: task.md
+  agent/workspace/answer.py: answer.py
+  agent/workspace/visible_tests.py: visible_tests.py
+
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+
+  judge/judge.py: judge.py
+  judge/core.py: core.py
+  judge/instance_spec.py: instance_spec.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  # Shared exact-semantics package (accepted CS001/CS003/CS007 substrate;
+  # judge-side only - nothing here reaches the agent workspace).
+  judge/epistemic_semantics/__init__.py: shared/epistemic_semantics/__init__.py
+  judge/epistemic_semantics/event_bayes.py: shared/epistemic_semantics/event_bayes.py
+  judge/epistemic_semantics/supplied_policy.py: shared/epistemic_semantics/supplied_policy.py
+  judge/epistemic_semantics/silence.py: shared/epistemic_semantics/silence.py
+  judge/Dockerfile: Dockerfile.judge
+
+  run_eval.sh: shared/run_eval.sh
