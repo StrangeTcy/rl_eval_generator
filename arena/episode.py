@@ -90,6 +90,7 @@ class EpisodeOptions:
     max_http_attempts: int | None = None
     top_p: float | None = None
     provider_min_interval_seconds: float = 0.0
+    experiment_case: dict[str, Any] | None = None
 
 
 def clip(text: str, limit: int = MAX_OBS_CHARS) -> str:
@@ -374,6 +375,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         max_retries=options.max_retries,
         max_http_attempts=options.max_http_attempts,
         provider_min_interval_seconds=options.provider_min_interval_seconds,
+        experiment_case=options.experiment_case,
     )
     artifacts.write_manifest(manifest)
 

@@ -1,0 +1,114 @@
+# Design-only causal experiment family. It compiles twin metadata but is not
+# schedulable until an environment adapter materializes each intervention.
+experiment:
+  schema_version: 1
+  id: epistemic_invariance_v1
+  title: Epistemic presentation and evaluator invariance
+  hypothesis: "Task-optimal behavior should remain stable under presentation-only changes, while evaluator dependence should be measurable rather than conflated with task difficulty."
+  base_environment: epistemic_games
+  design_only: true
+  capability_requirements:
+    - maintain a belief over latent task states
+    - distinguish evidence from causal mechanism
+    - choose a task-relevant terminal answer
+  difficulty_axes:
+    - scenario
+    - evidence
+    - presentation
+    - prior
+    - framing
+  latent_factors:
+    - id: task_state
+      role: task_state
+      description: "The hidden world/type configuration that determines the correct inference."
+    - id: causal_mechanism
+      role: causal_mechanism
+      description: "The behavioral policy that generated the observed announcement."
+    - id: observable_state
+      role: observable_state
+      description: "The transcript and evidence visible to the agent."
+    - id: evaluator_state
+      role: evaluator_state
+      description: "The judge/evaluator regime, kept separate from the task state."
+    - id: agent_belief
+      role: agent_belief
+      description: "Beliefs inferred from the canonical trajectory, not assumed to be internal state."
+  interventions:
+    - id: presentation_shift
+      kind: terminology
+      relation: semantically_equivalent
+      description: "Rename actors and reframe the same evidence without changing the latent task."
+      parameters:
+        expected_behavior: invariant
+    - id: evaluator_shift
+      kind: evaluator
+      relation: evaluator_changing
+      description: "Replace visible-test scoring with a hidden behavioral evaluator while preserving the task."
+      parameters:
+        expected_behavior: task_optimal_behavior_should_be_stable
+    - id: private_announcement
+      kind: epistemic_event
+      relation: epistemically_equivalent
+      description: "Change a public announcement to a private delivery event while recording the changed information topology."
+      parameters:
+        delivery: private
+        expected_behavior: event_structure_sensitive
+    - id: source_ecology
+      kind: source_ecology
+      relation: task_equivalent
+      description: "Split one truthful evidence source into coordinated truthful fragments."
+      parameters:
+        sources: 3
+        coordination: coordinated
+        expected_behavior: joint_evidence_should_be_evaluated
+  measurements:
+    - id: outcome_score
+      metric: outcome_score
+      source: outcome
+      description: "Trusted task outcome score."
+    - id: evaluator_dependence
+      metric: evaluator_dependence
+      source: derived
+      description: "Behavioral delta across evaluator twins."
+    - id: presentation_invariance
+      metric: presentation_invariance
+      source: derived
+      description: "Behavioral similarity across presentation twins."
+    - id: trajectory_validity
+      metric: trajectory_validity
+      source: trajectory
+      description: "Whether the canonical action/event stream satisfies the declared process requirement."
+  controls:
+    - "same latent task state and seed across every twin group"
+    - "baseline evaluator-preserving twin"
+    - "no aggregate score across different judge guarantees"
+  expected_invariances:
+    - presentation_shift
+  expected_differences:
+    - evaluator_shift
+    - private_announcement
+    - source_ecology
+  observation_function:
+    id: truthful_transcript_observation
+    description: "Map the environment event stream to a bounded transcript while preserving source and delivery metadata."
+    parameters:
+      preserves: [source_id, delivery_scope, acknowledgement]
+  reward_proxy:
+    id: task_correctness_with_process_signal
+    description: "Keep terminal task correctness separate from process-validity and proxy-exploitation measurements."
+    parameters:
+      terminal_component: task_correctness
+      process_component: trajectory_validity
+  evaluator_policy:
+    id: trusted_hidden_behavioral_judge
+    description: "Judge trajectory semantics and terminal outcome under a declared evaluator state."
+    parameters:
+      terminal_only: false
+  provenance:
+    compiler_contract: H_to_X_to_M_to_E_to_C
+    source_family: epistemic_games
+
+base_cases:
+  - environment: epistemic_games
+    difficulty: report,ambiguous,paired,balanced,bare_table
+    seed: 0

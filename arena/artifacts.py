@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .diffing import files_differ, has_symlink_in_path, text_for_diff, unified_text_diff
+from .trajectory_schema import canonicalize_trace
 
 ARTIFACT_NAMES = (
     "manifest.json",
@@ -30,6 +31,8 @@ ARTIFACT_NAMES = (
     "judge.stdout",
     "judge.stderr",
     "environment-events.jsonl",
+    "trajectory.json",
+    "trajectory_metrics.json",
 )
 
 
@@ -224,14 +227,41 @@ class RunArtifacts:
             diff = diff.replace(self.secret, "[REDACTED]")
         self.path("workspace.diff").write_text(diff, encoding="utf-8")
 
+    def write_canonical_trajectory(self) -> dict[str, Any]:
+        records = _read_jsonl(self.path("trace.jsonl"))
+        case_id: str | None = None
+        manifest_path = self.path("manifest.json")
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                experiment_case = manifest.get("experiment_case")
+                if isinstance(experiment_case, Mapping):
+                    candidate = experiment_case.get("case_id")
+                    case_id = str(candidate) if candidate else None
+            except (OSError, json.JSONDecodeError):
+                pass
+        trajectory = canonicalize_trace(records, run_id=self.run_id, case_id=case_id)
+        metrics = trajectory.metrics()
+        write_json(self.path("trajectory.json"), trajectory.as_dict(), secret=self.secret)
+        write_json(self.path("trajectory_metrics.json"), metrics, secret=self.secret)
+        return metrics
+
     def finalize(self, *, episode_dir: Path, final: Any, finished_at: str | None = None) -> None:
         self.collect_episode_files(episode_dir)
         for name in ("trace.jsonl", "model_responses.jsonl", "api_errors.jsonl"):
             path = self.path(name)
             if not path.exists():
                 path.write_text("", encoding="utf-8")
-        self.write_final(final)
-        self.update_manifest({"finished_at": finished_at or utc_now()})
+        trajectory_metrics = self.write_canonical_trajectory()
+        final_record = dict(final) if isinstance(final, Mapping) else {"result": final}
+        final_record.setdefault("trajectory_metrics", trajectory_metrics)
+        final_record.setdefault("trajectory_schema_version", 1)
+        self.write_final(final_record)
+        self.update_manifest({
+            "finished_at": finished_at or utc_now(),
+            "trajectory_schema_version": 1,
+            "trajectory_event_count": len(_read_jsonl(self.path("trace.jsonl"))),
+        })
 
 
 def manifest_defaults(
@@ -256,6 +286,7 @@ def manifest_defaults(
     provider_min_interval_seconds: float | None = None,
     agent_image_id: str | None = None,
     judge_image_id: str | None = None,
+    experiment_case: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     result = {
         "run_id": run_id,
@@ -277,6 +308,7 @@ def manifest_defaults(
         "max_http_attempts": max_http_attempts,
         "provider_min_interval_seconds": provider_min_interval_seconds,
         "request_extra": dict(request_extra),
+        "experiment_case": dict(experiment_case or {}),
         "system_prompt_sha256": sha256_text(system_prompt),
         "agent_image_id": agent_image_id,
         "judge_image_id": judge_image_id,

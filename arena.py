@@ -90,6 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--temperature", type=float, default=0.0)
     run.add_argument("--top-p", type=float, default=None)
     run.add_argument("--request-extra", type=_request_extra_arg, default={})
+    run.add_argument(
+        "--experiment-case",
+        type=_request_extra_arg,
+        default=None,
+        help="optional causal-experiment twin metadata to persist in the run manifest",
+    )
     run.add_argument("--sandbox", choices=("docker", "local"), default="docker")
     run.add_argument("--out", type=Path, default=Path("runs"), help="directory containing run directories")
     run.add_argument("--invalid-retries", type=int, default=2)
@@ -211,6 +217,7 @@ def _run(args: argparse.Namespace) -> int:
         max_retries=args.max_retries,
         max_http_attempts=args.max_http_attempts,
         provider_min_interval_seconds=args.provider_min_interval_seconds,
+        experiment_case=args.experiment_case,
         keep_images=args.keep_images,
         keep_workspace=args.keep_workspace,
     )

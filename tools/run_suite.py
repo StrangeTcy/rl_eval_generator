@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -364,6 +365,7 @@ def _build_command(
     max_retries: int = 3,
     reasoning_effort: str | None = None,
     request_extra: dict[str, Any] | None = None,
+    experiment_case: Mapping[str, Any] | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -426,6 +428,13 @@ def _build_command(
                 json.dumps(effective_extra, separators=(",", ":")),
             ]
         )
+    if experiment_case:
+        command.extend(
+            [
+                "--experiment-case",
+                json.dumps(dict(experiment_case), separators=(",", ":")),
+            ]
+        )
     if keep_images:
         command.append("--keep-images")
     if keep_workspace:
@@ -474,6 +483,22 @@ def run_suite(
     stop_after_gates: bool = False,
     gate_wall_seconds: float | None = None,
 ) -> dict[str, Any]:
+    if manifest.get("manifest_type") == "causal_experiment_family":
+        if not manifest.get("ready_for_scheduler", False):
+            raise ValueError(
+                "causal experiment family is design-only or has unmaterialized interventions; "
+                "compile materializers before scheduling"
+            )
+        unmaterialized = [
+            str(case.get("case_id", ""))
+            for case in manifest.get("cases", [])
+            if case.get("experiment_materialized") is False or case.get("experiment_design_only") is True
+        ]
+        if unmaterialized:
+            raise ValueError(
+                "causal experiment family contains unmaterialized cases: "
+                + ", ".join(unmaterialized[:5])
+            )
     if not manifest.get("ready_for_scheduler", False) and not allow_config_drift:
         raise ValueError("manifest is not ready; fix inventory issues or pass --allow-config-drift explicitly")
     if not provider or not model:
@@ -1084,6 +1109,35 @@ def run_suite(
             keep_workspace=keep_workspace,
             reasoning_effort=reasoning_effort,
             request_extra=request_extra,
+            experiment_case=(
+                case.get("experiment_case")
+                or (
+                    {
+                        key: case[key]
+                        for key in (
+                            "case_id",
+                            "base_case_id",
+                            "experiment_id",
+                            "experiment_spec_sha256",
+                            "twin_group_id",
+                            "variant_id",
+                            "intervention_id",
+                            "intervention",
+                            "expected_relation",
+                            "counterfactual_partner_ids",
+                            "hypothesis",
+                            "measurement_ids",
+                            "capability_requirements",
+                            "difficulty_axes",
+                            "difficulty_vector",
+                            "expected_invariances",
+                            "expected_differences",
+                        )
+                        if key in case
+                    }
+                    or None
+                )
+            ),
         )
         case_started = time.monotonic()
         remaining_wall_seconds = None

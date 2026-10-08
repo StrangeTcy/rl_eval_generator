@@ -57,6 +57,33 @@ These environments are designed to make that strategy less reliable:
 
 The goal is to test whether an agent can form and use a causal model of an ML system.
 
+### Causal experiment families
+
+The existing registry and generator can also be used as substrates for matched
+counterfactual experiments. `arena.experiment_schema` keeps latent task state,
+causal mechanism, observation, reward/proxy, evaluator state, and reported
+belief as explicit factors, while interventions and difficulty vectors remain
+separate. The first example crosses presentation, epistemic-event, evaluator,
+and source-ecology interventions over `epistemic_games` without treating them
+as a sequential intelligence ladder.
+
+Compile the design-only family with no provider or Docker calls:
+
+```bash
+python tools/experiment_family.py \
+  --spec experiments/epistemic_invariance.yaml \
+  --out /tmp/epistemic-family.json
+```
+
+Every twin preserves its base environment, difficulty vector, and seed. The
+compiler records expected invariances/differences and refuses to mark an
+unmaterialized intervention schedulable. Run finalization also writes canonical
+`trajectory.json` and derived `trajectory_metrics.json`; these summarize
+observable event semantics such as hypothesis switches, information gained,
+discriminating-test timing, backtracking, and state revisitation rather than
+claiming access to private reasoning. See
+[docs/causal-experiments.md](docs/causal-experiments.md).
+
 ---
 
 ## Included environments
