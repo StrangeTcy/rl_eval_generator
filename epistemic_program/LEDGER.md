@@ -123,7 +123,7 @@ Durable handoff ledger for the source-to-implementation program. Updated each ba
 
 ## Implementation log
 
-### Batch 1 — Foundation (implemented 2026-10-07, pending result acceptance)
+### Batch 1 — Foundation (implemented + accepted, committed `f1e552a`)
 
 Scope (user-approved): verbatim vendor of CS001–CS011 + shared exact core + D2
 refactor of v0 onto shared bayes + packets/leakage primitives + boundary tests.
@@ -173,7 +173,7 @@ lineage, wrapped-not-replaced per approved-contract rule); proposal v2 "shared
 exact arithmetic"; E1-card signed-LR note (documented in bayes.py); standing
 rules (exactness, closed schemas, GT forbid-list, behavior-only naming).
 
-### Batch 2 — E-line generator families E2/E4/E5/E3 (implemented 2026-10-08, pending result acceptance)
+### Batch 2 — E-line generator families E2/E4/E5/E3 (implemented + accepted 2026-10-08, committed `e901cbc`)
 
 Scope (user-approved via D3 + batch authorization): E2/E3/E4/E5 as generator
 environment families (answer-only, v0-style), not arena probes. All four
@@ -266,7 +266,7 @@ rules honored: bounded finite models; no common-knowledge or general
 theory-of-mind claims); approved substrate consumption matrix: E2→CS002/CS005,
 E4→CS002/CS005, E5→CS005/CS011, E3→CS001/CS003/CS007.
 
-### Batch 3 — V1/V3 verification track (implemented 2026-10-08, pending result acceptance)
+### Batch 3 — V1/V3 verification track (implemented + accepted 2026-10-08, committed `f35123c`)
 
 Scope (user-approved roadmap): V1 (faithfulness of English renderings) and
 V3 (feasibility of independent verification) as operational, offline checks
@@ -334,6 +334,67 @@ E-line dependency); dependency-plan steps 2 and 7 (assess V1/V3 on the
 substrate families; repeat where families change formal or rendering
 assumptions — the four Batch-2 families are all covered).
 
+### Batch 4 — T1 presentation pilot (implemented 2026-10-08, pending result acceptance)
+
+Scope (user-approved D4): T1 / matched-fact presentation PILOT, offline only.
+Per the corpus, T1 is a separate research line kept separate from the 15; the
+pilot delivers the `implementable primitive` (the identity fix + matched-arm
+construction). The broader presentation-order-effect question remains
+`needs prior-art/source check first`; nothing here measures behavior, and
+behavioral sensitivity to presentation is explicitly NOT an
+attention-mechanism claim.
+
+What was done:
+1. `shared/presentation_identity.py` — T1 identity-fix primitives:
+   - `Fact(fact_id, canonical_content, text)`: identity assigned ONCE at
+     generation/extraction time and carried as metadata; the rendered `text`
+     carries zero identity weight.
+   - `canonical_semantic_hash(fact)`: sha256 over canonical structured
+     content only (sorted keys, compact separators); the renderer never
+     participates.
+   - `semantic_fact_multiset_id(facts)`: commutative over fact ORDER by
+     construction (canonical sort of content blobs), sensitive to CONTENT —
+     fixing the corpus-flagged failure where hashing English "loses
+     commutativity of fact sets and confuses whitespace noise with fact
+     change."
+   - `RenderedPresentation(fact_set_id, variant, order, text)` and
+     `MatchedFactPair` + `build_matched_fact_pair`: same fact multiset, two
+     presentations (permuted order and/or framing), one shared semantic ID;
+     permutation validation included.
+2. `tools/presentation_pilot.py` — offline pilot wired to the four E-line
+   families: structured fact extraction from judge-side `to_spec()` (NEVER
+   from rendered text): world facts, partitions, announcement sequence,
+   target scenario, registered query (E2/E4/E5) and priors, announcement
+   rules, observed event (E3). Builds matched arms (canonical bullet order
+   vs reversed numbered order) and checks: identity stability across
+   presentations, multiset commutativity, determinism, and the text-hash
+   failure-mode contrast. CLI: `--env/--difficulty/--seed`, JSON report,
+   exit codes.
+3. `tests/test_presentation_identity.py` — 7 tests: primitive identity
+   stability across order/framing; multiset commutativity + content
+   sensitivity (+ fact_id renames do NOT move content identity); the
+   corpus's text-hash-splits-matched-arms demo; permutation validation;
+   structured extraction non-empty with unique generation-time IDs across
+   7 representative family instances; pilot invariants + determinism over
+   all four families (seeds 0-1); semantic-ID sensitivity to mutated specs
+   (prior change, valuation change).
+
+Verification evidence (2026-10-08):
+- `pytest tests/test_presentation_identity.py -q`: 7 passed.
+- `pytest tests -q` (full suite except slow test_exhaustive_campaign_recovery):
+  exit 0.
+- CLI exercised for all four families (fact counts 6/8/10/10): identity
+  stable across presentations in every case; naive text hashing splits the
+  matched arms in every case.
+
+Source units addressed by Batch 4: critique section "T1: Matched-fact
+presentation" (Canonical Fact ID fix), T1 final section (semantic fact
+multiset ID + presentation permutation arm; extend-not-replace note
+acknowledged: the relay trajectory_semantics keeps its own
+semantic_equivalence_id/matched_control_id scheme untouched — the pilot is a
+new shared primitive, not a fork of the relay benchmark), shared-primitives
+notes #4 (paired-arm construction) and #6 (canonical semantic hash).
+
 ## D6 fix record (2026-10-07)
 
 - Failure: tests/test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume
@@ -377,18 +438,18 @@ Batch 1 + D6 fix: ACCEPTED and committed/pushed as `f1e552a` (verified on
 origin 2026-10-07).
 
 Batch 2 (E2/E4/E5/E3 families): ACCEPTED 2026-10-08 and committed/pushed as
-`e901cbc` (verified on origin). Working tree: envs/registry.yaml, tests/test_scoring.py,
-envs/epistemic_announcements/, envs/epistemic_nested_knowledge/,
-envs/epistemic_fragmented_observation/, envs/epistemic_silence/,
-tests/test_epistemic_announcements.py, tests/test_epistemic_nested_knowledge.py,
-tests/test_epistemic_fragmented_observation.py, tests/test_epistemic_silence.py.
+`e901cbc` (verified on origin).
 
-Batch 3 (V1/V3 verification track) awaits result acceptance and commit/push
-authorization. Working tree: tools/epistemic_verifier.py,
-tests/test_epistemic_verification.py, epistemic_program/LEDGER.md.
+Batch 3 (V1/V3 verification track): ACCEPTED 2026-10-08 and committed/pushed
+as `f35123c` (verified on origin).
 
-After authorization and commit: Batch 4 (T1 presentation pilot, offline-only,
-user-approved in D4) per roadmap. Parallel
+Batch 4 (T1 presentation pilot, offline) awaits result acceptance and
+commit/push authorization. Working tree: shared/presentation_identity.py,
+tools/presentation_pilot.py, tests/test_presentation_identity.py,
+epistemic_program/LEDGER.md.
+
+After authorization and commit: Batch 5 (E6 game-theory family, the only
+E7/E8-adjacent scope approved in D5) per roadmap. Parallel
 reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–F12/
 F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
 sections, critique mid-round details (for the source-to-code matrix rows of
