@@ -25,15 +25,15 @@ Durable handoff ledger for the source-to-implementation program. Updated each ba
 | F03 | epistemic_games_dialogue_representation.md | 16386 | headers | Turn-by-turn attribution record for the primary dialogue. Provenance/attribution rules. |
 | F04 | epistemic_games_generator_development_paths.md | 5636 | YES | Routing note: 3 independent generator paths (intervention operators / domain variants / episode engine) + separate empirical question. Not an approved architecture. |
 | F05 | epistemic_games_genre_index_v2.json | 14272 | headers | Genre catalog index (JSON). |
-| F06 | epistemic_games_genre_sorted_v2.md | 236088 | NO (batch B) | Raw genre-sorted dialogue extract v2 (LARGE). |
-| F07 | epistemic_games_genre_sorted_v5.md | 220505 | NO (batch B) | Raw genre-sorted dialogue extract v5 (LARGE). Relationship to F06: v5 is a later re-sorting; supersession NOT established by filename alone; both retained. |
+| F06 | epistemic_games_genre_sorted_v2.md | 236088 | STRUCTURED SCAN (batch 8) | Raw genre-sorted dialogue extract v2 (LARGE). |
+| F07 | epistemic_games_genre_sorted_v5.md | 220505 | STRUCTURED SCAN (batch 8) | Raw genre-sorted dialogue extract v5 (LARGE). Relationship to F06: v5 is a later re-sorting; supersession NOT established by filename alone; both retained. |
 | F08 | epistemic_games_genre_v5_01_ideas.md | 17908 | headers | Ideas: Pelevin/reflexive-control/desontology bridge, MI-13, magic/misdirection primitive. Assistant proposals. |
 | F09 | epistemic_games_genre_v5_01_ideas_v2.md | 5859 | headers | Disposition register v2 for F08 ideas. |
 | F10 | epistemic_games_genre_v5_02_evaluation_experiment_proposals.md | 31589 | KEY parts | Arena synthesis (trajectory = central observable), intervention-operator register (same_fact_presentation / truthful_subset / observation_budget / source_cue / causal_attribution), reporting boundary. Points to docs/epistemic_trajectories*.md (read, see below). |
 | F11 | epistemic_games_genre_v5_03_notation_formalism.md | 16480 | headers | Formal core: trajectories + three metrics; notation discipline; semantic quotient σ. |
 | F12 | epistemic_games_genre_v5_04_code_drafts.md | 20715 | headers | Code drafts: v0.1 spec materials (overlaps F13). |
 | F13 | epistemic_games_genre_v5_05_implementation_generator_specifications.md | 33201 | YES | Generator specs: (1) v2.0 "Epistemic Process Control" spec (grand, unapproved), (2) epistemic-trajectories v0.1 impl spec, (3) six critique changes (no v2.0 rename; strict v0.1 claim; four_way=fixture; structured facts; small primary endpoint; deterministic semantic IDs) + PR order 1–6, (4) actionable spec: exclusion_8x6 primary template, three metrics ℶ/ℷ/ℸ never collapsed, naming lint (presentation ≠ attention), budget sweep {1,2,3}, four validity checks NULL/EFFECT/ABL-1/ABL-2, scripted targets exact_bayesian + bounded(m=3), PR ladder incl. "PR1.5 pilot + four checks". |
-| F14–F16 | genre_v5_06_writing_drafts{,_v2,_v3}.md | 63K+58K+44K | NO (batch B) | Writing/blog drafts. |
+| F14–F16 | genre_v5_06_writing_drafts{,_v2,_v3}.md | 63K+58K+44K | header-verified (batch 8) | Writing/blog drafts. |
 | F17 | epistemic_games_genre_v5_07_research_prior_art.md | 11952 | headers | Prior-art assessment. |
 | F18 | epistemic_games_genre_v5_08_critique_corrections_audit.md | 13822 | headers | Corrections: belief-vs-process boundary, magic foundation, дезонтология correction, causal tests requirement, claims discipline. |
 | F19 | epistemic_games_genre_v5_09_context_model_capability_discussion.md | 8677 | headers | Model-news tangent (OpenAI Astra etc.) — background, not eval content. |
@@ -41,19 +41,19 @@ Durable handoff ledger for the source-to-implementation program. Updated each ba
 | F21 | epistemic_games_ladders.md | 13055 | YES §1,§10 | Ladder record: E0–E8 ladder = assistant-proposed, UNAPPROVED; belief→process ladder explicitly REJECTED; §10 standing interpretation rules. |
 | F22 | epistemic_games_proposed_minimal_test.md | 3510 | YES | Minimal-test candidate (ΔG/ΔQ/ΔR separation; message conditions; A0–A2 as conditions not ladder). Decisions needed before pilot. |
 | F23 | epistemic_games_sources_index.md | 22690 | YES | Bibliography/provenance index of dialogue mentions; verification warnings preserved. Category: quoted/external claims. |
-| F24 | epistemic_games_without_references_and_hierarchies.md | 226044 | NO (batch B) | Combined dialogue extract (LARGE). |
+| F24 | epistemic_games_without_references_and_hierarchies.md | 226044 | STRUCTURED SCAN (batch 8) | Combined dialogue extract (LARGE). |
 | F25 | epistemic_trajectories_repo_evolution_battle_prompt.md | 10998 | headers | Battle prompt v1 (methodology artifact). |
 | F26 | epistemic_trajectories_repo_evolution_battle_prompt_v2.md | 13157 | headers | Battle prompt v2 with access gate (methodology artifact). |
 | F27 | epistemic_trajectories_v2_luna_design_review.md | 2518 | YES | Review: E0–E8 factorization = promising CANDIDATE, not settled architecture; do not promote without adoption + repo audit. |
 | F28 | epistemic_trajectories_v2_luna_review.md | 5901 | YES | Review: access receipt matched; attribution error preserved; matched-presentation = candidate operationalization, not approved core. |
-| F29 | evolution_responses | 204388 | NO (batch C) | Raw battle-prompt responses (LARGE). |
+| F29 | evolution_responses | 204388 | STRUCTURED SCAN (batch 8) | Raw battle-prompt responses (LARGE). |
 | F30 | raw/2026-10-02_instruction_revision.gpt_5.6_luna.md | 12734 | via F02 | Verbatim raw output; not adopted. |
 
 ### Authoritative context (mission-02, outside sources/)
 
 | Item | Read | Notes |
 |---|---|---|
-| code snippets critique.md (4463 ln) | STRUCTURE + key rounds | 6 review rounds: gemini-3-flash (CS001–002), gpt6-luna refusal, opus-4.8 retraction, sonnet-5 (CS003–033), grok-4.5 r1 (CS034–066), grok-4.5 r2 (CS067–074), refusal, gemini r2 (CS075–078), **fable-5 final round (CS079–110)** with the complete `shared/epistemic_semantics/*` blueprint, non-negotiable invariants, build order. 110 python blocks ↔ CS001–CS110 confirmed by fence enumeration. |
+| code snippets critique.md (4463 ln) | STRUCTURE + key rounds | 6 review rounds: gemini-3-flash (CS001–002), gpt6-luna refusal, opus-4.8 retraction, sonnet-5 (CS003–033), grok-4.5 r1 (CS034–066), grok-4.5 r2 (CS067–074), **fable-5.1 intermediate (CS075–078)** [corrected 2026-10-08 from 'gemini r2' by fence/round inspection], **fable-5 final round (CS079–110)** with the complete `shared/epistemic_semantics/*` blueprint, non-negotiable invariants, build order. 110 python blocks ↔ CS001–CS110 confirmed by fence enumeration. |
 | initial_code_snippets_proposal_v1.md | part | The critiqued v1 proposal (float Bayes, world-filter PAL, BNE-checker, import-graph V3, text-hash T1). |
 | initial_code_snippets_proposal_v2.md | KEY parts | Critique-responsive rewrite: separation of concerns; exact FiniteDist (rejects floats); per-question sections E1–E8/S1–S4/V1–V3/T1; module boundaries + build order mirroring fable-5; integration-point caveats ("verify in the target session before editing"). |
 | snippet_reconciliation/approved/ | verified | CS001–CS011: 7 modules (event_bayes, supplied_policy, public_announcements, silence, common_knowledge, epistemic_relations, fragmented_observation) + 11 test files + 11 acceptance records. **82 passed, 37 subtests passed** (re-run here 2026-10-07). Contracts pinned. CS011 record: "User separately requested a new-session prompt to integrate accepted snippets into a new rl_eval_generator environment family; that integration has not run here." → our program IS that integration. |
@@ -62,7 +62,7 @@ Durable handoff ledger for the source-to-implementation program. Updated each ba
 | seed.yaml | part | Mission framing; v0 facts restated; theory pool = leads not evidence; cards frozen before Council. |
 | freeze/game_cards.freeze.yaml | part | Freeze bookkeeping for strategy cards. |
 | docs/epistemic_trajectories.md, _scope.md, rl_eval_generator_..._proposal.md | YES | Track status: proposed working name; alongside epistemic_games, not a rename; gates before implementation (inspect actual repo first — done here); engine-validated interventions; replay. |
-| council/, context/, gates/* (rest), workbench.yaml, retrieval_seed.yaml | NO (batch D) | Council round materials; to be inventoried as provenance, not specs. |
+| council/, context/, gates/* (rest), workbench.yaml, retrieval_seed.yaml | inventoried (batch 8); intake log + digest read | Provenance, not specs: intake log says the compiler's reading 'decides nothing', Gate 1 remains a human decision; digest is 'LEADS, not evidence', untrusted. |
 
 ## Target repo inspection (complete for program-relevant seams)
 
@@ -488,7 +488,7 @@ S3 -> blocked on rubric authorship (no code by corpus instruction);
 S4 -> blocked on S1 infrastructure + confound controls. E7/E8 -> deferred
 per D5 (re-decide later), untouched.
 
-### Batch 7 — S-line offline arm primitive (implemented 2026-10-08, pending result acceptance)
+### Batch 7 — S-line offline arm primitive (implemented + accepted 2026-10-08, committed `02e440e`)
 
 Scope: user decision on Batch 6 option c — build the offline prompt-level
 arm-construction primitive (critique shared primitive #4), explicitly
@@ -524,6 +524,40 @@ Status effect on S-line: S1/S4 infrastructure precondition (paired-arm
 data construction) now satisfied offline; execution of any comparison still
 requires explicit model-call authorization (option 4 of the assessment).
 S2/S3 blockers unchanged (V2 prerequisite; rubric authorship).
+
+### Batch 8 — corpus reading backlog + source-to-code matrix (completed 2026-10-08, pending result acceptance)
+
+Scope: the standing reading backlog (ledger "parallel reading backlog") and
+the CS012–CS110 disposition rows required by the program rules ("CS012–
+CS110 unaccepted — verify, don't assume"; "maintain source-to-code matrix").
+
+What was done:
+1. Re-derived the block map from primary evidence: 110 python fences in
+   `code snippets critique.md` enumerated and round-assigned (gemini r1:
+   CS001–002; sonnet-5: CS003–033; grok r1: CS034–066; grok r2: CS067–074;
+   fable-5.1 intermediate: CS075–078; fable-5 final: CS079–110).
+2. `epistemic_program/SOURCE_CODE_MATRIX.md` — durable matrix: accepted/
+   vendored units (CS001–CS011 incl. CS012 as CS011's test body), per-block
+   disposition for every unaccepted block grouped by question lineage (E6
+   consumed self-authored in Batch 5; E7/E8 deferred per D5; S-line per
+   Batch 6 statuses; V-line consumed in Batches 1+3; T1 in Batch 4;
+   blueprint modules superseded by the accepted substrate), non-CS corpus
+   units F01–F30 with read status, and mission-context inventory (council/
+   context/gates) as provenance-not-specs.
+3. Large dialogue extracts (F06/F07/F24) and battle responses (F29)
+   STRUCTURALLY SCANNED for decision/approval markers (not line-read — the
+   matrix records this honestly). Finding: the interactive epistemic-
+   trajectories pilot appears as a PROPOSAL ("not a command supported by
+   the current CLI") — candidate only, no adoption.
+4. Corrections recorded: CS075–078 attribution fixed (fable-5.1 round, not
+   "gemini r2"); CS012 identified as the accepted CS011 test body, not part
+   of the unaccepted tail.
+5. Standing distinctions preserved: acceptance records remain the only
+   binding source acceptances; everything else is proposal/lineage/leads;
+   F07 is a later re-sorting of F06's dialogue, supersession NOT
+   established, both retained.
+
+No code changed in this batch; full repo suite still green (verified).
 
 ## D6 fix record (2026-10-07)
 
@@ -583,14 +617,18 @@ Batch 6 (S-line scope assessment): ACCEPTED 2026-10-08 and committed/pushed
 as `493bd8a` (verified on origin). User chose S-line option c (offline arm
 primitive, explicitly unused until model-call authorization).
 
-Batch 7 (S-line offline arm primitive) awaits result acceptance and
-commit/push authorization. Working tree: shared/experiment_arms.py,
-tests/test_experiment_arms.py, epistemic_program/S_LINE_ASSESSMENT.md,
-epistemic_program/LEDGER.md.
+Batch 7 (S-line offline arm primitive): ACCEPTED 2026-10-08 and
+committed/pushed as `02e440e` (verified on origin).
 
-Next after acceptance: E7/E8 remain deferred pending re-decision per D5;
-remaining roadmap items are the reading backlog and any user-directed
-scope. Parallel
+Batch 8 (corpus reading backlog + source-to-code matrix) awaits result
+acceptance and commit/push authorization. Working tree:
+epistemic_program/SOURCE_CODE_MATRIX.md, epistemic_program/LEDGER.md.
+
+Program state after Batch 8: all roadmap batches 1–8 complete. Open items
+requiring user decisions: E7/E8 re-decision (D5); S-line execution gates
+(model-call authorization, V2 methodology, S3 rubric); optional mutation-
+testing harness and dual-oracle V3 harness (future work noted in matrix).
+Parallel
 reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–F12/
 F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
 sections, critique mid-round details (for the source-to-code matrix rows of
