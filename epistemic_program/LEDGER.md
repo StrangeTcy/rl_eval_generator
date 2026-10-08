@@ -266,6 +266,74 @@ rules honored: bounded finite models; no common-knowledge or general
 theory-of-mind claims); approved substrate consumption matrix: E2→CS002/CS005,
 E4→CS002/CS005, E5→CS005/CS011, E3→CS001/CS003/CS007.
 
+### Batch 3 — V1/V3 verification track (implemented 2026-10-08, pending result acceptance)
+
+Scope (user-approved roadmap): V1 (faithfulness of English renderings) and
+V3 (feasibility of independent verification) as operational, offline checks
+for the four E-line families. Per the portfolio, V1/V3 are supporting
+measurement-validity / engineering-feasibility checks, not LLM outcome
+hypotheses; no model calls are involved.
+
+What was done:
+1. `tools/epistemic_verifier.py` — independent verifier. Parses each family's
+   public task.md (structural line parsers + recursive-descent parser over
+   the public formula grammar: atoms, "it is not the case that", "X knows
+   that", "pooling ... pins down that") and:
+   - V1 mode: reconstructs the registered formal state (valuation,
+     partitions/observation matrices, announcement sequence or announcement
+     rules, target scenario, registered proposition, prior) and exact-matches
+     it against the judge-side spec fields. Predefined treatment: any parse
+     mismatch is recorded as a faithfulness failure with an error type;
+     annotation is mechanical, no adjudication step.
+   - V3 mode: recomputes ground truth from the parsed public text using ONLY
+     the accepted shared substrate (CS005 PAL, CS011 joint_information,
+     CS007 silence, CS003/CS008 supplied policy, CS001 event Bayes). The
+     tool imports no family core.py and reads no generator logic. Notably,
+     the E2 ground truth is recomputed WITHOUT the hidden actual world:
+     announcement-by-announcement restriction plus the public-derivability
+     invariant (query truth constant across the final survivors) — a
+     strictly weaker-information path than the judge's.
+   Surface-vocabulary tables are mirrored DATA (agent-visible strings only,
+   no generation/grading logic), pinned against drift by a test.
+   CLI: `python tools/epistemic_verifier.py --dir <generated env> --mode both`
+   with exit code 0/1; corrupt inputs report structured failures instead of
+   crashing.
+2. `tests/test_epistemic_verification.py` — 6 tests:
+   - structural independence guard (verifier source imports no family core,
+     never calls build_instance);
+   - vocabulary drift pins (E2 prefix / E4-E5 exact / E3 exact);
+   - V1 exact reconstruction over full grids, 156 instances
+     (48 E2 + 36 E4 + 24 E5 + 48 E3, seeds 0-2): 156/156 exact;
+   - V3 independent verification over the same 156 instances: 156/156
+     verified against baked specs;
+   - tamper detection (renamed world, deleted partition block, corrupted
+     prior all caught — the verifier is not a rubber stamp);
+   - CLI end-to-end on a real generated environment, including a corrupted
+     copy flipping the exit code.
+
+Verification evidence (2026-10-08):
+- `pytest tests/test_epistemic_verification.py -q`: 6 passed.
+- `pytest tests -q` (full suite except slow test_exhaustive_campaign_recovery):
+  exit 0 (361 tests).
+- CLI exercised inside the end-to-end test on a generated epistemic_silence
+  environment: v1 exact_reconstruction=true, v3 verified=true on the
+  pristine artifact; verified=false (structured failure) after corruption.
+
+V3 feasibility conclusions recorded per family (portfolio asks for a check,
+not a full external verifier): all four families support a verifier that
+does not share the generator implementation, because (a) every registered
+formal component is rendered as uniquely parsable public text, and (b) the
+accepted substrate suffices to recompute the intended answer from that text
+alone — for E2 even without the hidden actual world. The intended local
+extension (this verifier) is described within the available architecture:
+it is a repository tool consuming only public artifacts and shared modules.
+
+Source units addressed by Batch 3: portfolio section C (V1, V3; V2 remains
+queued per roadmap — it is a retrieval precondition for the S-line, not an
+E-line dependency); dependency-plan steps 2 and 7 (assess V1/V3 on the
+substrate families; repeat where families change formal or rendering
+assumptions — the four Batch-2 families are all covered).
+
 ## D6 fix record (2026-10-07)
 
 - Failure: tests/test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume
@@ -308,15 +376,19 @@ Sub-decisions surfaced for the user:
 Batch 1 + D6 fix: ACCEPTED and committed/pushed as `f1e552a` (verified on
 origin 2026-10-07).
 
-Batch 2 (E2/E4/E5/E3 families) awaits result acceptance and commit/push
-authorization. Working tree: envs/registry.yaml, tests/test_scoring.py,
+Batch 2 (E2/E4/E5/E3 families): ACCEPTED 2026-10-08 and committed/pushed as
+`e901cbc` (verified on origin). Working tree: envs/registry.yaml, tests/test_scoring.py,
 envs/epistemic_announcements/, envs/epistemic_nested_knowledge/,
 envs/epistemic_fragmented_observation/, envs/epistemic_silence/,
 tests/test_epistemic_announcements.py, tests/test_epistemic_nested_knowledge.py,
 tests/test_epistemic_fragmented_observation.py, tests/test_epistemic_silence.py.
 
-After authorization and commit: Batch 3 (V1/V3 presentation track) per
-roadmap — approved scope, no further permission needed to begin. Parallel
+Batch 3 (V1/V3 verification track) awaits result acceptance and commit/push
+authorization. Working tree: tools/epistemic_verifier.py,
+tests/test_epistemic_verification.py, epistemic_program/LEDGER.md.
+
+After authorization and commit: Batch 4 (T1 presentation pilot, offline-only,
+user-approved in D4) per roadmap. Parallel
 reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–F12/
 F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
 sections, critique mid-round details (for the source-to-code matrix rows of
