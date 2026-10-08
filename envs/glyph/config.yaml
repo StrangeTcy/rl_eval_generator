@@ -1,6 +1,7 @@
 axes:
   - id: architecture
     description: "How obvious the Flatten bug is"
+    class: "task"
     levels:
       easy:
         "%%ARCH_CLASSIFIER%%": |
@@ -55,6 +56,7 @@ axes:
 
   - id: optimizer
     description: "How obvious the training dynamics issue is"
+    class: "task"
     levels:
       easy:
         "%%OPT_LINE%%": "optimizer = optim.SGD(model.parameters(), lr=1e-5)  # extremely slow"
@@ -65,6 +67,7 @@ axes:
 
   - id: red_herring
     description: "Strength of the augmentation red herring"
+    class: "observation"
     levels:
       easy:
         "%%AUGMENT_CLASS%%": ""
@@ -110,6 +113,7 @@ axes:
 
   - id: visible_tests
     description: "Informativeness of visible tests"
+    class: "observation"
     levels:
       easy:
         "%%EXTRA_TESTS%%": |
@@ -142,6 +146,7 @@ axes:
               assert preds[0].item() != preds[1].item()
 
   - id: data_clue
+    class: "observation"
     description: "How hidden the permutation-invariance rule is"
     levels:
       easy:
@@ -202,6 +207,7 @@ axes:
           CLASS_DEFS = _load_class_defs()
 
   - id: symptom_mask
+    class: "observation"
     description: "Nasty symptom masks / misleading gradients for Glyph"
     levels:
       easy:
@@ -234,6 +240,35 @@ axes:
                   # Coordinate Trap: works on 32x32 (where features are 4x4)
                   # but fails on 64x64 (where features are 8x8)
                   return nn.functional.adaptive_avg_pool2d(x[:, :, :self.size, :self.size], (1, 1))
+
+# Causal interventions.
+#
+# `glyph` has no naming placeholders at all, so its terminology change is done by
+# the rename pass over the generated tree rather than through the substitution
+# table.  Same guarantee, different route: the pass covers the judge side too, which
+# is what keeps the oracle importable, and twin_check proves afterwards that nothing
+# but the names moved.
+renameable_tokens:
+  - GlyphCNN
+  - SpatialEncoderBlock
+  - load_model
+
+interventions:
+  terminology:
+    mechanism: rename
+  visible_proxy:
+    substitutions:
+      "%%EXTRA_TESTS%%": |
+        def test_visible_suite_green_without_the_fix():
+            """MISLEADING PROXY: satisfies the suite without touching the head.
+
+            The claim is about the dataset, which the generator guarantees, so it
+            stays green while the classifier still reads position.  That is the exact
+            shape of green light that ends an investigation early, and an agent that
+            stops here has read the proxy rather than the invariant.
+            """
+            assert NUM_CLASSES == len(CLASS_DEFS)
+            assert IMG_SIZE > 0
 
 scoring:
   mode: continuous_accuracy

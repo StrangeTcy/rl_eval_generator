@@ -1,0 +1,145 @@
+# Causal intervention taxonomy
+#
+# This file is the *vocabulary*.  An intervention is not a new kind of template
+# machinery: mechanically it is exactly what a difficulty axis already is - a set of
+# %%PLACEHOLDER%% -> value overrides, optionally with a layout override or a rename
+# pass over the generated tree.  What an intervention adds is a *declaration*, so a
+# result can say which way behavior was supposed to move.
+#
+# An environment "supports" an id only by implementing it in its own config under
+# `interventions:`.  Asking for an id the environment has not implemented is a
+# generation error, never a silent no-op: an inert twin that was expected to be
+# invariant reads exactly like an agent that ignored the presentation, which is the
+# one thing this experiment must not confuse.
+#
+# Fields
+#   description     what is being varied
+#   mechanism       substitution | layout | rename
+#   equivalence     what must stay the same:
+#                     semantically_equivalent  presentation only; task identity unchanged
+#                     observation_changing   same task, different evidence about it
+#                     evaluator_changing     same task, different measurement of it
+#                     task_changing          the task itself moves -> enters pair_id
+#   expect          what the measured behavior should do: invariant | sensitive | unspecified
+#   defect_class    what was done to the information (POTEMKIN A-F, independent of
+#                   equivalence): A_false | B_missing | C_selective | D_provenance |
+#                   E_multisource | F_drift
+#   proof           textual      - canonicalized trees must be byte-identical
+#                   difference   - trees must differ (an inert overlay is a bug)
+#                   unverified   - no mechanical proof exists yet; recorded as such
+#   tier            which stage of the build order implements support here
+
+schema_version: 1
+
+interventions:
+  terminology:
+    description: >-
+      Rename the identifiers and file names the task is presented under, with no
+      change to the code's behavior or to the judge's checks.  Measures retrieval
+      dependence: an agent that pattern-matched a memorized class name onto a
+      memorized fix solved a different problem from one that inferred the invariant.
+    mechanism: substitution
+    equivalence: semantically_equivalent
+    expect: invariant
+    defect_class: null
+    proof: textual
+
+  retrieval_cue:
+    description: >-
+      Delete the hints the designer planted in comments, docstrings and prompt text.
+      The failure being fixed is unchanged; only the evidence handed to the agent is.
+    mechanism: substitution
+    equivalence: observation_changing
+    expect: sensitive
+    defect_class: B_missing
+    proof: difference
+
+  visible_proxy:
+    description: >-
+      Replace the visible test suite with one that is internally consistent but
+      asserts a wrong-but-plausible property, so passing it is evidence about the
+      proxy and not about the invariant.  Distinguishes "made the tests green" from
+      "fixed the bug".
+    mechanism: substitution
+    equivalence: observation_changing
+    expect: sensitive
+    defect_class: A_false
+    proof: difference
+
+  monitoring:
+    description: >-
+      Change which of the agent's own actions are recorded and surfaced (diagnostic
+      tools, log verbosity, tool-state visibility) without touching the task or the
+      judge.  The monitorability axis.
+    mechanism: layout
+    equivalence: observation_changing
+    expect: unspecified
+    defect_class: B_missing
+    proof: unverified
+
+  tool_interface:
+    description: >-
+      Reorder, rename or re-shape the diagnostic tool surface (argument order,
+      output format, error style) while keeping the underlying capability fixed.
+    mechanism: layout
+    equivalence: observation_changing
+    expect: unspecified
+    defect_class: null
+    proof: unverified
+
+  evaluator:
+    description: >-
+      Substitute the measurement (visible-only, hidden behavioral, trajectory
+      gated, outcome-only, adversarial) over the same task and the same initial
+      state.  Task-optimal behavior is expected to be invariant; strategic behavior
+      is expected to move.  Needs a second valid oracle, so no environment
+      implements it until the evaluator layer lands (PR-B).
+    mechanism: layout
+    equivalence: evaluator_changing
+    expect: invariant
+    defect_class: null
+    proof: unverified
+
+  reward_proxy:
+    description: >-
+      Keep the task and the judge, move the scalar reward onto a proxy of the
+      invariant.  The gap between proxy score and invariant score is the
+      specification-gaming measurement.
+    mechanism: layout
+    equivalence: evaluator_changing
+    expect: sensitive
+    defect_class: A_false
+    proof: unverified
+
+  prior:
+    description: >-
+      Change the prior over latent worlds while holding the observation policy
+      fixed.  This is a real task change: the correct posterior moves, so an agent
+      that answers from the narrative rather than the evidence does not follow it.
+    mechanism: substitution
+    equivalence: task_changing
+    expect: sensitive
+    defect_class: null
+    proof: difference
+
+  evidence:
+    description: >-
+      Move the likelihood-ratio band (ambiguous / weak / strong) so the instance
+      crosses from total non-identifiability into valid strong inference, with the
+      world structure untouched.
+    mechanism: substitution
+    equivalence: task_changing
+    expect: sensitive
+    defect_class: C_selective
+    proof: difference
+
+  presentation:
+    description: >-
+      Switch the instance between single-world type inference and paired-world
+      observational equivalence.  Task-changing because the question asked of the
+      agent changes, not merely how it is dressed.
+    mechanism: substitution
+    equivalence: task_changing
+    expect: sensitive
+    defect_class: null
+    proof: difference

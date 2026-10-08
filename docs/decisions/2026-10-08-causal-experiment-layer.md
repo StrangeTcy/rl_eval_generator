@@ -2,7 +2,8 @@
 
 Status: **all 27 recorded — 16 from part 1 (items 1–16) + 11 from part 2 (P2.1–P2.11), all
 `CONFIRMED`.** Each answer is recorded verbatim in *Answers*; the resulting build order is in
-*Build order*. No code has been written for any of it yet — this branch contains this document only.
+*Build order*. **PR-A is implemented** (see *PR-A: what landed* at the end of this file);
+PR-B…PR-E are not.
 Repository revision reviewed: `e1b038a4efb7343afd713f4e981c90fc0fb0485c` (`main`), branch `arena/81157642-rl-eval-generator`.
 Method: every proposal below was checked against the actual generator, registry, judge library,
 suite tooling and test suite at that revision. The two upstream analyses also cite
@@ -689,4 +690,62 @@ flow; `#11`'s solver-in-the-loop objective (`discriminative power` stays undefin
 population exists); `P2.3`'s agent-as-player variant until `#9` is real; any env-level "attention
 budget" variable.
 
+---
 
+## PR-A: what landed
+
+Items 13, 1, 2, 3, 15, 12 and 14 — all model-free, torch-free and Docker-free.
+
+| File | Role |
+|---|---|
+| `shared/generation_manifest.py` | `generation_id` / `pair_id` / tree and judge hashing / `verify_manifest`; item 13 |
+| `envs/interventions.yaml` | the global id taxonomy with `equivalence`, `expect`, `defect_class`, `proof`; item 1 |
+| `generate_env.py` | `--interventions`, `--parent-generation-id`, `--list-interventions`, overlay application, the rename pass, `generation.json`; items 1, 13, 15 |
+| `tools/twin_check.py` | the three declaration rules, applied at generation time; item 2 |
+| `tools/family.py` | baseline plus one member per intervention per seed, verification, `family_manifest.json`, `--spec`; items 1, 2, 12 |
+| `shared/experiment_spec.py` | spec validation and compilation; items 12, 14 |
+| `spec/invariant-vs-presentation.yaml` | a real spec that validates against the registry |
+| `envs/{moco,glyph,css_state_machine,epistemic_games}/config.yaml` | first implementations: 9 intervention ids across 4 environments, `class:` on all 19 of their axes, `renameable_tokens` for glyph |
+| `tests/test_causal_layer.py` | 19 tests, including a tamper test, an inert-overlay test, and one asserting these modules never import torch |
+
+Four things only showed up while building it, and each changes how a later stage reads:
+
+1. **"Nothing happened" had to be defined on normalized trees.** Two generated
+   directories always differ — the instance label is baked into `run_eval.sh`, the
+   Dockerfiles and the image names — so raw equality is meaningless and raw difference
+   is never informative. The inert check is now "identical once the label is normalized
+   away", which is the statement the declaration actually needs.
+2. **Normalization is only sound for atomic values.** An overlay that replaces `MoCo`
+   with `RetrievalPooledEncoder` can be mapped back and *proved* inert; one that
+   replaces a rendered task text cannot, without rewriting whole files and possibly
+   erasing the very difference being measured. So a differing value is normalized only
+   when it is a single token; a *composed* value (e.g. `PATCHABLE_FILES`, which embeds
+   the renamed file name) is accepted only when mapping its components reproduces the
+   base value exactly; anything else reports `unverified`, never a pass. That is the
+   mechanical form of the item-15 decision, and it makes the `epistemic_games`
+   framing-style case behave correctly: prose-valued invariance is declared
+   unfalsifiable instead of quietly true.
+3. **`mechanism` had to be overridable per environment; `equivalence` and `expect` must
+   not be.** moco renames through the substitution table, glyph — which has no naming
+   placeholders at all — renames through the tree-wide pass; both are faithfully
+   `terminology`. What an environment must never be allowed to relabel is the claim
+   about what stays invariant. The rule caught a real bug in the first draft.
+4. **Two generator bugs were in the way.** `mkdtemp` took the full output name as its
+   prefix, so an absolute output path nested the temporary tree inside itself; and
+   `%%ENV_NAME%%` was the whole path, which for a family member under an output
+   directory produced image names like `/home/…/families/moco/moco__…_agent`. Both
+   fixed: the label is the directory basename everywhere, and the manifest records that
+   label rather than the incidental path.
+
+**Deliberately not in PR-A.** Campaign integration: `tools/run_suite.py` and
+`tools/suite_inventory.py` do not yet enumerate family members as cases, so a family
+can be generated and verified but not *run* — that is the first item of PR-B. Also
+absent: `class:` tags on the remaining 78 axes, and any evaluator-tier intervention —
+`evaluator` and `reward_proxy` are declared in the taxonomy and implemented nowhere, so
+requesting one is refused with the reason, which is the intended state until a second
+valid oracle exists.
+
+**Verified.** `pytest -q` = 99 passed, 1 failed, and the failure is the pre-existing
+`test_a_chained_campaign_presents_a_resume_as_a_resume` from `e1b038a` documented under
+*Census*, untouched by this branch. `tools/suite_inventory.py --matrix covering` still
+reports 218 cases, `registry_clean: true`, `issue_count: 0`.

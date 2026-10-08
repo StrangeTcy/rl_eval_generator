@@ -313,6 +313,68 @@ limits apply when scoring through the generated `run_eval.sh`.
 
 ---
 
+## Causal interventions and twin families
+
+Difficulty axes say how hard a task is. An **intervention** varies how the same task
+is presented, observed, or measured, and declares which way behavior is expected to
+move as a result. Mechanically an intervention is what an axis already is —
+placeholder overrides, an optional layout override, or a rename pass over the
+generated tree — so it inherits the same guarantees: deterministic from the seed, no
+template logic, no code that only runs at generation time.
+
+```bash
+# what one environment supports, and what each id promises
+python generate_env.py --env moco --list-interventions
+
+# one instance with one intervention applied on top of the difficulty vector
+python generate_env.py --env moco --name moco_term --difficulty \
+  easy,easy,easy,easy,easy,easy --seed 3 --interventions terminology
+
+# the family: a baseline plus one member per intervention, then verify the expansion
+python tools/family.py --env moco --difficulty easy,easy,easy,easy,easy,easy \
+  --seeds 3 --interventions terminology,retrieval_cue --out families/moco
+```
+
+Every generated directory carries `generation.json`: the inputs, the config hash, the
+judge-source hash, the tree hash, a `generation_id` (identity of the artifact) and a
+`pair_id` (identity of the *task*). `shared/generation_manifest.verify_manifest`
+recomputes them, so a tree that drifted from what its record claims — hand-edited, or
+generated from a config that has since changed — is unusable rather than quietly
+re-scored. `pair_id` deliberately ignores presentation-layer interventions: twins that
+differ only in names are one task, and that is the comparison the experiment is about.
+
+`tools/twin_check.py` decides whether a twin is the experiment its declaration claims,
+before any model is contacted:
+
+| declaration | what is verified | why |
+|---|---|---|
+| `semantically_equivalent` | trees identical once every value the overlay introduced is mapped back | a twin that differs beyond the renaming is a different task with an invariance label on it |
+| `observation_changing`, `task_changing` | trees must differ once the instance label is normalized away | an overlay that fired nothing is indistinguishable from an agent that correctly ignored it |
+| `evaluator_changing` | agent tree identical, judge tree different | a measurement change that reaches the workspace turns "gamed the evaluator" into "read the evaluator" |
+
+Three declaration fields carry the meaning: `equivalence` (what must stay the same),
+`expect` (`invariant` / `sensitive` / `unspecified`), and `defect_class` (`A_false` …
+`F_drift`, what was done to the information — independent of the first two). `proof`
+says how much of it is mechanical: `textual`, `difference`, or `unverified`, which is a
+real verdict and never a pass.
+
+An `Environment Experiment Spec` (`spec/invariant-vs-presentation.yaml`) is the
+upstream object: hypotheses, the measurements that separate them, the controls, and the
+members that produce each measurement. `tools/family.py --spec` refuses to generate
+from one that is incoherent — fewer than two hypotheses, a hypothesis with no control,
+a measurement no member produces, an intervention the target environment does not
+implement, no untouched baseline, or `expect: invariant` under a task-changing overlay.
+
+**Limits.** Four environments implement interventions today (`moco`, `glyph`,
+`css_state_machine`, `epistemic_games`); the other 30 declare none, and asking for one
+there is a hard error rather than a no-op. Evaluator and reward-proxy substitution are
+declared in the taxonomy but implemented nowhere, because they need a second valid
+oracle — that is the next layer, not this one. Task identity is structural only where
+an environment bakes a judge-side instance spec; everywhere else `pair_id` falls back
+to the case id and says so in `pair_id_basis`.
+
+---
+
 ## Exploitation-resistant design
 
 The reward signal is meant to be hard to cheat *and* hard to deny. No single

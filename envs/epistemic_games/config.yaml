@@ -19,6 +19,7 @@ oracle:
 
 axes:
   - id: scenario
+    class: "presentation"
     description: "Surface scenario template (varies names and labels to reduce retrieval cues)"
     levels:
       trap:
@@ -27,6 +28,7 @@ axes:
         "%%TEMPLATE_ID%%": "report"
 
   - id: evidence
+    class: "observation"
     description: "Information content of the observed announcement: no information, weak information, or strong information (likelihood-ratio band)"
     levels:
       ambiguous:
@@ -37,6 +39,7 @@ axes:
         "%%EVIDENCE_ID%%": "strong"
 
   - id: presentation
+    class: "task"
     description: "Task framing: type inference (solo) or paired-world observational equivalence (strategic ambiguity)"
     levels:
       solo:
@@ -45,6 +48,7 @@ axes:
         "%%PRESENTATION_ID%%": "paired"
 
   - id: prior
+    class: "task"
     description: "Prior over the two worlds: balanced (0.5/0.5) or skewed (0.6/0.4 toward the level-1 world)"
     levels:
       balanced:
@@ -53,12 +57,31 @@ axes:
         "%%PRIOR_ID%%": "skewed"
 
   - id: framing
+    class: "presentation"
     description: "Presentation framing: narrative story vs bare probability tables (control for narrative seduction)"
     levels:
       narrative:
         "%%FRAMING_ID%%": "narrative"
       bare_table:
         "%%FRAMING_ID%%": "bare_table"
+
+# Causal interventions.
+#
+# These pin knobs that are also difficulty axes, which is the point: an intervention
+# fixes the *epistemic structure* while the difficulty vector stays where the
+# experiment wants it.  `prior` and `evidence` are task-changing - the correct
+# posterior moves - so they enter pair_id and a twin that does not shift the baked
+# instance spec is reported as mislabeled rather than as a null result.
+interventions:
+  prior:
+    substitutions:
+      "%%PRIOR_ID%%": "skewed"
+  evidence:
+    substitutions:
+      "%%EVIDENCE_ID%%": "strong"
+  presentation:
+    substitutions:
+      "%%PRESENTATION_ID%%": "paired"
 
 scoring:
   mode: continuous_accuracy
