@@ -1,0 +1,170 @@
+name: Model availability preflight
+
+# This workflow is intentionally cheap: it makes at most three small chat
+# requests to the exact model and never starts Docker or an evaluation.  A
+# family workflow can call it as a reusable job and put its paid run behind
+# `needs: model-preflight`.
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Provider id from arena/secrets.py"
+        required: true
+        default: "atria"
+        type: choice
+        options:
+          - atria
+          - nvidia
+          - openai
+          - anthropic
+          - gemini
+          - groq
+          - openrouter
+          - mistral
+          - deepseek
+          - together
+          - cerebras
+          - fireworks
+          - xai
+          - perplexity
+          - huggingface
+          - cloudflare
+          - custom
+      model:
+        description: "Exact provider model id"
+        required: true
+        default: "Atria-Dawn-Preview"
+      env_family:
+        description: "Environment family that the following workflow intends to run"
+        required: true
+        default: "epistemic_games"
+      api_base:
+        description: "Optional HTTPS base override (leave empty for the provider default)"
+        required: false
+        default: ""
+      reasoning_effort:
+        description: "Optional explicit reasoning effort; Atria should use high"
+        required: false
+        default: ""
+      ref:
+        description: "Code ref containing the preflight tool"
+        required: true
+        default: "main"
+  workflow_call:
+    inputs:
+      provider:
+        type: string
+        required: true
+      model:
+        type: string
+        required: true
+      env_family:
+        type: string
+        required: true
+      api_base:
+        type: string
+        required: false
+        default: ""
+      reasoning_effort:
+        type: string
+        required: false
+        default: ""
+      ref:
+        type: string
+        required: false
+        default: ""
+    outputs:
+      ready:
+        description: "True only when every bounded probe passed"
+        value: ${{ jobs.preflight.outputs.ready }}
+      artifact:
+        description: "Name of the redacted preflight artifact"
+        value: ${{ jobs.preflight.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: "${{ inputs.provider }} / ${{ inputs.model }} / ${{ inputs.env_family }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      ready: ${{ steps.probe.outputs.ready }}
+      artifact: model-preflight-${{ github.run_id }}
+    steps:
+      - name: Check out the controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install controller dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Probe the exact model with three cheap calls
+        id: probe
+        env:
+          # Empty secret values are harmless. The tool selects only the key
+          # belonging to the requested provider and never prints any of them.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          API_KEY: ${{ secrets.API_KEY }}
+          PREFLIGHT_PROVIDER: ${{ inputs.provider }}
+          PREFLIGHT_MODEL: ${{ inputs.model }}
+          PREFLIGHT_ENV_FAMILY: ${{ inputs.env_family }}
+          PREFLIGHT_API_BASE: ${{ inputs.api_base }}
+          PREFLIGHT_REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+        run: |
+          set +e
+          mkdir -p runs/model_preflight
+          args=(
+            --provider "$PREFLIGHT_PROVIDER"
+            --model "$PREFLIGHT_MODEL"
+            --env-family "$PREFLIGHT_ENV_FAMILY"
+            --out runs/model_preflight/result.json
+            --calls 3
+            --max-tokens 32
+            --max-retries 0
+            --min-interval-seconds 1.1
+          )
+          if [ -n "$PREFLIGHT_API_BASE" ]; then args+=(--api-base "$PREFLIGHT_API_BASE"); fi
+          if [ -n "$PREFLIGHT_REASONING_EFFORT" ]; then args+=(--reasoning-effort "$PREFLIGHT_REASONING_EFFORT"); fi
+          python tools/model_preflight.py "${args[@]}"
+          code=$?
+          if [ "$code" -eq 0 ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$code"
+
+      - name: Upload redacted preflight result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-preflight-${{ github.run_id }}
+          path: runs/model_preflight/result.json
+          if-no-files-found: warn
+          retention-days: 14

@@ -256,6 +256,15 @@ def _reasoning_content_length(message: Any) -> int | None:
         if isinstance(value, list):
             return len(_content_from_message({"content": value}))
         return len(str(value))
+    blocks = message.get("content")
+    if isinstance(blocks, list):
+        thinking = [
+            block.get("thinking") or block.get("text") or ""
+            for block in blocks
+            if isinstance(block, dict) and block.get("type") in {"thinking", "reasoning"}
+        ]
+        if thinking:
+            return len("".join(str(item) for item in thinking))
     return None
 
 
@@ -343,7 +352,23 @@ class ProviderClient:
         self.last_attempt_logs: list[dict[str, Any]] = []
         self.last_http_attempts = 0
 
+    @property
+    def uses_anthropic_messages(self) -> bool:
+        return self.provider == "anthropic"
+
+    def completion_url(self) -> str:
+        if self.uses_anthropic_messages:
+            base = self.api_base.rstrip("/")
+            return base if base.endswith("/messages") else f"{base}/messages"
+        return chat_completions_url(self.api_base)
+
     def headers(self) -> dict[str, str]:
+        if self.uses_anthropic_messages:
+            return {
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            }
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -356,6 +381,61 @@ class ProviderClient:
                 }
             )
         return headers
+
+    def _payload(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        max_tokens: int,
+        temperature: float,
+        top_p: float | None,
+        extra: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        if not self.uses_anthropic_messages:
+            payload: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": int(max_tokens),
+                "temperature": float(temperature),
+                "stream": False,
+            }
+            if top_p is not None:
+                payload["top_p"] = float(top_p)
+            payload.update(extra)
+            # Protected fields remain authoritative even for unusual Mapping
+            # implementations supplied by a caller.
+            payload["model"] = model
+            payload["messages"] = messages
+            payload["stream"] = False
+            return payload
+
+        system_parts = [
+            str(message.get("content", ""))
+            for message in messages
+            if message.get("role") == "system"
+        ]
+        anthropic_messages = [
+            {key: value for key, value in message.items() if key != "role"}
+            | {"role": message.get("role", "user")}
+            for message in messages
+            if message.get("role") != "system"
+        ]
+        payload = {
+            "model": model,
+            "messages": anthropic_messages,
+            "max_tokens": int(max_tokens),
+            "temperature": float(temperature),
+        }
+        if system_parts:
+            payload["system"] = "\n\n".join(system_parts)
+        if top_p is not None:
+            payload["top_p"] = float(top_p)
+        payload.update(extra)
+        payload["model"] = model
+        payload["messages"] = anthropic_messages
+        payload["max_tokens"] = int(max_tokens)
+        return payload
 
     def _log_attempt(self, record: dict[str, Any]) -> None:
         self.last_attempt_logs.append(dict(record))
@@ -489,29 +569,22 @@ class ProviderClient:
         if not model or not model.strip():
             raise ValueError("model must not be empty")
         extra = _validate_request_extra(request_extra)
-        payload: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": int(max_tokens),
-            "temperature": float(temperature),
-            "stream": False,
-        }
-        if top_p is not None:
-            if not 0.0 < float(top_p) <= 1.0:
-                raise ValueError("top_p must be greater than 0 and at most 1")
-            payload["top_p"] = float(top_p)
-        payload.update(extra)
-        # Protected keys are checked above, and are assigned before extras.  The
-        # explicit assignment also protects callers that pass a strange Mapping.
-        payload["model"] = model
-        payload["messages"] = messages
-        payload["stream"] = False
+        if top_p is not None and not 0.0 < float(top_p) <= 1.0:
+            raise ValueError("top_p must be greater than 0 and at most 1")
+        payload = self._payload(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            extra=extra,
+        )
 
         self.last_attempts = []
         self.last_attempt_logs = []
         self.last_retry_count = 0
         self.last_http_attempts = 0
-        url = chat_completions_url(self.api_base)
+        url = self.completion_url()
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = self.headers()
 
@@ -569,9 +642,37 @@ class ProviderClient:
                         response_headers=response_headers,
                         attempts=attempt_number,
                     )
-                choices = data.get("choices")
-                if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-                    request_id = _request_id(response_headers, data)
+                request_id = _request_id(response_headers, data)
+                if self.uses_anthropic_messages:
+                    content_blocks = data.get("content")
+                    valid_content = isinstance(content_blocks, list) and bool(content_blocks)
+                    if not valid_content:
+                        message = {}
+                        finish_reason = data.get("stop_reason")
+                        usage = data.get("usage")
+                    else:
+                        message = {"content": content_blocks}
+                        finish_reason = data.get("stop_reason")
+                        usage = data.get("usage")
+                    response_is_valid = valid_content
+                    response_error = "Provider response did not contain content blocks"
+                    upstream_provider = None
+                else:
+                    choices = data.get("choices")
+                    response_is_valid = (
+                        isinstance(choices, list)
+                        and bool(choices)
+                        and isinstance(choices[0], dict)
+                    )
+                    response_error = "Provider response did not contain choices[0]"
+                    choice = choices[0] if response_is_valid else {}
+                    message = choice.get("message", {})
+                    finish_reason = choice.get("finish_reason")
+                    usage = data.get("usage")
+                    upstream_provider = (
+                        str(data["provider"]) if data.get("provider") is not None else None
+                    )
+                if not response_is_valid:
                     failure = ProviderAttempt(
                         attempted_at=utc_now(),
                         status_code=response_status_code,
@@ -584,21 +685,16 @@ class ProviderClient:
                     )
                     self._record_failure(failure)
                     raise ProviderError(
-                        "Provider response did not contain choices[0]",
+                        response_error,
                         body=failure.body,
                         request_id=request_id,
                         response_headers=response_headers,
                         attempts=attempt_number,
                     )
-                choice = choices[0]
-                message = choice.get("message", {})
-                finish_reason = choice.get("finish_reason")
-                usage = data.get("usage")
                 reasoning_length = _reasoning_content_length(message)
                 if reasoning_length is None:
-                    reasoning_length = _reasoning_content_length(choice)
+                    reasoning_length = _reasoning_content_length(data)
                 latency_ms = max(0, int(round((time.monotonic() - started) * 1000)))
-                request_id = _request_id(response_headers, data)
                 self._record_success(
                     status_code=response_status_code,
                     request_id=request_id,
@@ -619,9 +715,7 @@ class ProviderClient:
                     status_code=response_status_code,
                     reasoning_content_length=reasoning_length,
                     provider=self.provider,
-                    upstream_provider=(
-                        str(data["provider"]) if data.get("provider") is not None else None
-                    ),
+                    upstream_provider=upstream_provider,
                 )
             except error.HTTPError as exc:
                 try:

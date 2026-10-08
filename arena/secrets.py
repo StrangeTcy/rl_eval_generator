@@ -24,22 +24,49 @@ SECRET_FILE_CANDIDATES = (
     Path.home() / ".config" / "rl_eval_generator" / SECRET_FILE_NAME,
 )
 
+# Provider names are intentionally explicit rather than inferred from a secret
+# name.  A workflow can expose several of these variables at once; resolution
+# still selects only the variable belonging to the requested provider.
 PROVIDER_ENV: dict[str, tuple[str, ...]] = {
+    "openai": ("OPENAI_API_KEY",),
+    "anthropic": ("ANTHROPIC_API_KEY",),
     "groq": ("GROQ_API_KEY",),
     "nvidia": ("NVIDIA_API_KEY",),
     "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
     "openrouter": ("OPENROUTER_API_KEY",),
-    "cloudflare": ("CF_API_TOKEN",),
+    "mistral": ("MISTRAL_API_KEY",),
+    "deepseek": ("DEEPSEEK_API_KEY",),
+    "together": ("TOGETHER_API_KEY",),
+    "cerebras": ("CEREBRAS_API_KEY",),
+    "fireworks": ("FIREWORKS_API_KEY",),
+    "xai": ("XAI_API_KEY",),
+    "perplexity": ("PERPLEXITY_API_KEY",),
+    "cloudflare": ("CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"),
     "atria": ("ATRIA_API_KEY",),
     "custom": ("API_KEY",),
     "huggingface": ("HF_TOKEN",),
 }
 
+# All entries except anthropic use the provider's OpenAI-compatible chat
+# endpoint.  Anthropic is handled by ProviderClient's native Messages adapter;
+# keeping that distinction here prevents a tempting but incorrect
+# ``/chat/completions`` request from being sent with an Anthropic key.
 PROVIDER_DEFAULT_BASE: dict[str, str | None] = {
+    "openai": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com/v1",
     "groq": "https://api.groq.com/openai/v1",
     "nvidia": "https://integrate.api.nvidia.com/v1",
     "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "openrouter": "https://openrouter.ai/api/v1",
+    "mistral": "https://api.mistral.ai/v1",
+    "deepseek": "https://api.deepseek.com/v1",
+    "together": "https://api.together.xyz/v1",
+    "cerebras": "https://api.cerebras.ai/v1",
+    "fireworks": "https://api.fireworks.ai/inference/v1",
+    "xai": "https://api.x.ai/v1",
+    "perplexity": "https://api.perplexity.ai",
+    # Cloudflare requires an account-specific URL, so the private profile or
+    # --api-base must supply it.  Do not guess an account id from a secret.
     "cloudflare": None,
     "atria": "https://api.atria-asi.ai/v1",
     "custom": None,

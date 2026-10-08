@@ -1,5 +1,7 @@
 # Bounded Atria Dawn Preview first-five pilot.
-# The reasoning mode is intentionally provider-default/unknown for raw Chat Completions.
+# Atria exposes thinking on its OpenAI-compatible Chat Completions endpoint via
+# the scalar reasoning_effort field. Keep it explicit so a provider-side
+# default cannot silently turn reasoning off or change between runs.
 name: atria_first5
 provider: atria
 api_base: https://api.atria-asi.ai/v1
@@ -11,7 +13,8 @@ temperature: 1.0
 top_p: 0.95
 stream: false
 request_extra: {}
-reasoning_mode: provider_default_uncontrolled
+reasoning_mode: explicit
+reasoning_effort: high
 rate_limit:
   documented_requests_per_minute: 60
   min_interval_seconds: 1.1

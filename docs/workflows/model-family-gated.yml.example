@@ -1,0 +1,83 @@
+# Draft family-gated workflow.
+#
+# Copy this to .github/workflows/ when the desired family is ready. The
+# reusable preflight job makes three small calls to the exact model and must
+# succeed before the family job can start. A model appearing in /models is not
+# enough: Atria and some other endpoints do not expose a useful model list.
+name: Model family test run
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        required: true
+        default: atria
+        type: string
+      model:
+        required: true
+        default: Atria-Dawn-Preview
+        type: string
+      family:
+        required: true
+        description: "all, ml_debugging, category_theoretic, epistemic_games, recurrent_depth, trajectory_semantics, or weird_machine"
+        default: epistemic_games
+        type: string
+      api_base:
+        required: false
+        default: ""
+        type: string
+      reasoning_effort:
+        required: false
+        default: high
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  model-preflight:
+    uses: ./.github/workflows/model-preflight.yml
+    with:
+      provider: ${{ inputs.provider }}
+      model: ${{ inputs.model }}
+      env_family: ${{ inputs.family }}
+      api_base: ${{ inputs.api_base }}
+      reasoning_effort: ${{ inputs.reasoning_effort }}
+    secrets: inherit
+
+  family-run:
+    name: Provider-free family manifest (paid run goes here)
+    needs: model-preflight
+    # The reusable job fails closed on an unavailable model. This condition is
+    # deliberately based on the job result as well as the output.
+    if: needs.model-preflight.result == 'success' && needs.model-preflight.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - name: Select the intended environment family without provider calls
+        env:
+          FAMILY: ${{ inputs.family }}
+        run: |
+          set -euo pipefail
+          python tools/family_manifest.py \
+            --family "$FAMILY" \
+            --matrix representative \
+            --out runs/family_test/manifest.json
+      - name: Handoff for the bounded family evaluation
+        run: |
+          cat <<'EOF'
+          Model availability passed. The generated manifest is
+          runs/family_test/manifest.json. Add the family-specific paid runner
+          here with explicit max-cases, max-api-calls, max-tokens-total, and
+          the provider secret mapped in env:. Do not remove the preflight job
+          or its needs/if gate.
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: family-test-manifest-${{ github.run_id }}
+          path: runs/family_test/manifest.json
+          retention-days: 14

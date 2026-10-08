@@ -414,7 +414,11 @@ def _build_command(
         command.extend(["--api-base", api_base])
     effective_extra = dict(request_extra or {})
     if reasoning_effort:
-        effective_extra["reasoning"] = {"effort": reasoning_effort}
+        # Atria's OpenAI-compatible Chat Completions endpoint advertises the
+        # OpenAI-compatible scalar field, not the Responses API object.  Keep
+        # this explicit in the generated request so a profile cannot silently
+        # fall back to provider-default/unknown thinking.
+        effective_extra["reasoning_effort"] = reasoning_effort
     if effective_extra:
         command.extend(
             [

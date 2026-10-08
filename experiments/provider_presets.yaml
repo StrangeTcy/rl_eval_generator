@@ -1,0 +1,75 @@
+# Credential-free provider catalog for local runs and Actions preflight.
+# Keys are resolved only from the named environment variable or a private,
+# gitignored secret_key.json. Do not put values in this file.
+providers:
+  openai:
+    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    protocol: openai_chat_completions
+  anthropic:
+    api_key_env: ANTHROPIC_API_KEY
+    api_base: https://api.anthropic.com/v1
+    protocol: anthropic_messages
+  atria:
+    api_key_env: ATRIA_API_KEY
+    api_base: https://api.atria-asi.ai/v1
+    protocol: openai_chat_completions
+    notes: "Atria-Dawn-Preview uses reasoning_effort: high when reasoning is requested"
+  nvidia:
+    api_key_env: NVIDIA_API_KEY
+    api_base: https://integrate.api.nvidia.com/v1
+    protocol: openai_chat_completions
+  gemini:
+    api_key_env: GEMINI_API_KEY
+    api_base: https://generativelanguage.googleapis.com/v1beta/openai/
+    protocol: openai_chat_completions
+  groq:
+    api_key_env: GROQ_API_KEY
+    api_base: https://api.groq.com/openai/v1
+    protocol: openai_chat_completions
+  openrouter:
+    api_key_env: OPENROUTER_API_KEY
+    api_base: https://openrouter.ai/api/v1
+    protocol: openai_chat_completions
+  mistral:
+    api_key_env: MISTRAL_API_KEY
+    api_base: https://api.mistral.ai/v1
+    protocol: openai_chat_completions
+  deepseek:
+    api_key_env: DEEPSEEK_API_KEY
+    api_base: https://api.deepseek.com/v1
+    protocol: openai_chat_completions
+  together:
+    api_key_env: TOGETHER_API_KEY
+    api_base: https://api.together.xyz/v1
+    protocol: openai_chat_completions
+  cerebras:
+    api_key_env: CEREBRAS_API_KEY
+    api_base: https://api.cerebras.ai/v1
+    protocol: openai_chat_completions
+  fireworks:
+    api_key_env: FIREWORKS_API_KEY
+    api_base: https://api.fireworks.ai/inference/v1
+    protocol: openai_chat_completions
+  xai:
+    api_key_env: XAI_API_KEY
+    api_base: https://api.x.ai/v1
+    protocol: openai_chat_completions
+  perplexity:
+    api_key_env: PERPLEXITY_API_KEY
+    api_base: https://api.perplexity.ai
+    protocol: openai_chat_completions
+  huggingface:
+    api_key_env: HF_TOKEN
+    api_base: https://router.huggingface.co/v1
+    protocol: openai_chat_completions
+  cloudflare:
+    api_key_env: CLOUDFLARE_API_TOKEN
+    api_base: null
+    protocol: openai_chat_completions
+    notes: "Set an account-specific AI Gateway/OpenAI-compatible base in the private profile"
+  custom:
+    api_key_env: API_KEY
+    api_base: null
+    protocol: openai_chat_completions
+    notes: "Pass or configure an HTTPS endpoint"

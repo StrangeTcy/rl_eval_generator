@@ -77,9 +77,11 @@ def _validate_profile(path: Path) -> dict[str, Any]:
     if profile.get("temperature") != 1.0 or profile.get("top_p") != 0.95:
         raise ValueError("Atria pilot sampling must preserve temperature 1.0 and top_p 0.95")
     if profile.get("request_extra", {}) != {}:
-        raise ValueError("Atria first pilot must not guess a reasoning request field")
-    if profile.get("reasoning_mode") != "provider_default_uncontrolled":
-        raise ValueError("Atria reasoning mode must be provider_default_uncontrolled")
+        raise ValueError("Atria reasoning must be configured through reasoning_effort")
+    if profile.get("reasoning_mode") != "explicit":
+        raise ValueError("Atria reasoning mode must be explicit")
+    if profile.get("reasoning_effort") not in {"low", "medium", "high"}:
+        raise ValueError("Atria reasoning_effort must be low, medium, or high")
     rate_limit = profile.get("rate_limit")
     if not isinstance(rate_limit, Mapping):
         raise ValueError("Atria profile rate_limit must be a mapping")
@@ -154,8 +156,9 @@ def _compatibility_check(profile: Mapping[str, Any], credentials: Any, output: P
         "temperature": profile["temperature"],
         "top_p": profile["top_p"],
         "stream": False,
-        "request_extra": {},
+        "request_extra": {"reasoning_effort": profile["reasoning_effort"]},
         "reasoning_mode": profile["reasoning_mode"],
+        "reasoning_effort": profile["reasoning_effort"],
         "max_retries": limits["max_retries"],
         "max_attempts": int(limits["max_retries"]) + 1,
         "min_interval_seconds": interval,
@@ -178,7 +181,7 @@ def _compatibility_check(profile: Mapping[str, Any], credentials: Any, output: P
             max_tokens=128,
             temperature=float(profile["temperature"]),
             top_p=float(profile["top_p"]),
-            request_extra={},
+            request_extra={"reasoning_effort": profile["reasoning_effort"]},
         )
     except ProviderError as exc:
         result = {
@@ -284,6 +287,8 @@ def _initial_checkpoint(
             "provider_min_interval_seconds": profile["rate_limit"]["min_interval_seconds"],
             "request_extra": {},
             "reasoning_mode": profile["reasoning_mode"],
+            "reasoning_effort": profile["reasoning_effort"],
+            "reasoning_enabled": True,
             "quota_ceiling_tokens": quota,
         },
         "results": [],
@@ -379,6 +384,11 @@ def _report(
         },
         "provider": "atria",
         "model": APPROVED_MODEL,
+        "reasoning": {
+            "mode": (checkpoint.get("run") or {}).get("reasoning_mode", "explicit") if checkpoint else "explicit",
+            "effort": (checkpoint.get("run") or {}).get("reasoning_effort", "high") if checkpoint else "high",
+            "enabled": True,
+        },
         "theoretical_http_attempt_bound": 6 + 5 * 20 * 2 * 6,
         "configured_physical_attempt_ceiling": 1207,
         "operator_bounds": {
@@ -646,6 +656,7 @@ def main(argv: list[str] | None = None) -> int:
             max_wall_seconds=remaining_wall,
             min_interval_seconds=float(profile["rate_limit"]["min_interval_seconds"]),
             floor_effect_after=0,
+            reasoning_effort=str(profile["reasoning_effort"]),
             request_extra={},
             checkpoint_path=output / "suite_checkpoint.json",
             allow_compile_only_oracles=args.allow_compile_only_oracles,

@@ -17,8 +17,12 @@ concurrency: 1
 temperature: 1.0
 top_p: 0.95
 stream: false
+# Explicit Atria reasoning.  This becomes reasoning_effort=high in every
+# compatibility and episode request; it is not the Responses API
+# reasoning={effort: ...} object because this campaign uses /chat/completions.
 request_extra: {}
-reasoning_mode: provider_default_uncontrolled
+reasoning_mode: explicit
+reasoning_effort: high
 rate_limit:
   documented_requests_per_minute: 60
   min_interval_seconds: 1.1

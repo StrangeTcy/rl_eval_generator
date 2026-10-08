@@ -190,6 +190,19 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
         )
     if profile.get("api_key_env") != "ATRIA_API_KEY":
         raise ValueError("campaign profile must use api_key_env: ATRIA_API_KEY")
+    # Atria's deployed campaign uses Chat Completions.  The endpoint accepts
+    # the scalar OpenAI-compatible reasoning_effort field; the Responses API
+    # object is intentionally not used here.  Keep a small legacy allowance
+    # for test-only profiles that omit the field, while all checked-in Atria
+    # profiles are explicit and default to the strongest bounded tier.
+    reasoning_mode = profile.get("reasoning_mode", "explicit")
+    reasoning_effort = profile.get("reasoning_effort", "high")
+    if reasoning_mode != "explicit":
+        raise ValueError("campaign profile must set reasoning_mode: explicit")
+    if reasoning_effort not in {"low", "medium", "high"}:
+        raise ValueError("campaign reasoning_effort must be low, medium, or high")
+    if profile.get("request_extra", {}) != {}:
+        raise ValueError("campaign reasoning must use the dedicated reasoning_effort field")
     matrix = profile.get("matrix") or {}
     if matrix.get("mode") != "covering":
         raise ValueError("campaign profile must declare matrix.mode: covering")
@@ -285,6 +298,11 @@ def _report_from_checkpoint(
         "gated_case_count": gate.get("gated_case_count"),
         "compile_only_case_count": gate.get("compile_only_case_count"),
         "gate_carried": bool(isinstance(gate.get("report"), dict) and gate["report"].get("carried_from_checkpoint")),
+        "reasoning": {
+            "mode": (checkpoint.get("run") or {}).get("reasoning_mode", "explicit"),
+            "effort": (checkpoint.get("run") or {}).get("reasoning_effort", "high"),
+            "enabled": (checkpoint.get("run") or {}).get("reasoning_effort", "high") is not None,
+        },
         "provider_outage": checkpoint.get("provider_outage"),
         "compatibility": {
             "status": compatibility.get("status") if compatibility else None,
@@ -1010,6 +1028,7 @@ def main(argv: list[str] | None = None) -> int:
             "max_tokens_total": int(limits["max_tokens_total"]),
             "min_interval_seconds": float(profile["rate_limit"]["min_interval_seconds"]),
             "floor_effect_after": int(limits.get("floor_effect_after", 0)),
+            "reasoning_effort": str(profile.get("reasoning_effort", "high")),
             "request_extra": {},
             "checkpoint_path": output / "suite_checkpoint.json",
             "allow_compile_only_oracles": True,

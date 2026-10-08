@@ -465,3 +465,46 @@ If you need real templating logic, use Jinja2 and a different generator. This ge
 ## License
 
 MIT
+
+## Provider selection, explicit reasoning, and cheap model preflight
+
+The controller keeps credentials on the host and supports the provider names in
+`arena/secrets.py`. In addition to the original Atria, NVIDIA, Groq, Gemini,
+OpenRouter, Hugging Face, Cloudflare, and custom profiles, the provider-neutral
+Chat Completions client now has presets for OpenAI, Mistral, DeepSeek, Together,
+Cerebras, Fireworks, xAI, and Perplexity. Anthropic is handled through its
+native Messages endpoint rather than being incorrectly sent to
+`/chat/completions`. The credential-free endpoint/key catalog is in
+`experiments/provider_presets.yaml`.
+
+Configure a key locally without putting it in a command line or a repository
+file:
+
+```bash
+export OPENAI_API_KEY='...'
+python tools/model_preflight.py \
+  --provider openai \
+  --model gpt-5 \
+  --env-family weird_machine \
+  --out runs/model_preflight.json
+```
+
+For a private profile, use `tools/configure_provider.py`; the file must be
+mode `0600`, untracked, and gitignored. GitHub Actions workflows map the same
+provider-specific secret names into the host process and never pass them to
+Docker or upload them. See `docs/workflows/model-preflight.yml.example`
+(copy it to `.github/workflows/` when deploying) and
+`docs/workflows/model-family-gated.yml.example` for the reusable family gate.
+The preflight makes at most three small calls to the exact model and stops on a
+failure. It does not claim that the environment judges or Docker are ready.
+
+### Atria Dawn reasoning
+
+Atria Dawn Preview is served here through its OpenAI-compatible Chat
+Completions endpoint. Set `reasoning_mode: explicit` and
+`reasoning_effort: low|medium|high` in an Atria profile. The campaign and
+first-five profile use `high`; the controller sends the scalar
+`reasoning_effort: "high"` field on both the compatibility probe and every
+episode request. This is deliberately distinct from the Responses API
+`reasoning: {"effort": ...}` object. The effective request and any exposed
+reasoning-content length are recorded without storing the API key.

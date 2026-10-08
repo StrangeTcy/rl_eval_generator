@@ -30,6 +30,13 @@ def _models_url(base: str) -> str:
 
 
 def _headers(provider: str, key: str) -> dict[str, str]:
+    if provider == "anthropic":
+        return {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
     value = {
         "Authorization": f"Bearer {key}",
         "Accept": "application/json",
