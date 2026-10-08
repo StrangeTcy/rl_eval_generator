@@ -104,7 +104,7 @@ def expand(base: Case, ids: Sequence[str], seeds: Sequence[int]) -> list[Member]
 The equivalence classes are the payload: they are what lets a result say "the agent was wrong"
 versus "the agent tracked the presentation instead of the invariant".
 
-**Recorded.** Assumed *hybrid* (see Answers) — reversible until confirmed.
+**Recorded — CONFIRMED.** *Hybrid*: global ids in `envs/interventions.yaml`, per-environment implementation, and an unimplemented id is a compile error rather than a skip (Round 1, item 1). Shipped in PR-A.
 
 ---
 
