@@ -451,7 +451,7 @@ Boundaries honored: no common-knowledge or mechanism claims; uniqueness is a
 registered task property, not a hint about the equilibrium's content; E7/E8
 untouched; frozen CS001-CS011 and all earlier batches unmodified.
 
-### Batch 6 — S-line scope assessment (completed 2026-10-08, decision requested)
+### Batch 6 — S-line scope assessment (completed + accepted 2026-10-08, committed `493bd8a`)
 
 Scope: verification/assessment batch per roadmap ("S3 blocked; E7/E8
 deferred") — no S-line implementation exists or was attempted; every S-card
@@ -487,6 +487,43 @@ satisfied by spec family/question tags (verified), matcher blocked on V2;
 S3 -> blocked on rubric authorship (no code by corpus instruction);
 S4 -> blocked on S1 infrastructure + confound controls. E7/E8 -> deferred
 per D5 (re-decide later), untouched.
+
+### Batch 7 — S-line offline arm primitive (implemented 2026-10-08, pending result acceptance)
+
+Scope: user decision on Batch 6 option c — build the offline prompt-level
+arm-construction primitive (critique shared primitive #4), explicitly
+UNUSED until model-call authorization exists. No model calls, no network,
+no scoring, no statistics.
+
+What was done:
+1. `shared/experiment_arms.py` — `Arm(name, prompt_supplement)` ("" for the
+   no-advice arm), `build_paired_arms(instance_id, card_text,
+   generic_advice_text)` returning card / generic_advice / none arms with
+   type/non-emptiness validation, and `arm_seed(instance_id, arm_name)` -
+   a pure sha256-derived per-arm seed in [0, 2^31), reproducible across
+   campaign re-runs with no per-arm seed files. Length/format matching of
+   card vs generic advice remains an upstream experimental-design
+   obligation, per the corpus boundary.
+2. `tests/test_experiment_arms.py` — 6 tests: both corpus tests verbatim in
+   spirit (arms share everything except the supplement; arm_seed
+   deterministic + arm-specific), instance-specificity + bounds,
+   no-collision sweep over 20 instances x 3 arms, validation errors, and
+   the UNUSED-BY-DESIGN boundary guard (no env/, tools/, arena/, or shared/
+   module besides the primitive itself may reference experiment_arms while
+   model calls are unauthorized).
+3. `epistemic_program/S_LINE_ASSESSMENT.md` addendum recording option-c
+   execution and the remaining authorization gate.
+
+Verification evidence (2026-10-08):
+- `pytest tests/test_experiment_arms.py -q`: 6 passed.
+- Full repo suite (slow exhaustive test excluded as disclosed): exit 0.
+- Boundary guard passes: zero consumers of the primitive outside its own
+  module and tests.
+
+Status effect on S-line: S1/S4 infrastructure precondition (paired-arm
+data construction) now satisfied offline; execution of any comparison still
+requires explicit model-call authorization (option 4 of the assessment).
+S2/S3 blockers unchanged (V2 prerequisite; rubric authorship).
 
 ## D6 fix record (2026-10-07)
 
@@ -542,14 +579,18 @@ committed/pushed as `342d302` (verified on origin).
 Batch 5 (E6 game-theory family): ACCEPTED 2026-10-08 and committed/pushed
 as `404a53c` (verified on origin).
 
-Batch 6 (S-line scope assessment) awaits result acceptance and commit/push
-authorization. Working tree: epistemic_program/S_LINE_ASSESSMENT.md,
-epistemic_program/LEDGER.md. A USER DECISION is requested on the four
-S-line options recorded in the assessment (hold / spec-authoring / offline
-arm primitive / authorized model-call pilot).
+Batch 6 (S-line scope assessment): ACCEPTED 2026-10-08 and committed/pushed
+as `493bd8a` (verified on origin). User chose S-line option c (offline arm
+primitive, explicitly unused until model-call authorization).
 
-Next after acceptance: per the user's S-line choice; E7/E8 remain deferred
-pending re-decision per D5. Parallel
+Batch 7 (S-line offline arm primitive) awaits result acceptance and
+commit/push authorization. Working tree: shared/experiment_arms.py,
+tests/test_experiment_arms.py, epistemic_program/S_LINE_ASSESSMENT.md,
+epistemic_program/LEDGER.md.
+
+Next after acceptance: E7/E8 remain deferred pending re-decision per D5;
+remaining roadmap items are the reading backlog and any user-directed
+scope. Parallel
 reading backlog: F06/F07/F24/F29 large dialogue extracts, F03/F05/F08–F12/
 F14–F19 deep reads, council/context/freeze triage, proposal-v2 per-question
 sections, critique mid-round details (for the source-to-code matrix rows of

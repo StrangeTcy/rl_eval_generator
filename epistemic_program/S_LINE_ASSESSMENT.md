@@ -141,3 +141,14 @@ explicit user decision per question.
    provider, budget, and which arm comparison).
 
 Statuses recorded here persist in the ledger's source-to-code matrix.
+
+## Addendum (2026-10-08): option c executed
+
+User decision: option c accepted. The offline prompt-level arm-construction
+primitive is now implemented at `shared/experiment_arms.py`
+(`Arm` / `build_paired_arms` / `arm_seed`, corpus shared primitive #4):
+data construction only - no model calls, no network, no scoring. A boundary
+test (`tests/test_experiment_arms.py`) enforces that no environment, judge,
+renderer, or tool consumes it while model calls remain unauthorized.
+Execution of any S1/S4 comparison still requires the explicit model-call
+authorization described in option 4 above.
