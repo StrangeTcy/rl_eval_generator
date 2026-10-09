@@ -120,13 +120,13 @@ def test_unimplemented_intervention_is_refused_not_skipped() -> None:
     """An inert overlay reported as an invariance test is the failure mode to prevent."""
     proc = subprocess.run(
         [sys.executable, "generate_env.py", "--env", "moco", "--name", "test_causal_unknown",
-         "--difficulty", MOCO_EASY, "--seed", "3", "--interventions", "evaluator"],
+         "--difficulty", MOCO_EASY, "--seed", "3", "--interventions", "monitoring"],
         cwd=ROOT, text=True, capture_output=True,
     )
     shutil.rmtree(ROOT / "test_causal_unknown", ignore_errors=True)
     assert proc.returncode != 0
     combined = proc.stdout + proc.stderr
-    assert "does not implement intervention 'evaluator'" in combined
+    assert "does not implement intervention 'monitoring'" in combined
     assert "terminology" in combined  # what is actually available, stated back
 
 
@@ -332,9 +332,15 @@ def test_declared_interventions_resolve_against_their_own_taxonomy() -> None:
                     )
             # An id that resolves to nothing at any difficulty is a silent no-op.
             mechanism = str(impl.get("mechanism") or taxonomy[iid].get("mechanism"))
-            assert impl.get("substitutions") or impl.get("layout") or mechanism == "rename", (
-                f"{config_path}: {iid} is empty"
-            )
+            assert (
+                impl.get("substitutions")
+                or impl.get("layout")
+                or mechanism == "rename"
+                or (mechanism == "view" and impl.get("view"))
+            ), f"{config_path}: {iid} is empty"
+            if mechanism == "view":
+                declared = [str(v) for v in ((config.get("evaluators") or {}).get("views") or [])]
+                assert impl["view"] in declared, f"{config_path}: {iid} selects an undeclared view"
             if mechanism == "rename":
                 assert config.get("renameable_tokens"), f"{config_path}: {iid} renames nothing"
 

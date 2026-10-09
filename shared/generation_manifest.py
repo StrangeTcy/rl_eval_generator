@@ -60,7 +60,11 @@ DEFECT_CLASSES = (
     "F_drift",
 )
 #: How an intervention is applied.
-MECHANISMS = ("substitution", "layout", "rename")
+# `view` realizes an intervention by changing which measurement of one judge run is
+# authoritative, not by changing any byte of the artifact.  A measurement change that
+# edited the judge instead would also change what "solved it" means, which is the one
+# thing an evaluator twin must not do.
+MECHANISMS = ("substitution", "layout", "rename", "view")
 #: Reused for tagging difficulty axes so presentation knobs are not mistaken for
 #: task depth (item 3).
 AXIS_CLASSES = ("presentation", "observation", "evaluator", "task")
@@ -251,6 +255,8 @@ def build_manifest(
     substitution_snapshot: Mapping[str, str] | None = None,
     event_schema_sha256: str | None = None,
     event_schema_version: int | None = None,
+    evaluators: Mapping[str, Any] | None = None,
+    authoritative_view: str | None = None,
     extra: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the manifest for a generated environment (tree must already be final).
@@ -315,6 +321,8 @@ def build_manifest(
         # claims are only comparable across environments when the reader can tell
         # which classifier produced the labels, and the answer has to come from the
         # artifact rather than from whatever the checkout says now.
+        "evaluators": dict(evaluators or {}),
+        "authoritative_view": authoritative_view,
         "event_schema_sha256": event_schema_sha256,
         "event_schema_version": event_schema_version,
         "repository": dict(repository or {}),

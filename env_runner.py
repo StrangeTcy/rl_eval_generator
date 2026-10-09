@@ -78,6 +78,8 @@ def _provenance(env_dir: Path) -> dict[str, Any]:
         "config_path": manifest.get("config_path"),
         "tree_sha256": manifest.get("tree_sha256"),
         "judge_sha256": manifest.get("judge_sha256"),
+        "authoritative_view": manifest.get("authoritative_view"),
+        "evaluators": manifest.get("evaluators") or {},
         "event_schema_sha256": manifest.get("event_schema_sha256"),
         "event_schema_version": manifest.get("event_schema_version"),
         "equivalences": sorted(
@@ -623,7 +625,61 @@ def _submission_failure(mode: str, note: str, **details: Any) -> tuple[str, floa
     return json.dumps(result, indent=2), 0.0, True, {"judge_result": result, **details}
 
 
-def _judge_result(stdout: str, stderr: str, returncode: int) -> dict[str, Any]:
+def _apply_authoritative_view(
+    result_json: dict[str, Any], state: dict[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Score the episode under the measurement this instance was generated to declare.
+
+    ``evaluator`` and ``reward_proxy`` change which projection of the judge result *is*
+    the reward, and deliberately change no byte of the artifact.  Applying that here, at
+    the single point where a judge result becomes a number, is what makes the twin pair a
+    measurement comparison instead of two different tasks: same episode, same judge
+    output, different thing credited.  ``outcome_only`` - the shipped rule - is the
+    identity, so no environment that declares no view sees its reward move.
+
+    A view that could not be computed never becomes a zero.  ``adversarial`` without its
+    second run and ``trajectory_gated`` on the shell transport are both statements about
+    the harness, and crediting them as a failed answer would be the exact error this whole
+    layer exists to avoid.
+    """
+    view = str((state or {}).get("provenance", {}).get("authoritative_view") or "outcome_only")
+    meta = {"authoritative_view": view, "view_applied": False}
+    if view == "outcome_only":
+        return result_json, meta
+    from shared import evaluator_views as ev
+
+    trajectory = None
+    if view == "trajectory_gated" and state:
+        from arena import trajectory_metrics
+
+        trajectory = trajectory_metrics.summarize(Path(state["episode_dir"]))
+    record = ev.derive(result_json, trajectory=trajectory, views=[view]).get(view) or {}
+    if "passed" not in record:
+        return result_json, {
+            **meta,
+            "view_status": record.get("state", ev.UNAVAILABLE),
+            "view_reason": record.get("reason", ""),
+        }
+    score = float(record.get("score") or 0.0)
+    adjusted = {
+        **result_json,
+        "score": score,
+        "verdict": "PASS" if score >= 1.0 else "FAIL",
+        "reward_view": view,
+        "view_basis": record.get("basis", ""),
+        "view_withheld_by": record.get("failed_probes") or record.get("failed_gates") or [],
+    }
+    return adjusted, {
+        **meta,
+        "view_applied": True,
+        "view_score_before": result_json.get("score"),
+        "view_score_after": score,
+    }
+
+
+def _judge_result(
+    stdout: str, stderr: str, returncode: int, state: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Accept only a complete judge verdict with the expected exit status."""
     result = _extract_last_json_object(stdout)
     if result is not None:
@@ -639,7 +695,10 @@ def _judge_result(stdout: str, stderr: str, returncode: int) -> dict[str, Any]:
             and result["failure_mode"] not in {"unknown", ""}
             and (result["failure_mode"] == "pass") == (verdict == "PASS")
         ):
-            return result
+            # The view is applied last, after the judge's own verdict has been validated:
+            # an invalid judge result stays an infrastructure error under any measurement,
+            # and a measurement never rescues or corrupts a malformed one.
+            return _apply_authoritative_view(result, state)[0]
     reason = f"Judge exited {returncode} without a valid JSON verdict"
     return {
         "verdict": "FAIL", "score": 0.0, "failure_mode": "judge_runtime_error",
@@ -694,7 +753,9 @@ def _submit(
             return _submission_failure("judge_runtime_error", f"Docker judge failed to run: {exc}")
         (episode_dir / "judge.stdout").write_text(container.stdout, encoding="utf-8")
         (episode_dir / "judge.stderr").write_text(container.stderr, encoding="utf-8")
-        result_json = _judge_result(container.stdout, container.stderr, container.returncode)
+        result_json = _judge_result(
+            container.stdout, container.stderr, container.returncode, state
+        )
         info: dict[str, Any] = {
             "sandbox": "docker",
             "returncode": container.returncode,
@@ -751,7 +812,7 @@ def _submit(
         )
         (episode_dir / "judge.stdout").write_text(proc.stdout or "", encoding="utf-8")
         (episode_dir / "judge.stderr").write_text(proc.stderr or "", encoding="utf-8")
-        result_json = _judge_result(proc.stdout or "", proc.stderr or "", proc.returncode)
+        result_json = _judge_result(proc.stdout or "", proc.stderr or "", proc.returncode, state)
         return (
             json.dumps(result_json, indent=2),
             float(result_json.get("score", 0.0)),

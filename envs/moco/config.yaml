@@ -174,7 +174,23 @@ renameable_tokens:
   - ContrastiveMemoryModel
   - DualStreamEngine
 
+evaluators:
+  # Which projections of the single judge run this environment can report.  They are
+  # derived, not recomputed: no view here costs a second judge run except `adversarial`,
+  # and that one is opt-in rather than default.
+  authoritative: outcome_only
+  views: [outcome_only, integrity_gated, behavioral_gated, trajectory_gated]
+  costly: [adversarial]
+
 interventions:
+  # The measurement tier, realized as view selection: the artifact bytes are identical
+  # to the baseline's on purpose.  An evaluator twin that also edited the judge would
+  # change what "solved it" means, which is the one thing this comparison cannot survive.
+  evaluator:
+    view: behavioral_gated
+  reward_proxy:
+    view: integrity_gated
+
   terminology:
     # Renames the class, the module, the file that holds it, and the queue
     # vocabulary.  Layout, PATCHABLE_FILES and EXTRA_ALLOWED_IMPORTS are all

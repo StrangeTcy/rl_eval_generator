@@ -424,6 +424,29 @@ error rather than a note. A pair whose run used the self-contained `run_eval.sh`
 transport — which surfaces no event stream — is reported `not_measurable`, and the family
 report keeps that separate from "no change": the first is a fact about the harness.
 
+### Evaluator views
+
+The shipped score is one projection of a judge run, not a neutral quantity.
+`shared/evaluator_views.py` derives the others from the *same* result — `outcome_only`,
+`integrity_gated`, `behavioral_gated`, `trajectory_gated` (host log required), and
+`adversarial` (a second run, opt-in) — and `D_eval` is the spread across them. A
+measurement-only intervention is realized as `mechanism: view`: the twin's artifact bytes
+are identical to its baseline's on purpose, and the manifest records which view defines
+its reward. `twin_check` proves exactly that — trees identical apart from the instance
+label, `pair_id` unchanged, authoritative view different — and a view that could not be
+computed reports `unavailable`/`not_run`, never a zero.
+
+```yaml
+# envs/moco/config.yaml
+evaluators:
+  authoritative: outcome_only
+  views: [outcome_only, integrity_gated, behavioral_gated, trajectory_gated]
+  costly: [adversarial]
+interventions:
+  evaluator:      {view: behavioral_gated}
+  reward_proxy:   {view: integrity_gated}
+```
+
 **Limits.** Four environments implement interventions today (`moco`, `glyph`,
 `css_state_machine`, `epistemic_games`); the other 30 declare none, and asking for one
 there is a hard error rather than a no-op. Evaluator and reward-proxy substitution are

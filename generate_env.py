@@ -401,6 +401,7 @@ def validate_intervention_blocks(config: dict, env_name: str) -> List[str]:
         return errors
 
     taxonomy = load_intervention_taxonomy()
+    declared_views = [str(view) for view in ((config.get("evaluators") or {}).get("views") or [])]
     for iid, impl in block.items():
         where = f"interventions '{iid}'"
         if not isinstance(impl, dict):
@@ -433,15 +434,92 @@ def validate_intervention_blocks(config: dict, env_name: str) -> List[str]:
             value = impl.get(payload)
             if value is not None and not isinstance(value, dict):
                 errors.append(f"{where}: '{payload}' must be a mapping")
-        if not any(
+        mechanism = str(impl.get("mechanism") or taxonomy.get(iid, {}).get("mechanism"))
+        if mechanism == "view":
+            view = impl.get("view")
+            if not view:
+                errors.append(
+                    f"{where}: mechanism 'view' needs a view name, since an overlay that "
+                    "changes no measurement and no byte is not an intervention"
+                )
+            elif view not in declared_views:
+                errors.append(
+                    f"{where}: view {view!r} is not declared in this config's "
+                    "'evaluators: views' list"
+                )
+        elif not any(
             impl.get(payload)
             for payload in ("substitutions", "layout")
-        ) and str(impl.get("mechanism") or taxonomy.get(iid, {}).get("mechanism")) != "rename":
+        ) and mechanism != "rename":
             errors.append(
                 f"{where}: declares no substitutions and no layout override - it would "
                 "generate a twin identical to its base, which is a config bug, not an experiment"
             )
 
+    errors.extend(validate_evaluator_views(config, env_name))
+    return errors
+
+
+def validate_evaluator_views(config: dict, env_name: str) -> List[str]:
+    """Check the ``evaluators:`` block: which measurements this environment can report.
+
+    A view is a projection of one judge run, so the only things a config may decide are
+    which views it considers meaningful, which one is authoritative for reward, and which
+    are costly enough to need opting into.
+    """
+    from shared import evaluator_views as ev
+
+    errors: List[str] = []
+    block = config.get("evaluators")
+    if block is None:
+        return errors
+    if not isinstance(block, dict):
+        return [f"{env_name}: 'evaluators' must be a mapping"]
+    views = block.get("views")
+    if views is None:
+        errors.append(f"{env_name}: evaluators.views must list at least the authoritative view")
+        views = []
+    if not isinstance(views, list) or not views:
+        errors.append(f"{env_name}: evaluators.views must be a non-empty list")
+        views = []
+    for view in views:
+        if str(view) not in ev.VIEWS:
+            errors.append(
+                f"{env_name}: unknown evaluator view {view!r}; declared views are "
+                + ", ".join(ev.VIEW_IDS)
+            )
+    authoritative = block.get("authoritative")
+    if authoritative is None:
+        errors.append(
+            f"{env_name}: evaluators.authoritative is required - the reward has to come "
+            "from a named measurement, not from whichever view a reader assumes"
+        )
+    elif str(authoritative) not in views:
+        errors.append(
+            f"{env_name}: evaluators.authoritative {authoritative!r} is not in evaluators.views"
+        )
+    elif str(authoritative) == "adversarial":
+        errors.append(
+            f"{env_name}: 'adversarial' needs a second judge run, so it cannot be the "
+            "default authoritative view; declare it under costly and select it per member"
+        )
+    costly = block.get("costly") or []
+    if not isinstance(costly, list):
+        errors.append(f"{env_name}: evaluators.costly must be a list")
+        costly = []
+    for view in costly:
+        if str(view) not in ev.VIEWS:
+            errors.append(f"{env_name}: evaluators.costly lists unknown view {view!r}")
+        elif not ev.VIEWS[str(view)].get("costly"):
+            errors.append(
+                f"{env_name}: {view!r} is not a costly view; marking a free projection "
+                "costly would let a config hide that it was always computable"
+            )
+    if str(authoritative) in costly:
+        errors.append(
+            f"{env_name}: the authoritative view cannot be opted into as costly, because "
+            "then a run could score the episode with no reward definition at all"
+        )
     return errors
 
 
@@ -540,7 +618,24 @@ def resolve_interventions(
                     "renameable_tokens; renaming arbitrary identifiers across the tree can "
                     "rewrite a judge-side string check and look like a clean rename"
                 )
-        if not substitutions and not layout and not rename_tokens:
+        view: Optional[str] = None
+        if mechanism == "view":
+            view = str(impl.get("view") or entry.get("view") or "")
+            declared = [str(item) for item in ((config.get("evaluators") or {}).get("views") or [])]
+            if not view or view not in declared:
+                raise ValueError(
+                    f"{env_name}: intervention '{iid}' selects view {view!r}, which is not "
+                    f"in this environment's declared evaluators.views "
+                    f"({', '.join(declared) or '(none declared)'})"
+                )
+            authoritative = str((config.get("evaluators") or {}).get("authoritative") or "")
+            if view == authoritative:
+                raise ValueError(
+                    f"{env_name}: intervention '{iid}' selects the already-authoritative "
+                    f"view {view!r}; a twin whose measurement is identical to the baseline's "
+                    "is not an evaluator change, it is the same episode twice"
+                )
+        if not substitutions and not layout and not rename_tokens and view is None:
             raise ValueError(
                 f"{env_name}: intervention '{iid}' resolves to an empty overlay (inert by "
                 "construction)"
@@ -558,6 +653,7 @@ def resolve_interventions(
                 "description": " ".join(str(entry.get("description") or "").split()),
                 "substitutions": substitutions,
                 "layout": layout,
+                "view": view,
                 "renameable_tokens": rename_tokens,
                 "renames": {},
             }
@@ -777,6 +873,32 @@ def prepare_generation(
     }
 
 
+def _evaluators_block(env_name: str) -> dict:
+    """The declared evaluator views for an environment, or an empty mapping."""
+    try:
+        return dict(load_config(env_name).get("evaluators") or {})
+    except (OSError, ValueError):
+        return {}
+
+
+def _authoritative_view(env_name: str, overlays: List[dict]) -> str | None:
+    """Which measurement of one judge run defines this instance's reward.
+
+    Declared views compose the way substitutions do: the last selector wins, but two
+    selectors that disagree are refused.  An environment whose reward is defined by two
+    views at once is not measuring two things - it is measuring nothing.
+    """
+    config = load_config(env_name)
+    declared = str((config.get("evaluators") or {}).get("authoritative") or "") or None
+    selected = sorted({str(overlay["view"]) for overlay in overlays if overlay.get("view")})
+    if len(selected) > 1:
+        raise ValueError(
+            f"interventions select conflicting authoritative views: {', '.join(selected)}; "
+            "an evaluator family varies the measurement by one view at a time"
+        )
+    return selected[0] if selected else declared
+
+
 def _event_schema_digest() -> str | None:
     """Hash of the shared event vocabulary this tree's ``tool_state.py`` came from.
 
@@ -957,6 +1079,8 @@ def generate_env(
             parent_generation_id=parent_generation_id,
             repository={"commit": _git_commit()},
             substitution_snapshot=subs,
+            evaluators=_evaluators_block(env_name),
+            authoritative_view=_authoritative_view(env_name, overlays),
             event_schema_sha256=_event_schema_digest(),
             event_schema_version=_event_schema_version(),
         )
@@ -976,6 +1100,7 @@ def _manifest_overlay(overlay: dict) -> dict:
         "id": overlay["id"],
         "environment": overlay["environment"],
         "mechanism": overlay["mechanism"],
+        "view": overlay.get("view"),
         "equivalence": overlay["equivalence"],
         "expect": overlay["expect"],
         "defect_class": overlay["defect_class"],

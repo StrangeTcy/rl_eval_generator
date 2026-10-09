@@ -245,3 +245,136 @@ def test_cli_reports_and_can_gate_a_campaign_step(tmp_path: Path) -> None:
     assert proc.returncode == 1
     written = json.loads(report_path.read_text(encoding="utf-8"))
     assert written["status"] == "not_measurable"
+
+
+# ---------------------------------------------------------------------------
+# evaluator views: several measurements of one judge run
+# ---------------------------------------------------------------------------
+
+JUDGE_RESULT = {
+    "verdict": "PASS",
+    "score": 1.0,
+    "failure_mode": "pass",
+    "checks": {
+        "patch_found": True,
+        "patch_valid": True,
+        "sources_valid": True,
+        "training_completed": True,
+        "artifact_found": True,
+        "non_collapsed_features": True,
+        "temperature_sensitive": False,
+        "queue_wraparound": True,
+    },
+}
+
+
+def test_views_are_projections_of_the_same_run_not_recomputations() -> None:
+    from shared import evaluator_views as ev
+
+    views = ev.derive(JUDGE_RESULT)
+    assert views["outcome_only"]["passed"] is True
+    assert views["integrity_gated"]["passed"] is True
+    # One behavioral probe failed, so the stricter measurement withholds the credit.
+    assert views["behavioral_gated"]["passed"] is False
+    assert views["behavioral_gated"]["failed_probes"] == ["temperature_sensitive"]
+    assert views["trajectory_gated"]["state"] == ev.UNAVAILABLE
+
+    spread = ev.dispersion(views)
+    assert spread["verdict_disagreement"] is True
+    assert spread["d_eval"] == 1.0
+    assert spread["views_compared"] == 3
+    assert spread["excluded"] == ["adversarial", "trajectory_gated"]
+
+
+def test_a_view_nobody_computed_is_never_read_as_a_zero() -> None:
+    from shared import evaluator_views as ev
+
+    views = ev.derive(JUDGE_RESULT, views=["adversarial"])
+    assert views["adversarial"]["state"] == ev.NOT_RUN
+    spread = ev.dispersion(views)
+    assert spread["views_compared"] == 0
+    assert spread["d_eval"] is None
+    assert "no view could be computed" in spread["reason"]
+
+    # With the second run recorded, the same view becomes a number.
+    views = ev.derive(
+        JUDGE_RESULT, views=["adversarial"], adversarial_result={**JUDGE_RESULT, "score": 0.4}
+    )
+    assert views["adversarial"]["passed"] is False
+    assert views["adversarial"]["perturbed_score"] == 0.4
+    survived = ev.derive(
+        JUDGE_RESULT, views=["adversarial"], adversarial_result=dict(JUDGE_RESULT)
+    )
+    assert survived["adversarial"]["passed"] is True
+
+
+def test_the_runner_credits_the_view_the_instance_declared() -> None:
+    """Same judge output, different reward: that is what an evaluator twin measures."""
+    import env_runner as er
+
+    stdout = json.dumps(JUDGE_RESULT)
+    shipped = er._judge_result(stdout, "", 0, {"provenance": {}})
+    assert (shipped["score"], shipped["verdict"]) == (1.0, "PASS")
+
+    behavioral = er._judge_result(
+        stdout, "", 0, {"provenance": {"authoritative_view": "behavioral_gated"}}
+    )
+    assert (behavioral["score"], behavioral["verdict"]) == (0.0, "FAIL")
+    assert behavioral["reward_view"] == "behavioral_gated"
+    assert behavioral["view_withheld_by"] == ["temperature_sensitive"]
+
+    # An invalid judge result is an infrastructure failure under any measurement.
+    broken = er._judge_result("no json here", "boom", 2,
+                             {"provenance": {"authoritative_view": "behavioral_gated"}})
+    assert broken["failure_mode"] == "judge_runtime_error"
+
+
+def test_a_measurement_twin_is_verified_with_identical_bytes() -> None:
+    base_name, twin_name = "test_views_base", "test_views_twin"
+    try:
+        base = _generate(base_name)
+        subprocess.run(
+            [sys.executable, "generate_env.py", "--env", "moco", "--name", twin_name,
+             "--difficulty", MOCO_EASY, "--seed", "3", "--interventions", "evaluator"],
+            cwd=ROOT, text=True, capture_output=True, check=True,
+        )
+        twin = ROOT / twin_name
+        base_manifest = json.loads((base / gm.MANIFEST_NAME).read_text(encoding="utf-8"))
+        twin_manifest = json.loads((twin / gm.MANIFEST_NAME).read_text(encoding="utf-8"))
+        assert base_manifest["authoritative_view"] == "outcome_only"
+        assert twin_manifest["authoritative_view"] == "behavioral_gated"
+        # Same task, same artifact: measurement is not identity.
+        assert twin_manifest["pair_id"] == base_manifest["pair_id"]
+        report = subprocess.run(
+            [sys.executable, "tools/twin_check.py", str(base), str(twin),
+             "--json", str(twin / "twin_report.json")],
+            cwd=ROOT, text=True, capture_output=True,
+        )
+        assert report.returncode == 0, report.stdout + report.stderr
+        checks = json.loads((twin / "twin_report.json").read_text(encoding="utf-8"))["checks"]
+        assert checks["trees_identical_apart_from_label"] is True
+        assert checks["judge_tree_unchanged"] is True
+        assert checks["authoritative_view_changed"] is True
+    finally:
+        for name in (base_name, twin_name):
+            shutil.rmtree(ROOT / name, ignore_errors=True)
+
+
+def test_an_evaluators_block_that_lets_a_view_cheat_is_refused() -> None:
+    import generate_env as ge
+
+    config = {
+        "axes": [{"id": "a", "levels": {"easy": {}}}],
+        "layout": {},
+        "evaluators": {
+            "authoritative": "adversarial",
+            "views": ["adversarial"],
+            "costly": ["outcome_only"],
+        },
+        "interventions": {"evaluator": {"view": "nonexistent_view"}},
+    }
+    errors = ge.validate_intervention_blocks(config, "fake_env")
+    joined = "\n".join(errors)
+    assert "cannot be the default authoritative view" in joined
+    assert "not a costly view" in joined
+    assert "not declared in this config's 'evaluators: views' list" in joined

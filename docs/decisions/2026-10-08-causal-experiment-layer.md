@@ -867,3 +867,44 @@ GITHUB_EVENT_NAME: ${{ steps.mode.outputs.mode == 'resume' && 'schedule' || gith
 It belongs on the *campaign* step, not the chain step: the controller reads
 `GITHUB_EVENT_NAME` when it decides whether to `rmtree` the restored state, and it is the
 pinned code that does that — which is why the override has to live in the workflow.
+
+---
+
+## PR-B.3: evaluator views and `D_eval` (item 10, first half)
+
+`shared/evaluator_views.py` derives every view from one judge result; `D_eval` is the
+spread across the views that could actually be computed, with the excluded ones named.
+`outcome_only` is the shipped rule, `integrity_gated` credits a structurally honest
+submission, `behavioral_gated` withholds credit when any probe outside the
+`judge_lib` infrastructure set failed, `trajectory_gated` adds the host-log gates, and
+`adversarial` is the only view needing a second run.
+
+The measurement-tier ids became real by being declared `mechanism: view`: `evaluator` →
+`behavioral_gated`, `reward_proxy` → `integrity_gated`, implemented in moco. The choice
+is the point of the item — an evaluator twin that also edited the judge would change what
+"solved it" means, which is the one thing this comparison cannot survive. Consequences
+that followed from taking that seriously:
+
+1. `pair_id` does **not** move under a measurement change (identity is the task, not the
+   ruler), and `twin_check` grew a fourth rule that requires the trees to be identical
+   apart from the instance label *and* the recorded view to differ *and* `judge_tree`
+   unchanged — with a note saying the proof is of the declaration, not of the score.
+2. The view is applied at the single place a judge result becomes a reward
+   (`env_runner._judge_result`), after the judge's own verdict has been validated, so an
+   invalid judge result is an infrastructure error under any measurement. Verified
+   behaviorally: identical output scores 1.0 under `outcome_only` and 0.0 under
+   `behavioral_gated`, naming the probe that withheld it.
+3. An uncomputable view is never a zero: `adversarial` without its second run is
+   `not_run`, `trajectory_gated` on the shell transport is `unavailable`, both excluded
+   from `D_eval` and listed as excluded.
+4. `evaluators:` is validated, and the rules are the ones that keep the block honest:
+   the authoritative view must be declared, cannot be `adversarial`, cannot also be
+   opted into as costly, and a view overlay that selects the already-authoritative view
+   is refused at resolution time — "the same episode twice".
+
+**Not in this slice:** the second *episode* paths. `adversarial` still needs a runner
+that re-grades the same artifact under perturbation, and `#7`'s shortcut patches are the
+natural input to that re-grade, so they should land together; and `suite_inventory`
+does not yet emit one case per (intervention, view) pair, so families vary the view only
+through `tools/family.py`. Verified locally: causal + trajectory + family layers 71
+passed; `env_runner`, `integration`, `scoring`, `paid_campaign_safety` 16 passed.

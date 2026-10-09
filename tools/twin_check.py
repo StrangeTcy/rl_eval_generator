@@ -318,13 +318,26 @@ def compare(base_dir: Path, twin_dir: Path) -> dict[str, Any]:
         for name, info in (item.get("renames") or {}).items()
         if int((info or {}).get("occurrences") or 0) > 0
     )
+    fired_views = sorted(
+        {
+            str(item.get("view"))
+            for item in interventions
+            if item.get("view")
+            and str(item.get("view")) != str(base_manifest.get("authoritative_view") or "")
+        }
+    )
+    mechanisms = {str(item.get("mechanism") or "") for item in interventions}
+    report["mechanisms"] = sorted(mechanisms)
+    report["authoritative_view_base"] = base_manifest.get("authoritative_view")
+    report["authoritative_view_twin"] = twin_manifest.get("authoritative_view")
     report["overlay_fired"] = {
         "substitutions": fired_substitutions,
         "renames": fired_renames,
         "layout_overridden": layout_declared,
+        "views": fired_views,
     }
     report["checks"]["overlay_fired"] = bool(
-        fired_substitutions or fired_renames or layout_declared
+        fired_substitutions or fired_renames or layout_declared or fired_views
     )
 
     raw_base = snapshot(base_dir)
@@ -423,6 +436,46 @@ def compare(base_dir: Path, twin_dir: Path) -> dict[str, Any]:
                     "declaration rather than proved from structure"
                 )
         report["status"] = "fail" if problems else "pass"
+    elif equivalence == "evaluator_changing" and mechanisms == {"view"}:
+        # A measurement change must change *nothing* else.  The artifact is the same
+        # bytes as the baseline's by design - the difference lives in which projection of
+        # one judge run defines the reward - so the proof is that the record says a
+        # different view is authoritative while the trees are provably identical.
+        agent_same = _subtree(norm_base, "agent") == _subtree(norm_twin, "agent")
+        judge_same = _subtree(raw_base, "judge") == _subtree(raw_twin, "judge")
+        whole_same = normalized_equal
+        view_changed = bool(fired_views)
+        report["checks"]["agent_tree_unchanged"] = agent_same
+        report["checks"]["judge_tree_unchanged"] = judge_same
+        report["checks"]["trees_identical_apart_from_label"] = whole_same
+        report["checks"]["authoritative_view_changed"] = view_changed
+        report["checks"]["pair_id_unchanged"] = (
+            base_manifest.get("pair_id") == twin_manifest.get("pair_id")
+        )
+        if not whole_same or not judge_same:
+            problems.append(
+                "a view-mechanism twin changed bytes; selecting a measurement is supposed "
+                "to leave the artifact identical, otherwise the twin differs in task and "
+                "in measurement at once and neither effect is attributable"
+            )
+        if not view_changed:
+            problems.append(
+                "the authoritative view is the same as the baseline's, so this twin "
+                "measures exactly what its baseline measures: an evaluator comparison with "
+                "no second measurement is the same episode twice"
+            )
+        if not report["checks"]["pair_id_unchanged"]:
+            problems.append(
+                "pair_id moved under a measurement-only change; the task is the same, so "
+                "something other than the view declaration differs between the members"
+            )
+        report["status"] = "pass" if not problems else "fail"
+        if report["status"] == "pass":
+            report["notes"].append(
+                "proof is of the declaration and the bytes, not of the score: a view change "
+                "is verified by construction, and whether the measurement matters is "
+                "answered by D_eval over the two members' score vectors, after a run"
+            )
     elif equivalence == "evaluator_changing":
         agent_same = _subtree(norm_base, "agent") == _subtree(norm_twin, "agent")
         judge_differs = _subtree(raw_base, "judge") != _subtree(raw_twin, "judge")
