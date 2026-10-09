@@ -68,3 +68,47 @@ Net: **one deletion-class consolidation** (fold the Bayes-band math into `shared
 ## 6. Suggested next step
 
 On approval of §5: (a) reconcile the 3 `epistemic_games` files (adopt their `core.py`→shared-`bayes` refactor, merge `stage_outcomes` with the `information_policy` replay gate, keep both layout additions), (b) re-point `information_policy._record()` at the shared substrate and un-skip the bridge test, (c) port `result_record`/`presentation_identity`/`experiment_arms`/`epistemic_verifier` + their tests, 3-way the diverged `arena.py`/`episode.py`/`run_suite.py`, (d) resolve `test_campaign_workflow_guard` once (check whether their edit already is the PR-B.4 fix), (e) full suite + tools green, commit, push.
+
+## 7. Reconciliation executed (§5 approved by the user)
+
+**Phase 1 — the one consolidation (Bayes math → `shared/epistemic_semantics`).** Landed as commit `eb4deed`:
+adopted their behavior-preserving `core.py` D2 refactor (posterior + verdict band delegate to
+`bayes.posterior_world1` / `bayes.likelihood_ratio_band`); merged their judge-shipment of the
+`epistemic_semantics` package into `config.yaml` alongside this trunk's `judge/information_policy.py`;
+**folded `information_policy._record()`'s hand-rolled band math into `core._semantics_bayes.likelihood_ratio_band()`**
+(reached through `core` because the policy's own purity contract forbids importing `sys`/`pathlib`,
+which a direct three-context fallback would need); merged their `stage_outcomes` record on the
+judge's patch-validation path (coexists with the `information_policy` replay gate — different regions);
+adopted `PatchValidationError(code)` and `judge_lib`'s `_FAILURE_STAGE`/`_mark_stage` (so `reward_denial`,
+including the policy gate, is machine-readable registry-wide); un-skipped the differential bridge test.
+
+**Phases 2–3 — the kept layers + diverged-base wiring.** The four overlap modules are self-contained
+(`result_record` → `deepcopy` only; `presentation_identity`/`experiment_arms` → stdlib only;
+`epistemic_verifier` → the already-ported `epistemic_semantics`), so they ported as clean additions with
+their tests (`presentation_pilot.py` came along as a test dependency). The diverged-base files were
+3-way merged (`git merge-file`, base `e1b038a`): `arena.py` clean; `tools/run_suite.py` clean (their
+`_build_command` id-threading is purely additive and every name it references already exists in this
+trunk's runner); `arena/artifacts.py` adopted wholesale (identical base); `arena/episode.py` had **one**
+conflict — my base added `"interventions": interventions` to the oracle-case dict while theirs improved
+`case_id` to `options.case_id or options.episode_id or "direct"` — resolved by **combining both** (their
+`case_id` + my `interventions`); `--case-id` is defined in the cleanly-merged `arena.py`.
+
+**Phase 4 — `test_campaign_workflow_guard` (NOT ported; standing instruction).** Their branch does *not*
+touch the workflow; it relaxes the *test* to accept a second resume mechanism — `env -u GITHUB_EVENT_NAME`
+on a resume-gated branch — and **this trunk's deployed `atria-campaign.yml` already uses exactly that**
+(`env -u GITHUB_EVENT_NAME python tools/atria_campaign.py`, lines 658–661). Adopting their test edit would
+make the guard pass, i.e. would "fix the campaign guard on this branch," which the user's standing
+instruction forbids (it lands as its own PR against `main`). So the guard is **left failing here**.
+Consequence for that separate PR: the recorded PR-B.2/B.4 plan (add a `GITHUB_EVENT_NAME: ${{ … 'resume' … }}`
+step override — mechanism 1) is likely **superseded** — the deployed workflow already moved to mechanism 2,
+and the only thing failing is the old test's refusal to recognize it. The separate PR should choose between
+(a) their test-side acceptance of mechanism 2 (no workflow change) and (b) the original mechanism-1 workflow
+override, not do both. Flagged for the user; not decided here.
+
+**Boundary note (kept layers, not unified):** `presentation_identity` (intra-instance fact identity for
+matched-fact arms) and `latent_spec` (registry-wide instance identity / `pair_id`) coexist at different
+granularities; `epistemic_verifier` (independent offline faithfulness, never imports family `core.py`) and
+the judge's re-derivation + `information_policy` replay (runtime provenance/anti-tamper) coexist as
+complementary verification layers; `result_record`/`stage_outcomes` (run-time) and `generation_manifest`/
+`latent_spec` (generation-time) coexist across lifecycles. The only true single-source-of-truth merge was
+the Bayes math (Phase 1). No mechanism was deleted.

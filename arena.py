@@ -104,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-retries", type=int, default=3)
     run.add_argument("--max-http-attempts", type=int, default=None)
     run.add_argument("--provider-min-interval-seconds", type=float, default=0.0)
+    run.add_argument("--case-id", default=None, help="stable case identifier for result records")
+    run.add_argument("--campaign-id", default=None, help="campaign identifier for result records")
+    run.add_argument("--judge-guarantee", default=None, help="declared guarantee for this case")
     run.add_argument("--keep-images", action="store_true")
     run.add_argument("--keep-workspace", action="store_true")
 
@@ -220,6 +223,9 @@ def _run(args: argparse.Namespace) -> int:
         max_retries=args.max_retries,
         max_http_attempts=args.max_http_attempts,
         provider_min_interval_seconds=args.provider_min_interval_seconds,
+        case_id=args.case_id,
+        campaign_id=args.campaign_id,
+        judge_guarantee=args.judge_guarantee,
         keep_images=args.keep_images,
         keep_workspace=args.keep_workspace,
     )
