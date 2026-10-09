@@ -35,9 +35,12 @@ from shared.epistemic_semantics import bayes  # noqa: E402
 from shared.epistemic_semantics.event_bayes import SpecError  # noqa: E402
 from tools.matched_fact_probe import (  # noqa: E402
     BASELINES,
+    load_profile,
     make_model_source,
+    plan_from_profile,
     prior_anchored,
     run_probe,
+    run_profile,
 )
 
 
@@ -305,3 +308,39 @@ def test_run_probe_emits_boundary_safe_report_with_separate_endpoints() -> None:
     assert "diverged_endpoint_histogram" in agg
     assert not any("score" in k for k in agg)
     assert_reporting_boundary(report)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Campaign profile + offline preflight (the "matrix" for a target).
+# ---------------------------------------------------------------------------
+
+
+def test_mercury_profile_plans_a_covering_matrix_within_budget() -> None:
+    profile = load_profile("experiments/t1_mercury.yaml")
+    plan = plan_from_profile(profile)
+    assert plan["provider"] == "mercury"
+    assert plan["model"] == "mercury-2.5"
+    assert plan["reasoning_effort"] == "high"
+    # 3 n_facts x 2 priors = 6 cells; 6 x 24 seeds x 2 arms = 288 calls.
+    assert plan["cell_count"] == 6
+    assert plan["seed_count"] == 24
+    assert plan["planned_api_calls"] == 288
+    assert plan["within_budget"] is True
+
+
+def test_budget_gate_fires_before_any_provider_access() -> None:
+    """The call ceiling is checked before a key is resolved (offline-safe gate)."""
+    profile = {
+        "target": {"provider": "mercury", "model": "mercury-2.5"},
+        "matrix": {"seeds": 10, "n_facts": [3, 4, 5], "prior_world1": ["1/2", "1/3"]},
+        "budget": {"max_api_calls": 5},  # 6 x 10 x 2 = 120 planned >> 5
+    }
+    assert plan_from_profile(profile)["within_budget"] is False
+    with pytest.raises(SystemExit):
+        run_profile(profile, out=None)  # must raise on budget, never reaching the network
+
+
+def test_profile_requires_a_target_mapping() -> None:
+    with pytest.raises(SystemExit):
+        plan_from_profile({"matrix": {"seeds": 2}})
+

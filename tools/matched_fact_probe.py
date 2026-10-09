@@ -366,6 +366,171 @@ def _arm_record(arm) -> Dict[str, object]:
 
 
 # ---------------------------------------------------------------------------
+# Campaign profile (the matched-fact "matrix" for one target) + offline plan.
+# ---------------------------------------------------------------------------
+
+
+def load_profile(path: "str | Path") -> Dict[str, object]:
+    """Load a T1 campaign profile: the matched-fact matrix for one target."""
+    import yaml
+
+    profile_path = Path(path)
+    if not profile_path.is_absolute():
+        profile_path = REPO_ROOT / profile_path
+    profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    if not isinstance(profile, dict):
+        raise SystemExit(f"profile {profile_path} must be a YAML mapping")
+    return profile
+
+
+def _profile_seeds(matrix: Mapping[str, object]) -> List[int]:
+    seed_list = matrix.get("seed_list")
+    if seed_list:
+        if isinstance(seed_list, str):
+            return [int(s) for s in seed_list.split(",") if s.strip()]
+        return [int(s) for s in seed_list]
+    count = int(matrix.get("seeds", 8))
+    start = int(matrix.get("seed_start", 0))
+    return list(range(start, start + count))
+
+
+def _as_list(value: object, default: List[object]) -> List[object]:
+    if value is None:
+        return list(default)
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
+
+
+def _matrix_cells(matrix: Mapping[str, object]) -> List[Tuple[int, str]]:
+    """The covering matrix: cross-product of n_facts x prior_world1."""
+    n_facts_opts = [int(x) for x in _as_list(matrix.get("n_facts"), [4])]
+    prior_opts = [str(x) for x in _as_list(matrix.get("prior_world1"), ["1/2"])]
+    return [(nf, pr) for nf in n_facts_opts for pr in prior_opts]
+
+
+def plan_from_profile(profile: Mapping[str, object]) -> Dict[str, object]:
+    """The execution plan WITHOUT any provider call (offline preflight).
+
+    Mirrors the coding-campaign discipline of gating before provider access:
+    the workflow runs ``--plan`` first to prove the profile is well-formed and
+    the call budget is respected, then runs the live probe.
+    """
+    target = profile.get("target")
+    if not isinstance(target, Mapping):
+        raise SystemExit("profile.target must be a mapping (provider/model/...)")
+    matrix = profile.get("matrix", {})
+    if not isinstance(matrix, Mapping):
+        raise SystemExit("profile.matrix must be a mapping")
+    rate_limit = profile.get("rate_limit", {})
+    budget = profile.get("budget", {})
+    seeds = _profile_seeds(matrix)
+    cells = _matrix_cells(matrix)
+    calls = 2 * len(seeds) * len(cells)  # two matched arms per instance per cell
+    max_api_calls = budget.get("max_api_calls") if isinstance(budget, Mapping) else None
+    return {
+        "probe": "t1_same_fact_presentation",
+        "operator": "same_fact_presentation",
+        "provider": target.get("provider"),
+        "model": target.get("model"),
+        "reasoning_mode": profile.get("reasoning_mode", "provider_default_uncontrolled"),
+        "reasoning_effort": target.get("reasoning_effort"),
+        "temperature": target.get("temperature", 0.0),
+        "max_tokens": target.get("max_tokens", 1024),
+        "seeds": seeds,
+        "seed_count": len(seeds),
+        "cells": [{"n_facts": nf, "prior_world1": pr} for nf, pr in cells],
+        "cell_count": len(cells),
+        "planned_api_calls": calls,
+        "max_api_calls": max_api_calls,
+        "within_budget": (max_api_calls is None or calls <= int(max_api_calls)),
+        "min_interval_seconds": (
+            rate_limit.get("min_interval_seconds", 0.0)
+            if isinstance(rate_limit, Mapping)
+            else 0.0
+        ),
+    }
+
+
+def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[str, object]:
+    """Run the live matched-fact probe for one target profile."""
+    from arena.providers import ProviderClient
+    from arena.secrets import resolve_provider
+
+    plan = plan_from_profile(profile)
+    if not plan["within_budget"]:
+        raise SystemExit(
+            f"planned {plan['planned_api_calls']} calls exceed max_api_calls "
+            f"{plan['max_api_calls']}; raise the ceiling or shrink the matrix"
+        )
+    target = profile["target"]
+    assert isinstance(target, Mapping)
+    provider = str(target.get("provider"))
+    model = str(target.get("model"))
+    api_key_env = target.get("api_key_env")
+    creds = resolve_provider(provider, api_key_env=str(api_key_env) if api_key_env else None)
+    if not creds.api_key:
+        raise SystemExit(f"no API key resolved for provider {provider!r}")
+    rate_limit = profile.get("rate_limit", {})
+    min_interval = (
+        float(rate_limit.get("min_interval_seconds", 0.0))
+        if isinstance(rate_limit, Mapping)
+        else 0.0
+    )
+    client = ProviderClient(provider, creds.api_key, api_base=creds.api_base,
+                            min_interval_seconds=min_interval)
+    reasoning_effort = target.get("reasoning_effort")
+    source = make_model_source(
+        client,
+        model,
+        temperature=float(target.get("temperature", 0.0)),
+        max_tokens=int(target.get("max_tokens", 1024)),
+        reasoning_effort=str(reasoning_effort) if reasoning_effort else None,
+        top_p=float(target["top_p"]) if target.get("top_p") is not None else None,
+    )
+    matrix = profile.get("matrix", {})
+    assert isinstance(matrix, Mapping)
+    seeds = _profile_seeds(matrix)
+    cell_reports: List[Dict[str, object]] = []
+    for n_facts, prior in _matrix_cells(matrix):
+        cell = run_probe(
+            lambda task: source,
+            seeds=seeds,
+            n_facts=n_facts,
+            prior_world1=Fraction(prior),
+        )
+        cell_reports.append({"n_facts": n_facts, "prior_world1": prior, **cell})
+    report: Dict[str, object] = {
+        "probe": "t1_same_fact_presentation",
+        "operator": "same_fact_presentation",
+        "target": {
+            "provider": provider,
+            "model": model,
+            "reasoning_mode": plan["reasoning_mode"],
+            "reasoning_effort": reasoning_effort,
+        },
+        "plan": plan,
+        "cell_count": len(cell_reports),
+        "cells": cell_reports,
+        "interpretation_boundary": (
+            cell_reports[0]["interpretation_boundary"]
+            if cell_reports
+            else "presentation susceptibility only; endpoints reported separately"
+        ),
+    }
+    assert_reporting_boundary(report)
+    text = json.dumps(report, indent=2, sort_keys=True)
+    if out:
+        out_path = Path(out)
+        if not out_path.is_absolute():
+            out_path = REPO_ROOT / out_path
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(text + "\n", encoding="utf-8")
+    print(text)
+    return report
+
+
+# ---------------------------------------------------------------------------
 # CLI.
 # ---------------------------------------------------------------------------
 
@@ -419,6 +584,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     group.add_argument("--baseline", choices=sorted(BASELINES))
     group.add_argument("--module", help="path/to/module.py:callable answer source")
     group.add_argument("--provider", help="registered provider name (e.g. mercury, atria)")
+    group.add_argument("--profile", help="T1 campaign profile YAML (target + matrix)")
     parser.add_argument("--model", help="model id for --provider")
     parser.add_argument("--api-key-env", help="override the provider key env var")
     parser.add_argument("--reasoning-effort", help="Mercury reasoning_effort: low|medium|high")
@@ -431,7 +597,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--n-facts", type=int, default=4)
     parser.add_argument("--prior-world1", default="1/2")
     parser.add_argument("--out", help="write the JSON report here (and to stdout)")
+    parser.add_argument("--plan", action="store_true",
+                        help="with --profile: print the execution plan and make NO provider calls")
     args = parser.parse_args(argv)
+
+    chosen = [bool(args.baseline), bool(args.module), bool(args.provider), bool(args.profile)]
+    if sum(chosen) != 1:
+        raise SystemExit("choose exactly one of --baseline, --module, --provider, --profile")
+
+    if args.profile:
+        profile = load_profile(args.profile)
+        if args.plan:
+            plan = plan_from_profile(profile)
+            print(json.dumps(plan, indent=2, sort_keys=True))
+            if not plan["within_budget"]:
+                print(
+                    "PLAN OUT OF BUDGET: "
+                    f"{plan['planned_api_calls']} > {plan['max_api_calls']}",
+                    file=sys.stderr,
+                )
+                return 1
+            return 0
+        run_profile(profile, out=args.out)
+        return 0
 
     if args.provider and not args.model:
         raise SystemExit("--provider requires --model")
