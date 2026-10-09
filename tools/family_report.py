@@ -32,6 +32,10 @@ if str(ROOT) not in sys.path:
 
 SCHEMA_VERSION = 1
 
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from arena import trajectory_metrics  # noqa: E402
+
 # Statuses that mean "an answer exists" rather than "the run broke before one did".
 SCORED = {"scored"}
 
@@ -43,6 +47,67 @@ def _index_rows(checkpoint: dict[str, Any]) -> dict[str, dict[str, Any]]:
         if case_id:
             rows[case_id] = row
     return rows
+
+
+def _trajectory(row: dict[str, Any]) -> dict[str, Any]:
+    """The trajectory view of one episode, or the reason there is none.
+
+    The controller copies the host event log into the run directory, so a scored
+    campaign result can be read back after the fact.  The workspace's own log is not
+    consulted here: inside a run directory it is a snapshot the agent could have
+    written to, and a trajectory claim has to come from the record the agent cannot
+    touch.
+    """
+    run_dir = row.get("run_dir")
+    if not isinstance(run_dir, str) or not run_dir:
+        return {"status": "not_measurable", "reason": "the result row records no run_dir"}
+    return trajectory_metrics.summarize(Path(run_dir), include_agent_log=False)
+
+
+def _trajectory_shift(member: dict[str, Any], baseline: dict[str, Any] | None) -> dict[str, Any]:
+    """How the trajectory moved, not just the score.
+
+    A score that does not change while the trajectory does is a different result from
+    one where neither does: the first is a model that reached the same answer by a
+    different route, which is exactly what an invariance claim is supposed to be blind
+    to.  Both are reported so a reader can tell them apart.
+    """
+    if baseline is None:
+        return {"status": "not_measurable", "reason": "no baseline trajectory to compare"}
+    if member.get("status") != "measured" or baseline.get("status") != "measured":
+        return {
+            "status": "not_measurable",
+            "reason": "; ".join(
+                sorted({str(side.get("reason")) for side in (member, baseline) if side})
+            )
+            or "no host event log",
+        }
+    member_counts = member["host"]["counts"]
+    baseline_counts = baseline["host"]["counts"]
+    return {
+        "status": "measured",
+        "count_delta": {
+            kind: member_counts.get(kind, 0) - baseline_counts.get(kind, 0)
+            for kind in member_counts
+            if member_counts.get(kind, 0) or baseline_counts.get(kind, 0)
+        },
+        "first_index_delta": {
+            kind: (
+                None
+                if member["host"]["first"].get(kind) is None
+                or baseline["host"]["first"].get(kind) is None
+                else member["host"]["first"][kind] - baseline["host"]["first"][kind]
+            )
+            for kind in ("observe", "retrieve", "modify", "measure")
+        },
+        "gates": {
+            gate: {
+                "member": member["gates"].get(gate),
+                "baseline": baseline["gates"].get(gate),
+            }
+            for gate in member.get("gates", {})
+        },
+    }
 
 
 def _delta(member: dict[str, Any], baseline: dict[str, Any] | None) -> dict[str, Any]:
@@ -172,6 +237,11 @@ def build_report(
             "status": member_row.get("status", "not_run"),
             "movement": delta,
         }
+        member_trajectory = _trajectory(member_row)
+        entry["trajectory"] = member_trajectory
+        entry["trajectory_shift"] = _trajectory_shift(
+            member_trajectory, _trajectory(baseline_row) if baseline_row else None
+        )
         verdict = _verdict(entry, delta)
         # A declaration twin_check could not prove is not a failed invariance; it is an
         # invariance that was never falsifiable in the first place.
@@ -209,6 +279,10 @@ def build_report(
                              if "seed-" in str(entry["case_id"])}),
         }
 
+    members = [entry for entry in verdicts if entry.get("role") == "member"]
+    trajectories_measured = sum(
+        1 for entry in members if entry.get("trajectory", {}).get("status") == "measured"
+    )
     counts_all: dict[str, int] = {}
     for entry in verdicts:
         counts_all[str(entry["verdict"])] = counts_all.get(str(entry["verdict"]), 0) + 1
@@ -223,6 +297,15 @@ def build_report(
         "by_intervention": pooled,
         "entries": verdicts,
         "unrun_cases": sorted(set(planned) - set(rows)),
+        "trajectory": {
+            "pairs_measured": trajectories_measured,
+            "pairs_total": len(members),
+            "note": (
+                "metrics come from the host event log copied into each run directory; "
+                "the self-contained run_eval.sh transport records none, so those pairs "
+                "are not_measurable rather than unchanged"
+            ),
+        },
         "claim_ceiling": (spec or {}).get(
             "claim_ceiling",
             "behavioral_association_only - deltas between generated members measure "
@@ -300,6 +383,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  claim ceiling: {str(report['claim_ceiling']).strip()}")
     if report["unrun_cases"]:
         print(f"  {len(report['unrun_cases'])} planned cases have no result row")
+    trajectory = report["trajectory"]
+    print(
+        f"  trajectories: {trajectory['pairs_measured']}/{trajectory['pairs_total']} pairs "
+        "measured from host event logs"
+    )
     if args.strict:
         blocked = [
             entry["case_id"]

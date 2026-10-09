@@ -344,6 +344,57 @@ def test_identity_drift_between_plan_and_run_is_visible(
     assert drifted[0]["pair_id_stable"] is False
 
 
+def test_the_report_attaches_trajectory_shifts_to_pair_verdicts(
+    suite_manifest: dict, tmp_path: Path
+) -> None:
+    """Same score, different route: the pair must not read as a plain invariance."""
+    baseline_case, member_case = suite_manifest["cases"][0], suite_manifest["cases"][1]
+    for case, kinds in ((baseline_case, ["observe", "retrieve"]), (member_case, ["observe"])):
+        run_dir = tmp_path / str(case["case_id"])
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "environment-events.jsonl").write_text(
+            "\n".join(
+                json.dumps({
+                    "ts": 1.0, "event": "step", "schema": 1, "action_kind": kind,
+                    "action": {"type": "read_file"},
+                })
+                for kind in kinds
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    scores = {case["case_id"]: 1.0 for case in suite_manifest["cases"]}
+    checkpoint_data = _checkpoint(suite_manifest, scores)
+    for row in checkpoint_data["results"]:
+        if row["case_id"] in (baseline_case["case_id"], member_case["case_id"]):
+            row["run_dir"] = str(tmp_path / row["case_id"])
+    checkpoint = tmp_path / "checkpoint.json"
+    checkpoint.write_text(json.dumps(checkpoint_data), encoding="utf-8")
+    manifest_path = tmp_path / "suite.json"
+    manifest_path.write_text(json.dumps(suite_manifest), encoding="utf-8")
+    report_path = tmp_path / "report.json"
+    proc = _run(
+        "tools/family_report.py", "--manifest", str(manifest_path),
+        "--checkpoint", str(checkpoint), "--json", str(report_path),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    entry = next(
+        item for item in report["entries"] if item["case_id"] == member_case["case_id"]
+    )
+    assert entry["verdict"] == "invariance_observed"
+    assert entry["trajectory"]["status"] == "measured"
+    assert entry["trajectory_shift"]["count_delta"]["retrieve"] == -1
+    unmeasured = [
+        item for item in report["entries"]
+        if item.get("role") == "member"
+        and item["trajectory_shift"]["status"] == "not_measurable"
+    ]
+    assert len(unmeasured) == 3
+    assert report["trajectory"]["pairs_measured"] == 1
+    assert report["trajectory"]["pairs_total"] == 4
+
+
 def test_generated_member_records_remain_verifiable_after_the_whole_chain(
     family_dir: Path,
 ) -> None:

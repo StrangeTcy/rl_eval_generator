@@ -397,6 +397,33 @@ Two things this wiring guarantees rather than assumes:
 `not_measurable` when no scored verdict exists. It never writes "established", and it
 prints the spec's `claim_ceiling` with the numbers.
 
+### Trajectory measurement
+
+Tool calls are recorded in a canonical vocabulary that lives in `shared/tool_state.py` —
+the file every environment already copies, so the contract reaches all 34 of them without
+a single layout edit. Events carry `kind` (one of `observe`, `retrieve`, `modify`,
+`execute`, `measure`, `submit`, `judge`, `lifecycle`, `other`), `schema`, and their
+literal action string: classification is closed, but an unanticipated verb is kept and
+counted as `other`, because dropping unfamiliar events would bias every trajectory metric
+toward the environments someone remembered to label.
+
+The host log (`.episodes/<id>/environment-events.jsonl`, copied into each run directory)
+is the authoritative record — the agent cannot write it. The workspace log is the agent's
+own tools' account of themselves: richer, and forgeable, so `arena/trajectory_metrics.py`
+reports the difference as `claim_divergence` instead of trusting or averaging it.
+
+```bash
+python arena/trajectory_metrics.py runs/<episode>          # metrics + gates + verdict
+python tools/family_report.py --manifest suite.json --checkpoint checkpoint.json
+```
+
+`generation.json` records `event_schema_sha256`/`event_schema_version`, and
+`verify_manifest` recomputes them: a tree whose vocabulary no longer matches the one it
+shipped with cannot be compared against another environment's trajectory, so that is an
+error rather than a note. A pair whose run used the self-contained `run_eval.sh`
+transport — which surfaces no event stream — is reported `not_measurable`, and the family
+report keeps that separate from "no change": the first is a fact about the harness.
+
 **Limits.** Four environments implement interventions today (`moco`, `glyph`,
 `css_state_machine`, `epistemic_games`); the other 30 declare none, and asking for one
 there is a hard error rather than a no-op. Evaluator and reward-proxy substitution are

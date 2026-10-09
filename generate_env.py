@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import ast
 import os
 import re
 import shutil
@@ -776,6 +777,34 @@ def prepare_generation(
     }
 
 
+def _event_schema_digest() -> str | None:
+    """Hash of the shared event vocabulary this tree's ``tool_state.py`` came from.
+
+    Recorded per generation, not read from the checkout at grading time: the point of
+    the field is that a run can say which classifier its labels follow.
+    """
+    path = Path(__file__).resolve().parent / "shared" / "tool_state.py"
+    if not path.is_file():
+        return None
+    return gm.sha256_text(path.read_text(encoding="utf-8"))
+
+
+def _event_schema_version() -> int | None:
+    path = Path(__file__).resolve().parent / "shared" / "tool_state.py"
+    if not path.is_file():
+        return None
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "EVENT_SCHEMA_VERSION"
+            for target in node.targets
+        ):
+            value = node.value
+            if isinstance(value, ast.Constant) and isinstance(value.value, int):
+                return int(value.value)
+    return None
+
+
 def _judge_source_hashes(destination: Path) -> Dict[str, str]:
     judge_dir = destination / "judge"
     if not judge_dir.is_dir():
@@ -928,6 +957,8 @@ def generate_env(
             parent_generation_id=parent_generation_id,
             repository={"commit": _git_commit()},
             substitution_snapshot=subs,
+            event_schema_sha256=_event_schema_digest(),
+            event_schema_version=_event_schema_version(),
         )
         written = gm.write_manifest(dest, manifest)
         print(f"\n  generation_id: {manifest['generation_id']}")

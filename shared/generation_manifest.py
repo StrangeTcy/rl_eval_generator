@@ -249,6 +249,8 @@ def build_manifest(
     parent_generation_id: str | None = None,
     repository: Mapping[str, Any] | None = None,
     substitution_snapshot: Mapping[str, str] | None = None,
+    event_schema_sha256: str | None = None,
+    event_schema_version: int | None = None,
     extra: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the manifest for a generated environment (tree must already be final).
@@ -309,6 +311,12 @@ def build_manifest(
         "substitution_snapshot_sha256": (
             hash_texts(substitution_snapshot) if substitution_snapshot is not None else None
         ),
+        # Which event vocabulary the copied ``tool_state.py`` implements.  Trajectory
+        # claims are only comparable across environments when the reader can tell
+        # which classifier produced the labels, and the answer has to come from the
+        # artifact rather than from whatever the checkout says now.
+        "event_schema_sha256": event_schema_sha256,
+        "event_schema_version": event_schema_version,
         "repository": dict(repository or {}),
     }
     manifest.update(dict(extra or {}))
@@ -388,6 +396,17 @@ def verify_manifest(
             errors.append(
                 "config_sha256 mismatch: the environment config changed after generation, "
                 "so this artifact's claims describe a different generator state"
+            )
+
+    if config_root is not None and manifest.get("event_schema_sha256"):
+        schema_path = Path(config_root) / "shared" / "tool_state.py"
+        if not schema_path.is_file():
+            errors.append("event_schema: shared/tool_state.py not found for recompute")
+        elif sha256_text(schema_path.read_text(encoding="utf-8")) != manifest["event_schema_sha256"]:
+            errors.append(
+                "event_schema_sha256 mismatch: the event vocabulary changed after "
+                "generation, so trajectory metrics derived from this tree follow a "
+                "different classifier than the one it shipped with"
             )
 
     if generator_version is not None and manifest.get("generator_version") != generator_version:

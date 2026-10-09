@@ -21,6 +21,7 @@ from typing import Any
 
 from arena.diffing import files_differ, has_symlink_in_path, text_for_diff, unified_text_diff
 from shared import generation_manifest as gm
+from shared.tool_state import EVENT_SCHEMA_VERSION, classify_action
 from arena.docker_backend import DockerBackend, DockerBackendError
 from arena.episode_id import validate_episode_id
 
@@ -77,6 +78,8 @@ def _provenance(env_dir: Path) -> dict[str, Any]:
         "config_path": manifest.get("config_path"),
         "tree_sha256": manifest.get("tree_sha256"),
         "judge_sha256": manifest.get("judge_sha256"),
+        "event_schema_sha256": manifest.get("event_schema_sha256"),
+        "event_schema_version": manifest.get("event_schema_version"),
         "equivalences": sorted(
             {str(item.get("equivalence")) for item in manifest.get("interventions") or []}
         ),
@@ -167,6 +170,22 @@ def _write_event(state_or_dir: dict[str, Any] | Path, event: dict[str, Any]) -> 
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+def _event_kind(action: Any) -> str:
+    """Canonical kind for a host-observed agent action.
+
+    The host log is the authoritative trajectory record: it is written by the runner,
+    outside anything the agent can edit, while ``workspace/logs/events.jsonl`` is
+    written by tools the agent can rewrite or simply not call.  Both use this
+    vocabulary so a comparison between them means something.
+    """
+    if not isinstance(action, dict):
+        return classify_action(str(action))
+    return classify_action(
+        str(action.get("type") or action.get("cmd") or action.get("action") or ""),
+        tool=str(action.get("tool") or ""),
+    )
 
 
 def _obs(text: str) -> str:
@@ -286,6 +305,7 @@ def reset(args: argparse.Namespace) -> None:
         "seed": args.seed,
         "interventions": interventions,
         "provenance": provenance,
+        "event_schema_version": EVENT_SCHEMA_VERSION,
         "step": 0,
         "max_steps": args.max_steps,
         "done": False,
@@ -315,6 +335,9 @@ def reset(args: argparse.Namespace) -> None:
         {
             "ts": time.time(),
             "event": "reset",
+            "action_kind": "lifecycle",
+            "schema": EVENT_SCHEMA_VERSION,
+            "event_schema_version": EVENT_SCHEMA_VERSION,
             "episode_id": episode_id,
             "env": args.env,
             "difficulty": args.difficulty,
@@ -830,6 +853,8 @@ def step(args: argparse.Namespace) -> None:
             "event": "step",
             "step": state["step"],
             "action": action,
+            "action_kind": _event_kind(action),
+            "schema": EVENT_SCHEMA_VERSION,
             "observation": _obs(observation),
             "reward": reward,
             "done": done,
@@ -858,6 +883,8 @@ def submit_episode(args: argparse.Namespace) -> None:
         {
             "ts": time.time(),
             "event": "submit",
+            "action_kind": "submit",
+            "schema": EVENT_SCHEMA_VERSION,
             "step": state["step"],
             "reward": reward,
             "done": done,

@@ -2,9 +2,9 @@
 
 Status: **all 27 recorded — 16 from part 1 (items 1–16) + 11 from part 2 (P2.1–P2.11), all
 `CONFIRMED`.** Each answer is recorded verbatim in *Answers*; the resulting build order is in
-*Build order*. **PR-A is implemented**, plus the first slice of PR-B (*families are
-runnable*); PR-B's measurement items, PR-C, PR-D and PR-E are not. Both records are at the
-end of this file.
+*Build order*. **PR-A is implemented**, plus two slices of PR-B: *families are runnable*
+and *the trajectory microscope* (item 8). PR-B's remaining measurement items (`#10`, `#7`,
+`#16`), PR-C, PR-D and PR-E are not. Each record is at the end of this file.
 Repository revision reviewed: `e1b038a4efb7343afd713f4e981c90fc0fb0485c` (`main`), branch `arena/81157642-rl-eval-generator`.
 Method: every proposal below was checked against the actual generator, registry, judge library,
 suite tooling and test suite at that revision. The two upstream analyses also cite
@@ -808,3 +808,62 @@ passed; `tests/test_env_runner.py tests/test_scoring.py tests/test_paid_campaign
 tests/test_atria_campaign.py tests/test_exhaustive_campaign_recovery.py
 tests/test_campaign_completion_contract.py tests/test_integration.py` = 30 passed;
 `suite_inventory --matrix covering` unchanged at 218 cases with `issue_count: 0`.
+
+---
+
+## PR-B.2: the trajectory microscope (#8)
+
+Both sides of one contract, so that "what did it look at and change on the way" becomes
+a measurable property of a run instead of a claim about it.
+
+| File | Change |
+|---|---|
+| `shared/tool_state.py` | canonical vocabulary: `KINDS`, `_KIND_RULES`, `classify_action()`, `event()`, `read_events()`, `EVENT_SCHEMA_VERSION`; `log_event` now stamps `kind` and `schema` |
+| `arena/trajectory_metrics.py` | repo-side deriver: per-kind counts and first/last indices, four trajectory gates, host-vs-agent `claim_divergence`, `not_measurable` semantics, CLI |
+| `env_runner.py` | host events carry `action_kind` + `schema`; reset is `lifecycle`; provenance block carries the schema digest |
+| `shared/generation_manifest.py` | `event_schema_sha256` / `event_schema_version` recorded, and recomputed by `verify_manifest` |
+| `generate_env.py` | hashes the shared module it copied from (absolute, not cwd-dependent) |
+| `tools/family_report.py` | each pair now carries `trajectory` and `trajectory_shift` (count and first-index deltas, gate comparison); `--strict` unchanged |
+| `tests/test_trajectory_events.py` | 29 tests (vocabulary, provenance, deriver, transport limit, forgeability) |
+
+Four decisions worth recording because they were not forced by anything upstream:
+
+1. **The vocabulary lives in `shared/tool_state.py`, not in a new module.** Every
+   environment already copies that file into `agent/tools/`, so the contract reached all
+   33 template environments with zero config edits. A second shared file would have meant
+   a `layout:` change in 34 configs, which is how one convention becomes 34 slightly
+   different ones.
+2. **Classification is closed but lossy-by-refusal.** Unrecognized verbs keep their
+   literal `action` string and count as `other`. `uncategorized` is reported, so a
+   metric that quietly ignored an environment's own tool names is visible as a number
+   rather than as a clean result.
+3. **Two logs, two trust levels.** The episode's host log is written outside anything
+   the agent controls; the workspace log is written by tools the agent can rewrite or
+   skip. The deriver treats the second as a *claim* and reports the divergence —
+   including that a shortfall usually means an unused tool, not a lie.
+4. **Trajectory and score are separate verdicts.** `family_report` labels a pair
+   `invariance_observed` from the score and *separately* reports `trajectory_shift`; a
+   pair whose route changed while its score did not is not silently folded into
+   "nothing happened", which is the failure mode an invariance claim is most exposed to.
+
+**What PR-B's evaluator item will consume.** `#10`'s `trajectory_gated` view is these
+gates evaluated on host-log metrics for the same episode — the substrate exists now, and
+the transport rule from round 5 still applies: `run_eval.sh` reports
+`trajectory_gated: unavailable`, and the controller path is authoritative. `not_measurable`
+stays a first-class label so that choosing the container transport is visible in the
+result rather than imputed as a zero.
+
+**CI follow-up, recorded so it survives the sandbox.** The one failing test predates this
+work (`tests/test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume`,
+broken by `e1b038a`). The fix, verified to turn all 6 guard tests green and then reverted
+so this lane stays clean, is one line in the **"Run the covering campaign (fresh or
+resumed)"** step's `env:` block of `.github/workflows/atria-campaign.yml` (after
+`ARENA_ALLOW_COMPILE_ONLY`):
+
+```yaml
+GITHUB_EVENT_NAME: ${{ steps.mode.outputs.mode == 'resume' && 'schedule' || github.event_name }}
+```
+
+It belongs on the *campaign* step, not the chain step: the controller reads
+`GITHUB_EVENT_NAME` when it decides whether to `rmtree` the restored state, and it is the
+pinned code that does that — which is why the override has to live in the workflow.
