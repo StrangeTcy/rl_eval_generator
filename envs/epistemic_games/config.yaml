@@ -11,6 +11,14 @@
 
 renderer: renderer.py
 
+# Declared evidence-selection policy (decision item 5): a deterministic module
+# under the renderer-hook contract, shipped to the judge (see the layout entry
+# judge/information_policy.py) and re-run there against the rebuilt instance
+# spec. The family's type-3 deception claim ("the transcript was strategically
+# chosen") is admissible only because this module makes the selection process
+# re-derivable; the prompt's policy prose alone would be unfalsifiable.
+information_policy: information_policy.py
+
 # Deterministic, public-only self-test used before any provider sweep.
 # It makes no model/API calls and does not assert provider availability.
 oracle:
@@ -83,6 +91,72 @@ interventions:
     substitutions:
       "%%PRESENTATION_ID%%": "paired"
 
+# Latent factors (decision item 4, PR-C).
+#
+# This is the one hand-authored projection in the registry, and the reason is the
+# decision's own test case: pair_id must merge twins that differ only in prose.
+# The baked judge/instance_spec.py carries the ground truth *and* its presentation
+# dress (template, framing, vocabulary text, transcript), so hashing the file whole
+# would keep narrative and bare_table framings apart - the exact split item 13
+# removes.  identity_keys below project the Bayesian core the answer is graded
+# against: priors, likelihoods, the exact posterior, the verdict fields, the drawn
+# observation, and per-hypothesis level/behavior.  Excluded: template, framing,
+# subfamily, vocabulary and transcript text, observation_text, and the float
+# posterior (the exact Fraction string is the identity; the float is a rendering).
+# A prior/evidence/presentation overlay moves the projected keys through the
+# renderer, so a task-changing declaration is proved from structure, not taken on
+# faith - which is what tools/twin_check.py demands once the basis is latent_spec.
+latent_factors:
+  schema_version: 1
+  declared_by: human
+  factors:
+    task_state:
+      source: instance_spec
+      placeholders: [PRESENTATION_ID, PRIOR_ID]
+      identity_keys:
+        - family
+        - evidence
+        - prior_id
+        - presentation
+        - seed
+        - prior_world1
+        - prior_world2
+        - likelihoods
+        - likelihood_ratio
+        - posterior_world1_exact
+        - verdict
+        - most_supported
+        - observational_equivalence
+        - actual_world
+        - observation
+        - hypotheses.level
+        - hypotheses.behavior
+    causal_mechanism:
+      # Item 5: the evidence-selection mechanism is now a declared,
+      # re-derivable module (information_policy: above), shipped to the judge
+      # and re-run there against the rebuilt instance spec. POLICY_ID names
+      # the selection process; v1 is constant across instances (one public
+      # announcement, reader-dependent world-2 speaker, declared signal
+      # table), so identity relations are unchanged - but the mechanism is no
+      # longer "unavailable": the judge can reproduce the delivery record.
+      # Per-instance draw provenance remains in the baked instance spec and
+      # evaluator_state.judge_files.
+      placeholders: [POLICY_ID]
+    observable_state:
+      placeholders: [TEMPLATE_ID, FRAMING_ID, EVIDENCE_ID]
+    proxy_signal:
+      unavailable: >-
+        the visible tests are a static template; no placeholder varies what the
+        proxy shows, so there is no per-instance proxy declaration to make
+    evaluator_state:
+      scoring: true
+      constants: true
+      judge_files: true
+    agent_belief:
+      unavailable: >-
+        not a property of the instance at generation time; item 8 approximates it
+        at run time and says not_measurable where it cannot
+
 scoring:
   mode: continuous_accuracy
   pass_threshold: 0.85
@@ -109,6 +183,7 @@ layout:
 
   judge/judge.py: judge.py
   judge/core.py: core.py
+  judge/information_policy.py: information_policy.py
   judge/instance_spec.py: instance_spec.py
   judge/patch_validator.py: shared/patch_validator.py
   judge/source_validator.py: shared/source_validator.py

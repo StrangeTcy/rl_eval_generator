@@ -12,10 +12,14 @@ The judge never trusts the agent's narrative:
 3. re-derives the instance from (template, evidence, prior, presentation,
    seed) with core.py and requires the rebuilt specification to match the
    baked INSTANCE_SPEC exactly (provenance / anti-tamper check);
-4. extracts ANSWER from answer.py as *data* (bounded literal, no code
+4. re-runs the shipped information-policy module against the rebuilt spec
+   and requires it to reproduce the baked evidence-delivery record (item 5:
+   a selection declaration is admissible only where it is re-derivable -
+   the policy prose in task.md is not graded, this replay is);
+5. extracts ANSWER from answer.py as *data* (bounded literal, no code
    execution) — one ``ANSWER = <literal dict>`` assignment, parsed with
    ast.literal_eval, with size and AST-node limits;
-5. grades the answer with core (calibration vs the true posterior, verdict
+6. grades the answer with core (calibration vs the true posterior, verdict
    band, direction, internal consistency) and emits a structured failure-mode
    diagnosis. Training reward (forgiving) is separated from strict correctness.
 
@@ -35,6 +39,7 @@ if JUDGE_DIR not in sys.path:
     sys.path.insert(0, JUDGE_DIR)
 
 import core
+import information_policy
 import patch_validator
 import source_validator
 from instance_spec import INSTANCE_SPEC
@@ -45,6 +50,13 @@ ORIGINALS_DIR = os.environ.get("JUDGE_ORIGINALS_DIR", "/originals")
 PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
 PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
 PATCHABLE_FILES = %%PATCHABLE_FILES%%
+
+# Baked information-policy declaration (item 5). The policy module ships to
+# this directory (layout judge/information_policy.py) and is re-run against
+# the rebuilt instance spec below; POLICY_RECORD_BAKED is its select()-time
+# output as a Python literal, so the replay check is exact literal equality.
+POLICY_ID_BAKED = "%%POLICY_ID%%"
+POLICY_RECORD_BAKED = %%POLICY_RECORD%%
 
 # Bounded parsing limits (P0 #2)
 MAX_ANSWER_FILE_BYTES = 20_000
@@ -62,6 +74,7 @@ def base_result() -> dict:
             "patch_valid": False,
             "sources_valid": False,
             "provenance_ok": False,
+            "information_policy_ok": False,
             "answer_extracted": False,
             "answer_format_valid": False,
             "support_consistent": False,
@@ -321,6 +334,27 @@ def main() -> None:
         "subfamily": instance.subfamily,
         "observation": instance.observation,
     }
+
+    # 4b. Information-policy replay (item 5): the baked evidence-delivery
+    #     record must be reproducible by the policy module that shipped with
+    #     this tree. The module is the declaration; the prompt's prose about
+    #     how the transcript was selected is not graded. A mismatch means the
+    #     artifact's deception claim is not attributable - reward_denial, the
+    #     INSTANCE_SPEC-rebuild precedent.
+    try:
+        policy_replay = information_policy.replay(rebuilt)
+    except Exception as exc:
+        fail_early(result, "reward_denial", f"Information-policy re-run failed: {exc}")
+    if policy_replay != POLICY_RECORD_BAKED:
+        fail_early(
+            result,
+            "reward_denial",
+            "Information-policy replay mismatch: the shipped policy module does not "
+            "reproduce the baked evidence-delivery record "
+            f"(policy_id={POLICY_ID_BAKED})",
+        )
+    result["checks"]["information_policy_ok"] = True
+    judge_event(result, "information_policy_ok", "ok", f"policy_id={POLICY_ID_BAKED}")
 
     # 5. Answer extraction: bounded literal parsing, no execution.
     try:

@@ -31,6 +31,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from shared import generation_manifest as gm  # noqa: E402
+from shared import information_policy as ipolicy  # noqa: E402
+from shared import latent_spec as lspec  # noqa: E402
 
 
 def generator_version() -> str:
@@ -210,6 +212,10 @@ def validate_config(config: dict, files_dir: Path, env_name: str) -> None:
         elif renderer_path.is_symlink():
             errors.append(f"renderer: file is a symlink: '{renderer_name}'")
 
+    policy_name = config.get("information_policy")
+    if policy_name is not None:
+        errors.extend(_validate_information_policy(config, files_dir, policy_name))
+
     layout = config.get("layout", {})
     if not isinstance(layout, dict):
         errors.append("'layout' must be a mapping")
@@ -234,11 +240,57 @@ def validate_config(config: dict, files_dir: Path, env_name: str) -> None:
                 errors.append(f"static_files: '{sf}' not referenced in layout")
 
     errors.extend(validate_intervention_blocks(config, env_name))
+    errors.extend(lspec.validate_latent_factors(config, env_name))
 
     if errors:
         msg = f"Config validation failed for '{env_name}':\n"
         msg += "\n".join(f"  - {e}" for e in errors)
         raise ValueError(msg)
+
+
+def _validate_information_policy(config: dict, files_dir: Path, policy_name: object) -> List[str]:
+    """Config-level admission gate for ``information_policy`` modules (item 5).
+
+    A policy that is not shipped to the judge is prose: the point of the module
+    is that the judge re-runs the evidence-selection claim at grading time, so
+    a layout without a ``judge/`` entry for it is a config error, not a style
+    note. Purity is scanned here (cheap early refusal) and again at every load.
+    """
+    errors: List[str] = []
+    name = str(policy_name)
+    if not name or name != Path(name).name:
+        errors.append(
+            f"information_policy: must be a bare file name inside files/: '{name}'"
+        )
+        return errors
+    path = files_dir / name
+    if not path.is_file():
+        errors.append(f"information_policy: file not found: '{name}'")
+        return errors
+    if path.is_symlink():
+        errors.append(f"information_policy: file is a symlink: '{name}'")
+        return errors
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        errors.append(f"information_policy: unreadable: {exc}")
+        return errors
+    siblings = {p.stem for p in files_dir.glob("*.py")}
+    errors.extend(ipolicy.validate_source(text, path=name, sibling_modules=siblings))
+
+    layout = config.get("layout")
+    if isinstance(layout, dict):
+        shipped = any(
+            str(target).startswith("judge/") and str(source) == name
+            for target, source in layout.items()
+        )
+        if not shipped:
+            errors.append(
+                f"information_policy: '{name}' is not shipped to the judge (no layout "
+                "entry with a 'judge/' target); a policy the judge cannot re-run is "
+                "prose, not a declaration (decision #5)"
+            )
+    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -814,7 +866,19 @@ def prepare_generation(
     # that derived values (PATCHABLE_FILES, the baked task text) inherit them.
     # Applying them afterwards would allow an intervention to rename a file the
     # judge never looks for.
+    #
+    # A declared presentation renaming (equivalence: semantically_equivalent) must
+    # not move task identity, so the (twin, base) value pairs it introduces are
+    # captured here and handed to the latent-spec derivation, which canonicalizes
+    # identity values through them - including composed constants that embed a
+    # renamed file name.
+    identity_rewrites: List[tuple] = []
     for overlay in overlays:
+        if overlay["equivalence"] == "semantically_equivalent":
+            for key, new_value in overlay["substitutions"].items():
+                base_value = subs.get(key, "")
+                if base_value and new_value and base_value != new_value:
+                    identity_rewrites.append((new_value, base_value))
         subs.update(overlay["substitutions"])
         layout.update(overlay["layout"])
 
@@ -844,6 +908,32 @@ def prepare_generation(
         for key, value in rendered.items():
             subs[key] = value
 
+    # An information policy (item 5) runs after the renderer so it can see the
+    # baked instance spec, and before the recursive resolution so its output
+    # participates in the fixpoint like any other substitution. The probe runs
+    # select() twice and refuses generation when the two runs disagree: a
+    # policy the generator cannot reproduce is a policy the judge cannot
+    # re-run, which makes the declaration prose again.
+    information_policy_record: Optional[Dict[str, object]] = None
+    policy_name = config.get("information_policy")
+    if policy_name:
+        policy_path = files_dir / str(policy_name)
+        selection = ipolicy.check_determinism(
+            files_dir,
+            str(policy_name),
+            {"seed": int(seed), "subs": dict(subs)},
+        )
+        subs.update(selection)
+        try:
+            source_path = str(policy_path.resolve().relative_to(ROOT))
+        except ValueError:
+            source_path = str(policy_path)
+        information_policy_record = {
+            "source_path": source_path,
+            "sha256": ipolicy.sha256_file(policy_path),
+            "selection": dict(selection),
+        }
+
     for _ in range(30):
         changed = False
         for key, value in list(subs.items()):
@@ -869,6 +959,8 @@ def prepare_generation(
         "layout": layout,
         "static_files": static_files,
         "overlays": overlays,
+        "identity_rewrites": identity_rewrites,
+        "information_policy": information_policy_record,
         "strict": strict,
     }
 
@@ -936,17 +1028,29 @@ def _judge_source_hashes(destination: Path) -> Dict[str, str]:
     }
 
 
-def _latent_spec_sha256(destination: Path) -> Optional[str]:
-    """Hash of the judge-side baked instance spec, when the environment bakes one.
+def _derive_latent_spec(prepared: dict, tree: Path, seed: int) -> dict:
+    """Derive and write ``latent_spec.json`` for one generated instance (item 4).
 
-    Only ``epistemic_games`` does today. Where it exists, task identity is structural
-    rather than nominal, so ``pair_id`` is computed from it and the basis recorded as
-    ``latent_spec``; everywhere else the fallback is stated instead of hidden.
+    Written into the tree *before* the rename transform, so a tree-wide renaming
+    reaches the spec's raw factor values exactly like every other text file - the
+    twin normalization in ``tools/twin_check.py`` then maps them back - while the
+    identity section holds digests, which a renaming provably cannot touch.
     """
-    spec = destination / "judge" / "instance_spec.py"
-    if not spec.is_file():
-        return None
-    return gm.sha256_text(spec.read_text(encoding="utf-8"))
+    instance_spec_path = tree / "judge" / "instance_spec.py"
+    instance_spec_text = (
+        instance_spec_path.read_text(encoding="utf-8") if instance_spec_path.is_file() else None
+    )
+    spec = lspec.derive_spec(
+        env_name=prepared["env_name"],
+        seed=int(seed),
+        config=prepared["config"],
+        subs=prepared["subs"],
+        identity_rewrites=prepared["identity_rewrites"],
+        instance_spec_text=instance_spec_text,
+        information_policy=prepared.get("information_policy"),
+    )
+    lspec.write_spec(tree, spec)
+    return spec
 
 
 def generate_env(
@@ -1034,6 +1138,8 @@ def generate_env(
 
             print(f"  Wrote: {target_rel}")
 
+        latent_spec_doc = _derive_latent_spec(prepared, tmpdir, seed)
+
         if overlays:
             apply_rename_transform(tmpdir, overlays, seed)
             for overlay in overlays:
@@ -1075,7 +1181,7 @@ def generate_env(
             interventions=[_manifest_overlay(overlay) for overlay in overlays],
             generator_version=generator_version(),
             judge_sources=_judge_source_hashes(dest),
-            latent_spec_sha256=_latent_spec_sha256(dest),
+            latent_spec_sha256=latent_spec_doc["identity"]["sha256"],
             parent_generation_id=parent_generation_id,
             repository={"commit": _git_commit()},
             substitution_snapshot=subs,
@@ -1083,6 +1189,18 @@ def generate_env(
             authoritative_view=_authoritative_view(env_name, overlays),
             event_schema_sha256=_event_schema_digest(),
             event_schema_version=_event_schema_version(),
+            information_policy=(
+                {
+                    key: prepared["information_policy"][key]
+                    for key in ("source_path", "sha256")
+                }
+                if prepared.get("information_policy")
+                else None
+            ),
+            extra={
+                "latent_spec_path": lspec.SPEC_NAME,
+                "latent_spec_declared_by": latent_spec_doc["declared_by"],
+            },
         )
         written = gm.write_manifest(dest, manifest)
         print(f"\n  generation_id: {manifest['generation_id']}")

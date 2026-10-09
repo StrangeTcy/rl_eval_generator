@@ -200,10 +200,17 @@ def pair_id(
 ) -> tuple[str, str]:
     """Return ``(pair_id, basis)``; basis is ``latent_spec`` or ``case_id_fallback``.
 
-    The fallback is a real, recorded state of the world, not a failure: until item 4
-    lands a config-wide ``latent_factors:`` block, there is no structural task
-    identity to hash for 33 environments.
+    With a latent spec (item 4, PR-C) the decision is literal: ``pair_id`` *is* the
+    hash of the spec's identity projection.  The projection already pins environment,
+    seed and every declared task-defining value - and excludes presentation dress and
+    observation-layer evidence - so twins that differ only in prose finally pair
+    instead of looking like different tasks.  The fallback below is legacy: it is
+    what pre-PR-C manifests verify against, and what a config without a
+    ``latent_factors:`` block would still get (no registry config is in that state
+    any more; the generator refuses to build one).
     """
+    if latent_spec_sha256:
+        return "P" + str(latent_spec_sha256)[:16], "latent_spec"
     identity = sorted(
         _intervention_key(item)
         for item in intervention_vector
@@ -215,9 +222,6 @@ def pair_id(
         "difficulty_vector": dict(sorted(difficulty_vector.items())),
         "identity_interventions": identity,
     }
-    if latent_spec_sha256:
-        payload["latent_spec_sha256"] = latent_spec_sha256
-        return "P" + sha256_text(_canonical_json(payload))[:16], "latent_spec"
     return "P" + sha256_text(_canonical_json(payload))[:16], "case_id_fallback"
 
 
@@ -255,6 +259,7 @@ def build_manifest(
     substitution_snapshot: Mapping[str, str] | None = None,
     event_schema_sha256: str | None = None,
     event_schema_version: int | None = None,
+    information_policy: Mapping[str, Any] | None = None,
     evaluators: Mapping[str, Any] | None = None,
     authoritative_view: str | None = None,
     extra: Mapping[str, Any] | None = None,
@@ -325,6 +330,13 @@ def build_manifest(
         "authoritative_view": authoritative_view,
         "event_schema_sha256": event_schema_sha256,
         "event_schema_version": event_schema_version,
+        # The declared evidence-selection policy (item 5), when the environment
+        # has one: repo-relative source path plus the sha256 of the module that
+        # shipped to the judge.  verify_manifest recomputes the hash from the
+        # checkout, so a policy edited after generation is caught the same way
+        # a drifted config is.  The selection itself lives in latent_spec.json
+        # and the substitution snapshot; the manifest records attribution only.
+        "information_policy": dict(information_policy) if information_policy else None,
         "repository": dict(repository or {}),
     }
     manifest.update(dict(extra or {}))
@@ -416,6 +428,54 @@ def verify_manifest(
                 "generation, so trajectory metrics derived from this tree follow a "
                 "different classifier than the one it shipped with"
             )
+
+    info_policy = manifest.get("information_policy")
+    if config_root is not None and isinstance(info_policy, dict) and info_policy.get("source_path"):
+        policy_path = Path(config_root) / str(info_policy["source_path"])
+        if not policy_path.is_file():
+            errors.append(
+                f"information_policy: {info_policy['source_path']} not found for recompute"
+            )
+        elif sha256_bytes(policy_path.read_bytes()) != info_policy.get("sha256"):
+            errors.append(
+                "information_policy sha256 mismatch: the evidence-selection policy "
+                "changed after generation, so the deception claims baked into this "
+                "artifact were not produced by the module it shipped to the judge"
+            )
+
+    if manifest.get("latent_spec_sha256"):
+        # The identity hash is recomputed from the spec document in the tree, not
+        # trusted from the manifest: pair_id is only as real as the artifact it can
+        # be re-derived from.  (Legacy manifests recorded the hash of a baked
+        # judge/instance_spec.py without a latent_spec.json; those predate PR-C and
+        # fail here by design - regenerate rather than re-score them.)
+        from shared import latent_spec as ls
+
+        spec_path = root / ls.SPEC_NAME
+        if not spec_path.is_file():
+            errors.append(
+                f"latent_spec_sha256 recorded but {ls.SPEC_NAME} is missing: task "
+                "identity cannot be re-derived, so pair_id cannot be attributed"
+            )
+        else:
+            try:
+                spec_doc = json.loads(spec_path.read_text(encoding="utf-8"))
+                recomputed_identity = ls.recompute_identity_sha256(spec_doc)
+            except (ValueError, KeyError, TypeError) as exc:
+                recomputed_identity = None
+                errors.append(f"{ls.SPEC_NAME} is unreadable: {exc}")
+            if recomputed_identity is not None:
+                if recomputed_identity != manifest["latent_spec_sha256"]:
+                    errors.append(
+                        "latent_spec_sha256 does not match the identity payload of "
+                        f"{ls.SPEC_NAME}: the recorded task identity is not the one "
+                        "this tree declares"
+                    )
+                if spec_doc.get("environment") != manifest.get("environment"):
+                    errors.append(
+                        f"{ls.SPEC_NAME} was derived for a different environment "
+                        f"({spec_doc.get('environment')!r})"
+                    )
 
     if generator_version is not None and manifest.get("generator_version") != generator_version:
         errors.append(

@@ -337,11 +337,23 @@ python tools/family.py --env moco --difficulty easy,easy,easy,easy,easy,easy \
 
 Every generated directory carries `generation.json`: the inputs, the config hash, the
 judge-source hash, the tree hash, a `generation_id` (identity of the artifact) and a
-`pair_id` (identity of the *task*). `shared/generation_manifest.verify_manifest`
-recomputes them, so a tree that drifted from what its record claims — hand-edited, or
-generated from a config that has since changed — is unusable rather than quietly
-re-scored. `pair_id` deliberately ignores presentation-layer interventions: twins that
-differ only in names are one task, and that is the comparison the experiment is about.
+`pair_id` (identity of the *task*), plus a `latent_spec.json` derived from the config's
+`latent_factors:` block: what the instance's task state, observable dress, proxy
+signals and evaluator structure actually are. `pair_id` is the hash of that spec's
+*identity projection* — task, mechanism and evaluator factors, never the presentation
+or observation dress — so twins that differ only in names or planted hints are one
+task, which is the comparison the experiment is about, and `verify_manifest`
+recomputes the projection from the file in the tree: a hand-edit moves `pair_id` or
+fails verification, it cannot quietly re-score.
+
+An environment that claims its evidence was strategically selected holds that claim as
+code, not prose: `information_policy:` declares a deterministic module under the
+renderer-hook contract, the generator bakes its `select()` output into the judge, and
+the judge re-runs the same module against the rebuilt instance spec — a replay mismatch
+is `reward_denial`, never a pooled zero. `epistemic_games` ships the first policy
+(`judge/information_policy.py`, byte-identical to its checkout source); the manifest and
+`latent_spec.json` record the module's `sha256`, and `verify_manifest` re-hashes the
+checkout, so a policy edited after generation fails attribution.
 
 `tools/twin_check.py` decides whether a twin is the experiment its declaration claims,
 before any model is contacted:
@@ -449,11 +461,84 @@ interventions:
 
 **Limits.** Four environments implement interventions today (`moco`, `glyph`,
 `css_state_machine`, `epistemic_games`); the other 30 declare none, and asking for one
-there is a hard error rather than a no-op. Evaluator and reward-proxy substitution are
-declared in the taxonomy but implemented nowhere, because they need a second valid
-oracle — that is the next layer, not this one. Task identity is structural only where
-an environment bakes a judge-side instance spec; everywhere else `pair_id` falls back
-to the case id and says so in `pair_id_basis`.
+there is a hard error rather than a no-op. `evaluator` and `reward_proxy` are realized
+as the view selection shown above — same bytes, same judge run, a different projection
+made authoritative; the taxonomy ids nobody implements yet are `monitoring` and
+`tool_interface`. Task identity is structural registry-wide: every config declares
+`latent_factors:` (`tools/latent_factors_scaffold.py` emitted 33 of the 34 blocks and
+stamps them `scaffold_unreviewed`, so a mechanical declaration cannot be cited as a
+causal claim; the `epistemic_games` projection is hand-authored), and the pre-PR-C
+case-id fallback in `pair_id_basis` survives only for verifying manifests generated
+before the latent registry existed. One environment declares an `information_policy`
+(`epistemic_games`, whose policy is a constant v1 declaration — one public announcement,
+reader-dependent world-2 speaker, declared signal table); the other 33 make no
+re-derivable evidence-selection claim, and their deception surface stays prose-free by
+simply not making one.
+
+### Shortcut corpora
+
+A view that has never fooled anyone is only assumed to be stricter. `envs/<env>/shortcuts/`
+holds curated patches that satisfy the measurement without solving the task, and
+`tools/shortcut_gate.py` checks the claim in two tiers. The static tier runs in CI with no
+torch: every patch must apply to a freshly generated instance at its declared difficulty
+vector, touch only files the source validator lets an agent patch, and never edit the tests
+or the judge (rewriting `visible_tests.py` is not gaming a measurement, it is deleting one).
+The declarations are checked as an argument: `credits_under` must include the authoritative
+view — a patch that fails it is a bad attempt, never rewarded, uninformative — and a view
+that judges the *run* rather than the artifact gets no verdict, because a corpus entry is
+applied outside any episode: `trajectory_gated` is `not_measurable` there and belongs under
+`run_dependent`, while `adversarial` needs a `perturbation` someone can execute. Any view in
+`strictness_evidence` must be demonstrated by at least one entry. The behavioral tier
+(`--judge`) regenerates the instance, applies the patch, runs the real judge, and compares
+each view's state with what the entry claimed; where torch is absent it prints a reported
+skip rather than a pass.
+
+```bash
+python tools/shortcut_gate.py            # static tier, blocking via tests/test_shortcut_gate.py
+python tools/shortcut_gate.py --judge    # also grade each shortcut (needs the judge)
+python tools/evaluator_adversary.py --corpus moco --json adv.json
+```
+
+`tools/evaluator_adversary.py` is the only writer of `judge.adversarial.json`, the file
+`evaluator_views` needs before `adversarial` stops reporting `not_run`. It knows one
+perturbation — re-grade the *same* artifact on a fresh draw of the instance — because
+anything environment-specific is a claim about that environment's geometry and stays
+`unavailable` until someone implements it. A gap is written as `status: unavailable` with
+exit 0, never as a score of 0: the whole point of the layer is that an unmeasured view is
+visibly unmeasured.
+
+### Measurement adversary
+
+The shortcut corpus asks whether a policy can satisfy a measurement without solving the task.
+`tools/measurement_adversary.py` asks whether it can satisfy the measurement without
+submitting anything a judge could look at — and gives the *protocol* regression tests. A
+fixed library of hostile submissions (no-op hunk, test-rewriting patch, legal patch with a
+hostile import, pre-baked metrics, forged stdout) is pushed through the instance's **real**
+guards, `judge/patch_validator.py` then `judge/source_validator.py`, in the order
+`judge_lib.validate_submission` uses; each must be refused by the check named for it in
+`measurement_guards.static`. Because it executes the guards rather than re-implementing them,
+it needs no torch, so it blocks CI; the runtime exploits (`visible_test_overfit`,
+`faked_training_failure`) are *scheduled* under `runtime:` — omitting one is reported as an
+untested exploit rather than an unexploitable one.
+
+```yaml
+# envs/moco/config.yaml
+measurement_guards:
+  static:
+    no_op_patch: patch_valid
+    test_rewrite: patch_valid
+    judge_import_tamper: sources_valid
+    hardcoded_metric: [temperature_sensitive, non_collapsed_features, queue_wraparound]
+  runtime: [visible_test_overfit, faked_training_failure]
+```
+
+`hardcoded_metric` is the one exploit no allowlist can catch — pre-baked numbers are a legal
+patch — so the tier audits the *guard* instead: every check named there must be marked in the
+judge from a value that traces back to re-executing the submission (`run(...)`, a
+`torch.load` of what the eval step wrote). A check derived from `result["metrics"]` is the
+agent's own claim re-labelled, and is refused with that sentence. For the same reason
+`stdout_spoof` asserts what actually authenticates a verdict — that exit status, failure mode
+and score corroborate each other — rather than trusting where the object sat in the stream.
 
 ---
 

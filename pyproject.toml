@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rl_eval_generator"
-version = "0.2.0"
+version = "0.3.0"
 description = "Procedurally generated ML debugging environments for evaluating AI agents"
 readme = "README.md"
 requires-python = ">=3.11"

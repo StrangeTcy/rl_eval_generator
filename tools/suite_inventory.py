@@ -11,6 +11,7 @@ Examples:
     python tools/suite_inventory.py --out suite_all.json --matrix all --seeds 0,1
     python tools/suite_inventory.py --out suite_covering.json --matrix covering --seeds 0
     python tools/suite_inventory.py --out suite_preflight.json --matrix all --preflight
+    python tools/suite_inventory.py --out suite_iv.json --matrix covering --interventions
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import generate_env as ge  # noqa: E402
 from shared import generation_manifest as gm  # noqa: E402
 from tools.judge_preflight import validate_generated_judge  # noqa: E402
 
@@ -186,6 +188,80 @@ def _case_id(environment: str, difficulty: dict[str, str], seed: int) -> str:
     return f"{environment}__{safe}__seed-{seed}"
 
 
+def _intervention_case_id(environment: str, difficulty: dict[str, str], seed: int, iid: str) -> str:
+    encoded = ",".join(f"{key}={difficulty[key]}" for key in difficulty)
+    safe = "".join(char if char.isalnum() or char in "._=-" else "_" for char in encoded)
+    return f"{environment}__{safe}__{iid}__seed-{seed}"
+
+
+def _intervention_expansion(
+    name: str,
+    config: dict[str, Any],
+    taxonomy: dict[str, Any],
+    difficulty: dict[str, str],
+    seed: int,
+    base_case: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """One planned case per intervention this environment declares, on this vector.
+
+    This is the registry-direct twin of what ``tools/family.py`` builds on disk:
+    the campaign lane regenerates each instance from (environment, vector, seed,
+    interventions) anyway, so a case only needs the coordinates plus the
+    declaration a report will be read against.  A ``view``-mechanism intervention
+    carries the view it selects, which is what makes the expansion one case per
+    (intervention, view) rather than one case per overlay: the measurement tier
+    varies without a second generated artifact, exactly as in a family.
+
+    What is deliberately *not* done here: no twin_check verdict.  Nothing was
+    generated, so there are no bytes to verify; the declaration is carried
+    (equivalence/expect/proof) and the verification happens where it can happen -
+    at generation time in a family, or at reset time via the provenance gate.
+    """
+    issues: list[str] = []
+    cases: list[dict[str, Any]] = []
+    declared = config.get("interventions")
+    if not isinstance(declared, dict) or not declared:
+        return cases, issues
+    for iid in sorted(declared):
+        impl = declared.get(iid)
+        impl = dict(impl) if isinstance(impl, dict) else {}
+        entry = taxonomy.get(iid)
+        case_id = _intervention_case_id(name, difficulty, seed, iid)
+        case: dict[str, Any] = {
+            **{
+                key: base_case[key]
+                for key in (
+                    "environment", "config_path", "config_sha256", "track", "runner",
+                    "difficulty_levels", "difficulty", "seed",
+                )
+            },
+            "case_id": case_id,
+            "interventions": iid,
+            "baseline_case_id": base_case["case_id"],
+            "status": "planned",
+        }
+        if entry is None:
+            issues.append(
+                f"{case_id}: intervention {iid!r} is declared by the config but missing "
+                "from the taxonomy (envs/interventions.yaml); generation would refuse it"
+            )
+            case["status"] = "blocked_unknown_intervention"
+            cases.append(case)
+            continue
+        mechanism = str(impl.get("mechanism") or entry.get("mechanism") or "substitution")
+        case["intervention"] = {
+            "id": iid,
+            "mechanism": mechanism,
+            "view": str(impl.get("view") or entry.get("view") or "") or None,
+            "equivalence": str(entry.get("equivalence") or ""),
+            "expect": str(entry.get("expect") or "unspecified"),
+            "defect_class": impl.get("defect_class", entry.get("defect_class")),
+            "proof": str(entry.get("proof") or "unverified"),
+        }
+        cases.append(case)
+    return cases, issues
+
+
 def _ref_config_paths(ref: str, root: Path) -> list[str]:
     try:
         result = subprocess.run(
@@ -282,6 +358,8 @@ def _preflight_case(case: dict[str, Any], root: Path) -> dict[str, Any]:
         "--seed",
         str(case["seed"]),
     ]
+    if case.get("interventions"):
+        command += ["--interventions", str(case["interventions"])]
     try:
         generated = subprocess.run(
             command,
@@ -470,6 +548,7 @@ def build_manifest(
     dry_run: bool = True,
     max_tokens_total: int | None = None,
     families: list[Path] | None = None,
+    expand_interventions: bool = False,
 ) -> dict[str, Any]:
     root = root.resolve()
     families = [path.resolve() for path in (families or [])]
@@ -477,6 +556,11 @@ def build_manifest(
         raise ValueError(
             "--family supplies its own case list, so --matrix is not consulted; drop "
             "it rather than letting a matrix setting imply cases that never exist"
+        )
+    if families and expand_interventions:
+        raise ValueError(
+            "--family members already are the intervention expansion; --interventions "
+            "would emit a second, unverified copy of every twin the family carries"
         )
     if max_tokens_total is not None and max_tokens_total < 1:
         raise ValueError("max-tokens-total must be positive")
@@ -486,7 +570,9 @@ def build_manifest(
     branch_comparisons = _compare_refs(root, list(compare_refs or []), config_paths)
     environments: list[dict[str, Any]] = []
     cases: list[dict[str, Any]] = []
+    intervention_issues: list[str] = []
     seeds = list(seeds or [0])
+    taxonomy = ge.load_intervention_taxonomy() if expand_interventions else {}
     for config_path in config_paths:
         relative = config_path.relative_to(root).as_posix()
         names = [name for name, path in registry.items() if Path(path).as_posix() == relative]
@@ -526,6 +612,15 @@ def build_manifest(
                     if preflight:
                         case.update(_preflight_case(case, root))
                     cases.append(case)
+                    if expand_interventions:
+                        twins, twin_issues = _intervention_expansion(
+                            name, config, taxonomy, difficulty, seed, case
+                        )
+                        for twin in twins:
+                            if preflight and twin["status"] == "planned":
+                                twin.update(_preflight_case(twin, root))
+                            cases.append(twin)
+                        intervention_issues.extend(twin_issues)
     family_sections: list[dict[str, Any]] = []
     family_issues: list[str] = []
     for family_dir in families:
@@ -536,6 +631,7 @@ def build_manifest(
 
     issues = [
         *family_issues,
+        *intervention_issues,
         *audit["missing_registry_paths"],
         *audit["unregistered_config_paths"],
         *[
@@ -579,12 +675,14 @@ def build_manifest(
             "seeds": seeds,
             "families": [str(path) for path in families],
             "selected_levels": selected_levels or [],
+            "expand_interventions": expand_interventions,
             "dry_run": dry_run,
             "max_tokens_total": max_tokens_total,
         },
         "registry_audit": audit,
         "families": family_sections,
         "family_count": len(family_sections),
+        "intervention_case_count": sum(1 for case in cases if case.get("intervention")),
         "branch_comparisons": branch_comparisons,
         "environment_count": len(environments),
         "case_count": len(cases),
@@ -642,6 +740,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="generate, compile, and check deferred judge scripts for each case",
     )
     parser.add_argument(
+        "--interventions",
+        action="store_true",
+        help=(
+            "emit one additional case per intervention each environment declares, on "
+            "every matrix vector and seed: the (intervention, view) expansion families "
+            "otherwise have to be generated for. A view-mechanism intervention carries "
+            "the measurement it selects, so the evaluator tier becomes schedulable "
+            "without a second artifact. Declarations are carried, not verified: nothing "
+            "was generated, so twin_check runs at generation time, as always."
+        ),
+    )
+    parser.add_argument(
         "--family",
         action="append",
         default=[],
@@ -673,6 +783,7 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             max_tokens_total=args.max_tokens_total,
             families=args.family,
+            expand_interventions=args.interventions,
         )
         write_json(args.out, manifest)
     except (OSError, RuntimeError, ValueError) as exc:
@@ -686,6 +797,7 @@ def main(argv: list[str] | None = None) -> int:
                 "case_count": manifest["case_count"],
                 "registry_clean": manifest["registry_audit"]["clean"],
                 "family_count": manifest["family_count"],
+                "intervention_case_count": manifest["intervention_case_count"],
                 "branch_comparisons": manifest["branch_comparisons"],
                 "ready_for_scheduler": manifest["ready_for_scheduler"],
                 "issue_count": len(manifest["issues"]),
