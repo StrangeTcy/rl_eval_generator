@@ -908,3 +908,65 @@ natural input to that re-grade, so they should land together; and `suite_invento
 does not yet emit one case per (intervention, view) pair, so families vary the view only
 through `tools/family.py`. Verified locally: causal + trajectory + family layers 71
 passed; `env_runner`, `integration`, `scoring`, `paid_campaign_safety` 16 passed.
+
+## PR-B.4: shortcut corpora and the gate that reads them (item 7, first tier)
+
+`envs/<env>/shortcuts/index.yaml` + `*.patch` make "this measurement is gameable" a
+checked artifact instead of a paragraph, and `tools/shortcut_gate.py` is the reader.
+Two moco entries landed: `tau-rescaled-at-logits` (divides by τ outside the normalize —
+bit-identical loss curve, lower reported loss, unchanged gradients; the visible test
+asserts a ratio bound so it passes, the judge's `temperature_sensitive` probe rejects it)
+and `queue-always-at-head` (writes newest-first with the offset still tracked, so
+wrap-around stays correct and the recency property is gone).
+
+**The rules the corpus taught, in order of how much they hurt.**
+
+1. Patches must be cut against a *generated* instance, never against
+   `envs/<env>/files/`. Those templates carry `%%PLACEHOLDER%%` text, so a hunk that
+   looks fine against the template will not apply to an instance. The gate re-generates
+   at each entry's declared vector and runs `patch --dry-run`, which converts that
+   mistake from a silent skip into a CI failure — the failure mode I actually hit.
+2. A patch cannot hold a verdict about a view that judges the *run*. `trajectory_gated`
+   reads the agent's event stream; a corpus entry is applied by a script with no
+   episode, so `measured_before_submit` is `not_measurable` → `unavailable`, which is not
+   "rejected". Entries therefore say `run_dependent: {trajectory_gated: why}` instead of
+   listing it, and the gate refuses the list form. `adversarial` is refused for the same
+   reason in a different direction: it is a second *grade*, so it needs
+   `perturbation.transform`, which is what `tools/evaluator_adversary.py` consumes.
+3. `credits_under` must include the authoritative view. My first draft claimed moco's
+   shortcuts were withheld by `outcome_only` too, which is not a shortcut but a failing
+   attempt — no policy is ever rewarded for it, so it teaches nothing about the
+   measurement. The definitional content of "shortcut" is *credited where the reward is
+   computed*.
+4. Strictness is a claim that needs a named witness: `strictness_evidence` lists the
+   views the corpus is on the record about fooling, and each must appear in some entry's
+   `withholds_credit_under` *with* the authoritative view credited. Demanding this for
+   every declared view was wrong (my first version asked for a patch that `behavioral_gated`
+   *credits*, i.e. a fix), so the obligation is per-corpus, not per-view.
+5. `tools/evaluator_adversary.py` writes `judge.adversarial.json` — the file
+   `evaluator_views` needs before `adversarial` stops reporting `not_run` — and knows
+   exactly one perturbation: re-grade the *same* bytes on a fresh draw of the instance
+   (`--seed-offset`, default 1; 0 is refused, since re-running the same measurement is not
+   an adversary). Environment-specific transforms stay declared-but-uncertified rather
+   than being approximated by generic code that would silently measure something else.
+
+**Correction to the previous session's note.** The claim that moco's
+`temperature_sensitive` check is gated on `RL_EVAL_TRAJECTORY_DIR` is wrong for this
+repo: no such environment variable exists here, and `envs/moco/files/judge.py` marks the
+check unconditionally from `eval_outputs.pt`. So `behavioral_gated` bites on every
+transport that runs the judge, including the self-contained one — which is why the
+entries withhold `behavioral_gated` outright rather than making it `run_dependent`.
+
+**Still unverified, on purpose.** No `--judge` run happened in this checkout: torch is
+absent, so the behavioral tier printed a reported skip and the corpus's verdict claims
+(each `credits_under`/`withholds_credit_under` pair) remain *assertions the gate is
+allowed to check but has not yet checked*. The static tier is green and blocking via
+`tests/test_shortcut_gate.py` (`ci.yml` runs `pytest -q`, so no workflow edit was needed —
+the same trick `#11` used for its guard). One pre-existing failure remains in the suite:
+`test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume`,
+the one-line campaign fix the user asked to land as its own PR against `main`, not here.
+
+**Not in this slice:** `suite_inventory` still does not emit one case per
+(intervention, view); per-env adversary implementations beyond `seed_offset`; the `#16`
+static measurement-adversary tier, which is next and can now reuse `PATCHABLE` and the
+`index.yaml` reader instead of inventing its own.

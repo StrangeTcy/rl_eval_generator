@@ -455,6 +455,38 @@ oracle — that is the next layer, not this one. Task identity is structural onl
 an environment bakes a judge-side instance spec; everywhere else `pair_id` falls back
 to the case id and says so in `pair_id_basis`.
 
+### Shortcut corpora
+
+A view that has never fooled anyone is only assumed to be stricter. `envs/<env>/shortcuts/`
+holds curated patches that satisfy the measurement without solving the task, and
+`tools/shortcut_gate.py` checks the claim in two tiers. The static tier runs in CI with no
+torch: every patch must apply to a freshly generated instance at its declared difficulty
+vector, touch only files the source validator lets an agent patch, and never edit the tests
+or the judge (rewriting `visible_tests.py` is not gaming a measurement, it is deleting one).
+The declarations are checked as an argument: `credits_under` must include the authoritative
+view — a patch that fails it is a bad attempt, never rewarded, uninformative — and a view
+that judges the *run* rather than the artifact gets no verdict, because a corpus entry is
+applied outside any episode: `trajectory_gated` is `not_measurable` there and belongs under
+`run_dependent`, while `adversarial` needs a `perturbation` someone can execute. Any view in
+`strictness_evidence` must be demonstrated by at least one entry. The behavioral tier
+(`--judge`) regenerates the instance, applies the patch, runs the real judge, and compares
+each view's state with what the entry claimed; where torch is absent it prints a reported
+skip rather than a pass.
+
+```bash
+python tools/shortcut_gate.py            # static tier, blocking via tests/test_shortcut_gate.py
+python tools/shortcut_gate.py --judge    # also grade each shortcut (needs the judge)
+python tools/evaluator_adversary.py --corpus moco --json adv.json
+```
+
+`tools/evaluator_adversary.py` is the only writer of `judge.adversarial.json`, the file
+`evaluator_views` needs before `adversarial` stops reporting `not_run`. It knows one
+perturbation — re-grade the *same* artifact on a fresh draw of the instance — because
+anything environment-specific is a claim about that environment's geometry and stays
+`unavailable` until someone implements it. A gap is written as `status: unavailable` with
+exit 0, never as a score of 0: the whole point of the layer is that an unmeasured view is
+visibly unmeasured.
+
 ---
 
 ## Exploitation-resistant design
