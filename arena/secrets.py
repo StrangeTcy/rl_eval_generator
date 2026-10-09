@@ -33,6 +33,10 @@ PROVIDER_ENV: dict[str, tuple[str, ...]] = {
     "atria": ("ATRIA_API_KEY",),
     "custom": ("API_KEY",),
     "huggingface": ("HF_TOKEN",),
+    # Inception Labs Mercury (diffusion LLM, OpenAI-compatible). The repo
+    # secret is MERCURY_API_KEY; INCEPTION_API_KEY is Inception's own
+    # documented convention and is accepted as a fallback.
+    "mercury": ("MERCURY_API_KEY", "INCEPTION_API_KEY"),
 }
 
 PROVIDER_DEFAULT_BASE: dict[str, str | None] = {
@@ -44,6 +48,7 @@ PROVIDER_DEFAULT_BASE: dict[str, str | None] = {
     "atria": "https://api.atria-asi.ai/v1",
     "custom": None,
     "huggingface": "https://router.huggingface.co/v1",
+    "mercury": "https://api.inceptionlabs.ai/v1",
 }
 
 # These patterns are only a fallback for values that were not loaded through a

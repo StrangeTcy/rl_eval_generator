@@ -290,6 +290,15 @@ def _validate_request_extra(extra: Mapping[str, Any] | None) -> dict[str, Any]:
     return dict(extra)
 
 
+# Providers whose OpenAI-compatible endpoint expects a completion-size key
+# other than the default ``max_tokens``. Inception Labs Mercury documents
+# ``max_completion_tokens`` (see docs.inceptionlabs.ai). Keyed by the
+# registered provider name; anything unlisted keeps ``max_tokens``.
+_MAX_TOKENS_KEY: dict[str, str] = {
+    "mercury": "max_completion_tokens",
+}
+
+
 class ProviderClient:
     """A small urllib-based client for OpenAI-compatible chat APIs."""
 
@@ -489,10 +498,14 @@ class ProviderClient:
         if not model or not model.strip():
             raise ValueError("model must not be empty")
         extra = _validate_request_extra(request_extra)
+        # Mercury's OpenAI-compatible endpoint documents ``max_completion_tokens``;
+        # every other wired provider uses ``max_tokens``. ``request_extra`` may not
+        # carry either protected key, so this is the single place the size is set.
+        max_tokens_key = _MAX_TOKENS_KEY.get(self.provider, "max_tokens")
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "max_tokens": int(max_tokens),
+            max_tokens_key: int(max_tokens),
             "temperature": float(temperature),
             "stream": False,
         }
