@@ -406,3 +406,98 @@ def test_generated_member_records_remain_verifiable_after_the_whole_chain(
         record = gm.read_manifest(family_dir / member["path"])
         assert record["generation_id"] == member["generation_id"]
         assert record["pair_id"] == member["pair_id"]
+
+
+# ---------------------------------------------------------------------------
+# registry-direct (intervention, view) expansion
+# ---------------------------------------------------------------------------
+
+_RUN_SUITE_KWARGS = dict(
+    provider="openai", model="m", api_key_env="K", secrets=None, api_base=None,
+    sandbox="docker", output_dir=Path("/tmp/out"), max_steps=10, max_tokens=100,
+    invalid_retries=0, keep_images=False, keep_workspace=False,
+)
+
+
+def test_inventory_expands_one_case_per_intervention_and_view(tmp_path: Path) -> None:
+    """The evaluator tier becomes schedulable from the registry, without a family dir."""
+    out = tmp_path / "suite_iv.json"
+    proc = _run("tools/suite_inventory.py", "--matrix", "representative",
+                "--interventions", "--out", str(out))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    manifest = json.loads(out.read_text(encoding="utf-8"))
+    assert manifest["selection"]["expand_interventions"] is True
+
+    moco = [case for case in manifest["cases"] if case["environment"] == "moco"]
+    by_iid = {case.get("interventions", ""): case for case in moco}
+    assert set(by_iid) == {
+        "", "terminology", "retrieval_cue", "visible_proxy", "evaluator", "reward_proxy",
+    }
+    baseline = by_iid[""]
+    assert "intervention" not in baseline
+    for iid, case in by_iid.items():
+        if not iid:
+            continue
+        assert case["status"] == "planned"
+        assert case["baseline_case_id"] == baseline["case_id"]
+        assert case["case_id"].endswith(f"__{iid}__seed-{baseline['seed']}")
+        assert case["difficulty"] == baseline["difficulty"]
+
+    # A view-mechanism intervention carries the measurement it selects: that is the
+    # "view" half of the (intervention, view) case, and it needs no second artifact.
+    assert by_iid["evaluator"]["intervention"]["view"] == "behavioral_gated"
+    assert by_iid["evaluator"]["intervention"]["equivalence"] == "evaluator_changing"
+    assert by_iid["reward_proxy"]["intervention"]["view"] == "integrity_gated"
+    assert by_iid["terminology"]["intervention"]["view"] is None
+    # Declarations come from the taxonomy, which an environment may not relabel.
+    assert by_iid["terminology"]["intervention"]["equivalence"] == "semantically_equivalent"
+    assert by_iid["terminology"]["intervention"]["expect"] == "invariant"
+    assert by_iid["retrieval_cue"]["intervention"]["expect"] == "sensitive"
+    assert by_iid["visible_proxy"]["intervention"]["defect_class"] == "A_false"
+
+    # An environment that declares no interventions is untouched by the expansion.
+    rope = [case for case in manifest["cases"] if case["environment"] == "rope"]
+    assert len(rope) == 1 and "intervention" not in rope[0]
+    assert manifest["intervention_case_count"] == sum(
+        1 for case in manifest["cases"] if case.get("intervention")
+    ) > 0
+
+    # The expanded cases are schedulable through the same builder families use.
+    from tools.run_suite import _build_command
+
+    command = _build_command(by_iid["terminology"], **_RUN_SUITE_KWARGS)
+    assert command[command.index("--interventions") + 1] == "terminology"
+
+
+def test_intervention_expansion_is_opt_in(family_dir: Path, tmp_path: Path) -> None:
+    """Default inventories keep their case list; families refuse a second expansion."""
+    default_out = tmp_path / "suite_default.json"
+    proc = _run("tools/suite_inventory.py", "--matrix", "representative",
+                "--out", str(default_out))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    manifest = json.loads(default_out.read_text(encoding="utf-8"))
+    assert manifest["selection"]["expand_interventions"] is False
+    assert manifest["intervention_case_count"] == 0
+    assert all(not case.get("interventions") for case in manifest["cases"])
+
+    duplicate = tmp_path / "suite_dup.json"
+    proc = _run("tools/suite_inventory.py", "--family", str(family_dir),
+                "--interventions", "--out", str(duplicate))
+    assert proc.returncode == 2
+    assert "already are the intervention expansion" in proc.stderr
+
+
+def test_expanded_view_case_survives_preflight_generation(tmp_path: Path) -> None:
+    """Preflighting an intervention case generates the twin, not the baseline."""
+    import tools.suite_inventory as si
+
+    case = {
+        "case_id": "moco__probe__evaluator__seed-0",
+        "environment": "moco",
+        "difficulty_levels": {axis["id"]: "easy" for axis in
+                              si._load_yaml(ROOT / "envs/moco/config.yaml")["axes"]},
+        "seed": 0,
+        "interventions": "evaluator",
+    }
+    result = si._preflight_case(case, ROOT)
+    assert result["status"] == "ready", result

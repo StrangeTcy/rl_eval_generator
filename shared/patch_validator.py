@@ -15,6 +15,14 @@ PATCHABLE_SET = set(PATCHABLE)
 MAX_PATCH_BYTES = 512 * 1024
 
 
+class PatchValidationError(RuntimeError):
+    """A patch rejection with a stable machine-readable code."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
 def _normalise_patch_path(raw: str) -> str:
     path = raw.split("\t", 1)[0].strip()
     if path.startswith("a/") or path.startswith("b/"):
@@ -100,17 +108,20 @@ def validate_patch_paths(patch_text: str) -> None:
 
 def validate_patch() -> str:
     if not os.path.isfile(PATCH_PATH):
-        raise RuntimeError(f"Patch not found at {PATCH_PATH}")
+        raise PatchValidationError("missing_patch", f"Patch not found at {PATCH_PATH}")
 
     patch_size = os.path.getsize(PATCH_PATH)
     if patch_size == 0:
-        raise RuntimeError("Patch file is empty")
+        raise PatchValidationError("empty_patch", "Patch file is empty")
     if patch_size > MAX_PATCH_BYTES:
-        raise RuntimeError(f"Patch too large: {patch_size} bytes (limit {MAX_PATCH_BYTES})")
+        raise PatchValidationError("patch_too_large", f"Patch too large: {patch_size} bytes (limit {MAX_PATCH_BYTES})")
 
     with open(PATCH_PATH, encoding="utf-8") as f:
         patch_text = f.read()
-    touched_paths = modified_files_from_patch(patch_text)
+    try:
+        touched_paths = modified_files_from_patch(patch_text)
+    except RuntimeError as exc:
+        raise PatchValidationError("malformed_patch", str(exc)) from exc
 
     tmpdir = tempfile.mkdtemp(prefix="judge_patched_")
     for fname in PATCHABLE:
@@ -125,7 +136,7 @@ def validate_patch() -> str:
     )
     if dry.returncode != 0:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        raise RuntimeError(f"Patch does not apply cleanly:\n{dry.stderr}\n{dry.stdout}")
+        raise PatchValidationError("patch_does_not_apply", f"Patch does not apply cleanly:\n{dry.stderr}\n{dry.stdout}")
 
     real = subprocess.run(
         ["patch", "-p1", "-d", tmpdir, "-i", PATCH_PATH],
@@ -134,22 +145,22 @@ def validate_patch() -> str:
     )
     if real.returncode != 0:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        raise RuntimeError(f"Patch application failed:\n{real.stderr}\n{real.stdout}")
+        raise PatchValidationError("patch_application_failed", f"Patch application failed:\n{real.stderr}\n{real.stdout}")
 
     unexpected = sorted(set(os.listdir(tmpdir)) - PATCHABLE_SET)
     if unexpected:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        raise RuntimeError(f"Patch created unexpected files: {unexpected}")
+        raise PatchValidationError("unexpected_artifact", f"Patch created unexpected files: {unexpected}")
     for name in touched_paths:
         original = os.path.join(ORIGINALS_DIR, name)
         patched = os.path.join(tmpdir, name)
         if not os.path.isfile(original) or not os.path.isfile(patched):
             shutil.rmtree(tmpdir, ignore_errors=True)
-            raise RuntimeError(f"Patch must update an existing file: {name}")
+            raise PatchValidationError("required_file_missing", f"Patch must update an existing file: {name}")
         with open(original, "rb") as before, open(patched, "rb") as after:
             if before.read() == after.read():
                 shutil.rmtree(tmpdir, ignore_errors=True)
-                raise RuntimeError(f"Patch has no effective change to file: {name}")
+                raise PatchValidationError("no_effective_change", f"Patch has no effective change to file: {name}")
 
     return tmpdir
 
@@ -158,6 +169,12 @@ if __name__ == "__main__":
     try:
         out = validate_patch()
         print(f"OK: patch applied to {out}")
+    except PatchValidationError as e:
+        print(f"FAIL_CODE: {e.code}")
+        print(f"FAIL: {e}")
+        sys.exit(1)
     except RuntimeError as e:
+        # Keep an explicit fallback code for unexpected legacy RuntimeErrors.
+        print("FAIL_CODE: patch_validation_error")
         print(f"FAIL: {e}")
         sys.exit(1)

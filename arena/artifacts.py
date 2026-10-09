@@ -23,6 +23,7 @@ ARTIFACT_NAMES = (
     "manifest.json",
     "trace.jsonl",
     "final.json",
+    "result_record.json",
     "submission.patch",
     "workspace.diff",
     "model_responses.jsonl",
@@ -204,6 +205,9 @@ class RunArtifacts:
     def write_final(self, result: Any) -> None:
         write_json(self.path("final.json"), result, secret=self.secret)
 
+    def write_result_record(self, record: Mapping[str, Any]) -> None:
+        write_json(self.path("result_record.json"), dict(record), secret=self.secret)
+
     def collect_episode_files(self, episode_dir: Path) -> None:
         """Copy local runner artifacts into their stable public names."""
 
@@ -254,11 +258,19 @@ def manifest_defaults(
     max_retries: int | None = None,
     max_http_attempts: int | None = None,
     provider_min_interval_seconds: float | None = None,
+    campaign_id: str | None = None,
+    case_id: str | None = None,
+    attempt_id: str | None = None,
+    judge_guarantee: str | None = None,
     agent_image_id: str | None = None,
     judge_image_id: str | None = None,
 ) -> dict[str, Any]:
     result = {
         "run_id": run_id,
+        "attempt_id": attempt_id or run_id,
+        "campaign_id": campaign_id,
+        "case_id": case_id,
+        "judge_guarantee": judge_guarantee,
         "started_at": utc_now(),
         "finished_at": None,
         "provider": provider,
@@ -321,6 +333,19 @@ def summarize_run(run_dir: Path) -> tuple[Path, Path]:
                 final = loaded
         except json.JSONDecodeError:
             pass
+    result_record: dict[str, Any] = {}
+    if (run_dir / "result_record.json").is_file():
+        try:
+            loaded_record = json.loads((run_dir / "result_record.json").read_text(encoding="utf-8"))
+            if isinstance(loaded_record, dict):
+                result_record = loaded_record
+        except json.JSONDecodeError:
+            pass
+    stage_statuses = {
+        str(name): str(value.get("status", "unknown"))
+        for name, value in result_record.get("stages", {}).items()
+        if isinstance(value, Mapping)
+    } if isinstance(result_record.get("stages"), Mapping) else {}
 
     usage_totals: dict[str, float] = {}
     for row in turns:
@@ -339,6 +364,12 @@ def summarize_run(run_dir: Path) -> tuple[Path, Path]:
     total_latency = sum(latency) if latency else 0.0
     row = {
         "run_id": manifest.get("run_id", run_dir.name),
+        "attempt_id": result_record.get("attempt_id", manifest.get("attempt_id", manifest.get("run_id", run_dir.name))),
+        "campaign_id": result_record.get("campaign_id", manifest.get("campaign_id")),
+        "case_id": result_record.get("case_id", manifest.get("case_id")),
+        "case_disposition": result_record.get("case_disposition"),
+        "judge_guarantee": result_record.get("judge_guarantee", manifest.get("judge_guarantee")),
+        "stage_statuses": json.dumps(stage_statuses, sort_keys=True),
         "provider": manifest.get("provider"),
         "requested_model": manifest.get("requested_model"),
         "resolved_model": manifest.get("resolved_model"),
@@ -373,6 +404,10 @@ def summarize_run(run_dir: Path) -> tuple[Path, Path]:
         f"- Model: `{row['requested_model']}`",
         f"- Provider: `{row['provider']}`",
         f"- Environment: `{row['environment']}` ({row['difficulty']})",
+        f"- Case: `{row['case_id']}`",
+        f"- Disposition: `{row['case_disposition']}`",
+        f"- Judge guarantee: `{row['judge_guarantee']}`",
+        f"- Stage statuses: `{row['stage_statuses']}`",
         f"- Seed: `{row['seed']}`",
         f"- Sandbox: `{row['sandbox']}`",
         f"- Verdict: `{final.get('verdict', 'UNKNOWN')}`",

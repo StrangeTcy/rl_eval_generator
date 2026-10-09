@@ -72,8 +72,11 @@ def test_every_generated_environment_carries_a_verified_manifest() -> None:
         assert manifest["generation_id"].startswith("G")
         assert manifest["pair_id"].startswith("P")
         assert manifest["interventions"] == []
-        assert manifest["latent_spec"] == "unavailable"
-        assert manifest["pair_id_basis"] == "case_id_fallback"
+        # PR-C (item 4): every config declares latent_factors, so the case-id
+        # fallback is retired - task identity is structural registry-wide.
+        assert manifest["latent_spec"] == "declared"
+        assert manifest["pair_id_basis"] == "latent_spec"
+        assert (directory / "latent_spec.json").is_file()
         ok, errors = gm.verify_manifest(directory, config_root=ROOT)
         assert ok, errors
         # The manifest lives inside the generated tree, so the unresolved-placeholder

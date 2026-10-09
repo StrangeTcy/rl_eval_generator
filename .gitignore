@@ -10,6 +10,7 @@ venv/
 *.ckpt
 **/data/
 smoke_*/
+ev_*/
 test_*/
 .DS_Store
 .episodes/

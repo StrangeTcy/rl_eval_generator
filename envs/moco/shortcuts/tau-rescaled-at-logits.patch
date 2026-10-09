@@ -1,0 +1,11 @@
+--- a/agent/workspace/moco_model.py
++++ b/agent/workspace/moco_model.py
+@@ -74,6 +74,8 @@
+         l_neg = torch.einsum("nc,ck->nk", [q, self.queue.clone().detach()])
+ 
+         logits = torch.cat([l_pos, l_neg], dim=1)
++        # SHORTCUT: make |logits| depend on tau without ordering the fix.
++        logits = logits / self.tau
+         labels = torch.zeros(logits.shape[0], dtype=torch.long, device=logits.device)
+ 
+         self._dequeue_and_enqueue(k)

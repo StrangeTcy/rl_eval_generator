@@ -2,9 +2,16 @@
 
 Status: **all 27 recorded — 16 from part 1 (items 1–16) + 11 from part 2 (P2.1–P2.11), all
 `CONFIRMED`.** Each answer is recorded verbatim in *Answers*; the resulting build order is in
-*Build order*. **PR-A is implemented**, plus two slices of PR-B: *families are runnable*
-and *the trajectory microscope* (item 8). PR-B's remaining measurement items (`#10`, `#7`,
-`#16`), PR-C, PR-D and PR-E are not. Each record is at the end of this file.
+*Build order*. **PR-A is implemented**, all five landed slices of PR-B (families runnable,
+trajectory microscope, evaluator views, shortcut corpora, static measurement adversary) plus
+the inventory's (intervention, view) expansion that closes PR-B's runnable remainder — and
+**PR-C.1: the latent registry** (item 4): every config declares `latent_factors:`, every
+instance carries `latent_spec.json`, and `pair_id` is structural registry-wide — and
+**PR-C.2: the information_policy module** (item 5): evidence-selection declarations are
+deterministic judge-shipped modules that the judge re-runs, with `epistemic_games` as the
+first carrier and its `causal_mechanism` factor upgraded from `unavailable` to a declared
+policy id. Remaining: the human review pass over the 33 scaffolded blocks, PR-D and PR-E.
+Each record is at the end of this file.
 Repository revision reviewed: `e1b038a4efb7343afd713f4e981c90fc0fb0485c` (`main`), branch `arena/81157642-rl-eval-generator`.
 Method: every proposal below was checked against the actual generator, registry, judge library,
 suite tooling and test suite at that revision. The two upstream analyses also cite
@@ -908,3 +915,322 @@ natural input to that re-grade, so they should land together; and `suite_invento
 does not yet emit one case per (intervention, view) pair, so families vary the view only
 through `tools/family.py`. Verified locally: causal + trajectory + family layers 71
 passed; `env_runner`, `integration`, `scoring`, `paid_campaign_safety` 16 passed.
+
+## PR-B.4: shortcut corpora and the gate that reads them (item 7, first tier)
+
+`envs/<env>/shortcuts/index.yaml` + `*.patch` make "this measurement is gameable" a
+checked artifact instead of a paragraph, and `tools/shortcut_gate.py` is the reader.
+Two moco entries landed: `tau-rescaled-at-logits` (divides by τ outside the normalize —
+bit-identical loss curve, lower reported loss, unchanged gradients; the visible test
+asserts a ratio bound so it passes, the judge's `temperature_sensitive` probe rejects it)
+and `queue-always-at-head` (writes newest-first with the offset still tracked, so
+wrap-around stays correct and the recency property is gone).
+
+**The rules the corpus taught, in order of how much they hurt.**
+
+1. Patches must be cut against a *generated* instance, never against
+   `envs/<env>/files/`. Those templates carry `%%PLACEHOLDER%%` text, so a hunk that
+   looks fine against the template will not apply to an instance. The gate re-generates
+   at each entry's declared vector and runs `patch --dry-run`, which converts that
+   mistake from a silent skip into a CI failure — the failure mode I actually hit.
+2. A patch cannot hold a verdict about a view that judges the *run*. `trajectory_gated`
+   reads the agent's event stream; a corpus entry is applied by a script with no
+   episode, so `measured_before_submit` is `not_measurable` → `unavailable`, which is not
+   "rejected". Entries therefore say `run_dependent: {trajectory_gated: why}` instead of
+   listing it, and the gate refuses the list form. `adversarial` is refused for the same
+   reason in a different direction: it is a second *grade*, so it needs
+   `perturbation.transform`, which is what `tools/evaluator_adversary.py` consumes.
+3. `credits_under` must include the authoritative view. My first draft claimed moco's
+   shortcuts were withheld by `outcome_only` too, which is not a shortcut but a failing
+   attempt — no policy is ever rewarded for it, so it teaches nothing about the
+   measurement. The definitional content of "shortcut" is *credited where the reward is
+   computed*.
+4. Strictness is a claim that needs a named witness: `strictness_evidence` lists the
+   views the corpus is on the record about fooling, and each must appear in some entry's
+   `withholds_credit_under` *with* the authoritative view credited. Demanding this for
+   every declared view was wrong (my first version asked for a patch that `behavioral_gated`
+   *credits*, i.e. a fix), so the obligation is per-corpus, not per-view.
+5. `tools/evaluator_adversary.py` writes `judge.adversarial.json` — the file
+   `evaluator_views` needs before `adversarial` stops reporting `not_run` — and knows
+   exactly one perturbation: re-grade the *same* bytes on a fresh draw of the instance
+   (`--seed-offset`, default 1; 0 is refused, since re-running the same measurement is not
+   an adversary). Environment-specific transforms stay declared-but-uncertified rather
+   than being approximated by generic code that would silently measure something else.
+
+**Correction to the previous session's note.** The claim that moco's
+`temperature_sensitive` check is gated on `RL_EVAL_TRAJECTORY_DIR` is wrong for this
+repo: no such environment variable exists here, and `envs/moco/files/judge.py` marks the
+check unconditionally from `eval_outputs.pt`. So `behavioral_gated` bites on every
+transport that runs the judge, including the self-contained one — which is why the
+entries withhold `behavioral_gated` outright rather than making it `run_dependent`.
+
+**Still unverified, on purpose.** No `--judge` run happened in this checkout: torch is
+absent, so the behavioral tier printed a reported skip and the corpus's verdict claims
+(each `credits_under`/`withholds_credit_under` pair) remain *assertions the gate is
+allowed to check but has not yet checked*. The static tier is green and blocking via
+`tests/test_shortcut_gate.py` (`ci.yml` runs `pytest -q`, so no workflow edit was needed —
+the same trick `#11` used for its guard). One pre-existing failure remains in the suite:
+`test_campaign_workflow_guard.py::test_a_chained_campaign_presents_a_resume_as_a_resume`,
+the one-line campaign fix the user asked to land as its own PR against `main`, not here.
+
+**Not in this slice:** `suite_inventory` still does not emit one case per
+(intervention, view); per-env adversary implementations beyond `seed_offset`; the `#16`
+static measurement-adversary tier, which is next and can now reuse `PATCHABLE` and the
+`index.yaml` reader instead of inventing its own.
+
+## PR-B.5: the static measurement adversary (item 16, first tier)
+
+`tools/measurement_adversary.py` is item 16 as answered: a fixed library of adversarial
+submissions, each asserted to be caught by a *named* check, so "the guard never fired"
+becomes "the guard does not exist here" and the fix is a check rather than a caveat. It
+ships unpushed (the session that wrote it lost GitHub access mid-flight), so the work is
+recorded here in full: files `tools/measurement_adversary.py`,
+`tests/test_measurement_adversary.py` (8 tests, blocking), the `measurement_guards:` block in
+`envs/moco/config.yaml`, and this section.
+
+**Why the static tier is executable, not textual.** `shared/judge_lib.py` imports torch at
+module scope, so a plain CI job cannot run a judge — but the two guards that decide these
+exploits are *subprocess scripts* (`judge/patch_validator.py`, `judge/source_validator.py`)
+that import only `ast`/`re`/`subprocess`, and `judge_lib.validate_submission` runs them as
+scripts in that order. So the tier runs them with `JUDGE_PATCH_PATH`/`JUDGE_ORIGINALS_DIR`
+pointed at a temp dir, and the thing it tests is the code that actually gates a reward. A
+tier that re-implemented the allowlist would keep passing while the allowlist rotted.
+
+**Exploits, and what caught them on the first run.**
+
+| exploit | shape | caught by | what it proved |
+| --- | --- | --- | --- |
+| `no_op_patch` | one hunk whose `-` and `+` lines are byte-identical | `patch_valid` — "Patch has no effective change to file" | the `changed` flag in `modified_files_from_patch` is *not* the no-op guard; the byte comparison in `validate_patch` is |
+| `test_rewrite` | edits `visible_tests.py` | `patch_valid` — "touches non-patchable file" | the corpus-level rule in `#7` and the harness rule agree, from opposite directions |
+| `judge_import_tamper` | legal file, `import judge_lib` / `import os` | `sources_valid` | only reachable because `patch_valid` **passes** it — a reason to keep the two guards separate |
+| `hardcoded_metric` | pre-baked numbers in a legal patch | *no allowlist*: audited on the guard instead | see below |
+| `stdout_spoof` | forged/mismatched judge payloads | `env_runner._judge_result` corroboration | see below |
+
+**Two findings that changed what this tier asserts.**
+
+1. `hardcoded_metric` cannot be attacked through the guards at all, so the tier audits the
+   guard's *provenance*: `guard_recomputes` walks `mark_check(result, "<name>", value)` and
+   follows `value` through judge-side assignments, accepting only a trace that reaches a
+   re-execution (`run`, `subprocess`, `torch.load`, …) and refusing one that reaches
+   `result` / `metrics` — "derived from what the submitted code reported about itself".
+   moco's three probes trace to `torch.load` in 3–5 hops and pass; a keyword-grep-style
+   check fails. First version tokenized the expression with `.split()`, which produced
+   garbage like `outputsgettau_ok`; it had to become an AST walk over `Name`/`Attribute`
+   chains. Same trap as `#7`, again: the audit must read the **instance's** `judge/judge.py`,
+   not `envs/<env>/files/judge.py`, whose `%%SCORING_PASS_THRESHOLD%%` text will not parse.
+2. The `stdout_spoof` assertion I first wrote was wrong and the tool caught it. For the
+   extractor, stdout is permissive by design: a valid verdict followed by log prose is
+   accepted, and a corroborated verdict wrapped in a JSON list is accepted. That is not a
+   hole — the authenticator is *corroboration* (exit status ⇔ verdict ⇔ score ⇔
+   `failure_mode`), which an agent that can write the judge's stdout still cannot forge,
+   because it does not control the judge's exit code. So the tier asserts both directions:
+   eight self-contradictory payloads refused, and two legitimate shapes still accepted, so
+   that a future "hardening" which starts rejecting real judge output is caught as the
+   behaviour change it would be.
+
+**Scope, honestly bounded.** `--grade` existed for a few minutes and was deleted: it graded
+nothing, it only relabelled `instance_oracle_gate`'s variants, which would have made a fake
+behavioral tier the blocking one. Runtime exploits are therefore *scheduled* —
+`measurement_guards.runtime` must list `visible_test_overfit` and `faked_training_failure` or
+the report says "a runtime exploit nobody scheduled is an exploit that is simply untested".
+Envs with a judge but no `measurement_guards` block (`batchnorm_ema`, `epistemic_games`,
+`glyph`, `rope`) are printed as "not yet attacked", advisory: blocking on a declaration that
+does not exist yet would make this PR's CI red for four other envs' rollout work.
+
+**Verified here:** `python tools/measurement_adversary.py` → `adversary: moco [ok] 7/7 exploits
+caught by a named check`, exit 0, 0.7 s; `tests/test_measurement_adversary.py` 8 passed.
+
+## PR-B.6: the inventory emits (intervention, view) cases
+
+The last runnable item PR-B.3/B.4 left open: families varied the measurement tier
+only through `tools/family.py`, so an evaluator experiment needed a generated
+family directory before a scheduler could see it. `tools/suite_inventory.py
+--interventions` now expands every matrix case with one planned case per
+intervention the environment *declares* — the campaign lane regenerates each
+instance from (environment, vector, seed, interventions) anyway, so a case only
+needs the coordinates plus the declaration a report is read against. A
+`view`-mechanism intervention carries the view it selects, which is the "view"
+half of the (intervention, view) case: the measurement tier varies with no second
+artifact and no second judge run.
+
+What it deliberately does not do: no twin_check verdict per case. Nothing was
+generated, so there are no bytes to verify; verification stays where it can
+happen — at generation time in a family, at reset time via the provenance gate.
+The flag is opt-in (the covering inventory stays at 218 cases), `--family`
+refuses it rather than emitting a second unverified copy of verified members,
+and `--preflight` generates the twin, not the baseline. Covering + flag: 335
+cases, `ready_for_scheduler: true`, with `evaluator`/`reward_proxy` the only
+view-carrying rows the registry can currently produce.
+
+## PR-C.1: the latent registry (item 4, first tier)
+
+`pair_id` stops being the case id. Every config now declares a `latent_factors:`
+block, every generated directory carries a `latent_spec.json` derived from it,
+and the manifest's `latent_spec_sha256` is the hash of the spec's *identity
+projection* — so `pair_id` is literally `"P" + sha256(latent spec identity)[:16]`,
+which is what Round 1 answer 2 said and what item 13 was waiting on. The
+case-id-fallback branch of `pair_id()` is frozen, not deleted: pre-PR-C manifests
+verify against it unchanged (the tracked `ev_base`/`ev_twin` evidence trees still
+pass), and a config without a block is now a generation error, so no *new*
+artifact can take the fallback.
+
+| File | Role |
+|---|---|
+| `shared/latent_spec.py` | the factor vocabulary, block validation, derivation, the identity projection, presentation canonicalization, `parse_instance_spec` (read via `ast.literal_eval` — env code is never executed) |
+| `tools/latent_factors_scaffold.py` | the mechanical mapping + `--write` / `--check`; emitted 33 of the 34 blocks, all stamped `declared_by: scaffold_unreviewed` |
+| `generate_env.py` | validates the block, captures `(twin, base)` value pairs from `semantically_equivalent` overlays, writes the spec **before** the rename pass, records `latent_spec_declared_by` |
+| `shared/generation_manifest.py` | the new `pair_id` form; `verify_manifest` recomputes the identity hash from the `latent_spec.json` in the tree — pair identity is only as real as the artifact it re-derives from |
+| `envs/epistemic_games/config.yaml` | the one hand-authored projection (`declared_by: human`), see below |
+| `tests/test_latent_registry.py` | 13 tests: registry completeness, scaffold-rule precedence, the four equivalence classes' pair relations, prose-twin merge, determinism, tamper, legacy fallback |
+
+**The seven decisions that were not forced by anything upstream.**
+
+1. **Identity is a projection, not the document.** Only `task_state`,
+   `causal_mechanism` and `evaluator_state` enter the hash (plus environment and
+   seed); `observable_state` and `proxy_signal` are recorded in full but never
+   split a pair — an observation twin is the same task under different evidence,
+   and a spec that hashed the whole document would turn every `retrieval_cue`
+   into a different task.
+2. **Cue-text patterns beat axis class tags.** moco's `QUEUE_HINT` lives under a
+   `task`-class axis (queue_math); the scaffold maps `*HINT*`/`*COMMENT*`/
+   `*CLUE*`/`*NOTE*`/`*DOCSTRING*`/`*HERRING*` names and `*TEST*` names to
+   observable/proxy regardless of the tag, because the tag describes the axis's
+   dominant character while the placeholder is the unit identity is built from.
+   Without this rule the cue twin's pair splits and the family report loses its
+   baseline comparison.
+3. **The default is conservative: untagged placeholders go to `task_state`.** An
+   over-broad identity splits pairs a later review merges; an over-narrow one
+   silently merges tasks that are different, which is the worse error. This is
+   also why `symptom_mask`-named axes in `cat_theo` (whose levels are real task
+   knobs — `CHECK_DIM`, `TOLERANCE`) do not follow moco's observational
+   `symptom_mask`: the id heuristic was dropped from the rule table.
+4. **Presentation canonicalization runs on values, not files.** Identity values
+   are mapped back through the `(twin, base)` pairs a `semantically_equivalent`
+   overlay introduced — the same invertibility rule `twin_check` enforces on
+   trees — so composed constants follow the renaming and map back exactly
+   (`PATCHABLE_FILES` embeds `retrieval_pooled_encoder.py` in the twin and hashes
+   to the base's digest). Rename-mechanism overlays need no pairs: they never
+   touch the substitution table.
+5. **The spec is written before the rename pass, and identity holds digests.** A
+   glyph-style tree-wide renaming reaches the spec's raw factor values like any
+   other text (the twin tree stays `GlyphCNN`-free, which the existing rename
+   test asserts over *all* files), while the identity section carries only hex
+   digests, which a word-boundary renaming provably cannot touch — so
+   `verify_manifest`'s recomputation from the file survives the rename.
+6. **`epistemic_games`' projection is hand-authored because a scaffold may not
+   make it.** The baked `judge/instance_spec.py` carries the ground truth *and*
+   its dress (`template`, `framing`, vocabulary text, `transcript`); hashing the
+   file whole would keep narrative and bare-table framings apart — the exact
+   split item 13 removes. `identity_keys` project the Bayesian core (priors,
+   likelihoods, exact posterior, verdict fields, drawn observation,
+   `hypotheses.level/behavior`), and the payoff is measured: framing *and*
+   scenario twins now share a pair_id while `prior`/`evidence`/`presentation`
+   overlays move it structurally — `twin_check`'s "task change not visible in the
+   latent spec" failure is now a real proof for this env, not a declaration.
+7. **`evaluator_state` records structure, not bytes.** A judge *content* hash
+   would move under a declared renaming (the judge legitimately imports the
+   renamed module) and split presentation twins; the collision `evaluator_state`
+   exists to prevent is between different *measurements*, so it holds the scoring
+   rule, the judge-side allowlists (canonicalized) and the judge file set.
+
+**Honesty constraints kept:** `causal_mechanism` is `unavailable` with a reason
+for all 33 template envs (the derived spec records which placeholders were
+instantiated, which is not a causal model — item 4's own caveat, and the spec
+document repeats it in `notes`), `agent_belief` is `unavailable` everywhere
+(item 8 approximates it at run time), and `scaffold_unreviewed` blocks say so in
+the document they produce.
+
+**Not in this slice:** `#5`'s `information_policy` module; the human review pass
+that moves blocks from `scaffold_unreviewed` to `human` (the checklist item 4
+accepted); judge-side consumption — the judge's own re-derivation stays per-env
+(`epistemic_games`' `INSTANCE_SPEC` equality check is untouched), and
+`latent_spec.json` is generator-side identity, not a new judge input; and
+`latent_factors` for the *axis-level* observation merges the scaffold's
+conservative default creates in the 30 envs without interventions (a review
+decision, not a mechanical one).
+
+**Verified here:** `pytest -q` = 176 passed, 1 failed — the failure being the
+pre-existing `test_campaign_workflow_guard` case documented under *Census*,
+untouched by this branch. `tools/latent_factors_scaffold.py --check` = 34/34.
+`tools/family.py` (terminology, retrieval_cue, evaluator over moco, seed 3) =
+4 members, 3 pass, 0 fail. `measurement_adversary` 7/7, `shortcut_gate` 2/2,
+covering inventory 218 cases `registry_clean` — all unchanged by the layer.
+
+## PR-C.2: the information_policy module (item 5)
+
+Prose in a prompt about how evidence was selected is not graded; a module the
+judge re-runs is. An `information_policy` is the renderer-hook contract applied
+to evidence selection: a deterministic file declared in the config, a pure
+function of `(seed, subs)`, **shipped to the judge through the layout**, and
+re-run there against the rebuilt instance spec. The type-3 deception claim
+("this transcript was strategically chosen") is admissible in an environment
+only where that claim is re-derivable this way — which is exactly the answer
+recorded for item 5, and why `epistemic_games` is the first carrier.
+
+| File | Role |
+|---|---|
+| `shared/information_policy.py` | the host contract: AST purity scan (stdlib allowlist + sibling env modules; no I/O, no dynamic code, no wall clock, no async; `select(context)` required), isolated loader mirroring `_run_renderer`, and the determinism probe (two runs, deep-copied contexts, disagreement refuses generation) |
+| `generate_env.py` | config-level admission (a policy the layout does not ship under `judge/` is a config error, not a style note); runs the policy after the renderer — so it sees the baked instance spec — and before the fixpoint, so its placeholders resolve like any others; records `source_path` + `sha256` + selection |
+| `shared/generation_manifest.py` | `information_policy: {source_path, sha256}` field; `verify_manifest` re-hashes the checkout source, so a policy edited after generation is caught like a drifted config |
+| `shared/latent_spec.py` | top-level `information_policy` section (path, hash, selection) plus an honesty note; identity is untouched — a policy enters identity only where a factor declares its placeholder |
+| `envs/epistemic_games/files/information_policy.py` | the first policy: `select()` parses the renderer's `JUDGE_INSTANCE` and returns `POLICY_ID` + `POLICY_RECORD`; `replay(spec)` is the judge-side entry recomputing the same record — one module, both sides of the boundary |
+| `envs/epistemic_games/files/judge.py` | step 4b: `information_policy.replay(rebuilt) != POLICY_RECORD_BAKED` → `reward_denial`, the `INSTANCE_SPEC`-rebuild precedent; `information_policy_ok` joins the checks |
+| `envs/epistemic_games/config.yaml` | `information_policy:` key, `judge/information_policy.py` layout entry, `causal_mechanism` upgraded from `unavailable` to `placeholders: [POLICY_ID]` |
+| `tests/test_information_policy.py` | 19 tests: purity refusals, judge-shipment gate, stateful-policy probe refusal, generation records, determinism, manifest drift, and — because the epistemic judge is torch-free — three real judge subprocess runs: reference PASS with `information_policy_ok`, tampered baked record → `reward_denial`, tampered shipped module → `reward_denial` |
+
+**The decisions that were not forced by anything upstream.**
+
+1. **The record is recomputed, never echoed.** Every field of the epistemic
+   record is re-derived from `core`'s declared machinery — the signal-table
+   membership of the drawn behavior pair (exact `Fraction(str(float))`
+   round-trip; every table value is short-decimal), the level-3 best response
+   to a level-1 reader (the mimicry invariant, recomputed rather than read
+   from the spec), and the verdict band from the exact likelihood ratio. A
+   record that echoed the spec's prose would prove nothing.
+2. **The comparison is literal dict equality, not string equality.** The
+   record ships as a Python literal (`repr`) baked into `judge.py`; floats
+   round-trip through `repr` without noise and dict equality ignores key
+   order. (The first cut compared a `repr` *string* against an evaluated
+   *dict* and denied everything — caught by running the real judge, which is
+   the only test that counts here.)
+3. **The shipped policy file is byte-identical to its checkout source.** The
+   module contains no placeholder markers of its own, so staging's
+   `%%...%%` resolution cannot touch it: what the judge ran is exactly what
+   `verify_manifest` re-hashes, and an auditor can diff the two files.
+4. **`POLICY_ID` enters identity; the record does not.** `causal_mechanism`
+   now carries `[POLICY_ID]` instead of `unavailable` — a constant in v1, so
+   every pair relation recorded under PR-C.1 (prose twins merge, prior
+   overlay splits) is unchanged, and the tests re-prove it. The per-instance
+   record lives top-level in the spec, outside the identity payload.
+5. **Purity is scanned twice and probed once.** Config validation refuses
+   early; `load_policy` re-validates the file on disk at generation time (the
+   declaration is the file, not what passed validation earlier); and the
+   determinism probe runs `select` twice on deep-copied contexts — a stateful
+   policy that the AST scan cannot see (module-level counter) is refused by
+   the probe, and the test does exactly that.
+
+**Honesty constraints.** The v1 policy is a *constant* declaration: one public
+announcement, always delivered, world 2 a level-3 speaker, the signal table
+drawn from `core.EVIDENCE_TABLE`. It does not yet vary across instances and it
+is not yet a causal account of delivery — it makes the selection process
+re-derivable, which is the admissibility condition, and PR-D's
+publicity/delivery axes (P2.1) are where the constants become parameters and
+this module starts recording per-instance variation. The runtime trap is real
+but narrow: it fires on tampering with the baked record or the shipped module
+inside a generated tree; an agent cannot reach either (`judge/` is not
+patchable), so its practical target is artifact provenance, not agent cheating.
+
+**Not in this slice.** No second environment carries a policy (the other 33
+configs have no evidence-selection story yet — declaring empty policies would
+be registry theater); no delivery-axis variation (P2.1); no policy-versioning
+scheme beyond the `_v1` suffix in the id.
+
+**Verified here:** `pytest tests/test_information_policy.py` = 19 passed.
+`tests/test_latent_registry.py + test_causal_layer.py + test_generator.py` =
+40 passed (pair relations and pins unchanged). `tools/oracle_preflight.py` =
+0 failures registry-wide (every generated judge still compiles, including the
+new import). `tools/suite_inventory.py` = 34 cases, `registry_clean`,
+`ready_for_scheduler`. `tools/latent_factors_scaffold.py --check` = 34/34.
+`measurement_adversary --env epistemic_games` still reports the known
+"no measurement_guards block" skip (one of the four envs listed under PR-B.5).
+Full-suite numbers are in the commit message.

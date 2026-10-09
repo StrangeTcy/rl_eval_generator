@@ -1,0 +1,65 @@
+# T1 same_fact_presentation campaign - reasoning Atria target.
+#
+# Lean direct-answer campaign (no Docker, no coding-env judge), the Atria arm of
+# the paired Atria-vs-Mercury comparison. It uses the SAME covering matrix as
+# experiments/t1_mercury.yaml on purpose: a case is identified by (seed, cell),
+# so identical matrices give identical case ids and the paired report can join
+# the two runs on their shared cases.
+#
+# WHY THIS PROFILE LOOKS DIFFERENT FROM MERCURY (do not assume equivalence):
+# Atria-Dawn-Preview is the single Atria model and exposes controlled reasoning
+# ONLY on the OpenAI-Responses surface (/v1/responses) as a nested
+# `reasoning: {effort}` field. Its Chat Completions endpoint has NO reasoning
+# control, which is exactly why the Chat-Completions Atria pilot is honestly
+# labelled `provider_default_uncontrolled`. Mercury, by contrast, is a Chat
+# Completions provider whose reasoning knob is the FLAT `reasoning_effort` body
+# field. Same word "reasoning", two different mechanisms on two different wire
+# APIs - the report records `wire_api` + `reasoning_mode` separately so the two
+# are never silently pooled.
+#
+# Offline preflight first (no provider access; proves the profile is well-formed
+# and within the call budget):
+#   python tools/matched_fact_probe.py --profile experiments/t1_reasoning_atria.yaml --plan
+# Live campaign (needs ATRIA_API_KEY in the environment / repo secrets):
+#   python tools/matched_fact_probe.py --profile experiments/t1_reasoning_atria.yaml \
+#       --out runs/t1_reasoning_atria/report.json
+name: t1_same_fact_presentation_reasoning_atria
+operator: same_fact_presentation
+# Controlled reasoning via the Responses API nested reasoning.effort - distinct
+# label from Mercury's Chat-Completions flat reasoning_effort.
+reasoning_mode: controlled_responses_reasoning_effort_high
+
+target:
+  provider: atria
+  model: Atria-Dawn-Preview     # exact capitalization required by the Atria API
+  api_key_env: ATRIA_API_KEY
+  wire_api: responses           # /v1/responses: the only Atria surface with reasoning control
+  reasoning_effort: high        # sent as nested reasoning:{effort:high}; matched to Mercury "high"
+  max_tokens: 1024              # -> max_output_tokens on the Responses API
+  # No temperature/top_p: the Responses reasoning surface does not take the Chat
+  # Completions sampling knobs, and the probe does not send them on this path.
+
+matrix:
+  # IDENTICAL to t1_mercury.yaml so case ids (seed, n_facts, prior) match across
+  # the two targets and the paired report joins on shared cases.
+  n_facts: [3, 4, 5]
+  prior_world1: ["1/2", "1/3"]
+  seeds: 24                     # seeds 0..23 per cell
+  # If reasoning-high latency threatens the workflow budget, reduce `seeds`
+  # SYMMETRICALLY in BOTH t1 profiles; the paired report joins on the shared
+  # (seed, cell) cases that remain, so pairing survives a smaller pilot.
+
+rate_limit:
+  # Atria's account-wide cap is 60 requests/minute, SHARED across all three APIs
+  # (Chat Completions, Messages, Responses); 429 carries Retry-After and
+  # x-rpm-limit. 1.1s spacing keeps us under 60 RPM with margin.
+  documented_requests_per_minute: 60
+  min_interval_seconds: 1.1
+
+budget:
+  # 3 n_facts x 2 priors x 24 seeds x 2 arms = 288 planned calls (== Mercury).
+  max_api_calls: 600
+  max_tokens_total: 4000000
+
+output:
+  dir: runs/t1_reasoning_atria
