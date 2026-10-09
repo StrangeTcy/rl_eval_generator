@@ -61,19 +61,45 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from fractions import Fraction
+from pathlib import Path
 from typing import Dict, List, Tuple
+
+# Single source of truth for the exact Bayes core and the likelihood-ratio
+# verdict bands (D2 refactor, user-approved 2026-10-07): the computation lives
+# in shared/epistemic_semantics/bayes.py, which wraps the accepted CS001–CS011
+# contracts. Three load contexts:
+#   1. repository checkout with the root importable (generate_env, pytest);
+#   2. generated judge image, where the package ships beside this file as
+#      plain `epistemic_semantics` (see the layout in config.yaml);
+#   3. direct file loads from tooling (tools/epistemic_probe.py) — fall back
+#      to deriving the repository root from this file's own location.
+try:
+    from shared.epistemic_semantics import bayes as _semantics_bayes
+except ImportError:
+    try:
+        from epistemic_semantics import bayes as _semantics_bayes
+    except ImportError:
+        import sys as _sys
+
+        _REPO_ROOT = str(Path(__file__).resolve().parents[3])
+        if _REPO_ROOT not in _sys.path:
+            _sys.path.insert(0, _REPO_ROOT)
+        from shared.epistemic_semantics import bayes as _semantics_bayes
 
 # ---------------------------------------------------------------------------
 # Vocabulary
 # ---------------------------------------------------------------------------
 
-VERDICT_INDISTINGUISHABLE = "indistinguishable"
-VERDICT_WEAK = "weakly_distinguishable"
-VERDICT_STRONG = "distinguishable"
-VERDICTS: Tuple[str, ...] = (VERDICT_INDISTINGUISHABLE, VERDICT_WEAK, VERDICT_STRONG)
+#: Verdict bands and the weak/strong ratio now come from the shared exact
+#: core; the names are re-exported here so the judge, the probe and any
+#: baked specs that reference this module keep working unchanged.
+VERDICT_INDISTINGUISHABLE = _semantics_bayes.VERDICT_INDISTINGUISHABLE
+VERDICT_WEAK = _semantics_bayes.VERDICT_WEAK
+VERDICT_STRONG = _semantics_bayes.VERDICT_STRONG
+VERDICTS: Tuple[str, ...] = _semantics_bayes.VERDICTS
 
 #: R >= WEAK_STRONG_RATIO is "distinguishable"; 1 < R < it is "weakly_distinguishable".
-WEAK_STRONG_RATIO = Fraction(3)
+WEAK_STRONG_RATIO = _semantics_bayes.WEAK_STRONG_RATIO
 
 SUPPORT_WORLD1 = "world1"
 SUPPORT_WORLD2 = "world2"
@@ -955,20 +981,15 @@ def build_instance(
     likelihoods = {w: hypotheses[w].behavior[observation] for w in WORLD_IDS}
     if min(likelihoods.values()) <= 0:
         raise InstanceConstructionError("observed announcement has zero probability")
-    posterior1 = (
-        likelihoods[WORLD1] * prior1
-        / (likelihoods[WORLD1] * prior1 + likelihoods[WORLD2] * (1 - prior1))
+    # Exact posterior and likelihood-ratio verdict band from the shared core
+    # (single source of truth; behavior must stay byte-identical — guarded by
+    # tests/epistemic_semantics/test_v0_differential.py).
+    posterior1 = _semantics_bayes.posterior_world1(
+        prior1, likelihoods[WORLD1], likelihoods[WORLD2]
     )
-    ratio = max(
-        likelihoods[WORLD1] / likelihoods[WORLD2],
-        likelihoods[WORLD2] / likelihoods[WORLD1],
+    ratio, verdict = _semantics_bayes.likelihood_ratio_band(
+        likelihoods[WORLD1], likelihoods[WORLD2]
     )
-    if ratio == 1:
-        verdict = VERDICT_INDISTINGUISHABLE
-    elif ratio < WEAK_STRONG_RATIO:
-        verdict = VERDICT_WEAK
-    else:
-        verdict = VERDICT_STRONG
     posterior1_f = float(posterior1)
     most_supported = (
         SUPPORT_WORLD1 if posterior1_f > 0.5 else SUPPORT_WORLD2 if posterior1_f < 0.5 else SUPPORT_NEITHER

@@ -83,14 +83,6 @@ def test_instance_behavior_is_byte_identical(index: int) -> None:
         assert json.dumps(got, sort_keys=True) == json.dumps(record[key], sort_keys=True), key
 
 
-@pytest.mark.skip(
-    reason="Deferred to the epistemic_games core.py reconciliation (additive-first "
-    "port). This asserts core.py was refactored to delegate its Bayes core and "
-    "verdict bands to shared/epistemic_semantics/bayes (CORE._semantics_bayes). "
-    "The refactor is behavior-preserving - the 144-instance differential guard "
-    "above passes against the un-refactored core.py too - so it lands cleanly with "
-    "the overlap reconciliation, alongside information_policy and PR-D."
-)
 def test_shared_core_is_the_refactored_source_of_truth() -> None:
     """The verdict bands and ratio must resolve to the shared module."""
     from fractions import Fraction

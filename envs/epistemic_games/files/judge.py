@@ -276,6 +276,10 @@ def main() -> None:
     try:
         patched_dir = patch_validator.validate_patch()
     except RuntimeError as exc:
+        result.setdefault("stage_outcomes", {})["patch_validation"] = {
+            "status": "failed",
+            "code": getattr(exc, "code", "patch_invalid"),
+        }
         fail_early(result, "patch_invalid", f"Patch validation failed: {exc}")
     result["checks"]["patch_valid"] = True
     result["patch_valid"] = True

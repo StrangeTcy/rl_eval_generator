@@ -57,18 +57,16 @@ def _record(spec: dict) -> dict:
     hyp2 = hypotheses[core.WORLD2]
     likelihoods = spec["likelihoods"]
 
-    # Band: recompute the verdict from the exact likelihood ratio, the same
-    # way build_instance does (R = max(L1/L2, L2/L1); ==1 indistinguishable,
-    # < WEAK_STRONG_RATIO weak, else strong).
+    # Band: recompute the verdict through the shared exact-semantics substrate
+    # (single source of truth for the likelihood-ratio band, per the
+    # branch-integration reconciliation - core.py now delegates here too).
+    # Accessed via ``core._semantics_bayes`` because this module's own purity
+    # contract (shared/information_policy.py) forbids importing sys/pathlib,
+    # which a direct three-context import fallback would require; core is an
+    # allowed sibling import and already binds the shared package.
     l1 = _exact(likelihoods[core.WORLD1])
     l2 = _exact(likelihoods[core.WORLD2])
-    ratio = max(l1 / l2, l2 / l1)
-    if ratio == 1:
-        expected_verdict = core.VERDICT_INDISTINGUISHABLE
-    elif ratio < core.WEAK_STRONG_RATIO:
-        expected_verdict = core.VERDICT_WEAK
-    else:
-        expected_verdict = core.VERDICT_STRONG
+    _, expected_verdict = core._semantics_bayes.likelihood_ratio_band(l1, l2)
 
     # Signal policy: the two behavior tables must be one of the declared
     # (honest_evasion, strategic_denial) draws for this evidence level.
