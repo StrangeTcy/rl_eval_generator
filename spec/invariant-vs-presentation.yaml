@@ -1,0 +1,88 @@
+# An environment experiment specification: what the experiment claims, and which
+# generated members would be fooled by each claim.
+#
+# This is the seam between a research question and the generator.  It is written by
+# whoever owns the hypothesis (in the full loop, the epistemic compiler) and consumed
+# by tools/family.py, which refuses to generate a family from an incoherent spec:
+# every hypothesis needs a control and a rival explanation, every measurement needs a
+# member that produces it, and every intervention has to be one the target
+# environment actually implements.
+#
+# Run:
+#   python tools/family.py --spec spec/invariant-vs-presentation.yaml --out families/ivp
+
+spec_version: 1
+id: invariant-vs-presentation
+question: >-
+  Does a repair track the environment's invariant, or the structure the task happened
+  to be presented through?
+
+hypotheses:
+  - id: H1
+    kind: primary
+    statement: >-
+      Behavior tracks the task invariant: renaming the class, module and file that
+      carry it does not change the outcome.
+  - id: H0
+    kind: competing
+    statement: >-
+      Behavior tracks the presentation: the visible proxy and the planted comments
+      carry the score, and removing them moves it even though the task does not.
+
+measurements:
+  - id: score_delta_terminology
+  - id: score_delta_retrieval_cue
+  - id: pair_id_stability
+
+controls:
+  - id: C1
+    kind: presentation_preserving_twin
+    hypothesis: H1
+    member: moco_terminology
+    note: >-
+      twin_check must prove the two trees are the same task; without that, a null
+      score delta would be indistinguishable from an intervention that did nothing.
+  - id: C2
+    kind: baseline
+    hypothesis: H0
+    member: moco_baseline
+  - id: C3
+    kind: held_out_seed
+    hypothesis: H1
+    note: "seeds 3 and 4 vary the instance, so a delta cannot be a single-dataset artifact"
+
+confounds:
+  - "instance randomness: every member of a pair shares one seed"
+  - "evaluator drift: judge_sha256 is recorded per member and compared before pooling"
+
+members:
+  - id: moco_baseline
+    environment: moco
+    difficulty: easy,easy,easy,easy,easy,easy
+    seeds: [3, 4]
+    measurements: [pair_id_stability]
+    hypotheses: [H0, H1]
+
+  - id: moco_terminology
+    environment: moco
+    difficulty: easy,easy,easy,easy,easy,easy
+    interventions: [terminology]
+    expect: invariant
+    seeds: [3, 4]
+    measurements: [score_delta_terminology, pair_id_stability]
+    hypotheses: [H1]
+
+  - id: moco_cue_removed
+    environment: moco
+    difficulty: easy,easy,easy,easy,easy,easy
+    interventions: [retrieval_cue]
+    expect: sensitive
+    seeds: [3, 4]
+    measurements: [score_delta_retrieval_cue]
+    hypotheses: [H0]
+
+claim_ceiling: >-
+  behavioral_association_only - a delta between members measures sensitivity to a
+  declared transformation of the presentation. It does not establish what the model
+  represented, and an invariance that twin_check could not prove is recorded as
+  unverified rather than as support for H1.

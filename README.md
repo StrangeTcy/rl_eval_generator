@@ -313,6 +313,150 @@ limits apply when scoring through the generated `run_eval.sh`.
 
 ---
 
+## Causal interventions and twin families
+
+Difficulty axes say how hard a task is. An **intervention** varies how the same task
+is presented, observed, or measured, and declares which way behavior is expected to
+move as a result. Mechanically an intervention is what an axis already is —
+placeholder overrides, an optional layout override, or a rename pass over the
+generated tree — so it inherits the same guarantees: deterministic from the seed, no
+template logic, no code that only runs at generation time.
+
+```bash
+# what one environment supports, and what each id promises
+python generate_env.py --env moco --list-interventions
+
+# one instance with one intervention applied on top of the difficulty vector
+python generate_env.py --env moco --name moco_term --difficulty \
+  easy,easy,easy,easy,easy,easy --seed 3 --interventions terminology
+
+# the family: a baseline plus one member per intervention, then verify the expansion
+python tools/family.py --env moco --difficulty easy,easy,easy,easy,easy,easy \
+  --seeds 3 --interventions terminology,retrieval_cue --out families/moco
+```
+
+Every generated directory carries `generation.json`: the inputs, the config hash, the
+judge-source hash, the tree hash, a `generation_id` (identity of the artifact) and a
+`pair_id` (identity of the *task*). `shared/generation_manifest.verify_manifest`
+recomputes them, so a tree that drifted from what its record claims — hand-edited, or
+generated from a config that has since changed — is unusable rather than quietly
+re-scored. `pair_id` deliberately ignores presentation-layer interventions: twins that
+differ only in names are one task, and that is the comparison the experiment is about.
+
+`tools/twin_check.py` decides whether a twin is the experiment its declaration claims,
+before any model is contacted:
+
+| declaration | what is verified | why |
+|---|---|---|
+| `semantically_equivalent` | trees identical once every value the overlay introduced is mapped back | a twin that differs beyond the renaming is a different task with an invariance label on it |
+| `observation_changing`, `task_changing` | trees must differ once the instance label is normalized away | an overlay that fired nothing is indistinguishable from an agent that correctly ignored it |
+| `evaluator_changing` | agent tree identical, judge tree different | a measurement change that reaches the workspace turns "gamed the evaluator" into "read the evaluator" |
+
+Three declaration fields carry the meaning: `equivalence` (what must stay the same),
+`expect` (`invariant` / `sensitive` / `unspecified`), and `defect_class` (`A_false` …
+`F_drift`, what was done to the information — independent of the first two). `proof`
+says how much of it is mechanical: `textual`, `difference`, or `unverified`, which is a
+real verdict and never a pass.
+
+An `Environment Experiment Spec` (`spec/invariant-vs-presentation.yaml`) is the
+upstream object: hypotheses, the measurements that separate them, the controls, and the
+members that produce each measurement. `tools/family.py --spec` refuses to generate
+from one that is incoherent — fewer than two hypotheses, a hypothesis with no control,
+a measurement no member produces, an intervention the target environment does not
+implement, no untouched baseline, or `expect: invariant` under a task-changing overlay.
+
+### Running a family
+
+A family is a plan, not a directory to score. `tools/suite_inventory.py --family` turns
+`family_manifest.json` into ordinary campaign cases — each carrying `interventions` plus
+the pair identity that grading has to reproduce — and the runner regenerates each member
+inside its own episode:
+
+```bash
+python tools/suite_inventory.py --family families/moco --preflight --out suite.json
+python tools/run_suite.py --manifest suite.json --provider … --model …      # or --dry-run
+python tools/family_report.py --manifest suite.json --checkpoint runs/…/checkpoint.json
+```
+
+Two things this wiring guarantees rather than assumes:
+
+* an episode that asks for an intervention gets a **regenerated** instance, so the twin
+  is byte-for-byte the one that was verified; `env_runner.py reset` records
+  `generation_id` and `pair_id` in the episode state and its reset event, and the
+  exact-instance oracle gate certifies the intervened instance, not the base one;
+* before the judge is invoked, the runner recomputes the generation record: files
+  outside `agent/workspace` and the pristine workspace must still match what was
+  generated. A mismatch is `reward_denial` — an integrity failure upstream of the model,
+  reported as `infrastructure_error`, never as a scored zero. `run_suite` marks the case
+  with `provenance record did not match the generated instance`.
+
+`tools/family_report.py` classifies each pair against its own declaration:
+`invariance_observed`, `sensitive`, `sensitivity_observed`, `no_sensitivity`,
+`*_declaration_unproved` when `twin_check` could not prove the label,
+`identity_mismatch` when the episode ran a different instance than the plan, and
+`not_measurable` when no scored verdict exists. It never writes "established", and it
+prints the spec's `claim_ceiling` with the numbers.
+
+### Trajectory measurement
+
+Tool calls are recorded in a canonical vocabulary that lives in `shared/tool_state.py` —
+the file every environment already copies, so the contract reaches all 34 of them without
+a single layout edit. Events carry `kind` (one of `observe`, `retrieve`, `modify`,
+`execute`, `measure`, `submit`, `judge`, `lifecycle`, `other`), `schema`, and their
+literal action string: classification is closed, but an unanticipated verb is kept and
+counted as `other`, because dropping unfamiliar events would bias every trajectory metric
+toward the environments someone remembered to label.
+
+The host log (`.episodes/<id>/environment-events.jsonl`, copied into each run directory)
+is the authoritative record — the agent cannot write it. The workspace log is the agent's
+own tools' account of themselves: richer, and forgeable, so `arena/trajectory_metrics.py`
+reports the difference as `claim_divergence` instead of trusting or averaging it.
+
+```bash
+python arena/trajectory_metrics.py runs/<episode>          # metrics + gates + verdict
+python tools/family_report.py --manifest suite.json --checkpoint checkpoint.json
+```
+
+`generation.json` records `event_schema_sha256`/`event_schema_version`, and
+`verify_manifest` recomputes them: a tree whose vocabulary no longer matches the one it
+shipped with cannot be compared against another environment's trajectory, so that is an
+error rather than a note. A pair whose run used the self-contained `run_eval.sh`
+transport — which surfaces no event stream — is reported `not_measurable`, and the family
+report keeps that separate from "no change": the first is a fact about the harness.
+
+### Evaluator views
+
+The shipped score is one projection of a judge run, not a neutral quantity.
+`shared/evaluator_views.py` derives the others from the *same* result — `outcome_only`,
+`integrity_gated`, `behavioral_gated`, `trajectory_gated` (host log required), and
+`adversarial` (a second run, opt-in) — and `D_eval` is the spread across them. A
+measurement-only intervention is realized as `mechanism: view`: the twin's artifact bytes
+are identical to its baseline's on purpose, and the manifest records which view defines
+its reward. `twin_check` proves exactly that — trees identical apart from the instance
+label, `pair_id` unchanged, authoritative view different — and a view that could not be
+computed reports `unavailable`/`not_run`, never a zero.
+
+```yaml
+# envs/moco/config.yaml
+evaluators:
+  authoritative: outcome_only
+  views: [outcome_only, integrity_gated, behavioral_gated, trajectory_gated]
+  costly: [adversarial]
+interventions:
+  evaluator:      {view: behavioral_gated}
+  reward_proxy:   {view: integrity_gated}
+```
+
+**Limits.** Four environments implement interventions today (`moco`, `glyph`,
+`css_state_machine`, `epistemic_games`); the other 30 declare none, and asking for one
+there is a hard error rather than a no-op. Evaluator and reward-proxy substitution are
+declared in the taxonomy but implemented nowhere, because they need a second valid
+oracle — that is the next layer, not this one. Task identity is structural only where
+an environment bakes a judge-side instance spec; everywhere else `pair_id` falls back
+to the case id and says so in `pair_id_basis`.
+
+---
+
 ## Exploitation-resistant design
 
 The reward signal is meant to be hard to cheat *and* hard to deny. No single

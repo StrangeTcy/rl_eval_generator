@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from shared import generation_manifest as gm  # noqa: E402
 from tools.judge_preflight import validate_generated_judge  # noqa: E402
 
 
@@ -323,6 +324,141 @@ def _preflight_case(case: dict[str, Any], root: Path) -> dict[str, Any]:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+
+# ---------------------------------------------------------------------------
+# intervention families as campaign cases
+# ---------------------------------------------------------------------------
+
+# A twin check that failed is not a runnable case: the pair was declared and the
+# declaration did not survive contact with the bytes.  "unverified" is allowed
+# through because it is a real verdict - names-only or content-valued overlays
+# cannot be proved textually - and the run report then says so instead of implying
+# the invariance held.
+_TWIN_CHECK_OK = {"pass", "unverified", "unchecked"}
+
+
+def _family_cases(root: Path, family_dir: Path, *, preflight: bool) -> tuple[dict[str, Any], list[str]]:
+    """Turn a verified intervention family into runnable suite cases.
+
+    A case does *not* point at the member directory on disk.  The campaign lane
+    regenerates each instance from (environment, vector, seed, interventions) inside
+    the episode, so what a case carries is those coordinates plus the identity the
+    family recorded - which is what grading must reproduce.  The family manifest is a
+    plan and ``generation.json`` is the receipt; nothing on the paid path depends on a
+    hand-placed artifact surviving from the planning step.
+    """
+    manifest_path = family_dir / gm.FAMILY_MANIFEST_NAME
+    if not manifest_path.is_file():
+        raise ValueError(f"no {gm.FAMILY_MANIFEST_NAME} in {family_dir}")
+    family = json.loads(manifest_path.read_text(encoding="utf-8"))
+    members = family.get("members") or []
+    if not members:
+        raise ValueError(f"{family_dir}: family manifest lists no members")
+
+    baselines: dict[tuple[str, int], str] = {}
+    for member in members:
+        if member.get("role") == "baseline":
+            baselines[(str(member.get("environment")), int(member.get("seed", 0)))] = str(
+                member.get("name")
+            )
+
+    cases: list[dict[str, Any]] = []
+    issues: list[str] = []
+    for member in members:
+        name = str(member.get("name") or "")
+        environment = str(member.get("environment") or "")
+        config_path = str(member.get("config_path") or "")
+        interventions = list(member.get("interventions") or [])
+        case_id = name or _case_id(
+            environment, dict(member.get("difficulty_levels") or {}), int(member.get("seed", 0))
+        )
+        case: dict[str, Any] = {
+            "case_id": case_id,
+            "environment": environment,
+            "config_path": config_path,
+            "config_sha256": member.get("config_sha256"),
+            "track": _track_for_path(root / config_path) if config_path else "untracked",
+            "runner": "arena_episode",
+            "difficulty_levels": dict(member.get("difficulty_levels") or {}),
+            "difficulty": member.get("difficulty"),
+            "seed": int(member.get("seed", 0)),
+            "interventions": ",".join(interventions),
+            "family": {
+                "manifest": str((family_dir / gm.FAMILY_MANIFEST_NAME).relative_to(root))
+                if (family_dir / gm.FAMILY_MANIFEST_NAME).is_relative_to(root)
+                else str(family_dir / gm.FAMILY_MANIFEST_NAME),
+                "member": name,
+                "role": member.get("role"),
+                "baseline_case_id": baselines.get((environment, int(member.get("seed", 0)))),
+                "pair_id": member.get("pair_id"),
+                "pair_id_basis": member.get("pair_id_basis"),
+                "generation_id": member.get("generation_id"),
+                "parent_generation_id": member.get("parent_generation_id"),
+                "equivalences": member.get("equivalences") or [],
+                "expect": member.get("expect"),
+                "defect_classes": member.get("defect_classes") or [],
+                "twin_check": (member.get("check") or {}).get("status", member.get("twin_check")),
+                "expected_invariances": member.get("expected_invariances") or [],
+                "expected_differences": member.get("expected_differences") or [],
+                "spec_id": member.get("spec_id"),
+                "spec_member_id": member.get("spec_member_id"),
+                "measurements": member.get("measurements") or [],
+                "hypotheses": member.get("hypotheses") or [],
+            },
+            "status": "planned",
+        }
+        if not environment or case["difficulty"] in (None, ""):
+            issues.append(f"{case_id}: family member is missing environment or difficulty")
+            case["status"] = "blocked_incomplete_member"
+            cases.append(case)
+            continue
+        if config_path:
+            path = root / config_path
+            if not path.is_file():
+                issues.append(f"{case_id}: config {config_path} is gone from this checkout")
+                case["status"] = "blocked_missing_config"
+            elif _sha256(path) != case.get("config_sha256"):
+                issues.append(
+                    f"{case_id}: {config_path} changed after the family was generated; "
+                    "regenerate the family before spending a run on it"
+                )
+                case["status"] = "blocked_config_drift"
+        twin_check_status = case["family"]["twin_check"]
+        if interventions and twin_check_status not in _TWIN_CHECK_OK:
+            issues.append(
+                f"{case_id}: twin check reported {twin_check_status!r}, so the declared "
+                "intervention is not proved on this pair"
+            )
+            case["status"] = "blocked_twin_check"
+        if preflight and case["status"] == "planned":
+            member_dir = family_dir / str(member.get("path") or name)
+            ok, problems = gm.verify_manifest(member_dir, config_root=root)
+            if not ok:
+                issues.append(
+                    f"{case_id}: generated member no longer matches its own record "
+                    + "(" + "; ".join(problems[:3]) + ")"
+                )
+                case["status"] = "blocked_provenance"
+            else:
+                case["status"] = "ready"
+                case["preflight"] = {
+                    "provenance": "verified",
+                    "tree_sha256": member.get("tree_sha256"),
+                    "pair_id_basis": member.get("pair_id_basis"),
+                }
+        cases.append(case)
+    summary = {
+        "source": str(family_dir.relative_to(root)) if family_dir.is_relative_to(root) else str(family_dir),
+        "member_count": len(members),
+        "baseline_count": len(baselines),
+        "spec_id": sorted({str(m.get("spec_id")) for m in members if m.get("spec_id")}),
+        "verification": family.get("verification", {}).get("counts", {}),
+        "family_ok": bool(family.get("ok")),
+    }
+    return {"family": summary, "cases": cases}, issues
+
+
+
 def build_manifest(
     *,
     root: Path = ROOT,
@@ -333,8 +469,15 @@ def build_manifest(
     compare_refs: list[str] | None = None,
     dry_run: bool = True,
     max_tokens_total: int | None = None,
+    families: list[Path] | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
+    families = [path.resolve() for path in (families or [])]
+    if families and matrix != "representative":
+        raise ValueError(
+            "--family supplies its own case list, so --matrix is not consulted; drop "
+            "it rather than letting a matrix setting imply cases that never exist"
+        )
     if max_tokens_total is not None and max_tokens_total < 1:
         raise ValueError("max-tokens-total must be positive")
     registry = _load_registry(root)
@@ -365,7 +508,7 @@ def build_manifest(
             "issues": axis_issues,
         }
         environments.append(environment)
-        for name in names[:1]:
+        for name in names[:1 if not families else 0]:
             for difficulty in vectors:
                 for seed in seeds:
                     case = {
@@ -383,7 +526,16 @@ def build_manifest(
                     if preflight:
                         case.update(_preflight_case(case, root))
                     cases.append(case)
+    family_sections: list[dict[str, Any]] = []
+    family_issues: list[str] = []
+    for family_dir in families:
+        section, section_issues = _family_cases(root, family_dir, preflight=preflight)
+        family_sections.append(section["family"])
+        cases.extend(section["cases"])
+        family_issues.extend(section_issues)
+
     issues = [
+        *family_issues,
         *audit["missing_registry_paths"],
         *audit["unregistered_config_paths"],
         *[
@@ -425,11 +577,14 @@ def build_manifest(
         "selection": {
             "matrix": matrix,
             "seeds": seeds,
+            "families": [str(path) for path in families],
             "selected_levels": selected_levels or [],
             "dry_run": dry_run,
             "max_tokens_total": max_tokens_total,
         },
         "registry_audit": audit,
+        "families": family_sections,
+        "family_count": len(family_sections),
         "branch_comparisons": branch_comparisons,
         "environment_count": len(environments),
         "case_count": len(cases),
@@ -486,6 +641,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--preflight", action="store_true",
         help="generate, compile, and check deferred judge scripts for each case",
     )
+    parser.add_argument(
+        "--family",
+        action="append",
+        default=[],
+        type=Path,
+        metavar="DIR",
+        help=(
+            "build cases from a generated intervention family (tools/family.py) "
+            "instead of expanding the registry matrix; repeatable. Each case carries "
+            "interventions plus the pair identity grading has to reproduce, and a "
+            "member whose twin check failed is blocked rather than planned. With "
+            "--preflight, every member's generation.json is recomputed too."
+        ),
+    )
     return parser
 
 
@@ -503,6 +672,7 @@ def main(argv: list[str] | None = None) -> int:
             compare_refs=args.compare_ref,
             dry_run=args.dry_run,
             max_tokens_total=args.max_tokens_total,
+            families=args.family,
         )
         write_json(args.out, manifest)
     except (OSError, RuntimeError, ValueError) as exc:
@@ -515,6 +685,7 @@ def main(argv: list[str] | None = None) -> int:
                 "environment_count": manifest["environment_count"],
                 "case_count": manifest["case_count"],
                 "registry_clean": manifest["registry_audit"]["clean"],
+                "family_count": manifest["family_count"],
                 "branch_comparisons": manifest["branch_comparisons"],
                 "ready_for_scheduler": manifest["ready_for_scheduler"],
                 "issue_count": len(manifest["issues"]),

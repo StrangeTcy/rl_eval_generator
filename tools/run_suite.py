@@ -179,6 +179,35 @@ def _judge_scoring_failed(final: dict[str, Any]) -> bool:
     )
 
 
+def _episode_identity(parsed: dict[str, Any]) -> dict[str, Any]:
+    """Read back which generated instance an episode actually ran.
+
+    Scores are pooled per *pair*, and pair identity is a property of the generated
+    bytes rather than of a manifest row, so it is taken from what the controller
+    recorded for the episode.  An episode with no record reports nothing, and a
+    family report treats a missing identity as unattributable rather than as a
+    baseline.
+    """
+    run_dir = parsed.get("run_dir") if isinstance(parsed, dict) else None
+    if not isinstance(run_dir, str):
+        return {}
+    manifest = Path(run_dir) / "manifest.json"
+    if not manifest.is_file():
+        return {}
+    try:
+        record = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    identity = {
+        key: record.get(key)
+        for key in ("generation_id", "pair_id", "pair_id_basis", "provenance")
+        if record.get(key) is not None
+    }
+    if record.get("interventions"):
+        identity["interventions"] = record["interventions"]
+    return identity
+
+
 def _current_config_hash(root: Path, case: dict[str, Any]) -> str | None:
     path = root / str(case.get("config_path", ""))
     if not path.is_file():
@@ -385,6 +414,7 @@ def _build_command(
         str(case["difficulty"]),
         "--seed",
         str(case["seed"]),
+        *(["--interventions", str(case["interventions"])] if case.get("interventions") else []),
         "--max-steps",
         str(max_steps),
         "--max-tokens",
@@ -966,6 +996,8 @@ def run_suite(
                 "track": case.get("track"),
                 "difficulty": case.get("difficulty"),
                 "seed": case.get("seed"),
+                "interventions": case.get("interventions") or "",
+                "family": case.get("family"),
                 "status": "blocked_config_drift",
                 "error": "config hash differs from the pinned inventory",
             }
@@ -1010,6 +1042,8 @@ def run_suite(
                 "track": case.get("track"),
                 "difficulty": case.get("difficulty"),
                 "seed": case.get("seed"),
+                "interventions": case.get("interventions") or "",
+                "family": case.get("family"),
                 "status": "planned",
                 "estimated_api_calls": estimated_calls,
                 "estimated_output_tokens": estimated_tokens,
@@ -1126,13 +1160,22 @@ def run_suite(
                 error = "provider or quota failure detected; resume only after checking the account"
             elif parsed and isinstance(final, dict) and (
                 final.get("failure_mode") in {
-                    "controller_error", "judge_runtime_error", "not_submitted", "unknown"
+                    # A denied reward means the instance could not be attributed to the
+                    # record that planned it.  That is an integrity failure upstream of
+                    # the model, so it is never reported as a scored zero.
+                    "controller_error", "judge_runtime_error", "not_submitted", "unknown",
+                    "reward_denial",
                 }
                 or not isinstance(final.get("failure_mode"), str)
                 or _judge_scoring_failed(final)
             ):
                 status = "infrastructure_error"
-                error = "arena controller or judge failed before producing a valid score"
+                error = (
+                    "provenance record did not match the generated instance; reward denied "
+                    "before the judge ran, so no score is attributable to this episode"
+                    if isinstance(final, dict) and final.get("failure_mode") == "reward_denial"
+                    else "arena controller or judge failed before producing a valid score"
+                )
             elif parsed and isinstance(final, dict) and "verdict" in final:
                 status = "scored"
                 error = None
@@ -1164,6 +1207,9 @@ def run_suite(
                 "http_attempt_ceiling": case_http_attempt_ceiling,
                 "run_dir": parsed.get("run_dir") if parsed else None,
                 "reasoning_enabled": reasoning_effort is not None,
+                "interventions": case.get("interventions") or "",
+                "family": case.get("family"),
+                **_episode_identity(parsed or {}),
                 "error": error,
                 "stdout_tail": stdout,
                 "stderr_tail": stderr,

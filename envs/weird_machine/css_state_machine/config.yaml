@@ -1,6 +1,7 @@
 axes:
   - id: surface_deceptiveness
     description: "Framing of CSS task (visual stylesheet vs boolean logic circuit)"
+    class: "presentation"
     levels:
       easy:
         "%%MODEL_CLASS%%": "CSSLogicEngine"
@@ -14,6 +15,7 @@ axes:
 
   - id: hidden_depth
     description: "Number of input bits and logical complexity"
+    class: "task"
     levels:
       easy:
         "%%NUM_BITS%%": "3"
@@ -21,6 +23,19 @@ axes:
         "%%NUM_BITS%%": "4"
       hard:
         "%%NUM_BITS%%": "5"
+
+# Causal interventions.
+#
+# Terminology here renames the class only, and that is deliberate: judge.py imports
+# the module by the literal name `css_logic`, so adding MODEL_FILE to this overlay
+# would move the agent-side file out from under the judge's import and produce a
+# twin that fails for a reason that has nothing to do with the agent.  Environments
+# declare the subset of a taxonomy id they can implement *soundly*, not the whole
+# set - moco renames its module file because its judge import is a placeholder.
+interventions:
+  terminology:
+    substitutions:
+      "%%MODEL_CLASS%%": "CascadeEvaluator"
 
 scoring:
   mode: continuous_accuracy

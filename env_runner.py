@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 
 from arena.diffing import files_differ, has_symlink_in_path, text_for_diff, unified_text_diff
+from shared import generation_manifest as gm
+from shared.tool_state import EVENT_SCHEMA_VERSION, classify_action
 from arena.docker_backend import DockerBackend, DockerBackendError
 from arena.episode_id import validate_episode_id
 
@@ -41,6 +43,103 @@ def _safe_join(root: Path, rel: str) -> Path:
     except ValueError as exc:
         raise ValueError(f"Path escapes workspace: {rel}") from exc
     return candidate
+
+
+def _intervention_list(value: Any) -> list[str]:
+    """Normalize a comma-separated intervention spec into ids, order kept."""
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [part.strip() for part in str(value or "").split(",") if part.strip()]
+
+
+def _declared_interventions(env_dir: Path) -> list[str]:
+    try:
+        manifest = gm.read_manifest(env_dir)
+    except (OSError, ValueError):
+        return []
+    return [str(item.get("id")) for item in manifest.get("interventions") or []]
+
+
+def _provenance(env_dir: Path) -> dict[str, Any]:
+    """Pull the identity fields out of the generation record, if there is one.
+
+    A tree without ``generation.json`` predates the manifest: that is reported as
+    ``absent``, not treated as verified.
+    """
+    try:
+        manifest = gm.read_manifest(env_dir)
+    except (OSError, ValueError):
+        return {"status": "absent"}
+    return {
+        "status": "recorded",
+        "generation_id": manifest.get("generation_id"),
+        "pair_id": manifest.get("pair_id"),
+        "pair_id_basis": manifest.get("pair_id_basis"),
+        "config_path": manifest.get("config_path"),
+        "tree_sha256": manifest.get("tree_sha256"),
+        "judge_sha256": manifest.get("judge_sha256"),
+        "authoritative_view": manifest.get("authoritative_view"),
+        "evaluators": manifest.get("evaluators") or {},
+        "event_schema_sha256": manifest.get("event_schema_sha256"),
+        "event_schema_version": manifest.get("event_schema_version"),
+        "equivalences": sorted(
+            {str(item.get("equivalence")) for item in manifest.get("interventions") or []}
+        ),
+        "expected_invariances": manifest.get("expected_invariances") or [],
+        "expected_differences": manifest.get("expected_differences") or [],
+    }
+
+
+def _verify_provenance(state: dict[str, Any]) -> list[str]:
+    """Recompute the generation record before the judge is paid for.
+
+    The agent may edit ``agent/workspace`` and nothing else, so the check is split
+    the same way: every recorded file outside the workspace must still match what was
+    generated, and the *pristine* workspace must match it too.  Only recorded paths
+    are required to match - a stray ``__pycache__`` from the agent running python is
+    not evidence of anything - which is why this does not compare ``tree_sha256``.
+
+    A mismatch denies the reward instead of zeroing it: the score would belong to an
+    artifact nobody certified, not to a model that failed a task.
+    """
+    env_dir = Path(state.get("env_dir") or "")
+    if not env_dir.is_dir():
+        return ["the generated tree is missing from the episode state"]
+    try:
+        manifest = gm.read_manifest(env_dir)
+    except (OSError, ValueError):
+        return ["no generation.json in the generated tree"]
+    recorded = manifest.get("files") or {}
+    if not recorded:
+        return ["generation.json records no file hashes"]
+    prefix = "agent/workspace/"
+    problems: list[str] = []
+    for rel in gm.iter_files(env_dir):
+        if rel.startswith(prefix):
+            continue
+        digest = recorded.get(rel)
+        if digest is None:
+            continue
+        if gm.sha256_bytes((env_dir / rel).read_bytes()) != digest:
+            problems.append(f"{rel} no longer matches its recorded hash")
+    pristine = Path(state.get("original_workspace") or "")
+    if not pristine.is_dir():
+        problems.append("the pristine workspace copy is missing")
+    else:
+        original = gm.file_hashes(pristine)
+        for rel, digest in sorted(recorded.items()):
+            if not rel.startswith(prefix):
+                continue
+            if original.get(rel[len(prefix):]) != digest:
+                problems.append(f"pristine {rel} no longer matches its recorded hash")
+    applied = _declared_interventions(env_dir)
+    requested = list(state.get("interventions") or [])
+    if applied != requested:
+        problems.append(
+            f"interventions applied to the instance ({applied or 'none'}) are not the "
+            f"ones this episode requested ({requested or 'none'})"
+        )
+    return problems
 
 
 def _episode_dir(episode_id: str) -> Path:
@@ -73,6 +172,22 @@ def _write_event(state_or_dir: dict[str, Any] | Path, event: dict[str, Any]) -> 
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+def _event_kind(action: Any) -> str:
+    """Canonical kind for a host-observed agent action.
+
+    The host log is the authoritative trajectory record: it is written by the runner,
+    outside anything the agent can edit, while ``workspace/logs/events.jsonl`` is
+    written by tools the agent can rewrite or simply not call.  Both use this
+    vocabulary so a comparison between them means something.
+    """
+    if not isinstance(action, dict):
+        return classify_action(str(action))
+    return classify_action(
+        str(action.get("type") or action.get("cmd") or action.get("action") or ""),
+        tool=str(action.get("tool") or ""),
+    )
 
 
 def _obs(text: str) -> str:
@@ -131,6 +246,10 @@ def reset(args: argparse.Namespace) -> None:
     keep_images = bool(getattr(args, "keep_images", False))
     keep_workspace = bool(getattr(args, "keep_workspace", False))
     episode_id = args.episode_id or f"{args.env}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    # Interventions are part of the instance, not a wrapper around it: the runner
+    # regenerates the member rather than mutating a base tree, so a twin episode is
+    # byte-for-byte what tools/family.py planned and verified.
+    interventions = _intervention_list(getattr(args, "interventions", ""))
     episode_dir = _episode_dir(episode_id)
     EPISODES_DIR.mkdir(exist_ok=True)
     if episode_dir.exists():
@@ -154,6 +273,8 @@ def reset(args: argparse.Namespace) -> None:
         "--seed",
         str(args.seed),
     ]
+    if interventions:
+        cmd.extend(["--interventions", ",".join(interventions)])
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if proc.returncode != 0:
         raise SystemExit(proc.stdout + proc.stderr)
@@ -164,6 +285,7 @@ def reset(args: argparse.Namespace) -> None:
     original_workspace = episode_dir / "original_workspace"
     shutil.copytree(workspace, original_workspace)
 
+    provenance = _provenance(env_dir)
     patchable_files = _parse_list_literal_from_file(env_dir / "judge" / "source_validator.py", "PATCHABLE")
     required_files = _parse_required_files(env_dir / "judge" / "judge.py")
     agent_image: dict[str, Any] | None = None
@@ -183,6 +305,9 @@ def reset(args: argparse.Namespace) -> None:
         "env": args.env,
         "difficulty": args.difficulty,
         "seed": args.seed,
+        "interventions": interventions,
+        "provenance": provenance,
+        "event_schema_version": EVENT_SCHEMA_VERSION,
         "step": 0,
         "max_steps": args.max_steps,
         "done": False,
@@ -212,10 +337,16 @@ def reset(args: argparse.Namespace) -> None:
         {
             "ts": time.time(),
             "event": "reset",
+            "action_kind": "lifecycle",
+            "schema": EVENT_SCHEMA_VERSION,
+            "event_schema_version": EVENT_SCHEMA_VERSION,
             "episode_id": episode_id,
             "env": args.env,
             "difficulty": args.difficulty,
             "seed": args.seed,
+            "interventions": interventions,
+            "generation_id": provenance.get("generation_id"),
+            "pair_id": provenance.get("pair_id"),
             "sandbox": sandbox,
             "agent_image": agent_image,
             "judge_image": judge_image,
@@ -230,6 +361,11 @@ def reset(args: argparse.Namespace) -> None:
             "env": args.env,
             "difficulty": args.difficulty,
             "seed": args.seed,
+            "interventions": interventions,
+            "generation_id": provenance.get("generation_id"),
+            "pair_id": provenance.get("pair_id"),
+            "pair_id_basis": provenance.get("pair_id_basis"),
+            "provenance": provenance.get("status"),
             "step": 0,
             "max_steps": args.max_steps,
             "workspace": str(workspace),
@@ -489,7 +625,61 @@ def _submission_failure(mode: str, note: str, **details: Any) -> tuple[str, floa
     return json.dumps(result, indent=2), 0.0, True, {"judge_result": result, **details}
 
 
-def _judge_result(stdout: str, stderr: str, returncode: int) -> dict[str, Any]:
+def _apply_authoritative_view(
+    result_json: dict[str, Any], state: dict[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Score the episode under the measurement this instance was generated to declare.
+
+    ``evaluator`` and ``reward_proxy`` change which projection of the judge result *is*
+    the reward, and deliberately change no byte of the artifact.  Applying that here, at
+    the single point where a judge result becomes a number, is what makes the twin pair a
+    measurement comparison instead of two different tasks: same episode, same judge
+    output, different thing credited.  ``outcome_only`` - the shipped rule - is the
+    identity, so no environment that declares no view sees its reward move.
+
+    A view that could not be computed never becomes a zero.  ``adversarial`` without its
+    second run and ``trajectory_gated`` on the shell transport are both statements about
+    the harness, and crediting them as a failed answer would be the exact error this whole
+    layer exists to avoid.
+    """
+    view = str((state or {}).get("provenance", {}).get("authoritative_view") or "outcome_only")
+    meta = {"authoritative_view": view, "view_applied": False}
+    if view == "outcome_only":
+        return result_json, meta
+    from shared import evaluator_views as ev
+
+    trajectory = None
+    if view == "trajectory_gated" and state:
+        from arena import trajectory_metrics
+
+        trajectory = trajectory_metrics.summarize(Path(state["episode_dir"]))
+    record = ev.derive(result_json, trajectory=trajectory, views=[view]).get(view) or {}
+    if "passed" not in record:
+        return result_json, {
+            **meta,
+            "view_status": record.get("state", ev.UNAVAILABLE),
+            "view_reason": record.get("reason", ""),
+        }
+    score = float(record.get("score") or 0.0)
+    adjusted = {
+        **result_json,
+        "score": score,
+        "verdict": "PASS" if score >= 1.0 else "FAIL",
+        "reward_view": view,
+        "view_basis": record.get("basis", ""),
+        "view_withheld_by": record.get("failed_probes") or record.get("failed_gates") or [],
+    }
+    return adjusted, {
+        **meta,
+        "view_applied": True,
+        "view_score_before": result_json.get("score"),
+        "view_score_after": score,
+    }
+
+
+def _judge_result(
+    stdout: str, stderr: str, returncode: int, state: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Accept only a complete judge verdict with the expected exit status."""
     result = _extract_last_json_object(stdout)
     if result is not None:
@@ -505,7 +695,10 @@ def _judge_result(stdout: str, stderr: str, returncode: int) -> dict[str, Any]:
             and result["failure_mode"] not in {"unknown", ""}
             and (result["failure_mode"] == "pass") == (verdict == "PASS")
         ):
-            return result
+            # The view is applied last, after the judge's own verdict has been validated:
+            # an invalid judge result stays an infrastructure error under any measurement,
+            # and a measurement never rescues or corrupts a malformed one.
+            return _apply_authoritative_view(result, state)[0]
     reason = f"Judge exited {returncode} without a valid JSON verdict"
     return {
         "verdict": "FAIL", "score": 0.0, "failure_mode": "judge_runtime_error",
@@ -531,6 +724,14 @@ def _submit(
 
     env_dir = Path(state["env_dir"])
     episode_dir = Path(state["episode_dir"])
+    problems = _verify_provenance(state)
+    if problems:
+        return _submission_failure(
+            "reward_denial",
+            "generated instance does not match its provenance record: "
+            + "; ".join(problems[:4]),
+            provenance_problems=problems,
+        )
     try:
         patch_path, _ = _make_submission_patch(state)
     except ValueError as exc:
@@ -552,7 +753,9 @@ def _submit(
             return _submission_failure("judge_runtime_error", f"Docker judge failed to run: {exc}")
         (episode_dir / "judge.stdout").write_text(container.stdout, encoding="utf-8")
         (episode_dir / "judge.stderr").write_text(container.stderr, encoding="utf-8")
-        result_json = _judge_result(container.stdout, container.stderr, container.returncode)
+        result_json = _judge_result(
+            container.stdout, container.stderr, container.returncode, state
+        )
         info: dict[str, Any] = {
             "sandbox": "docker",
             "returncode": container.returncode,
@@ -609,7 +812,7 @@ def _submit(
         )
         (episode_dir / "judge.stdout").write_text(proc.stdout or "", encoding="utf-8")
         (episode_dir / "judge.stderr").write_text(proc.stderr or "", encoding="utf-8")
-        result_json = _judge_result(proc.stdout or "", proc.stderr or "", proc.returncode)
+        result_json = _judge_result(proc.stdout or "", proc.stderr or "", proc.returncode, state)
         return (
             json.dumps(result_json, indent=2),
             float(result_json.get("score", 0.0)),
@@ -711,6 +914,8 @@ def step(args: argparse.Namespace) -> None:
             "event": "step",
             "step": state["step"],
             "action": action,
+            "action_kind": _event_kind(action),
+            "schema": EVENT_SCHEMA_VERSION,
             "observation": _obs(observation),
             "reward": reward,
             "done": done,
@@ -739,6 +944,8 @@ def submit_episode(args: argparse.Namespace) -> None:
         {
             "ts": time.time(),
             "event": "submit",
+            "action_kind": "submit",
+            "schema": EVENT_SCHEMA_VERSION,
             "step": state["step"],
             "reward": reward,
             "done": done,
@@ -765,6 +972,11 @@ def main() -> None:
     p_reset.add_argument("--difficulty", required=True)
     p_reset.add_argument("--seed", type=int, default=0)
     p_reset.add_argument("--episode-id", default="")
+    p_reset.add_argument(
+        "--interventions",
+        default="",
+        help="comma-separated intervention ids to apply on top of the difficulty vector",
+    )
     p_reset.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     p_reset.add_argument("--sandbox", choices=("local", "docker"), default="local")
     p_reset.add_argument("--keep-images", action="store_true")
