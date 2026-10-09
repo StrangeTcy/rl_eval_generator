@@ -16,6 +16,10 @@ def test_scoring_is_configured_in_environment_settings():
             assert "partial_threshold" in config["scoring"]
         elif config["scoring"]["mode"] == "check_fraction":
             assert "total_checks" in config["scoring"]
+        elif config["scoring"]["mode"] == "exact_classification":
+            # Binary exact classification (e.g. registered truth values):
+            # full credit only on an exact match, no thresholds by design.
+            pass
         else:
             raise AssertionError(f"unknown scoring mode {config['scoring']['mode']!r}")
 

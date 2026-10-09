@@ -57,11 +57,14 @@ def test_every_registry_config_declares_a_valid_latent_factors_block() -> None:
         cwd=ROOT, text=True, capture_output=True,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "34/34" in proc.stdout
 
     registry = yaml.safe_load((ROOT / "envs" / "registry.yaml").read_text(encoding="utf-8"))
     paths = {str(path) for path in registry["environments"].values()}
-    assert len(paths) == 34
+    # Count-agnostic on purpose: the registry grows as environments are added
+    # (34 at PR-C.1, 39 after the epistemic-semantics families were ported in).
+    # What must hold is that *every* config validates, so the scaffold reports
+    # N/N for however many N configs the registry currently has.
+    assert f"{len(paths)}/{len(paths)}" in proc.stdout, proc.stdout
     stamped = 0
     for relative in sorted(paths):
         config = yaml.safe_load((ROOT / relative).read_text(encoding="utf-8"))
@@ -71,9 +74,10 @@ def test_every_registry_config_declares_a_valid_latent_factors_block() -> None:
         assert "task_state" in block["factors"], relative
         if block["declared_by"] == "scaffold_unreviewed":
             stamped += 1
-    # One hand-authored projection (epistemic_games); the rest are scaffold output
-    # awaiting review - the stamp is what keeps them from being cited as claims.
-    assert stamped == 33
+    # Exactly one hand-authored projection (epistemic_games); every other block
+    # is scaffold output awaiting review - the stamp is what keeps a mechanical
+    # declaration from being cited as a causal claim.
+    assert stamped == len(paths) - 1
 
 
 def test_scaffold_rules_are_the_documented_precedence() -> None:
