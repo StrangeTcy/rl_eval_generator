@@ -344,3 +344,59 @@ def test_profile_requires_a_target_mapping() -> None:
     with pytest.raises(SystemExit):
         plan_from_profile({"matrix": {"seeds": 2}})
 
+
+
+class _FakeResponsesCompletion:
+    def __init__(self, content: str, usage=None) -> None:
+        self.content = content
+        self.usage = usage or {"prompt_tokens": 0, "completion_tokens": 0}
+
+
+class _FakeResponsesClient:
+    def __init__(self, content: str) -> None:
+        self._content = content
+        self.calls: list = []
+
+    def complete_responses(self, input_text, **kwargs):
+        self.calls.append({"input_text": input_text, **kwargs})
+        return _FakeResponsesCompletion(
+            self._content, {"prompt_tokens": 12, "completion_tokens": 5}
+        )
+
+
+def test_model_adapter_uses_responses_wire_api_with_nested_reasoning_effort() -> None:
+    task = sample_bayesian_matched_facts(seed=15, n_facts=4)
+    content = (
+        '{"posterior_world1": "0.6", "verdict": "weakly_distinguishable",'
+        ' "most_supported": "world1", "diagnostic_choices": [],'
+        ' "justification": "ok"}'
+    )
+    client = _FakeResponsesClient(content)
+    sink: dict = {}
+    source = make_model_source(
+        client,
+        "Atria-Dawn-Preview",
+        reasoning_effort="high",
+        max_tokens=1024,
+        wire_api="responses",
+        usage_sink=sink,
+    )
+    arm = run_arm(task, "a", source)
+    assert arm.terminal_answer == "world1:weakly_distinguishable"
+    call = client.calls[0]
+    # Nested reasoning + Responses input shape; no Chat-Completions-only fields.
+    assert call["reasoning_effort"] == "high"
+    assert call["max_output_tokens"] == 1024
+    assert call["model"] == "Atria-Dawn-Preview"
+    assert "messages" not in call and "request_extra" not in call
+    # The public prompt still hides the oracle answer and the fact-set identity.
+    assert task.oracle_answer() not in call["input_text"]
+    assert task.semantic_fact_id not in call["input_text"]
+    # Provenance sink accumulated the reported usage.
+    assert sink == {"calls": 1, "prompt_tokens": 12, "completion_tokens": 5}
+
+
+def test_model_adapter_rejects_unknown_wire_api() -> None:
+    client = _FakeResponsesClient("{}")
+    with pytest.raises(ValueError):
+        make_model_source(client, "m", wire_api="carrier_pigeon")

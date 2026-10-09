@@ -224,6 +224,52 @@ def chat_completions_url(api_base: str) -> str:
     return url
 
 
+def responses_url(api_base: str) -> str:
+    """Normalize a base URL to the OpenAI-Responses-compatible endpoint.
+
+    Atria-Dawn-Preview exposes controlled reasoning only here (nested
+    ``reasoning: {effort}``); its Chat Completions surface has no reasoning
+    field, which is why the Chat-Completions campaign is provider-default.
+    """
+
+    base = api_base.rstrip("/")
+    url = base if base.endswith("/responses") else f"{base}/responses"
+    require_https(url)
+    return url
+
+
+def _content_from_responses_output(data: Mapping[str, Any]) -> str:
+    """Extract the answer text from an OpenAI-Responses-shaped body.
+
+    Prefers the ``output_text`` convenience field, otherwise concatenates the
+    text parts of message items in ``output`` and skips reasoning items, so a
+    leading reasoning item never masquerades as the answer.
+    """
+
+    if isinstance(data.get("output_text"), str):
+        return data["output_text"]
+    output = data.get("output")
+    if not isinstance(output, list):
+        return ""
+    pieces: list[str] = []
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") not in (None, "message"):
+            continue
+        content = item.get("content")
+        if isinstance(content, str):
+            pieces.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, str):
+                    pieces.append(part)
+                elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                    pieces.append(part["text"])
+    return "".join(pieces)
+
+
+
 def _content_from_message(message: Any) -> str:
     content = message.get("content") if isinstance(message, dict) else None
     if isinstance(content, str):
@@ -776,6 +822,132 @@ class ProviderClient:
                 raise ProviderError("Provider request failed", body=failure.body) from exc
 
         raise AssertionError("unreachable")
+
+    def complete_responses(
+        self,
+        input_text: str | list[dict[str, Any]],
+        *,
+        model: str,
+        reasoning_effort: str | None = None,
+        max_output_tokens: int | None = None,
+        request_extra: Mapping[str, Any] | None = None,
+    ) -> Completion:
+        """Call the OpenAI-Responses-compatible ``/v1/responses`` endpoint.
+
+        Additive sibling of :meth:`complete`: the Chat-Completions path used by
+        every coding campaign is left byte-identical.  ``Atria-Dawn-Preview``
+        exposes controlled reasoning only on this surface, as a nested
+        ``reasoning: {effort}`` field (``low``/``medium``/``high``); its Chat
+        Completions endpoint has no reasoning control, which is why the
+        Chat-Completions Atria campaign is honestly labelled
+        ``provider_default_uncontrolled``.  The answer is read from the message
+        items of ``output`` (reasoning items skipped), finish from ``status``,
+        and usage from ``input_tokens``/``output_tokens``.
+        """
+
+        _validate_request_extra(request_extra)
+        url = responses_url(self.api_base)
+        payload: dict[str, Any] = {"model": model, "input": input_text, "stream": False}
+        if max_output_tokens is not None:
+            payload["max_output_tokens"] = int(max_output_tokens)
+        if reasoning_effort is not None:
+            payload["reasoning"] = {"effort": str(reasoning_effort)}
+        payload.update(dict(request_extra or {}))
+        encoded = json.dumps(payload).encode("utf-8")
+
+        attempt_number = 0
+        while True:
+            attempt_number += 1
+            started = time.monotonic()
+            self._wait_for_request_slot()
+            req = request.Request(url, data=encoded, headers=self.headers(), method="POST")
+            response_body = ""
+            response_status_code: int | None = None
+            try:
+                with self.opener(req, timeout=self.timeout) as raw:
+                    response_status_code = int(getattr(raw, "status", 0) or 0)
+                    raw_headers = dict(raw.headers.items()) if raw.headers else {}
+                    self._observe_rate_limit_headers(raw_headers, status_code=response_status_code)
+                    response_headers = _safe_headers(raw_headers, self.api_key)
+                    response_body = raw.read().decode("utf-8", errors="replace")
+                data = json.loads(response_body)
+                if not isinstance(data, dict):
+                    raise ProviderError(
+                        "Responses returned a non-object JSON response",
+                        status_code=response_status_code,
+                        body=_redact_text(response_body, self.api_key),
+                        retryable=False,
+                    )
+                content = _content_from_responses_output(data)
+                if not content.strip():
+                    raise ProviderError(
+                        "Responses output contained no text",
+                        status_code=response_status_code,
+                        body=_redact_text(response_body, self.api_key),
+                        retryable=False,
+                    )
+                usage = data.get("usage")
+                prompt_tokens = int(usage.get("input_tokens", 0)) if isinstance(usage, dict) else 0
+                completion_tokens = int(usage.get("output_tokens", 0)) if isinstance(usage, dict) else 0
+                finish = data.get("status")
+                return Completion(
+                    content=content,
+                    requested_model=model,
+                    resolved_model=str(data["model"]) if data.get("model") is not None else None,
+                    finish_reason=str(finish) if finish is not None else None,
+                    usage={"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens},
+                    raw_response=dict(data),
+                    latency_ms=max(0, int(round((time.monotonic() - started) * 1000))),
+                    request_id=_request_id(response_headers, data),
+                    response_headers=response_headers,
+                    status_code=response_status_code,
+                    reasoning_content_length=None,
+                    provider=self.provider,
+                    upstream_provider=None,
+                )
+            except error.HTTPError as exc:
+                try:
+                    response_body = exc.read().decode("utf-8", errors="replace")
+                except (AttributeError, OSError):
+                    response_body = ""
+                status = int(exc.code)
+                raw_error_headers = dict(exc.headers.items()) if exc.headers else {}
+                self._observe_rate_limit_headers(raw_error_headers, status_code=status)
+                safe_headers = _safe_headers(raw_error_headers, self.api_key)
+                retryable = status in {429, 500, 502, 503, 504}
+                if retryable and attempt_number <= self.max_retries:
+                    self.last_retry_count += 1
+                    self._backoff(
+                        attempt_number,
+                        self._retry_after_seconds(dict(exc.headers) if exc.headers else None),
+                    )
+                    continue
+                raise ProviderError(
+                    f"Responses HTTP {status}",
+                    status_code=status,
+                    body=_redact_text(response_body, self.api_key),
+                    request_id=_request_id(safe_headers, {}),
+                    response_headers=safe_headers,
+                    retryable=retryable,
+                    attempts=attempt_number,
+                ) from exc
+            except (TimeoutError, error.URLError) as exc:
+                if attempt_number <= self.max_retries:
+                    self.last_retry_count += 1
+                    self._backoff(attempt_number)
+                    continue
+                raise ProviderError(
+                    "Responses request failed",
+                    body=_redact_text(str(exc), self.api_key),
+                    retryable=True,
+                    attempts=attempt_number,
+                ) from exc
+            except json.JSONDecodeError as exc:
+                raise ProviderError(
+                    "Responses returned invalid JSON",
+                    status_code=response_status_code,
+                    body=_redact_text(response_body, self.api_key),
+                ) from exc
 
 
 def provider_metadata(completion: Completion) -> dict[str, Any]:

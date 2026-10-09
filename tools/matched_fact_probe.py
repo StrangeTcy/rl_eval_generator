@@ -209,6 +209,8 @@ def make_model_source(
     max_tokens: int = 1024,
     reasoning_effort: Optional[str] = None,
     top_p: Optional[float] = None,
+    wire_api: str = "chat_completions",
+    usage_sink: Optional[Dict[str, int]] = None,
 ) -> AnswerSource:
     """Wrap a ProviderClient as an AnswerSource for one target model.
 
@@ -217,10 +219,39 @@ def make_model_source(
     never sent. A response that cannot be parsed yields null endpoints (scored
     not_measurable/incorrect) rather than raising, so one bad completion cannot
     abort a campaign leg.
+
+    ``wire_api`` selects the provider surface and therefore how reasoning is
+    controlled -- the two are NOT interchangeable (do not assume equivalence
+    across providers):
+
+    * ``chat_completions`` (default): ``/v1/chat/completions``, reasoning as a
+      flat ``reasoning_effort`` body field (Mercury's documented control).
+    * ``responses``: ``/v1/responses`` (OpenAI-Responses-compatible), reasoning
+      as a nested ``reasoning: {effort}`` field. This is the ONLY surface on
+      which ``Atria-Dawn-Preview`` exposes controlled reasoning; its Chat
+      Completions endpoint has none, so a Chat-Completions Atria run is honestly
+      ``provider_default_uncontrolled``.
+
+    ``usage_sink``, when provided, accumulates prompt/completion token counts
+    and call counts for provenance in the campaign report.
     """
+    if wire_api not in ("chat_completions", "responses"):
+        raise ValueError(f"unsupported wire_api {wire_api!r}")
     request_extra: Dict[str, object] = {}
-    if reasoning_effort:
+    if reasoning_effort and wire_api == "chat_completions":
         request_extra["reasoning_effort"] = reasoning_effort
+
+    def _tally(completion: object) -> None:
+        if usage_sink is None:
+            return
+        usage = getattr(completion, "usage", None) or {}
+        usage_sink["calls"] = usage_sink.get("calls", 0) + 1
+        usage_sink["prompt_tokens"] = usage_sink.get("prompt_tokens", 0) + int(
+            usage.get("prompt_tokens", 0) or 0
+        )
+        usage_sink["completion_tokens"] = usage_sink.get("completion_tokens", 0) + int(
+            usage.get("completion_tokens", 0) or 0
+        )
 
     def source(presentation: Mapping[str, object]) -> Dict[str, object]:
         prompt = (
@@ -229,14 +260,23 @@ def make_model_source(
             f"{presentation['evidence_presentation']}\n\n"
             f"{_ANSWER_SCHEMA}"
         )
-        completion = client.complete(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            request_extra=request_extra or None,
-        )
+        if wire_api == "responses":
+            completion = client.complete_responses(
+                prompt,
+                model=model,
+                reasoning_effort=reasoning_effort or None,
+                max_output_tokens=max_tokens,
+            )
+        else:
+            completion = client.complete(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                request_extra=request_extra or None,
+            )
+        _tally(completion)
         data = _extract_json(completion.content)
         if data is None:
             return {
@@ -428,11 +468,17 @@ def plan_from_profile(profile: Mapping[str, object]) -> Dict[str, object]:
     cells = _matrix_cells(matrix)
     calls = 2 * len(seeds) * len(cells)  # two matched arms per instance per cell
     max_api_calls = budget.get("max_api_calls") if isinstance(budget, Mapping) else None
+    wire_api = str(target.get("wire_api", "chat_completions"))
+    if wire_api not in ("chat_completions", "responses"):
+        raise SystemExit(
+            f"profile.target.wire_api must be 'chat_completions' or 'responses', got {wire_api!r}"
+        )
     return {
         "probe": "t1_same_fact_presentation",
         "operator": "same_fact_presentation",
         "provider": target.get("provider"),
         "model": target.get("model"),
+        "wire_api": wire_api,
         "reasoning_mode": profile.get("reasoning_mode", "provider_default_uncontrolled"),
         "reasoning_effort": target.get("reasoning_effort"),
         "temperature": target.get("temperature", 0.0),
@@ -480,6 +526,8 @@ def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[st
     client = ProviderClient(provider, creds.api_key, api_base=creds.api_base,
                             min_interval_seconds=min_interval)
     reasoning_effort = target.get("reasoning_effort")
+    wire_api = str(plan["wire_api"])
+    usage_sink: Dict[str, int] = {}
     source = make_model_source(
         client,
         model,
@@ -487,6 +535,8 @@ def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[st
         max_tokens=int(target.get("max_tokens", 1024)),
         reasoning_effort=str(reasoning_effort) if reasoning_effort else None,
         top_p=float(target["top_p"]) if target.get("top_p") is not None else None,
+        wire_api=wire_api,
+        usage_sink=usage_sink,
     )
     matrix = profile.get("matrix", {})
     assert isinstance(matrix, Mapping)
@@ -506,9 +556,11 @@ def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[st
         "target": {
             "provider": provider,
             "model": model,
+            "wire_api": wire_api,
             "reasoning_mode": plan["reasoning_mode"],
             "reasoning_effort": reasoning_effort,
         },
+        "usage": dict(usage_sink),
         "plan": plan,
         "cell_count": len(cell_reports),
         "cells": cell_reports,
