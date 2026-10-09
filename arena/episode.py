@@ -18,6 +18,7 @@ from typing import Any
 from .artifacts import RunArtifacts, manifest_defaults, sanitize, utc_now
 from .docker_backend import DockerBackend
 from .episode_id import validate_episode_id
+from .result_record import build_attempt_record, read_jsonl, stage_status_summary
 from .providers import (
     Completion,
     ProviderClient,
@@ -84,6 +85,9 @@ class EpisodeOptions:
     secrets: Path | None = None
     invalid_retries: int = 2
     episode_id: str | None = None
+    case_id: str | None = None
+    campaign_id: str | None = None
+    judge_guarantee: str | None = None
     keep_images: bool = False
     keep_workspace: bool = False
     max_retries: int = 3
@@ -301,6 +305,12 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
 
     if options.episode_id is not None:
         validate_episode_id(options.episode_id)
+    if options.case_id is not None and not options.case_id.strip():
+        raise ValueError("case-id must not be empty")
+    if options.campaign_id is not None and not options.campaign_id.strip():
+        raise ValueError("campaign-id must not be empty")
+    if options.judge_guarantee is not None and not options.judge_guarantee.strip():
+        raise ValueError("judge-guarantee must not be empty")
     if options.sandbox not in {"local", "docker"}:
         raise ValueError("sandbox must be local or docker")
     if options.max_steps < 1 or options.max_tokens < 1:
@@ -325,7 +335,7 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     from tools.instance_oracle_gate import validate_case
 
     oracle = validate_case(
-        {"case_id": options.episode_id or "direct", "environment": options.env,
+        {"case_id": options.case_id or options.episode_id or "direct", "environment": options.env,
          "difficulty": options.difficulty, "seed": options.seed},
         root=ROOT, include_slow=True,
     )
@@ -351,10 +361,16 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         secret_path=options.secrets,
     )
     run_id = _new_run_id(options)
+    attempt_id = run_id
+    case_id = options.case_id or options.episode_id or f"direct:{run_id}"
+    judge_guarantee = options.judge_guarantee or (
+        "behavioral_reference" if oracle.get("status") == "passed" else None
+    )
     episode_id = validate_episode_id(options.episode_id or f"arena_{run_id.replace('-', '_')}")
     artifacts = RunArtifacts(Path(options.out), run_id, secret=api_key)
     episode_dir: Path | None = None
     final: dict[str, Any] = _fallback_final("not_submitted", "Episode did not reach submission.")
+    result_record: dict[str, Any] | None = None
     manifest = manifest_defaults(
         root=ROOT,
         run_id=run_id,
@@ -374,6 +390,10 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         max_retries=options.max_retries,
         max_http_attempts=options.max_http_attempts,
         provider_min_interval_seconds=options.provider_min_interval_seconds,
+        campaign_id=options.campaign_id,
+        case_id=case_id,
+        attempt_id=attempt_id,
+        judge_guarantee=judge_guarantee,
     )
     artifacts.write_manifest(manifest)
 
@@ -706,6 +726,26 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                 pass
         artifacts.finalize(episode_dir=episode_dir, final=final, finished_at=utc_now())
         artifacts.update_manifest(manifest_updates)
+        result_record = build_attempt_record(
+            attempt_id=attempt_id,
+            case_id=case_id,
+            campaign_id=options.campaign_id,
+            environment=options.env,
+            difficulty=options.difficulty,
+            seed=options.seed,
+            judge_guarantee=judge_guarantee,
+            final=final,
+            traces=read_jsonl(artifacts.path("trace.jsonl")),
+            model_responses=read_jsonl(artifacts.path("model_responses.jsonl")),
+            api_errors=read_jsonl(artifacts.path("api_errors.jsonl")),
+        )
+        artifacts.write_result_record(result_record)
+        artifacts.update_manifest(
+            {
+                "result_record_schema_version": result_record["schema_version"],
+                "case_disposition": result_record["case_disposition"],
+            }
+        )
         if options.sandbox == "docker" and not options.keep_images and state_path.is_file():
             try:
                 cleanup_state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -722,6 +762,13 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     return sanitize(
         {
             "run_id": run_id,
+            "attempt_id": attempt_id,
+            "case_id": case_id,
+            "campaign_id": options.campaign_id,
+            "case_disposition": result_record.get("case_disposition") if result_record else "unscored",
+            "judge_guarantee": judge_guarantee,
+            "stage_statuses": stage_status_summary(result_record or {}),
+            "result_record_path": str(artifacts.path("result_record.json")),
             "run_dir": str(artifacts.root),
             "final": final,
             "http_attempts": getattr(client, "http_attempts_used", 0),

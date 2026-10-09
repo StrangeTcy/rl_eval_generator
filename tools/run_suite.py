@@ -364,6 +364,9 @@ def _build_command(
     max_retries: int = 3,
     reasoning_effort: str | None = None,
     request_extra: dict[str, Any] | None = None,
+    case_id: str | None = None,
+    campaign_id: str | None = None,
+    judge_guarantee: str | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -412,6 +415,12 @@ def _build_command(
     ])
     if api_base:
         command.extend(["--api-base", api_base])
+    if case_id:
+        command.extend(["--case-id", case_id])
+    if campaign_id:
+        command.extend(["--campaign-id", campaign_id])
+    if judge_guarantee:
+        command.extend(["--judge-guarantee", judge_guarantee])
     effective_extra = dict(request_extra or {})
     if reasoning_effort:
         effective_extra["reasoning"] = {"effort": reasoning_effort}
@@ -1080,6 +1089,14 @@ def run_suite(
             keep_workspace=keep_workspace,
             reasoning_effort=reasoning_effort,
             request_extra=request_extra,
+            case_id=case_id,
+            campaign_id=output_dir.name,
+            judge_guarantee=(
+                "compile_only"
+                if unreferenced_compile_only
+                and str(case.get("environment", "")) not in referenced_envs
+                else "behavioral_reference"
+            ),
         )
         case_started = time.monotonic()
         remaining_wall_seconds = None
@@ -1163,6 +1180,10 @@ def run_suite(
                 ),
                 "http_attempt_ceiling": case_http_attempt_ceiling,
                 "run_dir": parsed.get("run_dir") if parsed else None,
+                "attempt_id": parsed.get("attempt_id") if parsed else None,
+                "case_disposition": parsed.get("case_disposition") if parsed else None,
+                "stage_statuses": parsed.get("stage_statuses", {}) if parsed else {},
+                "result_record_path": parsed.get("result_record_path") if parsed else None,
                 "reasoning_enabled": reasoning_effort is not None,
                 "error": error,
                 "stdout_tail": stdout,
