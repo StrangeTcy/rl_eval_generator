@@ -1,0 +1,112 @@
+# DEPLOYABLE SOURCE for .github/workflows/mercury-t1-campaign.yml.
+#
+# Copy this file to .github/workflows/mercury-t1-campaign.yml BY HAND. The branch
+# that carries it cannot push to that path: the GitHub App token used for
+# automation has no `workflows` permission, so any change under .github/workflows/
+# is rejected outright (the same reason atria-campaign.yml is hand-copied from
+# docs/workflows/atria-campaign.yml.example). Once copied to the default branch it
+# is dispatchable from the Actions tab (workflow_dispatch), or via the API against
+# a branch that contains it.
+#
+# Nothing else about this file is hand-editable-only: it is the exact workflow the
+# probe + profile in this repo drive. Keep it in sync with
+# experiments/t1_mercury.yaml and tools/matched_fact_probe.py.
+
+name: Mercury T1 matched-fact presentation campaign
+
+# Lean direct-answer campaign for the T1 same_fact_presentation operator against
+# Inception Labs Mercury. Unlike the coding-env covering campaign
+# (atria-campaign.yml), this needs no Docker, no judge, and no exact-instance
+# gate: tools/matched_fact_probe.py presents an identical evidence set under two
+# presentations and records the target's behavior as SEPARATE endpoints. The
+# terminal oracle is presentation-invariant by construction, so divergence across
+# matched arms is *presentation susceptibility* - never attention manipulation,
+# an internal update-rule change, or harm (see arena/matched_facts.py).
+#
+# Safety shape:
+#   * An offline --plan preflight runs BEFORE any provider access and fails
+#     closed if the matrix exceeds the call budget.
+#   * MERCURY_API_KEY is read by the host controller only; there is no container
+#     to leak it into, and it is never written to an artifact or command arg.
+#   * A concurrency group prevents two campaigns spending the shared 100M-token
+#     free budget at once.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or full commit SHA containing the pinned T1 probe code"
+        required: true
+        default: "arena/3fd95b93-rl-eval-generator"
+      profile:
+        description: "T1 campaign profile (target + covering matrix)"
+        required: false
+        default: "experiments/t1_mercury.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mercury-t1-campaign
+  cancel-in-progress: false
+
+jobs:
+  campaign:
+    runs-on: ubuntu-latest
+    # 288 single-turn calls at >=0.2s spacing is minutes of provider time; the
+    # larger job limit leaves room for checkout, deps, and artifact upload.
+    timeout-minutes: 60
+    steps:
+      - name: Check out pinned probe code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      # Fail closed on any ref that predates the T1 probe.
+      - name: Refuse ungated code
+        run: |
+          test -f tools/matched_fact_probe.py || { echo "ref lacks the T1 probe tool"; exit 1; }
+          test -f arena/matched_facts.py || { echo "ref lacks the T1 contract"; exit 1; }
+          test -f "${{ inputs.profile }}" || { echo "ref lacks the campaign profile"; exit 1; }
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install controller dependencies
+        run: python -m pip install -r requirements.txt
+
+      # Offline preflight: prove the profile is well-formed and within the call
+      # budget BEFORE any provider access. --plan exits nonzero if out of budget.
+      - name: Offline plan preflight (no provider access)
+        run: |
+          set -euo pipefail
+          mkdir -p runs/t1_mercury
+          python tools/matched_fact_probe.py --profile "${{ inputs.profile }}" --plan \
+            | tee runs/t1_mercury/plan.json
+          # `tee` masks the probe exit code behind the pipe; re-assert it.
+          python tools/matched_fact_probe.py --profile "${{ inputs.profile }}" --plan >/dev/null
+
+      - name: Run the T1 matched-fact campaign (live)
+        env:
+          # The host controller reads this value. There is no Docker agent or
+          # judge in this lean probe, so it never reaches a container, a command
+          # argument, or an artifact.
+          MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
+        run: |
+          set -euo pipefail
+          python tools/matched_fact_probe.py \
+            --profile "${{ inputs.profile }}" \
+            --out runs/t1_mercury/report.json
+
+      - name: Upload non-secret campaign artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mercury-t1-${{ github.run_id }}
+          path: |
+            runs/t1_mercury/**
+          if-no-files-found: warn
+          retention-days: 30
