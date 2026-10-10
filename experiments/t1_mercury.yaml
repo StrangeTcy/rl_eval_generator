@@ -26,7 +26,7 @@ target:
   api_key_env: MERCURY_API_KEY
   reasoning_effort: high          # Inception Mercury tunable reasoning depth
   temperature: 0.0                # deterministic where the provider allows
-  max_tokens: 1024
+  max_tokens: 8192
 
 matrix:
   # Covering matrix: cross-product of n_facts x prior_world1, swept over seeds.
