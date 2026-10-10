@@ -1,0 +1,371 @@
+# Manual-copy example only. Do not commit this file under .github/workflows/.
+# Copy to .github/workflows/reasoning-atria-pairwise-campaign.yml after review.
+#
+# THIS FILE IS THE ONLY THING THAT HAS TO BE UPLOADED. Everything else the campaign
+# needs - tools/suite_inventory.py's pairwise mode, tools/twin_preflight.py,
+# tools/inherit_campaign_state.py and the
+# experiments/reasoning_atria_pairwise_campaign.yaml profile - is read from the checkout of
+# the `ref` input below, which currently points at the session branch (tip
+# 4202f83). The job therefore runs the campaign as
+# written there without any of it landing on main first; `campaign_ref.txt` records
+# the resolved commit on the first dispatch and every scheduled tick resumes at
+# that same commit, so a later push to the branch does not move a running campaign.
+# A workflow file cannot be created by this checkout (the App has no `workflows`
+# permission), which is why exactly one manual copy step remains.
+#
+# Launches Atria reasoning at high reasoning effort on Responses, runs the
+# T1 same_fact_presentation profile first, then the provider-pinned strength-2
+# campaign: 496 vectors (358 pairwise over every axis plus the uniform
+# easy/medium/hard ladder, and 138 intervention twins), of which 269 owe an
+# exact-instance gate row. One gate case can need up to 108 minutes, so the live
+# step is capped at 330 minutes and the overall job at 350; the controller gets the
+# remaining live-step budget after T1's 70 minutes. Scheduled runs resume its
+# checkpoint, and gate rows already banked by this campaign are reused from its own
+# artifact - which is why a resume is cheap and a fresh dispatch is not.
+# T1 interruption is an operator stop (not auto-replayed).
+# Live status is posted to an Atria-specific Issue, via its own label and
+# pin file. Pick `paid` at the first dispatch: the execution mode is read back
+# only from the persisted intent, so a lineage started `gates_only` can never
+# be promoted later by a resume - a dropdown is ignored on that path.
+name: Reasoning-Atria pairwise campaign
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or full commit SHA containing the pinned campaign code (main after this work lands there)"
+        required: true
+        default: arena/595b91e0-rl-eval-generator
+      execution_mode:
+        description: "Choose whether this explicit dispatch may make provider calls"
+        required: true
+        type: choice
+        options:
+          - paid
+          - gates_only
+        default: paid
+      resume_previous:
+        description: "Resume the latest campaign-state artifact instead of starting fresh"
+        required: true
+        type: boolean
+        default: true
+  schedule:
+    - cron: "13,43 * * * *"
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: reasoning-atria-pairwise-campaign
+  cancel-in-progress: false
+
+jobs:
+  campaign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Decide fresh dispatch versus supervised resume
+        id: mode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
+             && [ "${{ inputs.resume_previous }}" != "true" ]; then
+            echo "mode=fresh" >> "$GITHUB_OUTPUT"
+            echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+            echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+            echo "reason=explicit fresh manual dispatch" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name | startswith("reasoning-atria-pairwise-state-")) | select(.expired == false)] | sort_by(.created_at) | last // empty')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=no Reasoning-Atria pairwise state artifact" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ARTIFACT_ID=$(printf '%s' "$LATEST" | jq -r '.id')
+          STATE_STAGE="$RUNNER_TEMP/reasoning_atria_state"
+          rm -rf "$STATE_STAGE"
+          mkdir -p "$STATE_STAGE"
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/reasoning_atria_state.zip"
+          unzip -q "$RUNNER_TEMP/reasoning_atria_state.zip" -d "$STATE_STAGE"
+          PINNED_REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
+          if [ -z "$PINNED_REF" ]; then
+            PINNED_REF=$(jq -r '.run.manifest_commit // empty' "$STATE_STAGE/suite_checkpoint.json" 2>/dev/null || true)
+          fi
+          if [ -z "$PINNED_REF" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=state artifact has no recorded ref" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SUPERVISOR="$RUNNER_TEMP/campaign_supervisor.py"
+          if ! gh api "repos/${{ github.repository }}/contents/tools/campaign_supervisor.py?ref=$PINNED_REF" --jq '.content' | base64 -d > "$SUPERVISOR" 2>/dev/null || [ ! -s "$SUPERVISOR" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=provider-free supervisor unavailable at pinned ref" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          DECISION=$(python3 -c '
+          import importlib.util, json, sys
+          spec = importlib.util.spec_from_file_location("campaign_supervisor", sys.argv[1])
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          print(json.dumps(module.decide_tick(sys.argv[2], expected_provider="atria")))
+          ' "$SUPERVISOR" "$STATE_STAGE")
+          MODE=$(printf '%s' "$DECISION" | jq -r '.mode')
+          REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
+          REF=$(printf '%s' "$DECISION" | jq -r '.ref // empty')
+          EXECUTION_MODE=$(printf '%s' "$DECISION" | jq -r '.execution_mode // empty')
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+          if [ "$MODE" != "none" ]; then
+            echo "ref=${REF:-$PINNED_REF}" >> "$GITHUB_OUTPUT"
+            echo "execution_mode=$EXECUTION_MODE" >> "$GITHUB_OUTPUT"
+            echo "state_staged=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Initialize fresh campaign state
+        if: steps.mode.outputs.mode != 'none' && steps.mode.outputs.mode == 'fresh'
+        run: |
+          set -euo pipefail
+          BOOTSTRAP="$RUNNER_TEMP/reasoning_atria_bootstrap"
+          rm -rf "$BOOTSTRAP"
+          mkdir -p "$BOOTSTRAP"
+          printf '%s\n' "${{ steps.mode.outputs.ref }}" > "$BOOTSTRAP/campaign_ref.txt"
+          printf '{"provider":"atria","execution_mode":"%s"}\n' \
+            "${{ steps.mode.outputs.execution_mode }}" > "$BOOTSTRAP/campaign_bootstrap.json"
+
+      - name: Check out pinned campaign code
+        if: steps.mode.outputs.mode != 'none'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.mode.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Refuse code missing campaign gates
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          test -f tools/instance_oracle_gate.py
+          test -f tools/atria_campaign.py
+          test -f tools/matched_fact_probe.py
+          test -f tools/campaign_supervisor.py
+          # This launcher needs the strength-2 mode and the twin preflight in the
+          # pinned code, or it would silently bill a strength-1 campaign: a resume
+          # pinned to an older commit must stop here, not discover it at row 40.
+          grep -q "def matrix_mode_of" tools/atria_campaign.py
+          grep -q "expand_interventions" tools/atria_campaign.py
+          test -f tools/twin_preflight.py
+          grep -q '"pairwise"' tools/suite_inventory.py
+          test -f tools/inherit_campaign_state.py
+
+      - name: Set up Python
+        if: steps.mode.outputs.mode != 'none'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Create virtual environment and install controller dependencies
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt
+
+      - name: Install pinned CPU judge stack
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          .venv/bin/python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
+          .venv/bin/python -m pip install jinja2
+
+      - name: Restore or initialize campaign output
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          OUT=runs/reasoning_atria_pairwise_campaign
+          mkdir -p "$OUT"
+          if [ "${{ steps.mode.outputs.state_staged }}" = "true" ]; then
+            cp -a "$RUNNER_TEMP/reasoning_atria_state/." "$OUT/"
+          else
+            cp -a "$RUNNER_TEMP/reasoning_atria_bootstrap/." "$OUT/"
+          fi
+          git rev-parse HEAD > "$OUT/campaign_ref.txt"
+
+      - name: Guard the shared Atria account-wide request budget
+        id: atria_rate
+        if: steps.mode.outputs.mode != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BUSY=$(gh api "repos/${{ github.repository }}/actions/runs?status=in_progress&per_page=100" \
+            --jq '[.workflow_runs[]
+                   | select((.id | tostring) != "${{ github.run_id }}")
+                   | select(.name == "Atria pairwise campaign"
+                         or .name == "Atria Dawn Preview first-five pilot"
+                         or .name == "Reasoning-Atria pairwise campaign")]
+                  | length')
+          if [ "$BUSY" -gt 0 ]; then
+            echo "safe=false" >> "$GITHUB_OUTPUT"
+            echo "reason=another Atria consumer is using the shared account request budget" >> "$GITHUB_OUTPUT"
+            echo "Another Atria consumer is active; this tick will preserve state without provider calls."
+          else
+            echo "safe=true" >> "$GITHUB_OUTPUT"
+            echo "reason=no competing Atria consumer" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Inherit exact-instance gate rows from the covering campaign
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          OUT=runs/reasoning_atria_pairwise_campaign
+          # Strength-2 does not subsume strength-1 case for case: 142 of the 241
+          # covering vectors recur here, 99 are not in this plan at all, and 216 are
+          # new. Only the exact-instance gate rows carry across that boundary, and
+          # only at the same revision - they are keyed on the case content hash and
+          # accepted under gate_context_sha == git rev-parse HEAD. The tool refuses
+          # rather than rewriting that context, and the episode ledger, intent and
+          # terminal markers are never inherited.
+          if [ -s "$OUT/instance_oracles_partial.json" ]; then
+            echo "this campaign already has gate rows of its own; nothing to inherit"
+            exit 0
+          fi
+          INHERIT="$RUNNER_TEMP/reasoning_atria_inherit"
+          rm -rf "$INHERIT"; mkdir -p "$INHERIT"
+          SRC_RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/reasoning-atria-covering-campaign.yml/runs?per_page=5" \
+            --jq '[.workflow_runs[] | select(.status == "completed")] | (.[0].id // empty)' || true)
+          if [ -z "${SRC_RUN:-}" ]; then
+            echo "no completed Reasoning-Atria covering campaign run to inherit from; starting clean"
+            exit 0
+          fi
+          SRC_ART=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SRC_RUN/artifacts" \
+            --jq '([.artifacts[] | select(.name | startswith("reasoning-atria-covering-state-")) | select(.expired == false)] | sort_by(.created_at) | last | .name) // empty' || true)
+          if [ -z "${SRC_ART:-}" ]; then
+            echo "no Reasoning-Atria covering campaign state artifact on run $SRC_RUN; starting clean"
+            exit 0
+          fi
+          gh run download "$SRC_RUN" -n "$SRC_ART" --dir "$INHERIT" || echo "artifact download failed; starting clean"
+          if [ -d "$INHERIT" ] && [ -n "$(ls -A "$INHERIT" 2>/dev/null || true)" ]; then
+            .venv/bin/python tools/inherit_campaign_state.py \
+              --from "$INHERIT" --to "$OUT" \
+              --allow-cross-revision-t1 \
+              --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+              || echo "inheritance failed; the campaign will gate from scratch"
+            cat "$OUT/inheritance_report.json" 2>/dev/null || true
+          fi
+
+      - name: Run T1 and pairwise campaign with live Issue status
+        if: steps.mode.outputs.mode != 'none' && steps.atria_rate.outputs.safe == 'true'
+        timeout-minutes: 330
+        env:
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_MODE: ${{ steps.mode.outputs.execution_mode }}
+        run: |
+          set -euo pipefail
+          STEP_STARTED=$SECONDS
+          OUT=runs/reasoning_atria_pairwise_campaign
+          .venv/bin/python tools/campaign_status_sidecar.py \
+            --out "$OUT" \
+            --label "Reasoning-Atria pairwise campaign" \
+            --pin-file experiments/reasoning_atria_pairwise_status_issue.txt \
+            --interval-seconds 30 &
+          sidecar_pid=$!
+          cleanup() {
+            kill "$sidecar_pid" 2>/dev/null || true
+            wait "$sidecar_pid" 2>/dev/null || true
+            if [ -f "$OUT/t1_started.json" ] && [ ! -f "$OUT/t1_same_fact_presentation.json" ]; then
+              printf '{"status":"interrupted","resume_policy":"operator_review_required_no_replay"}\n' \
+                > "$OUT/t1_interrupted.json"
+            fi
+            .venv/bin/python tools/campaign_status_sidecar.py \
+              --out "$OUT" \
+              --label "Reasoning-Atria pairwise campaign" \
+              --pin-file experiments/reasoning_atria_pairwise_status_issue.txt \
+              --once || true
+          }
+          trap cleanup EXIT
+
+          if [ "$EXECUTION_MODE" = "paid" ]; then
+            .venv/bin/python tools/matched_fact_probe.py \
+              --profile experiments/t1_reasoning_atria.yaml --plan > "$OUT/t1_plan.json"
+            .venv/bin/python tools/t1_paired_report.py \
+              --m0 --seeds 6 --out "$OUT/t1_m0.json" > /dev/null
+            if [ ! -f "$OUT/t1_same_fact_presentation.json" ]; then
+              printf '{"phase":"started","resume_policy":"operator_review_on_interruption"}\n' \
+                > "$OUT/t1_started.json"
+              timeout --foreground --signal=TERM --kill-after=30s 4200s \
+                .venv/bin/python tools/matched_fact_probe.py \
+                  --profile experiments/t1_reasoning_atria.yaml \
+                  --out "$OUT/t1_same_fact_presentation.json" \
+                  --progress-dir "$OUT" > /dev/null
+            fi
+          fi
+
+          ELAPSED_SECONDS=$((SECONDS - STEP_STARTED))
+          MAX_CAMPAIGN_SECONDS=$(.venv/bin/python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["campaign_job_seconds"])' \
+            experiments/reasoning_atria_pairwise_campaign.yaml)
+          # Keep one minute for sidecar cleanup before the 330-minute step limit.
+          CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))
+          if [ "$CAMPAIGN_SECONDS" -gt "$MAX_CAMPAIGN_SECONDS" ]; then
+            CAMPAIGN_SECONDS=$MAX_CAMPAIGN_SECONDS
+          fi
+          echo "Reasoning-Atria campaign budget: elapsed=${ELAPSED_SECONDS}s profile_max=${MAX_CAMPAIGN_SECONDS}s effective=${CAMPAIGN_SECONDS}s"
+          if [ "$CAMPAIGN_SECONDS" -lt 600 ]; then
+            echo "Insufficient time remains for a safe pairwise-campaign tick."
+            exit 1
+          fi
+
+          if [ "$EXECUTION_MODE" = "paid" ]; then
+            .venv/bin/python tools/atria_campaign.py \
+              --allow-cross-revision-t1 \
+              --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+              --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS"
+          else
+            .venv/bin/python tools/atria_campaign.py \
+              --allow-cross-revision-t1 \
+              --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+              --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS"
+          fi
+
+      - name: Stage campaign state for upload
+        id: stage
+        if: always() && steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          STAGED="$RUNNER_TEMP/reasoning_atria_upload"
+          rm -rf "$STAGED"
+          mkdir -p "$STAGED"
+          BEFORE=0
+          RESTORED="$RUNNER_TEMP/reasoning_atria_state/suite_checkpoint.json"
+          if [ "${{ steps.mode.outputs.state_staged }}" = "true" ] && [ -f "$RESTORED" ]; then
+            BEFORE=$(jq '(.results // []) | length' "$RESTORED")
+          fi
+          AFTER=0
+          CURRENT=runs/reasoning_atria_pairwise_campaign/suite_checkpoint.json
+          [ ! -f "$CURRENT" ] || AFTER=$(jq '(.results // []) | length' "$CURRENT")
+          echo "recorded episodes before=$BEFORE after=$AFTER"
+          if [ "${{ steps.mode.outputs.state_staged }}" = "true" ] && [ "$AFTER" -lt "$BEFORE" ]; then
+            echo "::error::Campaign checkpoint regressed; preserving restored state."
+            cp -a "$RUNNER_TEMP/reasoning_atria_state/." "$STAGED/"
+            echo "regressed=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "regressed=false" >> "$GITHUB_OUTPUT"
+          if [ -d runs/reasoning_atria_pairwise_campaign ]; then
+            cp -a runs/reasoning_atria_pairwise_campaign/. "$STAGED/"
+          else
+            cp -a "$RUNNER_TEMP/reasoning_atria_bootstrap/." "$STAGED/"
+          fi
+
+      - name: Upload Reasoning-Atria campaign state
+        if: always() && steps.mode.outputs.mode != 'none'
+        uses: actions/upload-artifact@v4
+        with:
+          name: reasoning-atria-pairwise-state-${{ github.run_id }}
+          path: ${{ runner.temp }}/reasoning_atria_upload/
+          if-no-files-found: warn
+          retention-days: 90
