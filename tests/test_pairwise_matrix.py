@@ -303,3 +303,76 @@ def test_pairwise_workflows_are_self_consistent_and_cannot_crosstalk() -> None:
         assert 'timeout-minutes: 330' in handoff and "timeout-minutes: 350" in handoff
         assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in handoff
         assert "test -f tools/twin_preflight.py" in handoff, "launcher must refuse code without the twin preflight"
+
+
+# --------------------------------------------------------------------------
+# The step that shipped broken: a workflow may only pass flags its tools accept.
+# --------------------------------------------------------------------------
+
+import re  # noqa: E402
+
+
+def _tool_commands(text: str, tool: str) -> list[str]:
+    """Join each backslash-continued shell invocation of ``tool`` into one string."""
+    commands: list[str] = []
+    current: str | None = None
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if current is None:
+            if not line.startswith(f".venv/bin/python {tool}"):
+                continue
+            current = line
+        else:
+            current = f"{current} {line}"
+        if not current.endswith("\\"):
+            commands.append(current)
+            current = None
+    return commands
+
+
+def _accepted_flags(tool_source: str) -> set[str]:
+    return set(re.findall(r'add_argument\(\s*"?(--[a-z0-9-]+)"?', tool_source))
+
+
+def test_workflow_flags_are_accepted_by_the_tools_they_call() -> None:
+    """Every ``--flag`` a launcher passes must exist in that tool's argparse.
+
+    This is the bug class that killed the first paid runs twice - one wrong kwarg
+    inside Python, one flag pasted onto the wrong invocation - and both were
+    invisible until a paid job died. The check is textual on purpose: the workflows
+    are the deployed artefact, and reading them is cheaper than booting them.
+    """
+    campaign_flags = _accepted_flags((ROOT / "tools/atria_campaign.py").read_text())
+    inherit_flags = _accepted_flags((ROOT / "tools/inherit_campaign_state.py").read_text())
+    assert campaign_flags and inherit_flags, "the extractors must actually find argparse lines"
+    files = [
+        *(ROOT / "handoff").glob("*-campaign.yml"),
+        *(ROOT / "docs/workflows").glob("*-campaign.yml.example"),
+    ]
+    assert files, "no launcher files found to check"
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        for command in _tool_commands(text, "tools/atria_campaign.py"):
+            for flag in re.findall(r'(?<![\w-])--[a-z0-9-]+', command):
+                assert flag in campaign_flags, f"{path.name}: atria_campaign.py does not accept {flag}"
+        for command in _tool_commands(text, "tools/inherit_campaign_state.py"):
+            for flag in re.findall(r'(?<![\w-])--[a-z0-9-]+', command):
+                assert flag in inherit_flags, f"{path.name}: inherit_campaign_state.py does not accept {flag}"
+
+
+def test_cross_revision_t1_flag_reaches_only_the_inherit_tool() -> None:
+    """A global text substitution put this flag on the campaign invocation too, and
+    argparse exit-2'd the paid step. It belongs to exactly one command per file."""
+    for name in ("mercury", "reasoning-atria"):
+        for path in (ROOT / f"handoff/{name}-pairwise-campaign.yml",
+                     ROOT / f"docs/workflows/{name}-pairwise-campaign.yml.example"):
+            text = path.read_text(encoding="utf-8")
+            assert text.count("--allow-cross-revision-t1") == 1, path.name
+            inherit = _tool_commands(text, "tools/inherit_campaign_state.py")
+            assert any("--allow-cross-revision-t1" in command for command in inherit), path.name
+            for command in _tool_commands(text, "tools/atria_campaign.py"):
+                assert "cross-revision" not in command, f"{path.name}: {command}"
+            # the flag must not be orphaned outside a continued command
+            for line in text.split("\n"):
+                if "allow-cross-revision-t1" in line:
+                    assert line.rstrip().endswith("\\"), f"{path.name}: dangling flag line"

@@ -321,12 +321,10 @@ jobs:
 
           if [ "$EXECUTION_MODE" = "paid" ]; then
             .venv/bin/python tools/atria_campaign.py \
-              --allow-cross-revision-t1 \
               --profile experiments/reasoning_atria_pairwise_campaign.yaml \
               --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS"
           else
             .venv/bin/python tools/atria_campaign.py \
-              --allow-cross-revision-t1 \
               --profile experiments/reasoning_atria_pairwise_campaign.yaml \
               --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS"
           fi
