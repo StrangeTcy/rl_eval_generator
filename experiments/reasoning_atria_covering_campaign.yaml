@@ -55,7 +55,7 @@ limits:
   max_tokens: 8192
   invalid_retries: 1
   max_retries: 5
-  max_http_attempts: 48306
+  max_http_attempts: 56166
   max_api_calls: 10050
   max_tokens_total: 66000000
   floor_effect_after: 0
