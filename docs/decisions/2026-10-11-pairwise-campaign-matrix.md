@@ -99,3 +99,43 @@ layer exists to prevent is an inert overlay being read as model-level invariance
 pure rename - cannot be normalized, and `only_the_instance_label_differs` stays
 false. Normalizing that line (or not embedding the member name in it) is the
 follow-up that would let this campaign move to `strict`.
+
+## 6. Resuming a covering campaign into a pairwise one
+
+The intuition "pairwise subsumes covering, so the new campaign can resume the old
+one" is true of *levels* and false of *cases*:
+
+```
+covering vectors                       241
+pairwise vectors                       358   (496 with intervention twins)
+vectors present in both                142   (59%)
+covering vectors that pairwise drops    99   <- the single-axis spikes, incl. all 7
+                                                manual_gate_blocked_exclusions ids
+pairwise vectors that are new           216
+covering gated rows inside this plan     40   of 96
+```
+
+So a mode switch is not a resume: the episode ledger, the campaign intent and the
+terminal markers all belong to the campaign that made them, and 99 verified
+instances of the old plan are simply not part of the new one.
+
+What *can* cross the boundary is the exact-instance gate row cache, because
+`run_suite` keys a row on `case_sha256` - the content hash of that case - and
+accepts it only when the file's `gate_context_sha` equals the current revision
+(`git rev-parse HEAD`). Nothing about that pair of keys mentions the plan.
+`tools/inherit_campaign_state.py` therefore filters the old campaign's rows to the
+cases this plan bills, and refuses the whole carry - rather than rewriting
+`gate_context_sha` - when the two campaigns sit on different commits. Rewriting it
+would accept a verdict produced by different grading code, which is the exact thing
+the guard exists to prevent. T1's report follows the same revision rule, with an
+explicit `--allow-cross-revision-t1` opt-in recorded in the report.
+
+The consequence is operational and unavoidable: **the richer campaign inherits
+anything only once both campaigns run the same commit.** A resumed campaign checks
+out the ref recorded in its own state artifact, so the live covering runs stay
+pinned where their 72 banked rows were validated; a pairwise campaign necessarily
+starts at a newer tip (it needs the mode to exist). Inheritance pays in the one
+sequence that aligns them - re-pin the covering campaign at the new tip, let its
+gate phase re-bank rows there, then launch the pairwise campaign - and it is the
+`gate_rows_status: refused_gate_context_differs` line that makes the other case
+legible instead of a silent re-gate of 40-odd rows.

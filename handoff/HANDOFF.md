@@ -106,25 +106,69 @@ lines in *Refuse code missing campaign gates* that require `matrix_mode_of`,
 in the pinned checkout. Budgets are unchanged (job 350, step 330,
 `CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))`).
 
+## What is inherited from the covering campaigns, and what is not
+
+Pairwise does not *subsume* covering case for case - it shares 142 of its 241
+vectors, drops 99 (the single-axis spikes, including all seven
+`manual_gate_blocked_exclusions` ids) and adds 216. Of covering's 96 gated rows,
+**40 lie inside this plan**. So the new workflow does not resume the old run: it
+*inherits* the part that is legitimately portable - the exact-instance gate rows -
+through a step placed after the state restore and before anything is billed
+(`tools/inherit_campaign_state.py`, reported in `$OUT/inheritance_report.json`).
+
+Rows are keyed on the case content hash and accepted only under
+`gate_context_sha == git rev-parse HEAD`, so the carry works **only when both
+campaigns run the same commit**. The tool refuses rather than rewriting that sha,
+and nothing campaign-scoped moves: no `suite_checkpoint.json` (episodes), no
+`campaign_intent.json`, no terminal markers. T1's report carries at the same
+revision, or across revisions only with `--allow-cross-revision-t1`, recorded in the
+report as `t1_source_ref`.
+
+A resumed campaign checks out the ref recorded in its own state artifact, so today:
+
+| campaign | pinned lineage | gate rows | episodes |
+|---|---|---|---|
+| Mercury covering (#17) | its recorded ref | 72/72 banked | 17/217 and paying |
+| Atria covering (#16) | its recorded ref | 72/72 banked | 14/217, paused at the wall |
+| pairwise (new) | must start at a tip that has `mode: pairwise` | inherits 0 until the shas align | - |
+
+Sequence that makes the inheritance pay, if you want the 40 rows:
+
+1. Land the profiles + controller on `main`.
+2. Re-pin **one** covering campaign (fresh dispatch at that tip, same state dir and
+   Issue). Its gate phase re-banks rows at the new sha - and note the cost: those
+   72 already-banked rows stop being usable *for it* at that moment too.
+3. Launch the pairwise campaign at that same tip: it inherits every row that is
+   both banked and in its plan, and gates only the rest (~229 rows).
+
+If that ordering is not worth 40 rows to you, skip the middle step: launch the
+pairwise campaign directly, accept `refused_gate_context_differs`, and let it gate
+its own 269 rows once - they then belong to its lineage and every later tick reuses
+them for free.
+
 ## Order of operations
 
-1. The profiles (`experiments/*_pairwise_campaign.yaml`) and the controller changes
+1. Upload both workflow files.
+2. The profiles (`experiments/*_pairwise_campaign.yaml`) and the controller changes
    must be on `main` **before** the workflows are useful: an old checkout rejects
-   `matrix.mode: pairwise`, and the new gate step will say so instead of billing a
+   `matrix.mode: pairwise`, and the gate step says so instead of billing a
    strength-1 campaign by accident.
-2. Dispatch once with `execution_mode: gates_only` — provider-free, exercises the
-   gate and the twin preflight, and writes `twin_preflight.json` so you can see the
-   79/33/26 split before spending anything.
-3. Dispatch `paid` with `resume_previous` left **unchecked** (fresh). Afterwards the
-   scheduled ticks resume it on their own.
-4. After the first tick posts, write that issue number into
+3. Dispatch once with `execution_mode: gates_only` - provider-free; it exercises the
+   gate, the twin preflight and the inheritance step, and writes both
+   `twin_preflight.json` and `inheritance_report.json` so you can read the numbers
+   before spending anything.
+4. Dispatch `paid` with `resume_previous` left **unchecked** (fresh). Scheduled ticks
+   resume it from there.
+5. After the first tick posts, write that issue number into
    `experiments/<provider>_pairwise_status_issue.txt`. Until then the sidecar finds
    the newest open Issue titled "<label> live status"; the label is distinct from the
-   covering campaigns' on purpose, and the state directory and pin file are too.
+   covering campaigns' on purpose, as are the state directory, pin file and artifact
+   prefix.
 
 ## Size, for reference
 
 496 vectors at seed 0 (358 pairwise + 138 twins), 269 gated rows, 19,840 calls and
 163 M tokens at the repo's own per-case estimate; profile ceilings 21,200 calls /
-136 M tokens (≈ 1.4 × one 100 M grant). `bill_verified_only` drops the twins that
-did not verify, so the billed count starts near 437.
+136 M tokens (~1.4 x one 100 M grant). `bill_verified_only` drops the twins that did
+not verify (79 pass / 33 fail / 26 unverified measured), so the billed count starts
+near 437.

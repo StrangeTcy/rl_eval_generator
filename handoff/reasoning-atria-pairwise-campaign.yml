@@ -142,6 +142,7 @@ jobs:
           grep -q "expand_interventions" tools/atria_campaign.py
           test -f tools/twin_preflight.py
           grep -q '"pairwise"' tools/suite_inventory.py
+          test -f tools/inherit_campaign_state.py
 
       - name: Set up Python
         if: steps.mode.outputs.mode != 'none'
@@ -197,6 +198,45 @@ jobs:
           else
             echo "safe=true" >> "$GITHUB_OUTPUT"
             echo "reason=no competing Atria consumer" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Inherit exact-instance gate rows from the covering campaign
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          OUT=runs/reasoning_atria_pairwise_campaign
+          # Strength-2 does not subsume strength-1 case for case: 142 of the 241
+          # covering vectors recur here, 99 are not in this plan at all, and 216 are
+          # new. Only the exact-instance gate rows carry across that boundary, and
+          # only at the same revision - they are keyed on the case content hash and
+          # accepted under gate_context_sha == git rev-parse HEAD. The tool refuses
+          # rather than rewriting that context, and the episode ledger, intent and
+          # terminal markers are never inherited.
+          if [ -s "$OUT/instance_oracles_partial.json" ]; then
+            echo "this campaign already has gate rows of its own; nothing to inherit"
+            exit 0
+          fi
+          INHERIT="$RUNNER_TEMP/reasoning_atria_inherit"
+          rm -rf "$INHERIT"; mkdir -p "$INHERIT"
+          SRC_RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/reasoning-atria-covering-campaign.yml/runs?per_page=5" \
+            --jq '[.workflow_runs[] | select(.status == "completed")] | (.[0].id // empty)' || true)
+          if [ -z "${SRC_RUN:-}" ]; then
+            echo "no completed Reasoning-Atria covering campaign run to inherit from; starting clean"
+            exit 0
+          fi
+          SRC_ART=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SRC_RUN/artifacts" \
+            --jq '([.artifacts[] | select(.name | startswith("reasoning-atria-covering-state-")) | select(.expired == false)] | sort_by(.created_at) | last | .name) // empty' || true)
+          if [ -z "${SRC_ART:-}" ]; then
+            echo "no Reasoning-Atria covering campaign state artifact on run $SRC_RUN; starting clean"
+            exit 0
+          fi
+          gh run download "$SRC_RUN" -n "$SRC_ART" --dir "$INHERIT" || echo "artifact download failed; starting clean"
+          if [ -d "$INHERIT" ] && [ -n "$(ls -A "$INHERIT" 2>/dev/null || true)" ]; then
+            .venv/bin/python tools/inherit_campaign_state.py \
+              --from "$INHERIT" --to "$OUT" \
+              --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+              || echo "inheritance failed; the campaign will gate from scratch"
+            cat "$OUT/inheritance_report.json" 2>/dev/null || true
           fi
 
       - name: Run T1 and pairwise campaign with live Issue status
