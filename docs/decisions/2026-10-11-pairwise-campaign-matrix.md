@@ -56,13 +56,46 @@ new plan and banked gate rows/episodes do not carry over.
   environment the manifest lacks is still a hard error, so typos and profile drift keep
   failing closed. The post-omission level-coverage check is mode-agnostic and passes both ways.
 
-## 5. Not done: interventions in the campaign lane
+## 5. Interventions: billable, but only where a twin proves the claim
 
-`--interventions` stays out of the paid campaign. `tools/family.py` is the lane that owns it,
-because a twin must be **generated and `twin_check`ed against bytes before any model is
-contacted** — otherwise "the agent was invariant" cannot be distinguished from "the
-intervention did nothing". The campaign's manifest path can carry declarations only
-(`suite_inventory`'s own words: *"Declarations are carried, not verified"*). Three of 39
-environments implement any intervention today. Cheapest useful step, no campaign change:
-run `tools/family.py --check` for those envs at the vectors a campaign would bill, and let a
-future preflight admit only the verified ids.
+An earlier reading of this repo said "three of 39 environments implement any
+intervention". Measured against the manifest the campaign builds, it is **four**
+environments and **eight** ids, and the expansion is bigger than that suggests:
+
+```
+epistemic_games 24   glyph 30   moco 75   css_state_machine 9      = 138 twin cases
+iids: terminology 39, visible_proxy 30, evaluator 15, retrieval_cue 15,
+      reward_proxy 15, evidence 8, presentation 8, prior 8
+pairwise 358 -> pairwise + interventions 496 vectors, 269 reference-backed
+```
+
+So `matrix.interventions: true` is now a profile key, threaded into
+`suite_inventory.build_manifest(expand_interventions=...)`, and paid cases carry the
+intervention in their identity (`run_suite` already passed `--interventions` to
+generation and included it in the episode id).
+
+What was *not* negotiable is verification. `tools/family.py` proves an overlay by
+comparing base and twin bytes **before** a model is contacted; the manifest path only
+carries declarations. So the controller runs `tools/twin_preflight.py` after writing
+the manifest and before any provider call, grouping cases by (environment, vector,
+seed) so one `family.py` call verifies every twin sharing a base - 47 calls, 20 s,
+no network.
+
+Measured verdicts on this manifest: **79 pass, 33 fail, 26 unverified**. Hence three
+policies, and the campaign default is the middle one:
+
+| mode | behaviour |
+|---|---|
+| `strict` | refuse to start if any billed twin did not verify |
+| `bill_verified_only` | drop non-verifying twins, name them in `intervention_twin_omissions`, bill the rest |
+| `advisory` | bill everything, label the rows |
+
+`off` is **refused** whenever `interventions: true`: the one failure mode this whole
+layer exists to prevent is an inert overlay being read as model-level invariance.
+
+26 of the 138 fail for a reason internal to the checker rather than to the overlay:
+`ENV_NAME` is on its `blocked_placeholders` list, so the generated
+`ENV_NAME="<member>"` line - the *only* difference outside the intended files for a
+pure rename - cannot be normalized, and `only_the_instance_label_differs` stays
+false. Normalizing that line (or not embedding the member name in it) is the
+follow-up that would let this campaign move to `strict`.

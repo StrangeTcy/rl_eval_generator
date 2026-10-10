@@ -157,3 +157,149 @@ def test_typo_in_exclusion_list_still_fails_closed() -> None:
 def test_paid_pairwise_run_requires_an_explicit_ceiling() -> None:
     source = (ROOT / "tools/run_suite.py").read_text()
     assert 'matrix in {"all", "covering", "pairwise"}' in source
+
+
+# --------------------------------------------------------------------------
+# interventions in a paid campaign: only what a twin check can defend
+# --------------------------------------------------------------------------
+
+from tools.twin_preflight import intervention_groups, verify_manifest_twins  # noqa: E402
+
+
+def _manifest(cases: list[dict]) -> dict:
+    return {"cases": cases, "case_count": len(cases), "selection": {"matrix": "pairwise"}}
+
+
+def _case(case_id: str, env: str, iid: str | None, seed: int = 0, **extra: str) -> dict:
+    levels = extra.pop("difficulty_levels", {"a": "easy", "b": "easy"})
+    case = {
+        "case_id": case_id,
+        "environment": env,
+        "difficulty": ",".join(levels.values()),
+        "difficulty_levels": levels,
+        "seed": seed,
+    }
+    if iid is not None:
+        case["interventions"] = iid
+        case["baseline_case_id"] = case_id.replace(f"__{iid}__", "__")
+    case.update(extra)
+    return case
+
+
+def test_intervention_groups_collapses_twins_sharing_a_base_instance() -> None:
+    manifest = _manifest([
+        _case("moco__a-easy_b-easy__terminology__seed-0", "moco", "terminology"),
+        _case("moco__a-easy_b-easy__visible_proxy__seed-0", "moco", "visible_proxy"),
+        _case("moco__a-easy_b-hard__terminology__seed-0", "moco", "terminology",
+              difficulty_levels={"a": "easy", "b": "hard"}),
+        _case("glyph__a-easy_b-easy__seed-0", "glyph", None),
+    ])
+    groups = intervention_groups(manifest)
+    assert len(groups) == 2, "twins sharing a base instance are one family call"
+    (key, members), = [item for item in groups.items() if item[0][0] == "moco" and item[0][1] == "easy,easy"]
+    assert sorted(members) == ["terminology", "visible_proxy"]
+    assert key == ("moco", "easy,easy", 0)
+
+
+def test_twin_preflight_does_nothing_when_there_is_nothing_to_verify(tmp_path: Path) -> None:
+    off = verify_manifest_twins(_manifest([_case("glyph__a-easy_b-easy__seed-0", "glyph", None)]), mode="off")
+    assert off["status"] == "skipped" and off["group_count"] == 0
+    empty = verify_manifest_twins(_manifest([]), mode="advisory", out_path=tmp_path / "r.json")
+    assert empty["status"] == "not_applicable"
+    assert (tmp_path / "r.json").exists()
+
+
+def test_twin_preflight_reports_verdicts_per_billed_case(tmp_path: Path) -> None:
+    """One real family.py run: the report must key verdicts by the campaign's own
+    case ids, and strict must refuse to let an unverified twin be billed."""
+    built = atria_campaign.build_manifest(root=ROOT, matrix="covering", seeds=[0], expand_interventions=True)
+    twin = next(case for case in built["cases"] if str(case["environment"]) == "glyph" and case.get("interventions"))
+    report = verify_manifest_twins(_manifest([twin]), out_path=tmp_path / "twin.json", mode="advisory")
+    assert report["group_count"] == 1 and report["case_count"] == 1
+    record = report["cases"][str(twin["case_id"])]
+    assert record["twin_check"] in {"pass", "fail", "unverified"}, record
+    assert record["family_exit_code"] in {0, 1}
+    assert report["status"] in {"passed", "unverified"}
+    if record["twin_check"] != "pass":
+        with pytest.raises(ValueError, match="did not verify"):
+            verify_manifest_twins(_manifest([twin]), mode="strict")
+
+
+def test_pairwise_manifest_expands_interventions_only_where_declared() -> None:
+    plain = atria_campaign.build_manifest(root=ROOT, matrix="pairwise", seeds=[0])
+    expanded = atria_campaign.build_manifest(root=ROOT, matrix="pairwise", seeds=[0], expand_interventions=True)
+    assert expanded["case_count"] == len(expanded["cases"]) > plain["case_count"]
+    twins = [case for case in expanded["cases"] if case.get("interventions")]
+    assert {str(case["environment"]) for case in twins} <= {
+        "glyph", "moco", "css_state_machine", "epistemic_games"
+    }
+    ids = {str(case["case_id"]) for case in expanded["cases"]}
+    missing = [case["case_id"] for case in twins if case.get("baseline_case_id") not in ids]
+    assert not missing, f"twins billed without their base: {missing[:3]}"
+
+
+def _profile_with(**matrix: object) -> dict:
+    profile = yaml.safe_load((ROOT / "experiments/mercury_covering_campaign.yaml").read_text())
+    settings = {"mode": "pairwise", "seeds": [0]}
+    settings.update(matrix)
+    profile["matrix"] = settings
+    return profile
+
+
+def test_twin_verification_policy_defaults_and_refusals() -> None:
+    assert atria_campaign.twin_verification_of({}) == "off"
+    assert atria_campaign.twin_verification_of({"matrix": {"interventions": True}}) == "advisory"
+    assert atria_campaign.matrix_interventions_of({"matrix": {"interventions": False}}) is False
+    for mode in ("strict", "advisory", "bill_verified_only"):
+        atria_campaign._validate_campaign_profile(_profile_with(interventions=True, twin_verification=mode))
+    atria_campaign._validate_campaign_profile(_profile_with(interventions=False, twin_verification="off"))
+    # disabling verification while billing intervention cases is the one thing
+    # that would let an inert overlay be read as model-level invariance.
+    with pytest.raises(ValueError, match="cannot disable twin verification"):
+        atria_campaign._validate_campaign_profile(_profile_with(interventions=True, twin_verification="off"))
+    with pytest.raises(ValueError, match="twin_verification must be"):
+        atria_campaign._validate_campaign_profile(_profile_with(interventions=True, twin_verification="yolo"))
+    with pytest.raises(ValueError, match="must be a boolean"):
+        atria_campaign._validate_campaign_profile(_profile_with(interventions="yes"))
+
+
+def test_comprehensive_profiles_are_valid_and_priced_against_their_own_matrix() -> None:
+    for name in ("mercury", "reasoning_atria"):
+        profile = yaml.safe_load((ROOT / f"experiments/{name}_pairwise_campaign.yaml").read_text())
+        atria_campaign._validate_campaign_profile(profile)
+        assert profile["name"] == f"{name}_pairwise_campaign"
+        assert profile["matrix"]["mode"] == "pairwise"
+        assert profile["matrix"]["interventions"] is True
+        assert profile["matrix"]["twin_verification"] == "bill_verified_only"
+        manifest = atria_campaign.build_manifest(
+            root=ROOT,
+            matrix=atria_campaign.matrix_mode_of(profile),
+            seeds=[0],
+            expand_interventions=atria_campaign.matrix_interventions_of(profile),
+        )
+        assert manifest["case_count"] == 496
+        assert profile["limits"]["max_api_calls"] >= manifest["case_count"] * 40
+        assert profile["limits"]["max_tokens_total"] > 0
+
+
+def test_pairwise_workflows_are_self_consistent_and_cannot_crosstalk() -> None:
+    """A second campaign on the same repo must not inherit the first one's Issue,
+    state directory, artifact prefix or profile - that similarity made two live
+    runs indistinguishable once, so it is asserted rather than eyeballed."""
+    for slug, profile_stem, label in (
+        ("mercury", "mercury_pairwise", "Mercury pairwise campaign"),
+        ("reasoning-atria", "reasoning_atria_pairwise", "pairwise campaign"),
+    ):
+        handoff = (ROOT / f"handoff/{slug}-pairwise-campaign.yml").read_text()
+        example = (ROOT / f"docs/workflows/{slug}-pairwise-campaign.yml.example").read_text()
+        assert handoff == example, f"{slug}: handoff copy and docs example drifted"
+        assert label in handoff
+        assert f"experiments/{profile_stem}_campaign.yaml" in handoff
+        assert f"runs/{profile_stem}_campaign" in handoff
+        assert f"{profile_stem}_status_issue.txt" in handoff
+        assert f"-{slug}-pairwise-state-" in handoff or "pairwise-state-" in handoff
+        for stale in ("_covering_status_issue.txt", "runs/mercury_covering_campaign", "runs/reasoning_atria_covering_campaign"):
+            assert stale not in handoff, f"{slug}: still points at the covering campaign's {stale}"
+        assert 'timeout-minutes: 330' in handoff and "timeout-minutes: 350" in handoff
+        assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in handoff
+        assert "test -f tools/twin_preflight.py" in handoff, "launcher must refuse code without the twin preflight"

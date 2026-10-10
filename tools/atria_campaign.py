@@ -300,6 +300,18 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
         raise ValueError("campaign profile must declare matrix.mode: covering or pairwise")
     if matrix.get("seeds") != [0]:
         raise ValueError("campaign profile must declare matrix.seeds: [0]")
+    if not isinstance(matrix.get("interventions", False), bool):
+        raise ValueError("matrix.interventions must be a boolean")
+    twin_mode = matrix.get("twin_verification")
+    if twin_mode is not None and str(twin_mode) not in {"strict", "advisory", "bill_verified_only", "off"}:
+        raise ValueError(
+            "matrix.twin_verification must be strict, advisory, bill_verified_only or off"
+        )
+    if matrix_interventions_of(profile) and str(twin_mode or "advisory") == "off":
+        raise ValueError(
+            "a campaign that bills intervention cases cannot disable twin verification: "
+            "an unverified twin is indistinguishable from an inert overlay"
+        )
     resilience = profile.get("resilience") or {}
     if not isinstance(resilience, Mapping):
         raise ValueError("resilience must be a mapping")
@@ -333,7 +345,12 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
         raise ValueError("rate_limit.min_interval_seconds must be > 0")
 
     research = profile.get("research_context")
-    if profile.get("name") in {"mercury_covering_campaign", "reasoning_atria_covering_campaign"}:
+    if profile.get("name") in {
+        "mercury_covering_campaign",
+        "reasoning_atria_covering_campaign",
+        "mercury_pairwise_campaign",
+        "reasoning_atria_pairwise_campaign",
+    }:
         if not isinstance(research, Mapping):
             raise ValueError("epistemic-process-control campaigns require research_context")
         _validate_research_context(
@@ -470,6 +487,30 @@ def matrix_mode_of(profile: dict) -> str:
     matrix = (profile or {}).get("matrix") or {}
     mode = matrix.get("mode") if isinstance(matrix, Mapping) else None
     return str(mode or "covering")
+
+
+def matrix_interventions_of(profile: Mapping[str, Any]) -> bool:
+    """Whether the campaign bills intervention-carrying vectors at all."""
+    matrix = (profile or {}).get("matrix") or {}
+    return bool(matrix.get("interventions")) if isinstance(matrix, Mapping) else False
+
+
+def twin_verification_of(profile: Mapping[str, Any]) -> str:
+    """How hard to insist that a billed intervention twin actually moved bytes.
+
+    Default is ``advisory`` when interventions are on, because the checker
+    refuses to normalize the generated ``ENV_NAME`` instance label and so every
+    twin currently comes back ``unverified`` - a real limitation of the check, not
+    of the overlay. ``strict`` is the mode a campaign should move to once that
+    normalization is fixed: it refuses to bill an invariance claim whose twin was
+    never verified, which is the failure ``envs/interventions.yaml`` exists to
+    prevent. ``off`` is only meaningful with no interventions.
+    """
+    matrix = (profile or {}).get("matrix") or {}
+    mode = matrix.get("twin_verification") if isinstance(matrix, Mapping) else None
+    if mode is not None:
+        return str(mode)
+    return "advisory" if matrix_interventions_of(profile) else "off"
 
 
 def _compatibility_check(
@@ -1309,13 +1350,81 @@ def main(argv: list[str] | None = None) -> int:
         backoff = float(resilience["provider_outage_backoff_seconds"])
 
         manifest = build_manifest(
-            root=ROOT, matrix=str(matrix_mode_of(profile)), seeds=[0]
+            root=ROOT,
+            matrix=str(matrix_mode_of(profile)),
+            seeds=[0],
+            expand_interventions=matrix_interventions_of(profile),
         )
         _apply_gate_blocked_exclusions(manifest, profile)
         target = CAMPAIGN_TARGETS[str(profile["provider"])]
         manifest["campaign"] = _campaign_metadata(profile)
         output.mkdir(parents=True, exist_ok=True)
         write_json(output / "pilot_manifest.json", manifest)
+
+        # Interventions assert a causal claim, so each billed twin must be
+        # generated and byte-compared before this process is allowed to spend a
+        # provider call. Provider-free by construction (tools/family.py).
+        twin_mode = twin_verification_of(profile)
+        if twin_mode != "off":
+            from tools.twin_preflight import verify_manifest_twins  # local: optional lane
+
+            try:
+                twins = verify_manifest_twins(
+                    manifest,
+                    root=ROOT,
+                    out_path=output / "twin_preflight.json",
+                    mode=twin_mode,
+                )
+            except ValueError as exc:
+                # strict mode: never bill an unverified invariance claim.
+                print(f"twin preflight refused the campaign: {exc}")
+                raise
+            manifest["twin_verification"] = {
+                key: twins.get(key)
+                for key in (
+                    "policy", "status", "group_count", "case_count",
+                    "unverified_case_count", "report_sha256",
+                )
+            }
+            if twin_mode == "bill_verified_only":
+                # An overlay whose twin did not verify cannot support an
+                # invariance claim either way: "the model did not move" and "the
+                # overlay did nothing" are the same bytes. Drop those cases and
+                # name them, rather than billing a row that would be read as
+                # evidence about the model. Base vectors always survive, so no
+                # axis level is lost and the covering-level accounting still holds.
+                drop = sorted(
+                    str(case_id)
+                    for case_id, record in (twins.get("cases") or {}).items()
+                    if record.get("twin_check") != "pass"
+                )
+                if drop:
+                    dropped = set(drop)
+                    manifest["cases"] = [
+                        case for case in manifest["cases"]
+                        if str(case.get("case_id")) not in dropped
+                    ]
+                    manifest["case_count"] = len(manifest["cases"])
+                manifest["intervention_twin_omissions"] = {
+                    "omitted_case_ids": drop,
+                    "omitted_case_count": len(drop),
+                    "reason": (
+                        "twin_check did not return pass, so the overlay's equivalence "
+                        "expectation is unproven for this instance"
+                    ),
+                    "disposition": "omitted_before_provider_access",
+                    "provider_calls_before_omission": 0,
+                }
+            write_json(output / "pilot_manifest.json", manifest)
+            print(
+                "twin preflight ["
+                + str(twins.get("policy"))
+                + "]: "
+                + str(twins.get("case_count"))
+                + " intervention cases, "
+                + str(twins.get("unverified_case_count"))
+                + " unverified"
+            )
         modality = inventory_selected_modalities(
             manifest,
             root=ROOT,

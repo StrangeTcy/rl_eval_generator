@@ -77,3 +77,54 @@ The new campaigns will do the same, each into its own Issue:
 - Mercury + reasoning-Atria covering-campaign profiles (`experiments/*.yaml`) and
   the two `docs/workflows/*.yml.example`.
 - Wire the epistemic-process-control ideas into the campaign matrices.
+
+---
+
+# Pairwise campaign (t=2 + difficulty ladder + interventions)
+
+Landed in commit `d31e52f`+ (this branch): `matrix: {mode: pairwise}`, the
+`tools/twin_preflight.py` verification lane, and two new profiles. Nothing about
+the two live covering campaigns changed.
+
+## Upload route (two files, one click each)
+
+| download | copy to |
+|---|---|
+| `raw/…/handoff/mercury-pairwise-campaign.yml` | `.github/workflows/mercury-pairwise-campaign.yml` |
+| `raw/…/handoff/reasoning-atria-pairwise-campaign.yml` | `.github/workflows/reasoning-atria-pairwise-campaign.yml` |
+
+```
+https://github.com/StrangeTcy/rl_eval_generator/raw/arena/595b91e0-rl-eval-generator/handoff/mercury-pairwise-campaign.yml
+https://github.com/StrangeTcy/rl_eval_generator/raw/arena/595b91e0-rl-eval-generator/handoff/reasoning-atria-pairwise-campaign.yml
+```
+
+They are clones of the fixed covering workflows with exactly these differences:
+name / concurrency group / `runs/*_pairwise_campaign` state dir / artifact prefix
+`*-pairwise-state-` / status label + `--pin-file` / profile path, plus four added
+lines in *Refuse code missing campaign gates* that require `matrix_mode_of`,
+`expand_interventions`, `tools/twin_preflight.py` and the `"pairwise"` mode to exist
+in the pinned checkout. Budgets are unchanged (job 350, step 330,
+`CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))`).
+
+## Order of operations
+
+1. The profiles (`experiments/*_pairwise_campaign.yaml`) and the controller changes
+   must be on `main` **before** the workflows are useful: an old checkout rejects
+   `matrix.mode: pairwise`, and the new gate step will say so instead of billing a
+   strength-1 campaign by accident.
+2. Dispatch once with `execution_mode: gates_only` — provider-free, exercises the
+   gate and the twin preflight, and writes `twin_preflight.json` so you can see the
+   79/33/26 split before spending anything.
+3. Dispatch `paid` with `resume_previous` left **unchecked** (fresh). Afterwards the
+   scheduled ticks resume it on their own.
+4. After the first tick posts, write that issue number into
+   `experiments/<provider>_pairwise_status_issue.txt`. Until then the sidecar finds
+   the newest open Issue titled "<label> live status"; the label is distinct from the
+   covering campaigns' on purpose, and the state directory and pin file are too.
+
+## Size, for reference
+
+496 vectors at seed 0 (358 pairwise + 138 twins), 269 gated rows, 19,840 calls and
+163 M tokens at the repo's own per-case estimate; profile ceilings 21,200 calls /
+136 M tokens (≈ 1.4 × one 100 M grant). `bill_verified_only` drops the twins that
+did not verify, so the billed count starts near 437.
