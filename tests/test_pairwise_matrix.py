@@ -331,7 +331,11 @@ def _tool_commands(text: str, tool: str) -> list[str]:
 
 
 def _accepted_flags(tool_source: str) -> set[str]:
-    return set(re.findall(r'add_argument\(\s*"?(--[a-z0-9-]+)"?', tool_source))
+    flags = set(re.findall(r'add_argument\(\s*"?(--[a-z0-9-]+)"?', tool_source))
+    # flags the controller tolerates without acting on are "accepted" for launcher
+    # purposes, and _record_ignored_launcher_flags makes each use visible.
+    from tools.atria_campaign import COMPATIBILITY_FLAGS
+    return flags | set(COMPATIBILITY_FLAGS)
 
 
 def test_workflow_flags_are_accepted_by_the_tools_they_call() -> None:
@@ -376,3 +380,38 @@ def test_cross_revision_t1_flag_reaches_only_the_inherit_tool() -> None:
             for line in text.split("\n"):
                 if "allow-cross-revision-t1" in line:
                     assert line.rstrip().endswith("\\"), f"{path.name}: dangling flag line"
+
+
+def test_a_stale_launcher_flag_is_tolerated_and_named(tmp_path: Path) -> None:
+    """The launcher YAML comes from the default branch, the controller from the pinned
+    ref - so a flag that moved between tools must not exit-2 a paid tick. Tolerance is
+    paired with a record, and with refusing everything else."""
+    import subprocess
+
+    source = (ROOT / "tools/atria_campaign.py").read_text()
+    stale = [
+        "tools/atria_campaign.py", "--profile", str(tmp_path / "missing.yaml"),
+        "--out", str(tmp_path / "out"), "--allow-cross-revision-t1",
+        "--allow-provider", "--job-seconds", "600",
+    ]
+    result = subprocess.run([sys.executable, *stale], cwd=ROOT, capture_output=True, text=True, timeout=120)
+    assert "unrecognized arguments" not in result.stdout + result.stderr, result.stdout[-400:] + result.stderr[-400:]
+    typo_args = [arg.replace("--allow-cross-revision-t1", "--allow-corss-revision-t1") for arg in stale]
+    typo = subprocess.run([sys.executable, *typo_args], cwd=ROOT, capture_output=True, text=True, timeout=120)
+    assert "unrecognized arguments" in typo.stdout + typo.stderr, "the parser must stay strict about everything else"
+
+
+def test_ignored_launcher_flags_are_recorded_in_the_manifest() -> None:
+    class _Args:
+        allow_cross_revision_t1 = True
+
+    manifest: dict = {"campaign": {}}
+    atria_campaign._record_ignored_launcher_flags(manifest, _Args())
+    assert manifest["campaign"]["ignored_launcher_arguments"] == ["--allow-cross-revision-t1"]
+
+    class _Clean:
+        allow_cross_revision_t1 = False
+
+    untouched: dict = {"campaign": {}}
+    atria_campaign._record_ignored_launcher_flags(untouched, _Clean())
+    assert "ignored_launcher_arguments" not in untouched["campaign"]

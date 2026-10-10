@@ -482,6 +482,30 @@ def _optional_credentials(profile: Mapping[str, Any]) -> Any | None:
     return creds if creds.api_key else None
 
 
+# Flags the controller tolerates but does not act on, because the launcher YAML and
+# the controller are versioned apart: GitHub reads the workflow file from the default
+# branch while the job checks out the campaign's pinned ``ref``. So a flag that moves
+# between tools mid-campaign reaches whichever side is stale, and exit-2'ing on it
+# would burn a paid tick for a wording difference. Tolerance is only acceptable if it
+# is named, which is what _record_ignored_launcher_flags is for.
+COMPATIBILITY_FLAGS = {"--allow-cross-revision-t1": "allow_cross_revision_t1"}
+
+
+def _record_ignored_launcher_flags(manifest: dict, args: Any) -> None:
+    """Name every compatibility flag this invocation was handed and did not act on."""
+    ignored = sorted(
+        flag for flag, attr in COMPATIBILITY_FLAGS.items() if getattr(args, attr, False)
+    )
+    if not ignored:
+        return
+    manifest.setdefault("campaign", {})["ignored_launcher_arguments"] = ignored
+    print(
+        "compatibility flags accepted and NOT acted on by the controller: "
+        + ", ".join(ignored)
+        + " (they belong to tools/inherit_campaign_state.py)"
+    )
+
+
 def matrix_mode_of(profile: dict) -> str:
     """The matrix mode a campaign profile asks for, defaulting to the historical value."""
     matrix = (profile or {}).get("matrix") or {}
@@ -1311,6 +1335,10 @@ def main(argv: list[str] | None = None) -> int:
             "compatibility probes, or provider requests"
         ),
     )
+    parser.add_argument(
+        "--allow-cross-revision-t1", action="store_true",
+        help="accepted and ignored here; it belongs to tools/inherit_campaign_state.py",
+    )
     args = parser.parse_args(argv)
     if args.gates_only and args.allow_provider:
         parser.error("--gates-only and --allow-provider are mutually exclusive")
@@ -1358,6 +1386,7 @@ def main(argv: list[str] | None = None) -> int:
         _apply_gate_blocked_exclusions(manifest, profile)
         target = CAMPAIGN_TARGETS[str(profile["provider"])]
         manifest["campaign"] = _campaign_metadata(profile)
+        _record_ignored_launcher_flags(manifest, args)
         output.mkdir(parents=True, exist_ok=True)
         write_json(output / "pilot_manifest.json", manifest)
 
