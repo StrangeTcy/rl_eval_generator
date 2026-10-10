@@ -450,10 +450,13 @@ def summarize(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         per: Dict[str, Any] = {}
         for stratum, group in sorted(strata.items()):
             by_arm: Dict[str, Any] = {}
-            matched = {
-                key: {arm: None for arm in ARMS}
-                for key in {(r["environment"], r["seed"], r["case_id"]) for r in group}
-            }
+            # Sorted, not a set comprehension: iteration order of a set of string tuples
+            # follows PYTHONHASHSEED, which reorders `pairs` below and changes the
+            # permutation p from run to run while leaving every closed-form statistic
+            # still. A result file that differs between two runs of the same code is a
+            # bug in the tool, whatever it says about the effect.
+            keys = sorted({(r["environment"], r["seed"], r["case_id"]) for r in group})
+            matched = {key: {arm: None for arm in ARMS} for key in keys}
             for row in group:
                 matched[(row["environment"], row["seed"], row["case_id"])][row["arm"]] = row
             for arm in ARMS:
@@ -663,11 +666,12 @@ def flags(env_name: str, answer: Dict[str, Any], checks: Dict[str, Any], metrics
 
 
 def render_markdown(summary: Dict[str, Any], rows: List[Dict[str, Any]]) -> str:
+    """The same numbers as stdout, from the same dict, so the two cannot drift."""
     lines = [
         "# Observational-equivalence operator: offline instrument results",
         "",
-        "Deterministic procedures on matched generated instances. No model was",
-        "contacted; see the claim ceiling in `spec/observational-equivalence-check.yaml`.",
+        "Deterministic procedures on matched generated instances. No model was contacted;",
+        "see the claim ceiling in `spec/observational-equivalence-check.yaml`.",
         "",
     ]
     for env_name, per in summary.items():
@@ -682,12 +686,14 @@ def render_markdown(summary: Dict[str, Any], rows: List[Dict[str, Any]]) -> str:
             )
             lines.append("|---|---|---|---|---|---|---|---|---|---|")
             for arm, v in block["arms"].items():
+                def cell(key: str) -> str:
+                    value = v.get(key)
+                    return "n/a" if value is None else f"{value:.3f}"
                 ci = v["wilson95"]
-                cell = lambda value: "n/a" if value is None else f"{value:.3f}"
                 lines.append(
                     f"| `{arm}` | {v['n']} | {v['strict_accuracy']:.3f} | {ci[0]:.3f}-{ci[1]:.3f} "
-                    f"| {v['mean_score']:.3f} | {cell(v['claims_a_separation_rate'])} "
-                    f"| {cell(v['overcommit_rate'])} | {cell(v['undercommit_rate'])} "
+                    f"| {v['mean_score']:.3f} | {cell('claims_a_separation_rate')} "
+                    f"| {cell('overcommit_rate')} | {cell('undercommit_rate')} "
                     f"| {v['answer_withheld_rate']:.2f} | {v['format_invalid_rate']:.2f} |"
                 )
             lines.append("")
@@ -696,10 +702,11 @@ def render_markdown(summary: Dict[str, Any], rows: List[Dict[str, Any]]) -> str:
             for arm, c in block["contrasts_vs_control"].items():
                 lines.append(
                     f"- `{arm}`: {c['matched_pairs']} pairs, arm-only {c['arm_only_correct']}, "
-                    f"control-only {c['control_only_correct']}, exact McNemar "
-                    f"p={probe.format_p(c['mcnemar_exact_p'])}, Newcombe 95% on the accuracy "
-                    f"difference {c['newcombe95_on_accuracy_diff']}, mean score "
-                    f"Δ {c['mean_score_diff']}"
+                    f"control-only {c['control_only_correct']}, exact McNemar {_p(c['mcnemar_exact_p'])}, "
+                    f"exact Wilcoxon {_p(c['wilcoxon_p_on_score_diff'])}, Newcombe 95% on the "
+                    f"arm-minus-control accuracy difference "
+                    f"{c['newcombe95_on_arm_minus_control']}, mean score "
+                    f"\u0394 {c['mean_score_diff']}"
                 )
         lines.append("")
     builds = [r for r in rows if "build_error" in r]

@@ -184,16 +184,11 @@ def patched_repo(tmp_path_factory) -> Path:
 
 
 def test_the_operator_twins_are_the_same_task_under_a_different_instruction(patched_repo: Path) -> None:
-    # With the patch applied, the same spec must validate with no errors at all.
-    spec = yaml.safe_load((patched_repo / "spec" / "observational-equivalence-check.yaml").read_text())
-    errors, warnings = es.validate_spec(
-        spec,
-        taxonomy=ge.load_intervention_taxonomy(),
-        implemented=family.registry_implementations(),
-        known_environments=family.registry_names(),
-    )
-    assert not errors and not warnings, (errors, warnings)
-
+    # No in-process re-validation here: family.registry_implementations() resolves
+    # against the checkout this test runs in, not the worktree, so it would report the
+    # unpatched state. The subprocess below is the validation - `tools/family.py` exits 2
+    # on a spec error before it generates anything, so returncode 0 is "coherent, in the
+    # tree that has the patch".
     out = patched_repo / "families" / "oec"
     result = subprocess.run(
         [

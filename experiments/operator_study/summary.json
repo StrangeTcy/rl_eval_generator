@@ -104,7 +104,7 @@
             -0.0037,
             0.3585
           ],
-          "permutation_p_on_score_diff": 0.1252,
+          "permutation_p_on_score_diff": 0.1312,
           "wilcoxon_p_on_score_diff": 0.125
         },
         "equivalence_check_literal": {
@@ -130,7 +130,7 @@
             -0.0037,
             0.3585
           ],
-          "permutation_p_on_score_diff": 0.1252,
+          "permutation_p_on_score_diff": 0.1312,
           "wilcoxon_p_on_score_diff": 0.125
         },
         "state_enumeration": {
@@ -143,7 +143,7 @@
             -0.0037,
             0.3585
           ],
-          "permutation_p_on_score_diff": 0.1252,
+          "permutation_p_on_score_diff": 0.1312,
           "wilcoxon_p_on_score_diff": 0.125
         }
       }
@@ -252,7 +252,7 @@
             -0.0037,
             0.3585
           ],
-          "permutation_p_on_score_diff": 0.1252,
+          "permutation_p_on_score_diff": 0.1312,
           "wilcoxon_p_on_score_diff": 0.125
         },
         "equivalence_check_literal": {
@@ -278,7 +278,7 @@
             -0.0037,
             0.3585
           ],
-          "permutation_p_on_score_diff": 0.1252,
+          "permutation_p_on_score_diff": 0.1312,
           "wilcoxon_p_on_score_diff": 0.125
         },
         "state_enumeration": {
@@ -291,7 +291,7 @@
             -0.0037,
             0.3585
           ],
-          "permutation_p_on_score_diff": 0.1252,
+          "permutation_p_on_score_diff": 0.1312,
           "wilcoxon_p_on_score_diff": 0.125
         }
       }
@@ -640,7 +640,7 @@
             0.345,
             0.6361
           ],
-          "permutation_p_on_score_diff": 0.1366,
+          "permutation_p_on_score_diff": 0.1377,
           "wilcoxon_p_on_score_diff": 0.002307603750207665
         },
         "equivalence_check_literal": {
@@ -653,7 +653,7 @@
             0.345,
             0.6361
           ],
-          "permutation_p_on_score_diff": 0.1366,
+          "permutation_p_on_score_diff": 0.1377,
           "wilcoxon_p_on_score_diff": 0.002307603750207665
         },
         "equivalence_check_revised": {
@@ -679,7 +679,7 @@
             0.345,
             0.6361
           ],
-          "permutation_p_on_score_diff": 0.0062,
+          "permutation_p_on_score_diff": 0.0063,
           "wilcoxon_p_on_score_diff": 0.002307603750207665
         }
       }
