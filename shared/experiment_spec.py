@@ -100,7 +100,18 @@ def validate_spec(
             continue
         if not _is_nonempty_str(hypothesis.get("statement")):
             errors.append(f"{where}: missing 'statement'")
-        kind = str(hypothesis.get("kind") or "primary")
+        if "kind" in hypothesis and hypothesis["kind"] is None:
+            # A bare `kind: null` is the value None in YAML, not the string "null", so
+            # without this it would fall through to the default and quietly register a
+            # stated null hypothesis as the primary claim.
+            errors.append(
+                f"{where}: kind is null; write it quoted as kind: 'null' if the null "
+                "hypothesis is meant, because an unquoted null in YAML is the value "
+                "None and not the string naming a hypothesis kind"
+            )
+            kind = "primary"
+        else:
+            kind = str(hypothesis.get("kind") or "primary")
         if kind not in HYPOTHESIS_KINDS:
             errors.append(f"{where}: kind {kind!r} must be one of {', '.join(HYPOTHESIS_KINDS)}")
         hypothesis_ids.append(str(hypothesis["id"]))

@@ -1,0 +1,1179 @@
+{
+  "epistemic_fragmented_observation": {
+    "identifiable": {
+      "arms": {
+        "control": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.8333,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 0.8333,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.6415,
+            0.9332
+          ]
+        },
+        "equivalence_check": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.862,
+            1.0
+          ]
+        },
+        "equivalence_check_literal": {
+          "answer_withheld_rate": 1.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 1.0,
+          "mean_score": 0.0,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 0.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.0,
+            0.138
+          ]
+        },
+        "equivalence_check_revised": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.862,
+            1.0
+          ]
+        },
+        "state_enumeration": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.862,
+            1.0
+          ]
+        }
+      },
+      "contrasts_vs_control": {
+        "equivalence_check": {
+          "arm_only_correct": 4,
+          "control_only_correct": 0,
+          "matched_pairs": 24,
+          "mcnemar_exact_p": 0.125,
+          "mean_score_diff": 0.1667,
+          "newcombe95_on_arm_minus_control": [
+            -0.0037,
+            0.3585
+          ],
+          "permutation_p_on_score_diff": 0.1252,
+          "wilcoxon_p_on_score_diff": 0.125
+        },
+        "equivalence_check_literal": {
+          "arm_only_correct": 0,
+          "control_only_correct": 20,
+          "matched_pairs": 24,
+          "mcnemar_exact_p": 1.9073486328125e-06,
+          "mean_score_diff": -0.8333,
+          "newcombe95_on_arm_minus_control": [
+            -0.9332,
+            -0.597
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 1.9073486328125e-06
+        },
+        "equivalence_check_revised": {
+          "arm_only_correct": 4,
+          "control_only_correct": 0,
+          "matched_pairs": 24,
+          "mcnemar_exact_p": 0.125,
+          "mean_score_diff": 0.1667,
+          "newcombe95_on_arm_minus_control": [
+            -0.0037,
+            0.3585
+          ],
+          "permutation_p_on_score_diff": 0.1252,
+          "wilcoxon_p_on_score_diff": 0.125
+        },
+        "state_enumeration": {
+          "arm_only_correct": 4,
+          "control_only_correct": 0,
+          "matched_pairs": 24,
+          "mcnemar_exact_p": 0.125,
+          "mean_score_diff": 0.1667,
+          "newcombe95_on_arm_minus_control": [
+            -0.0037,
+            0.3585
+          ],
+          "permutation_p_on_score_diff": 0.1252,
+          "wilcoxon_p_on_score_diff": 0.125
+        }
+      }
+    },
+    "pooled": {
+      "arms": {
+        "control": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.8333,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 0.8333,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.6415,
+            0.9332
+          ]
+        },
+        "equivalence_check": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.862,
+            1.0
+          ]
+        },
+        "equivalence_check_literal": {
+          "answer_withheld_rate": 1.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 1.0,
+          "mean_score": 0.0,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 0.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.0,
+            0.138
+          ]
+        },
+        "equivalence_check_revised": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.862,
+            1.0
+          ]
+        },
+        "state_enumeration": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 24,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.862,
+            1.0
+          ]
+        }
+      },
+      "contrasts_vs_control": {
+        "equivalence_check": {
+          "arm_only_correct": 4,
+          "control_only_correct": 0,
+          "matched_pairs": 24,
+          "mcnemar_exact_p": 0.125,
+          "mean_score_diff": 0.1667,
+          "newcombe95_on_arm_minus_control": [
+            -0.0037,
+            0.3585
+          ],
+          "permutation_p_on_score_diff": 0.1252,
+          "wilcoxon_p_on_score_diff": 0.125
+        },
+        "equivalence_check_literal": {
+          "arm_only_correct": 0,
+          "control_only_correct": 20,
+          "matched_pairs": 24,
+          "mcnemar_exact_p": 1.9073486328125e-06,
+          "mean_score_diff": -0.8333,
+          "newcombe95_on_arm_minus_control": [
+            -0.9332,
+            -0.597
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 1.9073486328125e-06
+        },
+        "equivalence_check_revised": {
+          "arm_only_correct": 4,
+          "control_only_correct": 0,
+          "matched_pairs": 24,
+          "mcnemar_exact_p": 0.125,
+          "mean_score_diff": 0.1667,
+          "newcombe95_on_arm_minus_control": [
+            -0.0037,
+            0.3585
+          ],
+          "permutation_p_on_score_diff": 0.1252,
+          "wilcoxon_p_on_score_diff": 0.125
+        },
+        "state_enumeration": {
+          "arm_only_correct": 4,
+          "control_only_correct": 0,
+          "matched_pairs": 24,
+          "mcnemar_exact_p": 0.125,
+          "mean_score_diff": 0.1667,
+          "newcombe95_on_arm_minus_control": [
+            -0.0037,
+            0.3585
+          ],
+          "permutation_p_on_score_diff": 0.1252,
+          "wilcoxon_p_on_score_diff": 0.125
+        }
+      }
+    }
+  },
+  "epistemic_games": {
+    "identifiable": {
+      "arms": {
+        "control": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.7024,
+          "n": 96,
+          "non_identifiable_n": 0,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "strict_accuracy": 0.0417,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "wilson95": [
+            0.0163,
+            0.1023
+          ]
+        },
+        "equivalence_check": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 96,
+          "non_identifiable_n": 0,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "strict_accuracy": 1.0,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "wilson95": [
+            0.9615,
+            1.0
+          ]
+        },
+        "equivalence_check_literal": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 96,
+          "non_identifiable_n": 0,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "strict_accuracy": 1.0,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "wilson95": [
+            0.9615,
+            1.0
+          ]
+        },
+        "equivalence_check_revised": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 96,
+          "non_identifiable_n": 0,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "strict_accuracy": 1.0,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "wilson95": [
+            0.9615,
+            1.0
+          ]
+        },
+        "state_enumeration": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 96,
+          "non_identifiable_n": 0,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "strict_accuracy": 1.0,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.0385
+          ],
+          "wilson95": [
+            0.9615,
+            1.0
+          ]
+        }
+      },
+      "contrasts_vs_control": {
+        "equivalence_check": {
+          "arm_only_correct": 92,
+          "control_only_correct": 0,
+          "matched_pairs": 96,
+          "mcnemar_exact_p": 4.0389678347315804e-28,
+          "mean_score_diff": 0.2976,
+          "newcombe95_on_arm_minus_control": [
+            0.8865,
+            0.9837
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 6.195044477408373e-13
+        },
+        "equivalence_check_literal": {
+          "arm_only_correct": 92,
+          "control_only_correct": 0,
+          "matched_pairs": 96,
+          "mcnemar_exact_p": 4.0389678347315804e-28,
+          "mean_score_diff": 0.2976,
+          "newcombe95_on_arm_minus_control": [
+            0.8865,
+            0.9837
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 6.195044477408373e-13
+        },
+        "equivalence_check_revised": {
+          "arm_only_correct": 92,
+          "control_only_correct": 0,
+          "matched_pairs": 96,
+          "mcnemar_exact_p": 4.0389678347315804e-28,
+          "mean_score_diff": 0.2976,
+          "newcombe95_on_arm_minus_control": [
+            0.8865,
+            0.9837
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 6.195044477408373e-13
+        },
+        "state_enumeration": {
+          "arm_only_correct": 92,
+          "control_only_correct": 0,
+          "matched_pairs": 96,
+          "mcnemar_exact_p": 4.0389678347315804e-28,
+          "mean_score_diff": 0.2976,
+          "newcombe95_on_arm_minus_control": [
+            0.8865,
+            0.9837
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 6.195044477408373e-13
+        }
+      }
+    },
+    "non_identifiable": {
+      "arms": {
+        "control": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 1.0,
+          "claims_a_separation_wilson95": [
+            0.9259,
+            1.0
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.3562,
+          "n": 48,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.5,
+          "overcommit_wilson95": [
+            0.3639,
+            0.6361
+          ],
+          "strict_accuracy": 0.0,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "wilson95": [
+            0.0,
+            0.0741
+          ]
+        },
+        "equivalence_check": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.5,
+          "n": 48,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "strict_accuracy": 0.5,
+          "undercommit_rate": 0.5,
+          "undercommit_wilson95": [
+            0.3639,
+            0.6361
+          ],
+          "wilson95": [
+            0.3639,
+            0.6361
+          ]
+        },
+        "equivalence_check_literal": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.5,
+          "n": 48,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "strict_accuracy": 0.5,
+          "undercommit_rate": 0.5,
+          "undercommit_wilson95": [
+            0.3639,
+            0.6361
+          ],
+          "wilson95": [
+            0.3639,
+            0.6361
+          ]
+        },
+        "equivalence_check_revised": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 48,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "strict_accuracy": 1.0,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "wilson95": [
+            0.9259,
+            1.0
+          ]
+        },
+        "state_enumeration": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.5,
+          "n": 48,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.5,
+          "overcommit_wilson95": [
+            0.3639,
+            0.6361
+          ],
+          "strict_accuracy": 0.5,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.0741
+          ],
+          "wilson95": [
+            0.3639,
+            0.6361
+          ]
+        }
+      },
+      "contrasts_vs_control": {
+        "equivalence_check": {
+          "arm_only_correct": 24,
+          "control_only_correct": 0,
+          "matched_pairs": 48,
+          "mcnemar_exact_p": 1.1920928955078125e-07,
+          "mean_score_diff": 0.1437,
+          "newcombe95_on_arm_minus_control": [
+            0.345,
+            0.6361
+          ],
+          "permutation_p_on_score_diff": 0.1366,
+          "wilcoxon_p_on_score_diff": 0.002307603750207665
+        },
+        "equivalence_check_literal": {
+          "arm_only_correct": 24,
+          "control_only_correct": 0,
+          "matched_pairs": 48,
+          "mcnemar_exact_p": 1.1920928955078125e-07,
+          "mean_score_diff": 0.1437,
+          "newcombe95_on_arm_minus_control": [
+            0.345,
+            0.6361
+          ],
+          "permutation_p_on_score_diff": 0.1366,
+          "wilcoxon_p_on_score_diff": 0.002307603750207665
+        },
+        "equivalence_check_revised": {
+          "arm_only_correct": 48,
+          "control_only_correct": 0,
+          "matched_pairs": 48,
+          "mcnemar_exact_p": 7.105427357601002e-15,
+          "mean_score_diff": 0.6438,
+          "newcombe95_on_arm_minus_control": [
+            0.8952,
+            1.0
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 4.909792572505012e-10
+        },
+        "state_enumeration": {
+          "arm_only_correct": 24,
+          "control_only_correct": 0,
+          "matched_pairs": 48,
+          "mcnemar_exact_p": 1.1920928955078125e-07,
+          "mean_score_diff": 0.1437,
+          "newcombe95_on_arm_minus_control": [
+            0.345,
+            0.6361
+          ],
+          "permutation_p_on_score_diff": 0.0062,
+          "wilcoxon_p_on_score_diff": 0.002307603750207665
+        }
+      }
+    },
+    "pooled": {
+      "arms": {
+        "control": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.3333,
+          "claims_a_separation_wilson95": [
+            0.2616,
+            0.4138
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.587,
+          "n": 144,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.1667,
+          "overcommit_wilson95": [
+            0.1146,
+            0.236
+          ],
+          "strict_accuracy": 0.0278,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.026
+          ],
+          "wilson95": [
+            0.0109,
+            0.0692
+          ]
+        },
+        "equivalence_check": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.026
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.8333,
+          "n": 144,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.026
+          ],
+          "strict_accuracy": 0.8333,
+          "undercommit_rate": 0.1667,
+          "undercommit_wilson95": [
+            0.1146,
+            0.236
+          ],
+          "wilson95": [
+            0.764,
+            0.8854
+          ]
+        },
+        "equivalence_check_literal": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.026
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.8333,
+          "n": 144,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.026
+          ],
+          "strict_accuracy": 0.8333,
+          "undercommit_rate": 0.1667,
+          "undercommit_wilson95": [
+            0.1146,
+            0.236
+          ],
+          "wilson95": [
+            0.764,
+            0.8854
+          ]
+        },
+        "equivalence_check_revised": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.026
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 144,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.0,
+          "overcommit_wilson95": [
+            0.0,
+            0.026
+          ],
+          "strict_accuracy": 1.0,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.026
+          ],
+          "wilson95": [
+            0.974,
+            1.0
+          ]
+        },
+        "state_enumeration": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": 0.0,
+          "claims_a_separation_wilson95": [
+            0.0,
+            0.026
+          ],
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.8333,
+          "n": 144,
+          "non_identifiable_n": 48,
+          "overcommit_rate": 0.1667,
+          "overcommit_wilson95": [
+            0.1146,
+            0.236
+          ],
+          "strict_accuracy": 0.8333,
+          "undercommit_rate": 0.0,
+          "undercommit_wilson95": [
+            0.0,
+            0.026
+          ],
+          "wilson95": [
+            0.764,
+            0.8854
+          ]
+        }
+      },
+      "contrasts_vs_control": {
+        "equivalence_check": {
+          "arm_only_correct": 116,
+          "control_only_correct": 0,
+          "matched_pairs": 144,
+          "mcnemar_exact_p": 2.407412430484045e-35,
+          "mean_score_diff": 0.2463,
+          "newcombe95_on_arm_minus_control": [
+            0.7288,
+            0.8619
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 1.8168716309219235e-08
+        },
+        "equivalence_check_literal": {
+          "arm_only_correct": 116,
+          "control_only_correct": 0,
+          "matched_pairs": 144,
+          "mcnemar_exact_p": 2.407412430484045e-35,
+          "mean_score_diff": 0.2463,
+          "newcombe95_on_arm_minus_control": [
+            0.7288,
+            0.8619
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 1.8168716309219235e-08
+        },
+        "equivalence_check_revised": {
+          "arm_only_correct": 140,
+          "control_only_correct": 0,
+          "matched_pairs": 144,
+          "mcnemar_exact_p": 1.4349296274686127e-42,
+          "mean_score_diff": 0.413,
+          "newcombe95_on_arm_minus_control": [
+            0.9233,
+            0.9891
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 0.0
+        },
+        "state_enumeration": {
+          "arm_only_correct": 116,
+          "control_only_correct": 0,
+          "matched_pairs": 144,
+          "mcnemar_exact_p": 2.407412430484045e-35,
+          "mean_score_diff": 0.2463,
+          "newcombe95_on_arm_minus_control": [
+            0.7288,
+            0.8619
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 9.103828801926284e-15
+        }
+      }
+    }
+  },
+  "epistemic_nested_knowledge": {
+    "identifiable": {
+      "arms": {
+        "control": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.5556,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 0.5556,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.3958,
+            0.7046
+          ]
+        },
+        "equivalence_check": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.9036,
+            1.0
+          ]
+        },
+        "equivalence_check_literal": {
+          "answer_withheld_rate": 1.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 1.0,
+          "mean_score": 0.0,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 0.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.0,
+            0.0964
+          ]
+        },
+        "equivalence_check_revised": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.9036,
+            1.0
+          ]
+        },
+        "state_enumeration": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.9036,
+            1.0
+          ]
+        }
+      },
+      "contrasts_vs_control": {
+        "equivalence_check": {
+          "arm_only_correct": 16,
+          "control_only_correct": 0,
+          "matched_pairs": 36,
+          "mcnemar_exact_p": 3.0517578125e-05,
+          "mean_score_diff": 0.4444,
+          "newcombe95_on_arm_minus_control": [
+            0.2669,
+            0.6042
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 3.0517578125e-05
+        },
+        "equivalence_check_literal": {
+          "arm_only_correct": 0,
+          "control_only_correct": 20,
+          "matched_pairs": 36,
+          "mcnemar_exact_p": 1.9073486328125e-06,
+          "mean_score_diff": -0.5556,
+          "newcombe95_on_arm_minus_control": [
+            -0.7046,
+            -0.369
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 1.9073486328125e-06
+        },
+        "equivalence_check_revised": {
+          "arm_only_correct": 16,
+          "control_only_correct": 0,
+          "matched_pairs": 36,
+          "mcnemar_exact_p": 3.0517578125e-05,
+          "mean_score_diff": 0.4444,
+          "newcombe95_on_arm_minus_control": [
+            0.2669,
+            0.6042
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 3.0517578125e-05
+        },
+        "state_enumeration": {
+          "arm_only_correct": 16,
+          "control_only_correct": 0,
+          "matched_pairs": 36,
+          "mcnemar_exact_p": 3.0517578125e-05,
+          "mean_score_diff": 0.4444,
+          "newcombe95_on_arm_minus_control": [
+            0.2669,
+            0.6042
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 3.0517578125e-05
+        }
+      }
+    },
+    "pooled": {
+      "arms": {
+        "control": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 0.5556,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 0.5556,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.3958,
+            0.7046
+          ]
+        },
+        "equivalence_check": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.9036,
+            1.0
+          ]
+        },
+        "equivalence_check_literal": {
+          "answer_withheld_rate": 1.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 1.0,
+          "mean_score": 0.0,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 0.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.0,
+            0.0964
+          ]
+        },
+        "equivalence_check_revised": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.9036,
+            1.0
+          ]
+        },
+        "state_enumeration": {
+          "answer_withheld_rate": 0.0,
+          "claims_a_separation_rate": null,
+          "claims_a_separation_wilson95": null,
+          "format_invalid_rate": 0.0,
+          "mean_score": 1.0,
+          "n": 36,
+          "non_identifiable_n": 0,
+          "overcommit_rate": null,
+          "overcommit_wilson95": null,
+          "strict_accuracy": 1.0,
+          "undercommit_rate": null,
+          "undercommit_wilson95": null,
+          "wilson95": [
+            0.9036,
+            1.0
+          ]
+        }
+      },
+      "contrasts_vs_control": {
+        "equivalence_check": {
+          "arm_only_correct": 16,
+          "control_only_correct": 0,
+          "matched_pairs": 36,
+          "mcnemar_exact_p": 3.0517578125e-05,
+          "mean_score_diff": 0.4444,
+          "newcombe95_on_arm_minus_control": [
+            0.2669,
+            0.6042
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 3.0517578125e-05
+        },
+        "equivalence_check_literal": {
+          "arm_only_correct": 0,
+          "control_only_correct": 20,
+          "matched_pairs": 36,
+          "mcnemar_exact_p": 1.9073486328125e-06,
+          "mean_score_diff": -0.5556,
+          "newcombe95_on_arm_minus_control": [
+            -0.7046,
+            -0.369
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 1.9073486328125e-06
+        },
+        "equivalence_check_revised": {
+          "arm_only_correct": 16,
+          "control_only_correct": 0,
+          "matched_pairs": 36,
+          "mcnemar_exact_p": 3.0517578125e-05,
+          "mean_score_diff": 0.4444,
+          "newcombe95_on_arm_minus_control": [
+            0.2669,
+            0.6042
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 3.0517578125e-05
+        },
+        "state_enumeration": {
+          "arm_only_correct": 16,
+          "control_only_correct": 0,
+          "matched_pairs": 36,
+          "mcnemar_exact_p": 3.0517578125e-05,
+          "mean_score_diff": 0.4444,
+          "newcombe95_on_arm_minus_control": [
+            0.2669,
+            0.6042
+          ],
+          "permutation_p_on_score_diff": 0.0,
+          "wilcoxon_p_on_score_diff": 3.0517578125e-05
+        }
+      }
+    }
+  }
+}

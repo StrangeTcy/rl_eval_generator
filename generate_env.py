@@ -343,13 +343,29 @@ def _run_renderer(files_dir: Path, renderer_name: str, subs: Dict[str, str]) -> 
     module = importlib.util.module_from_spec(spec)
     # Allow the renderer to import sibling modules (e.g. the env's core).
     sys.path.insert(0, str(files_dir))
+    # A renderer's `import core` resolves by the plain name, so the first environment
+    # generated in a process leaves its `core` in sys.modules for every later one. Two
+    # renderer environments in one family - which is what a transfer experiment is -
+    # then render the second instance with the first environment's builder: a TypeError
+    # when the signatures differ, and a silently wrong instance when they do not.
+    # Evict any module owned by some environment's files/ before and after each render,
+    # so a renderer only ever sees the core shipped beside it.
+    def _evict_env_modules() -> None:
+        envs_dir = str((ROOT / "envs").resolve())
+        for name, loaded in list(sys.modules.items()):
+            location = getattr(loaded, "__file__", None)
+            if location and str(Path(location).resolve()).startswith(envs_dir):
+                del sys.modules[name]
+
+    _evict_env_modules()
     try:
         spec.loader.exec_module(module)
+        if not hasattr(module, "render"):
+            raise ValueError(f"renderer module {renderer_name!r} must define render(subs)")
+        rendered = module.render(dict(subs))
     finally:
+        _evict_env_modules()
         sys.path.pop(0)
-    if not hasattr(module, "render"):
-        raise ValueError(f"renderer module {renderer_name!r} must define render(subs)")
-    rendered = module.render(dict(subs))
     if not isinstance(rendered, dict):
         raise ValueError("renderer must return a dict of placeholder mappings")
     for key in rendered:
