@@ -1,0 +1,2 @@
+# Optional GitHub Issue number for reasoning-Atria covering campaign status.
+# Leave unpinned to select/create the unique reasoning-Atria Issue by title.

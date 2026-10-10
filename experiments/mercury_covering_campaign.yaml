@@ -1,0 +1,79 @@
+# Full covering campaign for Inception Labs mercury-2.5.
+#
+# The first epistemic-process-control measurement is T1 same_fact_presentation.
+# Its independent report is stored beside the campaign state; interrupted T1
+# calls are not automatically replayed because the probe has no trial ledger.
+name: mercury_covering_campaign
+provider: mercury
+api_base: https://api.inceptionlabs.ai/v1
+model: mercury-2.5
+api_key_env: INCEPTION_API_KEY
+wire_api: chat_completions
+reasoning_mode: controlled_chat_reasoning_effort_high
+reasoning_effort: high
+temperature: 0.0
+stream: false
+request_extra: {}
+concurrency: 1
+rate_limit:
+  documented_requests_per_minute: 300
+  min_interval_seconds: 0.2
+quota_ceiling_tokens: null
+matrix:
+  mode: covering
+  seeds: [0]
+resilience:
+  provider_outage_patience_seconds: 3600
+  provider_outage_backoff_seconds: 60
+unreferenced_compile_only: true
+manual_gate_blocked_exclusions:
+  reason: known_gate_blocked_calibration_failures
+  disposition: omitted_before_provider_access
+  provenance:
+    github_actions_run_id: 36346941741
+    github_actions_run_url: https://github.com/StrangeTcy/rl_eval_generator/actions/runs/36346941741
+    calibration_issue: https://github.com/StrangeTcy/rl_eval_generator/issues/1
+  cases:
+    - case_id: glyph__architecture=easy_optimizer=hard_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_exists_per_environment_not_per_vector
+    - case_id: glyph__architecture=easy_optimizer=medium_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_exists_per_environment_not_per_vector
+    - case_id: moco__naming=hard_distractors=easy_queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0
+      calibration_class: oracle_assumes_easy_layout
+    - case_id: moco__naming=medium_distractors=easy_queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0
+      calibration_class: oracle_assumes_easy_layout
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=hard__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+# Reserve at least 70 minutes in the 340-minute workflow step for the 72-call T1 run.
+campaign_job_seconds: 16200
+limits:
+  max_steps: 20
+  max_tokens: 8192
+  invalid_retries: 1
+  max_retries: 5
+  max_http_attempts: 48306
+  max_api_calls: 10050
+  max_tokens_total: 66000000
+  floor_effect_after: 0
+  sandbox: docker
+research_context:
+  family: epistemic_process_control
+  lineage:
+    from: deception
+    to: epistemic_process_control
+    first_step: same_fact_presentation
+  t1_profile: experiments/t1_mercury.yaml
+  endpoint_contract:
+    diagnostic_choices: per_arm_menu_choices_and_matched_difference
+    inquiry_regret: not_measurable_single_turn
+    elicited_belief: per_arm_posterior_fraction_and_matched_delta
+    belief_correctness: per_case_exact_posterior_match_not_calibration
+    calibration_curve: unavailable_no_population_metric
+    terminal_outcome: per_arm_answer_and_correctness
+    recovery: not_measurable_single_turn
+    missingness: not_measurable_or_unavailable_never_zero_filled
+    aggregation: separate_endpoint_channels_no_composite

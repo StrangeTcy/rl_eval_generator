@@ -19,13 +19,16 @@ def _write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
-def _state(tmp_path: Path, *, execution_mode: str = "paid", campaign_ref: str = REF) -> None:
+def _state(
+    tmp_path: Path, *, execution_mode: str = "paid", campaign_ref: str = REF,
+    provider: str = "atria",
+) -> None:
     (tmp_path / "campaign_ref.txt").write_text(campaign_ref + "\n", encoding="utf-8")
     _write_json(
         tmp_path / "campaign_intent.json",
         {
             "schema_version": 1,
-            "provider": "atria",
+            "provider": provider,
             "execution_mode": execution_mode,
             "case_manifest_sha256": "a" * 64,
             "gate_context_sha": REF,
@@ -160,6 +163,36 @@ def test_completed_or_terminal_state_never_restarts_on_schedule(tmp_path: Path) 
     _write_json(tmp_path / "campaign_report.json", {"status": "paused", "pause_reason": "max_wall_seconds"})
     _write_json(tmp_path / "wrapper_failed.json", {"pause_reason": "generation_preflight_failed"})
     assert decide_tick(tmp_path)["mode"] == "none"
+
+
+def test_supervisor_can_validate_a_provider_specific_state(tmp_path: Path) -> None:
+    _state(tmp_path, execution_mode="paid")
+    assert decide_tick(tmp_path, expected_provider="atria")["mode"] == "resume"
+    assert decide_tick(tmp_path, expected_provider="mercury") == {
+        "mode": "none",
+        "reason": "state artifact intent provider does not match expected target 'mercury'",
+    }
+
+
+def test_interrupted_non_checkpointed_t1_is_an_operator_stop(tmp_path: Path) -> None:
+    _state(tmp_path, execution_mode="paid", provider="mercury")
+    (tmp_path / "t1_started.json").write_text('{"phase":"started"}', encoding="utf-8")
+
+    decision = decide_tick(tmp_path, expected_provider="mercury")
+
+    assert decision["mode"] == "none"
+    assert "no automatic provider-call replay" in decision["reason"]
+
+
+def test_completed_t1_report_allows_campaign_resume(tmp_path: Path) -> None:
+    _state(tmp_path, execution_mode="paid")
+    (tmp_path / "t1_started.json").write_text('{"phase":"started"}', encoding="utf-8")
+    (tmp_path / "t1_same_fact_presentation.json").write_text("{}", encoding="utf-8")
+
+    decision = decide_tick(tmp_path, expected_provider="atria")
+
+    assert decision["mode"] == "resume"
+    assert decision["execution_mode"] == "paid"
 
 
 def test_missing_state_fails_closed_and_branch_name_dispatch_resumes_pinned(tmp_path: Path) -> None:

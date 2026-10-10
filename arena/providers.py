@@ -241,13 +241,17 @@ def responses_url(api_base: str) -> str:
 def _content_from_responses_output(data: Mapping[str, Any]) -> str:
     """Extract the answer text from an OpenAI-Responses-shaped body.
 
-    Prefers the ``output_text`` convenience field, otherwise concatenates the
-    text parts of message items in ``output`` and skips reasoning items, so a
-    leading reasoning item never masquerades as the answer.
+    Tolerant of the shapes an OpenAI-Responses-compatible server may return:
+    the ``output_text`` convenience field, text directly on an output item, a
+    string ``content``, or a list of typed ``content`` parts. The only items and
+    parts deliberately skipped are reasoning/chain-of-thought ones, so a leading
+    reasoning item never masquerades as the answer and an unexpectedly-typed
+    message item is still collected rather than silently dropped.
     """
 
-    if isinstance(data.get("output_text"), str):
-        return data["output_text"]
+    convenience = data.get("output_text")
+    if isinstance(convenience, str) and convenience.strip():
+        return convenience
     output = data.get("output")
     if not isinstance(output, list):
         return ""
@@ -255,8 +259,11 @@ def _content_from_responses_output(data: Mapping[str, Any]) -> str:
     for item in output:
         if not isinstance(item, dict):
             continue
-        if item.get("type") not in (None, "message"):
-            continue
+        item_type = item.get("type")
+        if isinstance(item_type, str) and "reason" in item_type.lower():
+            continue  # never fold a reasoning item into the visible answer
+        if isinstance(item.get("text"), str):
+            pieces.append(item["text"])
         content = item.get("content")
         if isinstance(content, str):
             pieces.append(content)
@@ -264,8 +271,12 @@ def _content_from_responses_output(data: Mapping[str, Any]) -> str:
             for part in content:
                 if isinstance(part, str):
                     pieces.append(part)
-                elif isinstance(part, dict) and isinstance(part.get("text"), str):
-                    pieces.append(part["text"])
+                elif isinstance(part, dict):
+                    part_type = part.get("type")
+                    if isinstance(part_type, str) and "reason" in part_type.lower():
+                        continue
+                    if isinstance(part.get("text"), str):
+                        pieces.append(part["text"])
     return "".join(pieces)
 
 
@@ -880,8 +891,13 @@ class ProviderClient:
                     )
                 content = _content_from_responses_output(data)
                 if not content.strip():
+                    status_field = data.get("status")
+                    snippet = _redact_text(response_body, self.api_key, limit=800)
                     raise ProviderError(
-                        "Responses output contained no text",
+                        "Responses output contained no text "
+                        f"(status={status_field!r}; if this is a reasoning model it may "
+                        "have spent the whole max_output_tokens budget on reasoning - "
+                        f"raise max_tokens). Redacted body: {snippet}",
                         status_code=response_status_code,
                         body=_redact_text(response_body, self.api_key),
                         retryable=False,

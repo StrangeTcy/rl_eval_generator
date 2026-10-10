@@ -59,10 +59,10 @@ concurrency:
 jobs:
   campaign:
     runs-on: ubuntu-latest
-    # 288 single-turn reasoning-high calls at >=1.1s spacing (60 RPM account cap)
-    # plus per-call reasoning latency can run well past an hour; the generous job
-    # limit also leaves room for checkout, deps, and artifact upload. If latency
-    # threatens this budget, reduce `seeds` SYMMETRICALLY in BOTH t1 profiles.
+    # 72 single-turn reasoning-high calls at >=1.1s spacing (60 RPM account cap)
+    # plus per-call reasoning latency fit the two-hour job budget with margin.
+    # If measured latency still threatens this budget, reduce `seeds`
+    # SYMMETRICALLY in BOTH t1 profiles.
     timeout-minutes: 120
     steps:
       - name: Check out pinned probe code

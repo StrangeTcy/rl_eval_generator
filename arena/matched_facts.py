@@ -22,7 +22,8 @@ Design discipline (carried from the corpus register, verbatim in intent)
   FIXED; vary ONLY the presentation. This first slice varies ordering (and a
   framing label); any further transform needs its own frozen operator.
 * Observe the target's diagnostic choices/queries, inquiry regret, elicited
-  belief/calibration, and terminal task outcome as SEPARATE endpoints.
+  belief, exact belief correctness, terminal task outcome, and recovery as
+  SEPARATE endpoints. A calibration statistic is not computed by this probe.
 * Call any effect "presentation susceptibility". This condition alone does NOT
   establish attention manipulation or an internal update-rule change.
 * Reporting boundary: never use graph displacement as a harm proxy, never infer
@@ -61,7 +62,10 @@ from shared.presentation_identity import (
 __all__ = [
     "FORBIDDEN_FIELD_TOKENS",
     "SEPARATE_ENDPOINTS",
+    "MEASURED",
     "NOT_MEASURABLE",
+    "UNAVAILABLE",
+    "MEASUREMENT_STATUSES",
     "INQUIRY_MENU",
     "ArmEndpoints",
     "MatchedFactTask",
@@ -101,10 +105,13 @@ SEPARATE_ENDPOINTS: Tuple[str, ...] = (
     "recovery",
 )
 
-# First-class "we did not measure this" marker. Inquiry regret and recovery are
-# multi-turn notions; in a single-turn probe they are not_measurable rather than
-# silently zero-filled (mirrors the repo's not_measurable/unavailable discipline).
+# First-class measurement statuses. Inquiry regret and recovery are multi-turn
+# notions; in a single-turn probe they are not_measurable rather than silently
+# zero-filled. Unavailable means a requested observation could not be obtained.
+MEASURED = "measured"
 NOT_MEASURABLE = "not_measurable"
+UNAVAILABLE = "unavailable"
+MEASUREMENT_STATUSES = (MEASURED, NOT_MEASURABLE, UNAVAILABLE)
 
 # The declared inquiry menu. diagnostic_choices are drawn from this fixed
 # vocabulary so the two matched arms' choices are comparable as sets.
@@ -159,12 +166,18 @@ class ArmEndpoints:
     arm: str
     variant: str
     diagnostic_choices: Tuple[str, ...] = ()
+    diagnostic_choices_status: str = NOT_MEASURABLE
     elicited_belief: Optional[Fraction] = None
+    elicited_belief_status: str = NOT_MEASURABLE
     belief_correct: Optional[bool] = None
+    belief_correctness_status: str = NOT_MEASURABLE
     terminal_answer: Optional[str] = None
+    terminal_outcome_status: str = NOT_MEASURABLE
     terminal_correct: Optional[bool] = None
     inquiry_regret: object = NOT_MEASURABLE
+    inquiry_regret_status: str = NOT_MEASURABLE
     recovery: object = NOT_MEASURABLE
+    recovery_status: str = NOT_MEASURABLE
     justification: str = ""
 
 
@@ -218,13 +231,19 @@ class PresentationSusceptibility:
     """
 
     belief_delta: object
+    belief_delta_status: str
     belief_correct_flip: bool
+    belief_correctness_status: str
     diagnostic_choice_delta: Tuple[str, ...]
+    diagnostic_choices_status: str
     terminal_answer_flip: bool
     terminal_correct_flip: bool
+    terminal_outcome_status: str
     diverged_endpoints: Tuple[str, ...]
     inquiry_regret_comparable: bool
+    inquiry_regret_status: str
     recovery_comparable: bool
+    recovery_status: str
 
 
 class AnswerSource(Protocol):
@@ -392,13 +411,14 @@ def _score_belief(elicited: object, oracle_posterior: Fraction) -> Optional[bool
 
 
 def _normalize_terminal(answer: object) -> Optional[str]:
-    if answer is None:
+    if answer is None or answer == NOT_MEASURABLE or answer == UNAVAILABLE:
         return None
-    return str(answer).strip()
+    normalized = str(answer).strip()
+    return normalized or None
 
 
 def _normalize_choices(choices: object) -> Tuple[str, ...]:
-    if not choices:
+    if not choices or choices == NOT_MEASURABLE or choices == UNAVAILABLE:
         return ()
     if isinstance(choices, (str, bytes)):
         raise SpecError("diagnostic_choices must be a sequence of menu labels")
@@ -417,6 +437,31 @@ def _normalize_choices(choices: object) -> Tuple[str, ...]:
     return tuple(seen.keys())
 
 
+def _measurement_status(
+    raw: Mapping[str, object],
+    *,
+    status_field: str,
+    value: object,
+    present: bool,
+    invalid: bool = False,
+) -> str:
+    """Classify one endpoint without turning absence into a zero observation."""
+    explicit = raw.get(status_field)
+    if explicit is not None:
+        status = str(explicit)
+        if status not in MEASUREMENT_STATUSES:
+            raise SpecError(f"{status_field} must be one of {MEASUREMENT_STATUSES}")
+        return status
+    source_status = raw.get("_source_status")
+    if source_status is not None and source_status not in MEASUREMENT_STATUSES:
+        raise SpecError(f"_source_status must be one of {MEASUREMENT_STATUSES}")
+    if value == UNAVAILABLE or invalid or source_status == UNAVAILABLE and (not present or value is None):
+        return UNAVAILABLE
+    if value == NOT_MEASURABLE or value is None or not present:
+        return NOT_MEASURABLE
+    return MEASURED
+
+
 def run_arm(
     task: MatchedFactTask,
     arm: str,
@@ -427,25 +472,76 @@ def run_arm(
     raw = source(presentation)
     if not isinstance(raw, Mapping):
         raise SpecError("an answer source must return a mapping of endpoint fields")
+
     elicited = raw.get("elicited_belief")
-    elicited_fraction: Optional[Fraction]
-    try:
-        elicited_fraction = exact_fraction(elicited) if elicited is not None else None  # type: ignore[arg-type]
-    except (SpecError, TypeError, ValueError):
-        elicited_fraction = None
-    terminal_answer = _normalize_terminal(raw.get("terminal_answer"))
+    elicited_fraction: Optional[Fraction] = None
+    invalid_belief = False
+    if elicited not in (None, NOT_MEASURABLE, UNAVAILABLE):
+        try:
+            candidate = exact_fraction(elicited)  # type: ignore[arg-type]
+            if Fraction(0) <= candidate <= Fraction(1):
+                elicited_fraction = candidate
+            else:
+                invalid_belief = True
+        except (SpecError, TypeError, ValueError):
+            invalid_belief = True
+    belief_status = _measurement_status(
+        raw,
+        status_field="elicited_belief_status",
+        value=elicited,
+        present="elicited_belief" in raw,
+        invalid=invalid_belief,
+    )
+
+    raw_choices = raw.get("diagnostic_choices")
+    choices = _normalize_choices(raw_choices)
+    choices_status = _measurement_status(
+        raw,
+        status_field="diagnostic_choices_status",
+        value=raw_choices,
+        present="diagnostic_choices" in raw,
+    )
+    raw_terminal = raw.get("terminal_answer")
+    terminal_answer = _normalize_terminal(raw_terminal)
+    terminal_status = _measurement_status(
+        raw,
+        status_field="terminal_outcome_status",
+        value=raw_terminal,
+        present="terminal_answer" in raw,
+    )
+
+    inquiry_regret = raw.get("inquiry_regret", NOT_MEASURABLE)
+    inquiry_status = _measurement_status(
+        raw,
+        status_field="inquiry_regret_status",
+        value=inquiry_regret,
+        present="inquiry_regret" in raw,
+    )
+    recovery = raw.get("recovery", NOT_MEASURABLE)
+    recovery_status = _measurement_status(
+        raw,
+        status_field="recovery_status",
+        value=recovery,
+        present="recovery" in raw,
+    )
     return ArmEndpoints(
         arm=arm,
         variant=str(presentation["variant"]),
-        diagnostic_choices=_normalize_choices(raw.get("diagnostic_choices")),
+        diagnostic_choices=choices,
+        diagnostic_choices_status=choices_status,
         elicited_belief=elicited_fraction,
+        elicited_belief_status=belief_status,
         belief_correct=_score_belief(elicited_fraction, task.oracle_posterior_world1),
+        belief_correctness_status=belief_status,
         terminal_answer=terminal_answer,
+        terminal_outcome_status=terminal_status,
         terminal_correct=(
             terminal_answer == task.oracle_answer() if terminal_answer is not None else None
         ),
-        inquiry_regret=raw.get("inquiry_regret", NOT_MEASURABLE),
-        recovery=raw.get("recovery", NOT_MEASURABLE),
+        inquiry_regret=inquiry_regret,
+        inquiry_regret_status=inquiry_status,
+        recovery=recovery,
+        recovery_status=recovery_status,
         justification=str(raw.get("justification", "")),
     )
 
@@ -470,89 +566,156 @@ def build_trial(task: MatchedFactTask, source: AnswerSource) -> MatchedFactTrial
 # ---------------------------------------------------------------------------
 
 
+def _paired_measurement_status(status_a: str, status_b: str) -> str:
+    """Status for a matched comparison of one endpoint across two arms."""
+    if status_a == MEASURED and status_b == MEASURED:
+        return MEASURED
+    if UNAVAILABLE in {status_a, status_b}:
+        return UNAVAILABLE
+    if status_a == NOT_MEASURABLE and status_b == NOT_MEASURABLE:
+        return NOT_MEASURABLE
+    # One arm measured an endpoint the other did not: the paired contrast is
+    # unavailable, not a zero delta.
+    return UNAVAILABLE
+
+
 def compute_susceptibility(trial: MatchedFactTrial) -> PresentationSusceptibility:
     """Compare the two matched arms endpoint-by-endpoint. Never a scalar."""
     a, b = trial.arm_a, trial.arm_b
 
-    if a.elicited_belief is not None and b.elicited_belief is not None:
+    belief_delta_status = _paired_measurement_status(
+        a.elicited_belief_status, b.elicited_belief_status
+    )
+    if belief_delta_status == MEASURED:
+        assert a.elicited_belief is not None and b.elicited_belief is not None
         belief_delta: object = abs(a.elicited_belief - b.elicited_belief)
-    elif a.elicited_belief is None and b.elicited_belief is None:
-        belief_delta = Fraction(0)
     else:
-        belief_delta = NOT_MEASURABLE
+        belief_delta = belief_delta_status
 
+    belief_correctness_status = _paired_measurement_status(
+        a.belief_correctness_status, b.belief_correctness_status
+    )
     belief_correct_flip = (
-        a.belief_correct is not None
+        belief_correctness_status == MEASURED
+        and a.belief_correct is not None
         and b.belief_correct is not None
         and a.belief_correct != b.belief_correct
     )
 
-    choice_delta = tuple(
-        sorted(set(a.diagnostic_choices) ^ set(b.diagnostic_choices))
+    diagnostic_choices_status = _paired_measurement_status(
+        a.diagnostic_choices_status, b.diagnostic_choices_status
+    )
+    choice_delta = (
+        tuple(sorted(set(a.diagnostic_choices) ^ set(b.diagnostic_choices)))
+        if diagnostic_choices_status == MEASURED
+        else ()
     )
 
+    terminal_outcome_status = _paired_measurement_status(
+        a.terminal_outcome_status, b.terminal_outcome_status
+    )
     terminal_answer_flip = (
-        a.terminal_answer is not None
+        terminal_outcome_status == MEASURED
+        and a.terminal_answer is not None
         and b.terminal_answer is not None
         and a.terminal_answer != b.terminal_answer
     )
     terminal_correct_flip = (
-        a.terminal_correct is not None
+        terminal_outcome_status == MEASURED
+        and a.terminal_correct is not None
         and b.terminal_correct is not None
         and a.terminal_correct != b.terminal_correct
     )
 
-    diverged: List[str] = []
-    if belief_delta not in (Fraction(0), 0) and belief_delta != NOT_MEASURABLE:
-        diverged.append("elicited_belief")
-    if belief_correct_flip:
-        diverged.append("elicited_belief_correctness")
-    if choice_delta:
-        diverged.append("diagnostic_choices")
-    if terminal_answer_flip or terminal_correct_flip:
-        diverged.append("terminal_outcome")
-
-    inquiry_regret_comparable = (
-        a.inquiry_regret != NOT_MEASURABLE and b.inquiry_regret != NOT_MEASURABLE
+    inquiry_regret_status = _paired_measurement_status(
+        a.inquiry_regret_status, b.inquiry_regret_status
     )
-    recovery_comparable = a.recovery != NOT_MEASURABLE and b.recovery != NOT_MEASURABLE
+    recovery_status = _paired_measurement_status(a.recovery_status, b.recovery_status)
+    diverged: List[str] = []
+    if (
+        belief_delta_status == MEASURED
+        and belief_delta not in (Fraction(0), 0)
+    ):
+        diverged.append("elicited_belief")
+    if belief_correctness_status == MEASURED and belief_correct_flip:
+        diverged.append("elicited_belief_correctness")
+    if diagnostic_choices_status == MEASURED and choice_delta:
+        diverged.append("diagnostic_choices")
+    if terminal_outcome_status == MEASURED and (terminal_answer_flip or terminal_correct_flip):
+        diverged.append("terminal_outcome")
 
     return PresentationSusceptibility(
         belief_delta=belief_delta,
+        belief_delta_status=belief_delta_status,
         belief_correct_flip=bool(belief_correct_flip),
+        belief_correctness_status=belief_correctness_status,
         diagnostic_choice_delta=choice_delta,
+        diagnostic_choices_status=diagnostic_choices_status,
         terminal_answer_flip=bool(terminal_answer_flip),
         terminal_correct_flip=bool(terminal_correct_flip),
+        terminal_outcome_status=terminal_outcome_status,
         diverged_endpoints=tuple(diverged),
-        inquiry_regret_comparable=bool(inquiry_regret_comparable),
-        recovery_comparable=bool(recovery_comparable),
+        inquiry_regret_comparable=inquiry_regret_status == MEASURED,
+        inquiry_regret_status=inquiry_regret_status,
+        recovery_comparable=recovery_status == MEASURED,
+        recovery_status=recovery_status,
     )
 
 
 def susceptibility_report(susc: PresentationSusceptibility) -> Dict[str, object]:
-    """Render susceptibility as a STRUCTURED mapping with separate endpoints.
-
-    The top-level ``susceptibility`` value is a mapping, never a scalar: the
-    reporting boundary forbids collapsing distinct outcomes into one number.
-    """
+    """Render paired endpoint values with explicit measurement statuses."""
     return {
         "susceptibility": {
             "elicited_belief": {
+                "status": susc.belief_delta_status,
                 "delta": str(susc.belief_delta),
-                "correctness_flip": susc.belief_correct_flip,
             },
-            "diagnostic_choices": {"symmetric_difference": list(susc.diagnostic_choice_delta)},
+            "elicited_belief_correctness": {
+                "status": susc.belief_correctness_status,
+                "correctness_flip": (
+                    susc.belief_correct_flip
+                    if susc.belief_correctness_status == MEASURED
+                    else susc.belief_correctness_status
+                ),
+            },
+            "diagnostic_choices": {
+                "status": susc.diagnostic_choices_status,
+                "symmetric_difference": (
+                    list(susc.diagnostic_choice_delta)
+                    if susc.diagnostic_choices_status == MEASURED
+                    else susc.diagnostic_choices_status
+                ),
+            },
             "terminal_outcome": {
-                "answer_flip": susc.terminal_answer_flip,
-                "correctness_flip": susc.terminal_correct_flip,
+                "status": susc.terminal_outcome_status,
+                "answer_flip": (
+                    susc.terminal_answer_flip
+                    if susc.terminal_outcome_status == MEASURED
+                    else susc.terminal_outcome_status
+                ),
+                "correctness_flip": (
+                    susc.terminal_correct_flip
+                    if susc.terminal_outcome_status == MEASURED
+                    else susc.terminal_outcome_status
+                ),
             },
             "inquiry_regret": {
+                "status": susc.inquiry_regret_status,
                 "comparable": susc.inquiry_regret_comparable,
-                "value": NOT_MEASURABLE if not susc.inquiry_regret_comparable else "see_endpoints",
+                "value": (
+                    "see_endpoints"
+                    if susc.inquiry_regret_status == MEASURED
+                    else susc.inquiry_regret_status
+                ),
             },
             "recovery": {
+                "status": susc.recovery_status,
                 "comparable": susc.recovery_comparable,
-                "value": NOT_MEASURABLE if not susc.recovery_comparable else "see_endpoints",
+                "value": (
+                    "see_endpoints"
+                    if susc.recovery_status == MEASURED
+                    else susc.recovery_status
+                ),
             },
             "diverged_endpoints": list(susc.diverged_endpoints),
         }

@@ -81,6 +81,8 @@ class EpisodeOptions:
     max_tokens: int = 1024
     temperature: float = 0.0
     request_extra: dict[str, Any] = field(default_factory=dict)
+    wire_api: str = "chat_completions"
+    reasoning_effort: str | None = None
     sandbox: str = "docker"
     out: Path = Path("runs")
     api_key: str | None = None
@@ -240,6 +242,70 @@ def _request_extra(value: str | Mapping[str, Any] | None) -> dict[str, Any]:
     return parsed
 
 
+def _reasoning_request_extra_keys(request_extra: Mapping[str, Any]) -> list[str]:
+    """Find every extra field that could smuggle a reasoning control."""
+    return [str(key) for key in request_extra if "reasoning" in str(key).casefold()]
+
+
+def _complete_with_wire_api(
+    client: ProviderClient,
+    *,
+    options: EpisodeOptions,
+    messages: list[dict[str, str]],
+    request_extra: Mapping[str, Any],
+) -> Completion:
+    """Dispatch one model turn through the explicitly selected API surface.
+
+    Reasoning controls are target contracts, not interchangeable knobs:
+    Mercury's Chat Completions contract uses flat ``reasoning_effort`` while
+    controlled Atria reasoning is sent only through Responses' nested
+    ``reasoning.effort`` field.
+    """
+    if options.wire_api == "chat_completions":
+        extra = dict(request_extra)
+        reasoning_fields = _reasoning_request_extra_keys(extra)
+        if options.provider == "mercury" and any(
+            key != "reasoning_effort" for key in reasoning_fields
+        ):
+            raise ValueError("Mercury Chat Completions must use flat reasoning_effort")
+        if options.provider == "atria" and reasoning_fields:
+            raise ValueError("Atria reasoning controls are Responses-API-only")
+        if options.reasoning_effort is not None:
+            if options.provider != "mercury":
+                raise ValueError(
+                    "controlled reasoning on Chat Completions is defined only for Mercury"
+                )
+            supplied = extra.get("reasoning_effort")
+            if supplied is not None and supplied != options.reasoning_effort:
+                raise ValueError("request-extra reasoning_effort conflicts with the selected effort")
+            extra["reasoning_effort"] = options.reasoning_effort
+        return client.complete(
+            model=options.model,
+            messages=messages,
+            max_tokens=options.max_tokens,
+            temperature=options.temperature,
+            top_p=options.top_p,
+            request_extra=extra,
+        )
+    if options.wire_api == "responses":
+        if options.reasoning_effort is not None and options.provider != "atria":
+            raise ValueError(
+                "controlled reasoning on Responses is defined only for the Atria target"
+            )
+        if _reasoning_request_extra_keys(request_extra):
+            raise ValueError(
+                "Responses reasoning fields must use the explicit reasoning_effort option"
+            )
+        return client.complete_responses(
+            messages,
+            model=options.model,
+            max_output_tokens=options.max_tokens,
+            reasoning_effort=options.reasoning_effort,
+            request_extra=request_extra,
+        )
+    raise ValueError("wire_api must be 'chat_completions' or 'responses'")
+
+
 def _reset_args(options: EpisodeOptions, episode_id: str) -> list[str]:
     args = [
         "reset",
@@ -334,6 +400,19 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     if not options.model.strip():
         raise ValueError("model must not be empty")
     request_extra = _request_extra(options.request_extra)
+    if options.wire_api not in {"chat_completions", "responses"}:
+        raise ValueError("wire-api must be 'chat_completions' or 'responses'")
+    if options.reasoning_effort not in {None, "minimal", "low", "medium", "high", "xhigh"}:
+        raise ValueError("reasoning-effort must be a supported named effort or omitted")
+    if options.wire_api == "responses" and (
+        options.temperature != 0.0 or options.top_p is not None
+    ):
+        raise ValueError("temperature and top-p are not currently supported on the Responses path")
+    if options.provider == "atria" and options.wire_api == "chat_completions":
+        if options.reasoning_effort is not None or _reasoning_request_extra_keys(request_extra):
+            raise ValueError(
+                "Atria controlled reasoning is supported only through Responses API"
+            )
     # Direct arena.py runs must obey the same pre-provider behavioral gate as
     # suite/pilot entry points. In particular, a Docker reset is not proof the
     # judge can score the *chosen* difficulty and seed. Run before credentials
@@ -400,6 +479,8 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
         max_retries=options.max_retries,
         max_http_attempts=options.max_http_attempts,
         provider_min_interval_seconds=options.provider_min_interval_seconds,
+        wire_api=options.wire_api,
+        reasoning_effort=options.reasoning_effort,
         campaign_id=options.campaign_id,
         case_id=case_id,
         attempt_id=attempt_id,
@@ -482,12 +563,10 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
                 request_started = utc_now()
                 messages = format_messages(history, observation, parse_error)
                 try:
-                    completion = client.complete(
-                        model=options.model,
+                    completion = _complete_with_wire_api(
+                        client,
+                        options=options,
                         messages=messages,
-                        max_tokens=options.max_tokens,
-                        temperature=options.temperature,
-                        top_p=options.top_p,
                         request_extra=request_extra,
                     )
                 except ProviderError as exc:

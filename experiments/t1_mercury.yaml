@@ -13,7 +13,7 @@
 # Offline preflight first (no provider access; proves the profile is well-formed
 # and within the call budget):
 #   python tools/matched_fact_probe.py --profile experiments/t1_mercury.yaml --plan
-# Live campaign (needs MERCURY_API_KEY in the environment / repo secrets):
+# Live campaign (needs INCEPTION_API_KEY in the environment / repo secrets):
 #   python tools/matched_fact_probe.py --profile experiments/t1_mercury.yaml \
 #       --out runs/t1_mercury/report.json
 name: t1_same_fact_presentation_mercury
@@ -23,7 +23,9 @@ reasoning_mode: controlled_reasoning_effort_high
 target:
   provider: mercury
   model: mercury-2.5
-  api_key_env: MERCURY_API_KEY
+  api_base: https://api.inceptionlabs.ai/v1
+  api_key_env: INCEPTION_API_KEY
+  wire_api: chat_completions  # Mercury's flat reasoning_effort control
   reasoning_effort: high          # Inception Mercury tunable reasoning depth
   temperature: 0.0                # deterministic where the provider allows
   max_tokens: 8192
@@ -32,7 +34,7 @@ matrix:
   # Covering matrix: cross-product of n_facts x prior_world1, swept over seeds.
   n_facts: [3, 4, 5]
   prior_world1: ["1/2", "1/3"]
-  seeds: 24                       # seeds 0..23 per cell
+  seeds: 6                        # seeds 0..5 per cell; matched symmetrically with Atria
   # seed_list: "0,1,2"            # optional explicit override of `seeds`
 
 rate_limit:
@@ -42,7 +44,7 @@ rate_limit:
   min_interval_seconds: 0.2
 
 budget:
-  # 3 n_facts x 2 priors x 24 seeds x 2 arms = 288 planned calls.
+  # 3 n_facts x 2 priors x 6 seeds x 2 arms = 72 planned calls.
   max_api_calls: 600
   max_tokens_total: 4000000
 

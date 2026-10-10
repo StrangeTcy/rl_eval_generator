@@ -33,10 +33,10 @@ PROVIDER_ENV: dict[str, tuple[str, ...]] = {
     "atria": ("ATRIA_API_KEY",),
     "custom": ("API_KEY",),
     "huggingface": ("HF_TOKEN",),
-    # Inception Labs Mercury (diffusion LLM, OpenAI-compatible). The repo
-    # secret is MERCURY_API_KEY; INCEPTION_API_KEY is Inception's own
-    # documented convention and is accepted as a fallback.
-    "mercury": ("MERCURY_API_KEY", "INCEPTION_API_KEY"),
+    # Inception Labs Mercury (diffusion LLM, OpenAI-compatible). INCEPTION_API_KEY
+    # is Inception's documented convention and the name of the repo/Actions secret,
+    # so it is tried first; MERCURY_API_KEY is tolerated as a legacy alias.
+    "mercury": ("INCEPTION_API_KEY", "MERCURY_API_KEY"),
 }
 
 PROVIDER_DEFAULT_BASE: dict[str, str | None] = {
