@@ -26,7 +26,7 @@ name: Mercury T1 matched-fact presentation campaign
 # Safety shape:
 #   * An offline --plan preflight runs BEFORE any provider access and fails
 #     closed if the matrix exceeds the call budget.
-#   * MERCURY_API_KEY is read by the host controller only; there is no container
+#   * INCEPTION_API_KEY is read by the host controller only; there is no container
 #     to leak it into, and it is never written to an artifact or command arg.
 #   * A concurrency group prevents two campaigns spending the shared 100M-token
 #     free budget at once.
@@ -53,7 +53,7 @@ concurrency:
 jobs:
   campaign:
     runs-on: ubuntu-latest
-    # 288 single-turn calls at >=0.2s spacing is minutes of provider time; the
+    # 72 single-turn calls at >=0.2s spacing leave time for provider latency; the
     # larger job limit leaves room for checkout, deps, and artifact upload.
     timeout-minutes: 60
     steps:
@@ -93,8 +93,10 @@ jobs:
         env:
           # The host controller reads this value. There is no Docker agent or
           # judge in this lean probe, so it never reaches a container, a command
-          # argument, or an artifact.
-          MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
+          # argument, or an artifact. INCEPTION_API_KEY is the name of the repo
+          # secret (Inception's documented convention); resolve_provider also
+          # accepts MERCURY_API_KEY as a legacy alias.
+          INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
         run: |
           set -euo pipefail
           python tools/matched_fact_probe.py \

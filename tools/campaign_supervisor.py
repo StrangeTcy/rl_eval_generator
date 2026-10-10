@@ -1,8 +1,7 @@
-"""Provider-free continuation policy for the Atria covering campaign.
+"""Provider-free continuation policy for pinned covering campaigns.
 
-The scheduled workflow restores the latest ``atria-campaign-state-*`` artifact
-and calls :func:`decide_tick`.  This policy deliberately treats the artifact as
-the continuation contract: it identifies both the pinned code ref and the mode
+The scheduled workflow restores the latest provider-specific state artifact
+and calls :func:`decide_tick`. This policy deliberately treats the artifact asthe continuation contract: it identifies both the pinned code ref and the mode
 that the original manual dispatch authorized.
 
 A campaign may take more than GitHub Actions' per-job limit because gate rows
@@ -80,7 +79,9 @@ def _is_backoff_active(checkpoint: dict[str, Any]) -> str | None:
     return None
 
 
-def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
+def decide_tick(
+    state_dir: str | os.PathLike[str], *, expected_provider: str = "atria"
+) -> dict[str, str]:
     """Decide whether a scheduled tick may continue staged campaign state.
 
     Returns ``{"mode": "none"}`` for a terminal or untrusted state. A resume
@@ -118,12 +119,31 @@ def decide_tick(state_dir: str | os.PathLike[str]) -> dict[str, str]:
             ref="",
             reason="state artifact has an invalid campaign execution mode",
         )
-    if intent.get("provider") != "atria":
+    if intent.get("provider") != expected_provider:
         return _decision(
             mode="none",
             execution_mode="",
             ref="",
-            reason="state artifact intent is not an Atria campaign",
+            reason=(
+                "state artifact intent provider does not match expected "
+                f"target {expected_provider!r}"
+            ),
+        )
+
+    # T1 makes paid calls outside the episode scheduler and currently has no
+    # per-trial resume ledger. An interrupted run is therefore an operator
+    # decision: automatic replay could duplicate any already-completed calls.
+    t1_started = os.path.isfile(os.path.join(root, "t1_started.json"))
+    t1_report = os.path.isfile(os.path.join(root, "t1_same_fact_presentation.json"))
+    if t1_started and not t1_report:
+        return _decision(
+            mode="none",
+            execution_mode="",
+            ref="",
+            reason=(
+                "operator stop: T1 same_fact_presentation was interrupted before "
+                "its final report; no automatic provider-call replay"
+            ),
         )
 
     # A terminal marker survives only when the wrapper made a deliberate,

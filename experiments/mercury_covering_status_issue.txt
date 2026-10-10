@@ -1,0 +1,2 @@
+# Optional GitHub Issue number for Mercury covering campaign status.
+# Leave unpinned to select/create the unique Mercury campaign Issue by title.

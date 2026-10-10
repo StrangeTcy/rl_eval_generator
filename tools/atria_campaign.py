@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Run the resilient Atria covering campaign: every environment, every level.
+"""Run a resilient, provider-pinned covering campaign: every environment, every level.
 
-The campaign evaluates the pinned model across the covering difficulty matrix
+The historical ``atria_campaign.py`` entry point is retained as a stable CLI,
+but profile validation, credentials, API wire surface, reasoning controls,
+modality inventory, and scheduler settings are selected from an explicit
+provider target in the profile. The campaign evaluates the pinned model across the covering difficulty matrix
 built by ``tools/suite_inventory.py`` (every axis level of every registered
 environment at seed 0), so a provider outage costs time instead of the run:
 
@@ -43,12 +46,11 @@ if str(ROOT) not in sys.path:
 
 from arena.artifacts import write_json  # noqa: E402
 from arena.docker_backend import DockerBackendError  # noqa: E402
-from arena.secrets import redact_text  # noqa: E402
+from arena.providers import Completion, ProviderClient, ProviderError  # noqa: E402
+from arena.secrets import redact_text, resolve_provider  # noqa: E402
 from tools.atria_first_experiment import (  # noqa: E402
     APPROVED_BASE,
     APPROVED_MODEL,
-    _compatibility_check,
-    _optional_credentials,
 )
 from tools.atria_modality import inventory_selected_modalities  # noqa: E402
 from tools.first_experiment import _generation_preflight, _runtime_check  # noqa: E402
@@ -69,6 +71,21 @@ RESUMABLE_PAUSE_REASONS = {
     "infrastructure_error",
     "docker_unavailable",
     "wrapper_transient_error",
+}
+
+CAMPAIGN_TARGETS: dict[str, dict[str, Any]] = {
+    "atria": {
+        "model": APPROVED_MODEL,
+        "api_base": APPROVED_BASE,
+        "api_key_env": "ATRIA_API_KEY",
+        "input_modalities": ["text"],
+    },
+    "mercury": {
+        "model": "mercury-2.5",
+        "api_base": "https://api.inceptionlabs.ai/v1",
+        "api_key_env": "INCEPTION_API_KEY",
+        "input_modalities": ["text"],
+    },
 }
 
 
@@ -98,30 +115,69 @@ def _manifest_cases_sha256(manifest: Mapping[str, Any]) -> str:
     ).hexdigest()
 
 
+def _campaign_metadata(profile: Mapping[str, Any]) -> dict[str, Any]:
+    """Return non-secret target identity and optional measurement provenance."""
+    target = CAMPAIGN_TARGETS.get(str(profile.get("provider") or ""), {})
+    return {
+        "name": profile.get("name"),
+        "provider": profile.get("provider"),
+        "model": profile.get("model"),
+        "api_base": profile.get("api_base"),
+        "api_key_env": profile.get("api_key_env"),
+        "wire_api": profile.get("wire_api", "chat_completions"),
+        "reasoning_mode": profile.get("reasoning_mode", "provider_default_uncontrolled"),
+        "reasoning_effort": profile.get("reasoning_effort"),
+        "declared_input_modalities": list(target.get("input_modalities") or []),
+        "research_context": dict(profile.get("research_context") or {})
+        if isinstance(profile.get("research_context"), Mapping)
+        else None,
+    }
+
+
 def _record_campaign_intent(
     output: Path,
     manifest: Mapping[str, Any],
     *,
     execution_mode: str,
     gate_context_sha: str | None,
+    profile: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist the only continuation authority a scheduled run may trust.
 
-    It is written before the long exact-instance gate, which may span several
-    jobs. A schedule tick uses this small, non-secret record to decide whether
-    it should resume provider-free gating or the explicitly requested paid
-    phase; it never infers permission from a profile or the presence of a key.
+    New target profiles bind resumed state to provider, model, endpoint, wire
+    surface, effort, and profile identity. The historical Atria campaign keeps
+    its original intent shape so artifacts produced by its existing launcher
+    remain resumable after this controller is generalized.
     """
     if execution_mode not in {"gates_only", "paid"}:
         raise ValueError(f"invalid campaign execution mode: {execution_mode}")
+    selected = dict(profile or {})
+    provider = str(selected.get("provider") or "atria")
+    name = str(selected.get("name") or "atria_covering_campaign")
     path = output / "campaign_intent.json"
     expected = {
         "schema_version": 1,
-        "provider": "atria",
+        "provider": provider,
         "execution_mode": execution_mode,
         "case_manifest_sha256": _manifest_cases_sha256(manifest),
         "gate_context_sha": gate_context_sha,
     }
+    if name != "atria_covering_campaign":
+        campaign = _campaign_metadata(selected)
+        expected.update(
+            {
+                "campaign_name": name,
+                "model": campaign.get("model"),
+                "api_base": campaign.get("api_base"),
+                "wire_api": campaign.get("wire_api"),
+                "reasoning_effort": campaign.get("reasoning_effort"),
+                "campaign_profile_sha256": hashlib.sha256(
+                    json.dumps(
+                        selected, sort_keys=True, separators=(",", ":"), default=str
+                    ).encode("utf-8")
+                ).hexdigest(),
+            }
+        )
     try:
         existing = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -131,7 +187,7 @@ def _record_campaign_intent(
         if comparable != expected:
             raise ValueError(
                 "campaign intent differs from the restored state; refuse to "
-                "continue with a changed mode, manifest, or code context"
+                "continue with a changed provider, model, mode, manifest, or code context"
             )
         return existing
     value = {**expected, "recorded_at": _utc_now()}
@@ -139,7 +195,7 @@ def _record_campaign_intent(
     return value
 
 
-def _restored_paid_authorization(output: Path) -> bool:
+def _restored_paid_authorization(output: Path, provider: str = "atria") -> bool:
     """Return whether the staged state itself authorizes a paid resume.
 
     The authorization is deliberately read only from the persisted intent,
@@ -155,47 +211,93 @@ def _restored_paid_authorization(output: Path) -> bool:
             return False
     return (
         isinstance(intent, dict)
-        and intent.get("provider") == "atria"
+        and intent.get("provider") == provider
         and intent.get("execution_mode") == "paid"
     )
 
 
-def _is_explicit_actions_paid_dispatch() -> bool:
-    """Recognize the already-deployed campaign launcher's manual approval.
+def _is_explicit_actions_paid_dispatch(profile: Mapping[str, Any] | None = None) -> bool:
+    """Recognize explicit manual approval for the historical Atria launcher.
 
-    The deployed workflow predates the newer ``--allow-provider`` argument,
-    but a human ``workflow_dispatch`` of the named campaign workflow is an
-    explicit paid start.  This compatibility path is intentionally limited to
-    that workflow; local calls and arbitrary Actions jobs still need the flag.
+    New launchers pass ``--allow-provider``; the workflow-name compatibility
+    path remains restricted to the already-deployed Atria action.
     """
+    selected_name = str((profile or {}).get("name") or "atria_covering_campaign")
+    expected_workflow = (profile or {}).get("workflow_name")
+    if expected_workflow is None and selected_name == "atria_covering_campaign":
+        expected_workflow = "Atria covering campaign"
     return (
-        os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
-        and os.environ.get("GITHUB_WORKFLOW") == "Atria covering campaign"
+        selected_name == "atria_covering_campaign"
+        and os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+        and os.environ.get("GITHUB_WORKFLOW") == expected_workflow
     )
 
 
 def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
-    # Rehearsal mode: provider custom, no real API calls, exercises checkpoint resume
+    """Fail closed on target identity and the exact API/reasoning contract."""
+    # Rehearsal mode: provider custom, no real API calls, exercises checkpoint resume.
     if profile.get("provider") == "custom" and profile.get("name") in {"rehearsal", "rehearsal_autonomous"}:
-        # Minimal checks for rehearsal: allow custom provider, any api_base, model offline/pinned
         if profile.get("api_key_env") not in {"REHEARSAL_API_KEY", "ATRIA_API_KEY", "CUSTOM_API_KEY"}:
             raise ValueError("rehearsal profile must use REHEARSAL_API_KEY or similar")
-        # Skip strict atria checks for rehearsal
         return
-    if profile.get("provider") != "atria":
-        raise ValueError("campaign profile must pin provider: atria")
-    if profile.get("model") != APPROVED_MODEL or profile.get("api_base") != APPROVED_BASE:
+
+    provider = str(profile.get("provider") or "")
+    target = CAMPAIGN_TARGETS.get(provider)
+    if target is None:
+        raise ValueError(f"unsupported covering-campaign provider: {provider or '(missing)'}")
+    for field in ("model", "api_base", "api_key_env"):
+        if profile.get(field) != target[field]:
+            raise ValueError(
+                f"{provider} campaign profile must pin {field}: {target[field]!r}"
+            )
+
+    wire_api = str(profile.get("wire_api", "chat_completions"))
+    effort = profile.get("reasoning_effort")
+    reasoning_mode = str(profile.get("reasoning_mode", "provider_default_uncontrolled"))
+    request_extra = profile.get("request_extra", {})
+    if not isinstance(request_extra, Mapping):
+        raise ValueError("request_extra must be a mapping")
+    if any(key in request_extra for key in ("reasoning", "reasoning_effort")):
         raise ValueError(
-            f"campaign profile must pin model {APPROVED_MODEL!r} and api_base {APPROVED_BASE!r}"
+            "reasoning controls must use the explicit wire_api/reasoning_effort profile fields"
         )
-    if profile.get("api_key_env") != "ATRIA_API_KEY":
-        raise ValueError("campaign profile must use api_key_env: ATRIA_API_KEY")
+    if provider == "mercury":
+        if wire_api != "chat_completions":
+            raise ValueError("Mercury 2.5 campaign requires the Chat Completions wire API")
+        if effort != "high" or reasoning_mode != "controlled_chat_reasoning_effort_high":
+            raise ValueError(
+                "Mercury campaign must request high reasoning through flat Chat Completions reasoning_effort"
+            )
+    elif wire_api == "responses":
+        if effort not in {"low", "medium", "high"}:
+            raise ValueError("Atria Responses reasoning requires a named supported effort")
+        expected_mode = f"controlled_responses_reasoning_effort_{effort}"
+        if reasoning_mode != expected_mode:
+            raise ValueError(f"Atria Responses campaign must declare reasoning_mode: {expected_mode}")
+        if "temperature" in profile or "top_p" in profile:
+            raise ValueError(
+                "Atria Responses reasoning profile must not declare Chat Completions sampling controls"
+            )
+    elif wire_api == "chat_completions":
+        if effort is not None:
+            raise ValueError(
+                "Atria controlled reasoning is Responses-API-only; do not infer a Chat Completions equivalent"
+            )
+        if reasoning_mode != "provider_default_uncontrolled":
+            raise ValueError("Atria Chat Completions profile must declare provider_default_uncontrolled")
+    else:
+        raise ValueError("wire_api must be 'chat_completions' or 'responses'")
+
+    if profile.get("stream", False) is not False:
+        raise ValueError("covering campaigns require stream: false")
     matrix = profile.get("matrix") or {}
-    if matrix.get("mode") != "covering":
+    if not isinstance(matrix, Mapping) or matrix.get("mode") != "covering":
         raise ValueError("campaign profile must declare matrix.mode: covering")
     if matrix.get("seeds") != [0]:
         raise ValueError("campaign profile must declare matrix.seeds: [0]")
     resilience = profile.get("resilience") or {}
+    if not isinstance(resilience, Mapping):
+        raise ValueError("resilience must be a mapping")
     patience = resilience.get("provider_outage_patience_seconds")
     backoff = resilience.get("provider_outage_backoff_seconds")
     if not isinstance(patience, (int, float)) or patience < 0:
@@ -211,15 +313,257 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
     if not isinstance(job_seconds, int) or job_seconds < 600:
         raise ValueError("campaign_job_seconds must be an integer >= 600")
     limits = profile.get("limits") or {}
+    if not isinstance(limits, Mapping):
+        raise ValueError("limits must be a mapping")
     for field in (
         "max_steps", "max_tokens", "invalid_retries", "max_retries",
         "max_api_calls", "max_tokens_total", "max_http_attempts",
     ):
         if field not in limits:
             raise ValueError(f"campaign profile limits miss {field}")
+    if limits.get("sandbox", "docker") != "docker":
+        raise ValueError("covering campaigns require limits.sandbox: docker")
     rate = profile.get("rate_limit") or {}
-    if not isinstance(rate.get("min_interval_seconds"), (int, float)) or rate.get("min_interval_seconds", 0) <= 0:
+    if not isinstance(rate, Mapping) or not isinstance(rate.get("min_interval_seconds"), (int, float)) or rate.get("min_interval_seconds", 0) <= 0:
         raise ValueError("rate_limit.min_interval_seconds must be > 0")
+
+    research = profile.get("research_context")
+    if profile.get("name") in {"mercury_covering_campaign", "reasoning_atria_covering_campaign"}:
+        if not isinstance(research, Mapping):
+            raise ValueError("epistemic-process-control campaigns require research_context")
+        _validate_research_context(
+            research,
+            provider=provider,
+            model=str(target["model"]),
+            api_base=str(target["api_base"]),
+            api_key_env=str(target["api_key_env"]),
+            wire_api=wire_api,
+            effort=effort,
+        )
+    elif research is not None:
+        if not isinstance(research, Mapping):
+            raise ValueError("research_context must be a mapping")
+        _validate_research_context(
+            research,
+            provider=provider,
+            model=str(target["model"]),
+            api_base=str(target["api_base"]),
+            api_key_env=str(target["api_key_env"]),
+            wire_api=wire_api,
+            effort=effort,
+        )
+
+
+def _effective_campaign_job_seconds(profile_seconds: int, requested_seconds: int | None) -> int:
+    """Apply a per-invocation wall ceiling without exceeding the pinned profile."""
+    maximum = int(profile_seconds)
+    if requested_seconds is None:
+        return maximum
+    if requested_seconds < 600:
+        raise ValueError("--job-seconds must be at least 600 seconds")
+    if requested_seconds > maximum:
+        raise ValueError(
+            "--job-seconds may reduce, but must not exceed, profile.campaign_job_seconds"
+        )
+    return requested_seconds
+
+
+def _validate_research_context(
+    research: Mapping[str, Any],
+    *,
+    provider: str,
+    model: str,
+    api_base: str,
+    api_key_env: str,
+    wire_api: str,
+    effort: Any,
+) -> None:
+    from arena.matched_facts import assert_reporting_boundary
+
+    if research.get("family") != "epistemic_process_control":
+        raise ValueError("research_context.family must be epistemic_process_control")
+    lineage = research.get("lineage")
+    if not isinstance(lineage, Mapping) or (
+        lineage.get("from") != "deception"
+        or lineage.get("to") != "epistemic_process_control"
+        or lineage.get("first_step") != "same_fact_presentation"
+    ):
+        raise ValueError("research_context.lineage must identify the reframing and T1 first step")
+    t1_path = research.get("t1_profile")
+    if not isinstance(t1_path, str) or not t1_path:
+        raise ValueError("research_context.t1_profile must name a T1 profile")
+    profile_path = ROOT / t1_path
+    if not profile_path.is_file():
+        raise ValueError(f"research_context T1 profile not found: {t1_path}")
+    t1_profile = _load_yaml(profile_path)
+    t1_target = t1_profile.get("target") or {}
+    if not isinstance(t1_target, Mapping):
+        raise ValueError("T1 profile target must be a mapping")
+    if (
+        t1_target.get("provider") != provider
+        or t1_target.get("model") != model
+        or t1_target.get("api_base") != api_base
+        or t1_target.get("api_key_env") != api_key_env
+        or t1_target.get("wire_api", "chat_completions") != wire_api
+        or t1_target.get("reasoning_effort") != effort
+    ):
+        raise ValueError("campaign and T1 profile target/API/reasoning identities must match")
+    if t1_profile.get("operator") != "same_fact_presentation":
+        raise ValueError("research_context T1 profile must use same_fact_presentation")
+    endpoints = research.get("endpoint_contract")
+    if not isinstance(endpoints, Mapping):
+        raise ValueError("research_context.endpoint_contract must be a mapping")
+    required = {
+        "diagnostic_choices",
+        "inquiry_regret",
+        "elicited_belief",
+        "belief_correctness",
+        "calibration_curve",
+        "terminal_outcome",
+        "recovery",
+        "missingness",
+        "aggregation",
+    }
+    missing = sorted(required - set(endpoints))
+    if missing:
+        raise ValueError(f"endpoint_contract misses separate endpoints/statuses: {missing}")
+    expected_endpoints = {
+        "diagnostic_choices": "per_arm_menu_choices_and_matched_difference",
+        "elicited_belief": "per_arm_posterior_fraction_and_matched_delta",
+        "belief_correctness": "per_case_exact_posterior_match_not_calibration",
+        "terminal_outcome": "per_arm_answer_and_correctness",
+    }
+    for endpoint, expected_value in expected_endpoints.items():
+        if endpoints.get(endpoint) != expected_value:
+            raise ValueError(f"endpoint_contract.{endpoint} must preserve its separate measurement")
+    if endpoints.get("inquiry_regret") != "not_measurable_single_turn":
+        raise ValueError("single-turn inquiry_regret must be declared not_measurable")
+    if endpoints.get("recovery") != "not_measurable_single_turn":
+        raise ValueError("single-turn recovery must be declared not_measurable")
+    if endpoints.get("calibration_curve") != "unavailable_no_population_metric":
+        raise ValueError("do not label correctness as calibration; calibration curve remains unavailable")
+    if endpoints.get("missingness") != "not_measurable_or_unavailable_never_zero_filled":
+        raise ValueError("missing endpoints must remain not_measurable/unavailable, never zero-filled")
+    if endpoints.get("aggregation") != "separate_endpoint_channels_no_composite":
+        raise ValueError("T1 endpoint aggregation must keep endpoints separate and avoid composites")
+    assert_reporting_boundary(dict(research))
+
+
+def _optional_credentials(profile: Mapping[str, Any]) -> Any | None:
+    """Resolve the pinned provider with explicit env/base but no required key."""
+    creds = resolve_provider(
+        str(profile["provider"]),
+        api_key_env=str(profile["api_key_env"]),
+        api_base=str(profile["api_base"]),
+        require_key=False,
+    )
+    return creds if creds.api_key else None
+
+
+def _compatibility_check(
+    profile: Mapping[str, Any], credentials: Any, output: Path
+) -> dict[str, Any]:
+    """Make one bounded READY probe on the profile's exact wire surface."""
+    provider = str(profile["provider"])
+    wire_api = str(profile.get("wire_api", "chat_completions"))
+    effort = profile.get("reasoning_effort")
+    limits = profile["limits"]
+    interval = float(profile["rate_limit"]["min_interval_seconds"])
+    max_retries = int(limits["max_retries"])
+    extras = dict(profile.get("request_extra") or {})
+    if effort is not None and wire_api == "chat_completions":
+        extras["reasoning_effort"] = str(effort)
+    effective = {
+        "provider": provider,
+        "api_base": profile["api_base"],
+        "model": profile["model"],
+        "wire_api": wire_api,
+        "max_output_tokens": 128,
+        "temperature": profile.get("temperature") if wire_api == "chat_completions" else None,
+        "top_p": profile.get("top_p") if wire_api == "chat_completions" else None,
+        "stream": False,
+        "request_extra": extras,
+        "reasoning_mode": profile.get("reasoning_mode", "provider_default_uncontrolled"),
+        "reasoning_effort": effort,
+        "max_retries": max_retries,
+        "max_attempts": max_retries + 1,
+        "min_interval_seconds": interval,
+    }
+    client = ProviderClient(
+        provider,
+        credentials.api_key,
+        api_base=str(profile["api_base"]),
+        max_retries=max_retries,
+        max_http_attempts=max_retries + 1,
+        min_interval_seconds=interval,
+    )
+    messages = [
+        {"role": "system", "content": "Return a short compatibility acknowledgement."},
+        {"role": "user", "content": "Reply with the single word READY."},
+    ]
+    try:
+        if wire_api == "responses":
+            completion: Completion = client.complete_responses(
+                messages,
+                model=str(profile["model"]),
+                reasoning_effort=str(effort) if effort is not None else None,
+                max_output_tokens=128,
+                request_extra=profile.get("request_extra") or None,
+            )
+        else:
+            completion = client.complete(
+                model=str(profile["model"]),
+                messages=messages,
+                max_tokens=128,
+                temperature=float(profile.get("temperature", 0.0)),
+                top_p=float(profile["top_p"]) if profile.get("top_p") is not None else None,
+                request_extra=extras or None,
+            )
+    except ProviderError as exc:
+        result = {
+            "status": "failed",
+            "effective_request": effective,
+            "error_type": "provider_transient" if exc.retryable else type(exc).__name__,
+            "status_code": exc.status_code,
+            "request_id": exc.request_id,
+            "response_headers": exc.response_headers,
+            "attempts": exc.attempts,
+            "retry_count": client.last_retry_count,
+            "attempt_logs": client.last_attempt_logs,
+            "diagnostic_body": redact_text(exc.body)[:2000],
+        }
+        write_json(output / "compatibility.json", result, secret=credentials.api_key)
+        return result
+    expected_finish = "completed" if wire_api == "responses" else "stop"
+    valid = (
+        completion.status_code is not None
+        and 200 <= completion.status_code < 300
+        and completion.finish_reason == expected_finish
+        and completion.content.strip() == "READY"
+        and bool(completion.usage)
+    )
+    result = {
+        "status": "passed" if valid else "failed",
+        "effective_request": effective,
+        "error_type": None if valid else "invalid_compatibility_completion",
+        "requested_model": completion.requested_model,
+        "resolved_model": completion.resolved_model,
+        "request_id": completion.request_id,
+        "response_headers": completion.response_headers,
+        "provider": completion.provider,
+        "upstream_provider": completion.upstream_provider,
+        "status_code": completion.status_code,
+        "finish_reason": completion.finish_reason,
+        "usage": completion.usage,
+        "content_length": len(completion.content),
+        "reasoning_content_length": completion.reasoning_content_length,
+        "elapsed_ms": completion.latency_ms,
+        "attempts": max(1, client.http_attempts_used),
+        "attempt_logs": client.last_attempt_logs,
+        "retry_count": client.last_retry_count,
+    }
+    write_json(output / "compatibility.json", result, secret=credentials.api_key)
+    return result
 
 
 def _compatibility_with_patience(
@@ -276,7 +620,7 @@ def _report_from_checkpoint(
     gate = checkpoint.get("instance_gate") or {}
     report: dict[str, Any] = {
         "schema_version": 1,
-        "event": "atria_covering_campaign",
+        "event": "covering_campaign",
         "status": status,
         "pause_reason": pause_reason,
         "resumable": pause_reason in RESUMABLE_PAUSE_REASONS if pause_reason else False,
@@ -430,10 +774,13 @@ def _should_reset_output(
     recorded work now requires explicit operator intent via --fresh. Any
     future wiring mistake costs a redundant no-op, not the campaign.
     """
-    if profile.get("provider") != "atria":
-        return False, "non-atria profile keeps its output directory"
     if explicit_fresh:
         return True, "explicit --fresh"
+    if (
+        profile.get("provider") != "atria"
+        or profile.get("name") not in {None, "atria_covering_campaign"}
+    ):
+        return False, "non-legacy campaign output is preserved unless --fresh is explicit"
     if environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
         return False, f"event {environ.get('GITHUB_EVENT_NAME') or 'local'} is a resume"
     recorded = _recorded_episode_count(output)
@@ -475,6 +822,7 @@ def _reset_fresh_campaign_output(output: Path) -> None:
         known_state_files = {
             "campaign_ref.txt", "suite_checkpoint.json", "instance_oracles_partial.json",
             "campaign_report.json", "pilot_manifest.json", "generation_preflight.json",
+            "t1_started.json", "t1_same_fact_presentation.json",
         }
         if not output.is_dir() or not any((output / name).exists() for name in known_state_files):
             raise ValueError(
@@ -611,6 +959,14 @@ def _add_omissions_to_report(report: dict[str, Any], manifest: Mapping[str, Any]
         report["campaign_omissions"] = manifest["campaign_omissions"]
     if manifest.get("known_gate_blocked_omissions"):
         report["known_gate_blocked_omissions"] = manifest["known_gate_blocked_omissions"]
+    campaign = manifest.get("campaign")
+    if isinstance(campaign, Mapping):
+        report["campaign"] = dict(campaign)
+        if campaign.get("name"):
+            report["event"] = campaign["name"]
+        for field in ("provider", "model", "wire_api", "reasoning_mode", "reasoning_effort"):
+            if campaign.get(field) is not None:
+                report[field] = campaign[field]
     return report
 
 
@@ -849,6 +1205,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", type=Path, default=ROOT / "experiments" / "atria_campaign.yaml")
     parser.add_argument("--out", type=Path, default=ROOT / "runs" / "atria_campaign")
+    parser.add_argument(
+        "--job-seconds",
+        type=int,
+        help="lower this invocation's wall ceiling; cannot exceed the profile maximum",
+    )
     parser.add_argument("--keep-images", action="store_true")
     parser.add_argument("--keep-workspace", action="store_true")
     parser.add_argument(
@@ -871,6 +1232,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.gates_only and args.allow_provider:
         parser.error("--gates-only and --allow-provider are mutually exclusive")
     output = args.out
+    profile: dict[str, Any] = {}
+    manifest: dict[str, Any] = {}
     try:
         started = time.monotonic()
         profile = _load_yaml(args.profile)
@@ -897,15 +1260,25 @@ def main(argv: list[str] | None = None) -> int:
 
         limits = profile["limits"]
         resilience = profile["resilience"]
-        job_seconds = int(profile["campaign_job_seconds"])
+        job_seconds = _effective_campaign_job_seconds(
+            int(profile["campaign_job_seconds"]), args.job_seconds
+        )
         patience = float(resilience["provider_outage_patience_seconds"])
         backoff = float(resilience["provider_outage_backoff_seconds"])
 
         manifest = build_manifest(root=ROOT, matrix="covering", seeds=[0])
         _apply_gate_blocked_exclusions(manifest, profile)
+        target = CAMPAIGN_TARGETS[str(profile["provider"])]
+        manifest["campaign"] = _campaign_metadata(profile)
         output.mkdir(parents=True, exist_ok=True)
         write_json(output / "pilot_manifest.json", manifest)
-        modality = inventory_selected_modalities(manifest, root=ROOT)
+        modality = inventory_selected_modalities(
+            manifest,
+            root=ROOT,
+            provider=str(profile["provider"]),
+            model=str(profile["model"]),
+            input_modalities=list(target["input_modalities"]),
+        )
         unsupported = list(modality.get("unsupported_case_ids") or [])
         if unsupported and len(unsupported) < len(manifest.get("cases", [])):
             # The provider cannot serve some environments (e.g. non-text
@@ -927,23 +1300,34 @@ def main(argv: list[str] | None = None) -> int:
                 "omitted_case_ids": unsupported,
                 "omitted_environments": omitted_environments,
                 "reason": "provider_input_modality_unsupported",
-                "provider": "atria",
-                "provider_input_modality": "text_only",
+                "provider": str(profile["provider"]),
+                "provider_input_modalities": list(target["input_modalities"]),
             }
             write_json(output / "pilot_manifest.json", manifest)
-            modality = inventory_selected_modalities(manifest, root=ROOT)
+            modality = inventory_selected_modalities(
+                manifest,
+                root=ROOT,
+                provider=str(profile["provider"]),
+                model=str(profile["model"]),
+                input_modalities=list(target["input_modalities"]),
+            )
         # Budget exhaustion and floor effects pause non-resuably, so the
         # validated cases must complete before the compile-only ones.
         _order_cases_referenced_first(manifest)
         write_json(output / "pilot_manifest.json", manifest)
         write_json(output / "modality_inventory.json", modality)
-        if not modality["all_selected_cases_text_only_compatible"]:
+        modality_compatible = modality.get(
+            "all_selected_cases_provider_modality_compatible",
+            modality.get("all_selected_cases_text_only_compatible", False),
+        )
+        if not modality_compatible:
+            pause_reason = f"unsupported_non_text_input_for_{profile['provider']}"
             write_json(output / "campaign_report.json", _add_omissions_to_report({
-                "status": "blocked", "pause_reason": "unsupported_non_text_input_for_atria",
+                "status": "blocked", "pause_reason": pause_reason,
                 "resumable": False,
             }, manifest))
-            _mark_terminal(output, "unsupported_non_text_input_for_atria",
-                           "provider cannot serve the selected cases")
+            _mark_terminal(output, pause_reason,
+                           f"provider {profile['provider']} cannot serve the selected modalities")
             print(f"Campaign blocked by modality inventory; inspect {output}")
             return 2
         generation = _generation_preflight(manifest)
@@ -980,8 +1364,8 @@ def main(argv: list[str] | None = None) -> int:
             not args.gates_only
             and (
                 args.allow_provider
-                or _is_explicit_actions_paid_dispatch()
-                or _restored_paid_authorization(output)
+                or _is_explicit_actions_paid_dispatch(profile)
+                or _restored_paid_authorization(output, str(profile["provider"]))
             )
         )
         execution_mode = "paid" if provider_access_allowed else "gates_only"
@@ -990,18 +1374,19 @@ def main(argv: list[str] | None = None) -> int:
             manifest,
             execution_mode=execution_mode,
             gate_context_sha=gate_context_sha,
+            profile=profile,
         )
         scheduler_kwargs: dict[str, Any] = {
             "output_dir": output,
-            "provider": "atria",
-            "model": APPROVED_MODEL,
-            "api_key_env": "ATRIA_API_KEY",
-            "api_base": APPROVED_BASE,
-            "sandbox": "docker",
+            "provider": str(profile["provider"]),
+            "model": str(profile["model"]),
+            "api_key_env": str(profile["api_key_env"]),
+            "api_base": str(profile["api_base"]),
+            "sandbox": str(limits.get("sandbox", "docker")),
             "max_steps": int(limits["max_steps"]),
             "max_tokens": int(limits["max_tokens"]),
-            "temperature": float(profile["temperature"]),
-            "top_p": float(profile["top_p"]),
+            "temperature": float(profile.get("temperature", 0.0)),
+            "top_p": float(profile["top_p"]) if profile.get("top_p") is not None else None,
             "invalid_retries": int(limits["invalid_retries"]),
             "max_retries": int(limits["max_retries"]),
             "max_http_attempts": int(limits["max_http_attempts"]),
@@ -1010,7 +1395,13 @@ def main(argv: list[str] | None = None) -> int:
             "max_tokens_total": int(limits["max_tokens_total"]),
             "min_interval_seconds": float(profile["rate_limit"]["min_interval_seconds"]),
             "floor_effect_after": int(limits.get("floor_effect_after", 0)),
-            "request_extra": {},
+            "wire_api": str(profile.get("wire_api", "chat_completions")),
+            "reasoning_effort": (
+                str(profile["reasoning_effort"])
+                if profile.get("reasoning_effort") is not None
+                else None
+            ),
+            "request_extra": dict(profile.get("request_extra") or {}),
             "checkpoint_path": output / "suite_checkpoint.json",
             "allow_compile_only_oracles": True,
             "unreferenced_compile_only": True,
@@ -1112,7 +1503,7 @@ def main(argv: list[str] | None = None) -> int:
             }, manifest)
             write_json(output / "campaign_report.json", report)
             print(
-                "Atria provider-free gates passed; gate-only mode made no provider calls. "
+                f"{profile['provider']} provider-free gates passed; gate-only mode made no provider calls. "
                 f"Inspect {output}"
             )
             return 0
@@ -1188,19 +1579,22 @@ def main(argv: list[str] | None = None) -> int:
             return 8 if resumable else 4
 
         credentials = _optional_credentials(profile)
+        api_key_env = str(profile["api_key_env"])
+        credential_pause_reason = f"waiting_for_private_{api_key_env}"
         write_json(output / "credential_check.json", {
             "configured": credentials is not None,
-            "api_key_env": "ATRIA_API_KEY",
+            "provider": profile["provider"],
+            "api_key_env": api_key_env,
         })
         if credentials is None:
             write_json(output / "campaign_report.json", _add_omissions_to_report({
-                "status": "prepared", "pause_reason": "waiting_for_private_ATRIA_API_KEY",
+                "status": "prepared", "pause_reason": credential_pause_reason,
                 "resumable": False,
             }, manifest))
-            _mark_terminal(output, "waiting_for_private_ATRIA_API_KEY",
-                           "no provider call was made; configure the secret "
+            _mark_terminal(output, credential_pause_reason,
+                           "no provider call was made; configure the named Actions secret "
                            "and re-dispatch manually")
-            print("Campaign validated with no provider call; configure ATRIA_API_KEY privately.")
+            print(f"Campaign validated with no provider call; configure {api_key_env} privately.")
             return 3
 
         # Phase 2: the paid compatibility probe, with outage patience bounded
@@ -1255,10 +1649,14 @@ def main(argv: list[str] | None = None) -> int:
         _add_omissions_to_report(report, manifest)
         report["remaining_job_seconds"] = round(job_seconds - (time.monotonic() - started), 1)
         write_json(output / "campaign_report.json", report)
-        print(f"Atria campaign {status}; inspect {output}")
+        print(f"{profile['provider']} campaign {status}; inspect {output}")
         return 0 if status == "completed" else 8
     except (OSError, RuntimeError, ValueError, DockerBackendError) as exc:
         diagnostics = _campaign_failure_diagnostics(output)
+        def _failure_report(value: dict[str, Any]) -> dict[str, Any]:
+            if profile:
+                _add_omissions_to_report(value, {"campaign": _campaign_metadata(profile)})
+            return value
         detail = redact_text(str(exc)) + _format_failure_diagnostics(diagnostics)
         # Host/Docker I/O failures can happen outside run_suite's per-case
         # handler. They get the same bounded automatic restart treatment; a
@@ -1285,9 +1683,9 @@ def main(argv: list[str] | None = None) -> int:
                     "failures": transient_failures,
                     "updated_at": _utc_now(),
                 })
-                write_json(output / "campaign_report.json", {
+                write_json(output / "campaign_report.json", _failure_report({
                     "schema_version": 1,
-                    "event": "atria_covering_campaign",
+                    "event": "covering_campaign",
                     "status": "paused",
                     "pause_reason": "wrapper_transient_error",
                     "resumable": True,
@@ -1295,10 +1693,10 @@ def main(argv: list[str] | None = None) -> int:
                     "detail": detail,
                     "diagnostics": diagnostics,
                     "updated_at": _utc_now(),
-                })
+                }))
             except OSError:
                 pass
-            print(f"atria_campaign paused for automatic transient-wrapper retry: {detail}")
+            print(f"{profile.get('provider', 'covering campaign')} campaign paused for automatic transient-wrapper retry: {detail}")
             return 8
         if diagnostics["generation_preflight_failed_cases"]:
             pause_reason = "generation_preflight_failed"
@@ -1320,9 +1718,9 @@ def main(argv: list[str] | None = None) -> int:
                 "diagnostics": diagnostics,
                 "recorded_at": _utc_now(),
             })
-            write_json(output / "campaign_report.json", {
+            write_json(output / "campaign_report.json", _failure_report({
                 "schema_version": 1,
-                "event": "atria_covering_campaign",
+                "event": "covering_campaign",
                 "status": "blocked",
                 "pause_reason": pause_reason,
                 "resumable": False,
@@ -1330,10 +1728,10 @@ def main(argv: list[str] | None = None) -> int:
                 "detail": detail,
                 "diagnostics": diagnostics,
                 "updated_at": _utc_now(),
-            })
+            }))
         except OSError:
             pass
-        print(f"atria_campaign failed: {detail}")
+        print(f"{profile.get('provider', 'covering campaign')} campaign failed: {detail}")
         return 2
 
 

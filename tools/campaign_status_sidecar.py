@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-open GitHub Issue status sidecar for a running Atria campaign.
+"""Fail-open GitHub Issue status sidecar for a running covering campaign.
 
 The workflow starts this process in the background beside the controller. It
 polls only durable, metadata-only campaign files and replaces one Issue comment
@@ -38,6 +38,38 @@ STATUS_ISSUE_TITLE = "Atria covering campaign live status"
 # with the state artifact, which is what makes it usable on a campaign whose
 # restored state predates the Issue it should report into.
 STATUS_ISSUE_PIN = "experiments/atria_status_issue.txt"
+# Default comment-header label. Purely cosmetic - nothing matches on it - so its
+# wording may differ from the Issue title's.
+BODY_LABEL = "Atria campaign"
+
+# One sidecar process observes exactly one campaign, so the campaign identity is
+# process-global config rather than a parameter threaded through every call.
+# main() overrides these from --label / --pin-file. The defaults reproduce the
+# Atria covering campaign's existing behavior byte-for-byte, which is what keeps
+# every current caller and test unchanged. Two campaigns must NOT share an Issue:
+# reuse matches on the exact title, so a different campaign needs a different
+# label (and therefore a different title) or it would silently post into the
+# Atria Issue #3.
+_CAMPAIGN: dict[str, str] = {
+    "title": STATUS_ISSUE_TITLE,
+    "pin_path": STATUS_ISSUE_PIN,
+    "body_label": BODY_LABEL,
+}
+
+
+def configure_campaign(*, label: str | None = None, pin_file: str | None = None) -> None:
+    """Point the sidecar at one campaign's own live-status Issue.
+
+    ``label`` names the campaign (e.g. "Mercury covering campaign"): the Issue
+    title becomes "<label> live status" and the comment header "## <label> live
+    status". ``pin_file`` is the checked-out path holding an explicit Issue
+    number. Passing neither leaves the Atria defaults intact.
+    """
+    if label is not None:
+        _CAMPAIGN["title"] = f"{label} live status"
+        _CAMPAIGN["body_label"] = label
+    if pin_file is not None:
+        _CAMPAIGN["pin_path"] = pin_file
 # The sidecar is fail-open by construction: it swallows every API error so it
 # can never affect the campaign. That silence also made its own death
 # undiagnosable -- a killed process and a permanently 403-ing one look
@@ -201,7 +233,7 @@ def _body(output: Path) -> str:
     status = str(report.get("status") or run.get("execution_state") or "in progress")
     campaign_started_at = checkpoint.get("started_at") or state.get("campaign_started_at")
     lines = [
-        "## Atria campaign live status",
+        f"## {_CAMPAIGN['body_label']} live status",
         "",
         f"- **Updated:** {progress.get('updated_at') or report.get('updated_at') or datetime.now(UTC).isoformat()}",
         f"- **Campaign state:** `{status}`",
@@ -210,6 +242,29 @@ def _body(output: Path) -> str:
         f"- **Current case:** `{current}`",
         f"- **Current elapsed:** {_elapsed(progress.get('current_started_at'))}",
     ]
+    t1_interrupted = _read_json(output / "t1_interrupted.json")
+    if (
+        t1_interrupted.get("status") == "interrupted"
+        and not (output / "t1_same_fact_presentation.json").is_file()
+    ):
+        lines.append(
+            "- **T1 status:** `interrupted; operator review required; no automatic replay`"
+        )
+    if progress.get("progress_kind") == "t1_same_fact_presentation":
+        completed = progress.get("t1_api_calls_completed")
+        total = progress.get("t1_api_calls_total")
+        cells_completed = progress.get("t1_cells_completed")
+        cells_total = progress.get("t1_cells_total")
+        lines.append(
+            f"- **T1 matched-arm calls:** `{completed if isinstance(completed, int) else 0} / {total if isinstance(total, int) else '?'}`"
+        )
+        if isinstance(completed, int) and isinstance(total, int):
+            bar = _progress_bar(completed, total)
+            if bar is not None:
+                lines.append(f"- **T1 call progress:** `{bar}`")
+        lines.append(
+            f"- **T1 matched cells:** `{cells_completed if isinstance(cells_completed, int) else 0} / {cells_total if isinstance(cells_total, int) else '?'}`"
+        )
     if phase == "exact-instance gate" or partial:
         completed = progress.get("gate_completed")
         if not isinstance(completed, int):
@@ -279,9 +334,9 @@ def _write_heartbeat(output: Path, state: dict[str, Any]) -> None:
 
 
 def _pinned_issue_number() -> int | None:
-    """The Issue number pinned in STATUS_ISSUE_PIN, or None if absent/invalid."""
+    """The Issue number pinned in the campaign's pin file, or None if absent/invalid."""
     try:
-        raw = (ROOT / STATUS_ISSUE_PIN).read_text(encoding="utf-8").strip()
+        raw = (ROOT / _CAMPAIGN["pin_path"]).read_text(encoding="utf-8").strip()
     except OSError:
         return None
     raw = raw.lstrip("#").strip()
@@ -308,7 +363,7 @@ def _newest_open_status_issue(token: str, repository: str) -> int | None:
     for entry in listing:
         if not isinstance(entry, dict) or entry.get("pull_request"):
             continue
-        if entry.get("title") != STATUS_ISSUE_TITLE:
+        if entry.get("title") != _CAMPAIGN["title"]:
             continue
         number = entry.get("number")
         if isinstance(number, int):
@@ -351,7 +406,7 @@ def _ensure_comment(
                     "POST",
                     f"/repos/{repository}/issues",
                     {
-                        "title": STATUS_ISSUE_TITLE,
+                        "title": _CAMPAIGN["title"],
                         "body": "Live campaign status comment created by the workflow sidecar.",
                     },
                 )
@@ -415,7 +470,20 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="publish one final best-effort update and exit",
     )
+    parser.add_argument(
+        "--label",
+        help='campaign name for the Issue title and comment header, e.g. '
+        '"Mercury covering campaign" (default: the Atria covering campaign)',
+    )
+    parser.add_argument(
+        "--pin-file",
+        help="checked-out path holding an explicit Issue number "
+        "(default: experiments/atria_status_issue.txt)",
+    )
     args = parser.parse_args(argv)
+    # Per-process campaign identity. With neither flag this is a no-op, so the
+    # Atria covering campaign behaves exactly as before.
+    configure_campaign(label=args.label, pin_file=args.pin_file)
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     repository = os.environ.get("GITHUB_REPOSITORY")
     if not token or not repository:

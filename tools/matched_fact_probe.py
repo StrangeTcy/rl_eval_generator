@@ -13,10 +13,10 @@ arms - and never collapses it into a single score.
 Answer sources
 --------------
 Offline baselines (no model, no network), each a pure function of the public
-presentation except the calibration upper bound:
+presentation except the exact-oracle control:
 
-  calibrated      the exact order-invariant oracle (NOT public-only; a sanity
-                  upper bound that must show ZERO presentation susceptibility)
+  exact_oracle    the exact order-invariant oracle (NOT public-only; a sanity
+                  control that must show ZERO presentation susceptibility)
   prior_anchored  always answers the prior, ignores evidence and order (a flat
                   null control: zero susceptibility, incorrect belief)
   primacy_biased  recomputes from the FIRST-presented fact only (positive
@@ -36,7 +36,7 @@ API key is authorized - e.g. the campaign workflows):
 Usage (offline)::
 
     python tools/matched_fact_probe.py --baseline primacy_biased --seeds 8
-    python tools/matched_fact_probe.py --baseline calibrated --seeds 8 --out runs/t1/calibrated.json
+    python tools/matched_fact_probe.py --baseline exact_oracle --seeds 8 --out runs/t1/exact_oracle.json
 """
 from __future__ import annotations
 
@@ -54,7 +54,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from arena.matched_facts import (  # noqa: E402
     INQUIRY_MENU,
+    MEASURED,
     NOT_MEASURABLE,
+    UNAVAILABLE,
     AnswerSource,
     MatchedFactTask,
     assert_reporting_boundary,
@@ -66,7 +68,7 @@ from arena.matched_facts import (  # noqa: E402
 )
 from shared.epistemic_semantics import bayes  # noqa: E402
 
-# A source builder receives the task (so the calibration baseline can capture
+# A source builder receives the task (so the exact-oracle control can capture
 # the oracle) and returns an AnswerSource. Pure baselines ignore the task.
 SourceBuilder = Callable[[MatchedFactTask], AnswerSource]
 
@@ -86,12 +88,11 @@ def _bayes_answer(posterior: Fraction) -> Dict[str, object]:
     return {"_most": most}
 
 
-def make_calibrated_source(task: MatchedFactTask) -> AnswerSource:
-    """Calibration upper bound: the exact oracle, identical for both arms.
+def make_exact_oracle_source(task: MatchedFactTask) -> AnswerSource:
+    """Exact-oracle control, identical for both arms (not public-only).
 
-    NOT public-only (it reads the task oracle). A correct, order-invariant
-    target must show zero presentation susceptibility; this baseline proves the
-    metric does not fire on order-invariant behavior.
+    It reads the task oracle and sanity-checks order invariance. It is not a
+    calibration measure and does not contribute to the model's belief statistics.
     """
 
     def source(presentation: Mapping[str, object]) -> Dict[str, object]:
@@ -99,7 +100,7 @@ def make_calibrated_source(task: MatchedFactTask) -> AnswerSource:
             "elicited_belief": task.oracle_posterior_world1,
             "terminal_answer": task.oracle_answer(),
             "diagnostic_choices": ["conclude_no_further_inquiry"],
-            "justification": "calibrated oracle (not public-only)",
+            "justification": "exact oracle control (not public-only)",
         }
 
     return source
@@ -156,7 +157,7 @@ def prior_anchored(presentation: Mapping[str, object]) -> Dict[str, object]:
 
 
 BASELINES: Dict[str, SourceBuilder] = {
-    "calibrated": make_calibrated_source,
+    "exact_oracle": make_exact_oracle_source,
     "prior_anchored": lambda task: prior_anchored,
     "primacy_biased": lambda task: primacy_biased,
     "recency_biased": lambda task: recency_biased,
@@ -181,15 +182,6 @@ _ANSWER_SCHEMA = (
 )
 
 
-def _parse_belief(value: object) -> Optional[Fraction]:
-    if value is None:
-        return None
-    try:
-        return Fraction(str(value))
-    except (ValueError, ZeroDivisionError):
-        return None
-
-
 def _extract_json(content: str) -> Optional[dict]:
     match = _JSON_BLOCK.search(content or "")
     if not match:
@@ -210,14 +202,15 @@ def make_model_source(
     reasoning_effort: Optional[str] = None,
     top_p: Optional[float] = None,
     wire_api: str = "chat_completions",
+    provider: Optional[str] = None,
     usage_sink: Optional[Dict[str, int]] = None,
 ) -> AnswerSource:
     """Wrap a ProviderClient as an AnswerSource for one target model.
 
     The prompt carries only public content (task question + rendered evidence +
     the inquiry menu + the answer schema). The oracle and the fact-set id are
-    never sent. A response that cannot be parsed yields null endpoints (scored
-    not_measurable/incorrect) rather than raising, so one bad completion cannot
+    never sent. A response that cannot be parsed yields unavailable endpoints
+    (not zero or a clean null) rather than raising, so one bad completion cannot
     abort a campaign leg.
 
     ``wire_api`` selects the provider surface and therefore how reasoning is
@@ -237,8 +230,14 @@ def make_model_source(
     """
     if wire_api not in ("chat_completions", "responses"):
         raise ValueError(f"unsupported wire_api {wire_api!r}")
+    if reasoning_effort and provider == "atria" and wire_api != "responses":
+        raise ValueError("Atria controlled reasoning is Responses-API-only")
+    if reasoning_effort and provider == "mercury" and wire_api != "chat_completions":
+        raise ValueError("Mercury controlled reasoning uses Chat Completions reasoning_effort")
     request_extra: Dict[str, object] = {}
     if reasoning_effort and wire_api == "chat_completions":
+        if provider not in (None, "mercury"):
+            raise ValueError("flat Chat Completions reasoning_effort is only defined for Mercury")
         request_extra["reasoning_effort"] = reasoning_effort
 
     def _tally(completion: object) -> None:
@@ -277,21 +276,60 @@ def make_model_source(
                 request_extra=request_extra or None,
             )
         _tally(completion)
-        data = _extract_json(completion.content)
-        if data is None:
+        finish = getattr(completion, "finish_reason", None)
+        expected_finish = "completed" if wire_api == "responses" else "stop"
+        snippet = (completion.content or "")[:200].replace("\n", " ")
+        if finish != expected_finish:
             return {
+                "_source_status": UNAVAILABLE,
                 "elicited_belief": None,
                 "terminal_answer": None,
-                "diagnostic_choices": [],
-                "justification": "unparseable_response",
+                "diagnostic_choices": None,
+                "inquiry_regret": NOT_MEASURABLE,
+                "recovery": NOT_MEASURABLE,
+                "justification": (
+                    f"incomplete_response(finish={finish}): {snippet!r}"
+                ),
+            }
+        data = _extract_json(completion.content)
+        if data is None:
+            # Diagnostic, so an unparseable run is never blind: finish_reason
+            # "length" means the answer was truncated (raise max_tokens); "stop"
+            # with no JSON means a format mismatch. The snippet shows what the
+            # model actually returned. Bounded so the report stays small.
+            finish = getattr(completion, "finish_reason", None)
+            snippet = (completion.content or "")[:200].replace("\n", " ")
+            return {
+                "_source_status": UNAVAILABLE,
+                "elicited_belief": None,
+                "terminal_answer": None,
+                "diagnostic_choices": None,
+                "inquiry_regret": NOT_MEASURABLE,
+                "recovery": NOT_MEASURABLE,
+                "justification": f"unparseable_response(finish={finish}): {snippet!r}",
             }
         most = str(data.get("most_supported", "")).strip()
         verdict = str(data.get("verdict", "")).strip()
-        terminal = f"{most}:{verdict}" if most and verdict else None
+        terminal = (
+            f"{most}:{verdict}"
+            if most in {"world1", "world2", "neither"} and verdict in bayes.VERDICTS
+            else UNAVAILABLE
+        )
+        belief = data.get("posterior_world1", UNAVAILABLE)
+        if belief is None:
+            belief = UNAVAILABLE
+        choices = data.get("diagnostic_choices", UNAVAILABLE)
+        if (
+            not isinstance(choices, (list, tuple))
+            or any(not isinstance(choice, str) or choice not in INQUIRY_MENU for choice in choices)
+        ):
+            choices = UNAVAILABLE
         return {
-            "elicited_belief": _parse_belief(data.get("posterior_world1")),
+            "elicited_belief": belief,
             "terminal_answer": terminal,
-            "diagnostic_choices": data.get("diagnostic_choices") or [],
+            "diagnostic_choices": choices,
+            "inquiry_regret": NOT_MEASURABLE,
+            "recovery": NOT_MEASURABLE,
             "justification": str(data.get("justification", ""))[:500],
         }
 
@@ -335,6 +373,11 @@ def run_probe(
     """Run the matched-fact probe over ``seeds`` and build a boundary-safe report."""
     trials: List[Dict[str, object]] = []
     order_invariant_trials = 0
+    order_sensitive_trials = 0
+    not_measurable_trials = 0
+    unavailable_trials = 0
+    belief_delta_not_measurable_trials = 0
+    belief_delta_unavailable_trials = 0
     belief_deltas: List[str] = []
     diverged_histogram: Dict[str, int] = {}
 
@@ -344,7 +387,11 @@ def run_probe(
         trial = build_trial(task, source)
         susc = compute_susceptibility(trial)
         report = susceptibility_report(susc)
-        # Per-trial record keeps the endpoints separate.
+        # A trial is comparable only when at least one endpoint was measured
+        # in both arms. Per-endpoint statuses remain in the arm and contrast
+        # records; missing values never become empty/zero comparisons.
+        measurement_status = _trial_measurement_status(susc)
+        measurable = measurement_status == MEASURED
         trials.append(
             {
                 "seed": seed,
@@ -352,6 +399,8 @@ def run_probe(
                 "fact_count": task.fact_count if hasattr(task, "fact_count") else len(task.facts),
                 "oracle_answer": task.oracle_answer(),
                 "oracle_posterior_world1": str(task.oracle_posterior_world1),
+                "measurement_status": measurement_status,
+                "measurable": measurable,
                 "arms": {
                     "a": _arm_record(trial.arm_a),
                     "b": _arm_record(trial.arm_b),
@@ -359,20 +408,36 @@ def run_probe(
                 **report,
             }
         )
-        if not susc.diverged_endpoints:
+        if measurement_status == NOT_MEASURABLE:
+            not_measurable_trials += 1
+        elif measurement_status == UNAVAILABLE:
+            unavailable_trials += 1
+        elif not susc.diverged_endpoints:
             order_invariant_trials += 1
-        if susc.belief_delta not in (Fraction(0), 0) and susc.belief_delta != NOT_MEASURABLE:
-            belief_deltas.append(str(susc.belief_delta))
+        else:
+            order_sensitive_trials += 1
+        if susc.belief_delta_status == MEASURED:
+            if susc.belief_delta not in (Fraction(0), 0):
+                belief_deltas.append(str(susc.belief_delta))
+        elif susc.belief_delta_status == NOT_MEASURABLE:
+            belief_delta_not_measurable_trials += 1
+        else:
+            belief_delta_unavailable_trials += 1
         for endpoint in susc.diverged_endpoints:
             diverged_histogram[endpoint] = diverged_histogram.get(endpoint, 0) + 1
 
     aggregate = {
         "trial_count": len(trials),
-        # Reported separately, never collapsed into one susceptibility score:
+        # Reported separately, never collapsed into one susceptibility score, and
+        # with not_measurable kept first-class (never folded into the invariants):
         "order_invariant_trials": order_invariant_trials,
-        "order_sensitive_trials": len(trials) - order_invariant_trials,
+        "order_sensitive_trials": order_sensitive_trials,
+        "not_measurable_trials": not_measurable_trials,
+        "unavailable_trials": unavailable_trials,
         "diverged_endpoint_histogram": diverged_histogram,
         "belief_delta_values": belief_deltas,
+        "belief_delta_not_measurable_trials": belief_delta_not_measurable_trials,
+        "belief_delta_unavailable_trials": belief_delta_unavailable_trials,
     }
     full_report = {
         "probe": "t1_same_fact_presentation",
@@ -391,16 +456,36 @@ def run_probe(
     return full_report
 
 
+def _trial_measurement_status(susc) -> str:
+    endpoint_statuses = (
+        susc.belief_delta_status,
+        susc.belief_correctness_status,
+        susc.diagnostic_choices_status,
+        susc.terminal_outcome_status,
+    )
+    if MEASURED in endpoint_statuses:
+        return MEASURED
+    if UNAVAILABLE in endpoint_statuses:
+        return UNAVAILABLE
+    return NOT_MEASURABLE
+
+
 def _arm_record(arm) -> Dict[str, object]:
     return {
         "variant": arm.variant,
         "diagnostic_choices": list(arm.diagnostic_choices),
+        "diagnostic_choices_status": arm.diagnostic_choices_status,
         "elicited_belief": str(arm.elicited_belief) if arm.elicited_belief is not None else None,
+        "elicited_belief_status": arm.elicited_belief_status,
         "belief_correct": arm.belief_correct,
+        "belief_correctness_status": arm.belief_correctness_status,
         "terminal_answer": arm.terminal_answer,
+        "terminal_outcome_status": arm.terminal_outcome_status,
         "terminal_correct": arm.terminal_correct,
         "inquiry_regret": arm.inquiry_regret,
+        "inquiry_regret_status": arm.inquiry_regret_status,
         "recovery": arm.recovery,
+        "recovery_status": arm.recovery_status,
         "justification": arm.justification,
     }
 
@@ -473,11 +558,52 @@ def plan_from_profile(profile: Mapping[str, object]) -> Dict[str, object]:
         raise SystemExit(
             f"profile.target.wire_api must be 'chat_completions' or 'responses', got {wire_api!r}"
         )
+    provider = str(target.get("provider") or "")
+    effort = target.get("reasoning_effort")
+    contracts = {
+        "mercury": {
+            "model": "mercury-2.5",
+            "api_base": "https://api.inceptionlabs.ai/v1",
+            "api_key_env": "INCEPTION_API_KEY",
+            "wire_api": "chat_completions",
+            "reasoning_mode": "controlled_reasoning_effort_high",
+        },
+        "atria": {
+            "model": "Atria-Dawn-Preview",
+            "api_base": "https://api.atria-asi.ai/v1",
+            "api_key_env": "ATRIA_API_KEY",
+            "wire_api": "responses",
+            "reasoning_mode": "controlled_responses_reasoning_effort_high",
+        },
+    }
+    expected = contracts.get(provider)
+    if expected is None:
+        raise SystemExit(f"unsupported T1 provider {provider!r}")
+    for key in ("model", "api_base", "api_key_env"):
+        if target.get(key) != expected[key]:
+            raise SystemExit(
+                f"T1 {provider} profile must pin {key}: {expected[key]!r}"
+            )
+    if wire_api != expected["wire_api"]:
+        if provider == "atria":
+            raise SystemExit("Atria controlled reasoning requires target.wire_api: responses")
+        raise SystemExit("Mercury controlled reasoning requires target.wire_api: chat_completions")
+    if effort != "high" or profile.get("reasoning_mode") != expected["reasoning_mode"]:
+        raise SystemExit(
+            f"T1 {provider} profile must declare the pinned high reasoning mode"
+        )
+    if int(target.get("max_tokens", 0)) != 8192:
+        raise SystemExit("T1 provider profiles must preserve target.max_tokens: 8192")
+    if provider == "atria" and ("temperature" in target or "top_p" in target):
+        raise SystemExit("Atria Responses reasoning profile must not declare temperature or top_p")
+    if profile.get("operator") != "same_fact_presentation":
+        raise SystemExit("T1 profile operator must be same_fact_presentation")
     return {
         "probe": "t1_same_fact_presentation",
         "operator": "same_fact_presentation",
         "provider": target.get("provider"),
         "model": target.get("model"),
+        "api_base": target.get("api_base"),
         "wire_api": wire_api,
         "reasoning_mode": profile.get("reasoning_mode", "provider_default_uncontrolled"),
         "reasoning_effort": target.get("reasoning_effort"),
@@ -498,8 +624,20 @@ def plan_from_profile(profile: Mapping[str, object]) -> Dict[str, object]:
     }
 
 
-def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[str, object]:
-    """Run the live matched-fact probe for one target profile."""
+def run_profile(
+    profile: Mapping[str, object],
+    *,
+    out: Optional[str],
+    progress_dir: str | Path | None = None,
+) -> Dict[str, object]:
+    """Run the live matched-fact probe for one target profile.
+
+    ``progress_dir`` writes metadata-only cell checkpoints for a live observer.
+    It is not a resumable trial ledger: if the process stops before the final
+    report is written, a workflow must not automatically repeat the paid calls.
+    The campaign launcher records a start marker and makes an interrupted T1
+    phase an operator decision for precisely that reason.
+    """
     from arena.providers import ProviderClient
     from arena.secrets import resolve_provider
 
@@ -514,7 +652,12 @@ def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[st
     provider = str(target.get("provider"))
     model = str(target.get("model"))
     api_key_env = target.get("api_key_env")
-    creds = resolve_provider(provider, api_key_env=str(api_key_env) if api_key_env else None)
+    api_base = str(target.get("api_base"))
+    creds = resolve_provider(
+        provider,
+        api_key_env=str(api_key_env) if api_key_env else None,
+        api_base=api_base,
+    )
     if not creds.api_key:
         raise SystemExit(f"no API key resolved for provider {provider!r}")
     rate_limit = profile.get("rate_limit", {})
@@ -536,13 +679,38 @@ def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[st
         reasoning_effort=str(reasoning_effort) if reasoning_effort else None,
         top_p=float(target["top_p"]) if target.get("top_p") is not None else None,
         wire_api=wire_api,
+        provider=provider,
         usage_sink=usage_sink,
     )
     matrix = profile.get("matrix", {})
     assert isinstance(matrix, Mapping)
     seeds = _profile_seeds(matrix)
+    cells = _matrix_cells(matrix)
     cell_reports: List[Dict[str, object]] = []
-    for n_facts, prior in _matrix_cells(matrix):
+    progress_root: Path | None = None
+    write_progress = None
+    write_json = None
+    if progress_dir is not None:
+        from arena.artifacts import write_json as _write_json
+        from tools.campaign_progress import write_progress as _write_progress
+
+        progress_root = Path(progress_dir)
+        if not progress_root.is_absolute():
+            progress_root = REPO_ROOT / progress_root
+        progress_root.mkdir(parents=True, exist_ok=True)
+        write_progress = _write_progress
+        write_json = _write_json
+        write_progress(
+            progress_root,
+            progress_kind="t1_same_fact_presentation",
+            phase="T1 same_fact_presentation",
+            current_case="preflight complete; awaiting first matched cell",
+            t1_cells_completed=0,
+            t1_cells_total=len(cells),
+            t1_api_calls_completed=0,
+            t1_api_calls_total=int(plan["planned_api_calls"]),
+        )
+    for cell_index, (n_facts, prior) in enumerate(cells, start=1):
         cell = run_probe(
             lambda task: source,
             seeds=seeds,
@@ -550,12 +718,43 @@ def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[st
             prior_world1=Fraction(prior),
         )
         cell_reports.append({"n_facts": n_facts, "prior_world1": prior, **cell})
+        if progress_root is not None and write_progress is not None and write_json is not None:
+            write_progress(
+                progress_root,
+                progress_kind="t1_same_fact_presentation",
+                phase="T1 same_fact_presentation",
+                current_case=f"n_facts={n_facts}, prior_world1={prior}",
+                t1_cells_completed=cell_index,
+                t1_cells_total=len(cells),
+                t1_api_calls_completed=int(usage_sink.get("calls", 0)),
+                t1_api_calls_total=int(plan["planned_api_calls"]),
+            )
+            write_json(
+                progress_root / "t1_partial.json",
+                {
+                    "partial": True,
+                    "operator": "same_fact_presentation",
+                    "target": {
+                        "provider": provider,
+                        "model": model,
+                        "api_base": api_base,
+                        "wire_api": wire_api,
+                        "reasoning_mode": plan["reasoning_mode"],
+                        "reasoning_effort": reasoning_effort,
+                    },
+                    "usage": dict(usage_sink),
+                    "cell_count": len(cell_reports),
+                    "cells": cell_reports,
+                    "resume_policy": "not_resumable; interrupted paid calls require operator review",
+                },
+            )
     report: Dict[str, object] = {
         "probe": "t1_same_fact_presentation",
         "operator": "same_fact_presentation",
         "target": {
             "provider": provider,
             "model": model,
+            "api_base": api_base,
             "wire_api": wire_api,
             "reasoning_mode": plan["reasoning_mode"],
             "reasoning_effort": reasoning_effort,
@@ -564,10 +763,21 @@ def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[st
         "plan": plan,
         "cell_count": len(cell_reports),
         "cells": cell_reports,
+        "measurement_contract": {
+            "diagnostic_choices": "per_arm_menu_choices_and_matched_difference",
+            "inquiry_regret": NOT_MEASURABLE,
+            "elicited_belief": "per_arm_posterior_fraction_and_matched_delta",
+            "belief_correctness": "per_case_exact_posterior_match; separate from calibration",
+            "calibration_curve": "unavailable_no_population_metric",
+            "terminal_outcome": "per_arm_answer_and_correctness",
+            "recovery": NOT_MEASURABLE,
+            "missingness": "not_measurable_or_unavailable_never_zero_filled",
+            "aggregation": "separate_endpoint_channels_no_composite",
+        },
         "interpretation_boundary": (
             cell_reports[0]["interpretation_boundary"]
             if cell_reports
-            else "presentation susceptibility only; endpoints reported separately"
+            else "matched presentation effect only; endpoints reported separately"
         ),
     }
     assert_reporting_boundary(report)
@@ -578,6 +788,18 @@ def run_profile(profile: Mapping[str, object], *, out: Optional[str]) -> Dict[st
             out_path = REPO_ROOT / out_path
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(text + "\n", encoding="utf-8")
+    if progress_root is not None and write_progress is not None:
+        write_progress(
+            progress_root,
+            progress_kind="t1_same_fact_presentation",
+            phase="T1 complete",
+            current_case="final paired report written",
+            t1_cells_completed=len(cell_reports),
+            t1_cells_total=len(cells),
+            t1_api_calls_completed=int(usage_sink.get("calls", 0)),
+            t1_api_calls_total=int(plan["planned_api_calls"]),
+        )
+        (progress_root / "t1_partial.json").unlink(missing_ok=True)
     print(text)
     return report
 
@@ -627,6 +849,8 @@ def _build_source_builder(args: argparse.Namespace) -> SourceBuilder:
         max_tokens=args.max_tokens,
         reasoning_effort=args.reasoning_effort,
         top_p=args.top_p,
+        wire_api=args.wire_api,
+        provider=args.provider,
     )
 
 
@@ -639,7 +863,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     group.add_argument("--profile", help="T1 campaign profile YAML (target + matrix)")
     parser.add_argument("--model", help="model id for --provider")
     parser.add_argument("--api-key-env", help="override the provider key env var")
-    parser.add_argument("--reasoning-effort", help="Mercury reasoning_effort: low|medium|high")
+    parser.add_argument("--reasoning-effort", help="Mercury Chat or Atria Responses effort: low|medium|high")
+    parser.add_argument(
+        "--wire-api", choices=("chat_completions", "responses"), default="chat_completions",
+        help="explicit provider API surface; Atria controlled reasoning requires responses",
+    )
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float)
     parser.add_argument("--max-tokens", type=int, default=1024)
@@ -649,6 +877,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--n-facts", type=int, default=4)
     parser.add_argument("--prior-world1", default="1/2")
     parser.add_argument("--out", help="write the JSON report here (and to stdout)")
+    parser.add_argument(
+        "--progress-dir",
+        help="write metadata-only cell progress for a live campaign observer; does not enable resume",
+    )
     parser.add_argument("--plan", action="store_true",
                         help="with --profile: print the execution plan and make NO provider calls")
     args = parser.parse_args(argv)
@@ -670,7 +902,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
                 return 1
             return 0
-        run_profile(profile, out=args.out)
+        run_profile(profile, out=args.out, progress_dir=args.progress_dir)
         return 0
 
     if args.provider and not args.model:

@@ -32,6 +32,7 @@ reasoning_mode: controlled_responses_reasoning_effort_high
 target:
   provider: atria
   model: Atria-Dawn-Preview     # exact capitalization required by the Atria API
+  api_base: https://api.atria-asi.ai/v1
   api_key_env: ATRIA_API_KEY
   wire_api: responses           # /v1/responses: the only Atria surface with reasoning control
   reasoning_effort: high        # sent as nested reasoning:{effort:high}; matched to Mercury "high"
@@ -44,7 +45,7 @@ matrix:
   # the two targets and the paired report joins on shared cases.
   n_facts: [3, 4, 5]
   prior_world1: ["1/2", "1/3"]
-  seeds: 24                     # seeds 0..23 per cell
+  seeds: 6                      # seeds 0..5 per cell; matched symmetrically with Mercury
   # If reasoning-high latency threatens the workflow budget, reduce `seeds`
   # SYMMETRICALLY in BOTH t1 profiles; the paired report joins on the shared
   # (seed, cell) cases that remain, so pairing survives a smaller pilot.
@@ -57,7 +58,7 @@ rate_limit:
   min_interval_seconds: 1.1
 
 budget:
-  # 3 n_facts x 2 priors x 24 seeds x 2 arms = 288 planned calls (== Mercury).
+  # 3 n_facts x 2 priors x 6 seeds x 2 arms = 72 planned calls (== Mercury).
   max_api_calls: 600
   max_tokens_total: 4000000
 

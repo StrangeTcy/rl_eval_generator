@@ -97,6 +97,18 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-tokens", type=int, default=1024)
     run.add_argument("--temperature", type=float, default=0.0)
     run.add_argument("--top-p", type=float, default=None)
+    run.add_argument(
+        "--wire-api",
+        choices=("chat_completions", "responses"),
+        default="chat_completions",
+        help="provider request surface; explicit Responses selection is required for Atria reasoning",
+    )
+    run.add_argument(
+        "--reasoning-effort",
+        choices=("minimal", "low", "medium", "high", "xhigh"),
+        default=None,
+        help="controlled reasoning effort (Mercury Chat Completions or Atria Responses only)",
+    )
     run.add_argument("--request-extra", type=_request_extra_arg, default={})
     run.add_argument("--sandbox", choices=("docker", "local"), default="docker")
     run.add_argument("--out", type=Path, default=Path("runs"), help="directory containing run directories")
@@ -217,6 +229,8 @@ def _run(args: argparse.Namespace) -> int:
         temperature=args.temperature,
         top_p=args.top_p,
         request_extra=args.request_extra,
+        wire_api=args.wire_api,
+        reasoning_effort=args.reasoning_effort,
         sandbox=args.sandbox,
         out=args.out,
         invalid_retries=args.invalid_retries,

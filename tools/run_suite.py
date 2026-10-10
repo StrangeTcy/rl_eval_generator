@@ -253,12 +253,21 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
             "max_tokens_total",
             "floor_effect_after",
             "reasoning_effort",
+            "wire_api",
         )
         for field in immutable:
             if field == "max_http_attempts" and previous.get(field) is None:
                 # A preflight checkpoint may intentionally leave the live
                 # episode allocation unset until compatibility has consumed its
                 # bounded attempts.
+                continue
+            if (
+                field == "wire_api"
+                and previous.get(field) is None
+                and metadata.get(field) == "chat_completions"
+            ):
+                # Legacy Atria checkpoints predate the explicit wire selector;
+                # their old default was Chat Completions.
                 continue
             if previous.get(field) != metadata.get(field):
                 raise ValueError(
@@ -391,6 +400,7 @@ def _build_command(
     max_http_attempts: int | None = None,
     provider_min_interval_seconds: float = 0.0,
     max_retries: int = 3,
+    wire_api: str = "chat_completions",
     reasoning_effort: str | None = None,
     request_extra: dict[str, Any] | None = None,
     case_id: str | None = None,
@@ -428,7 +438,11 @@ def _build_command(
         str(invalid_retries),
         "--max-retries",
         str(max_retries),
+        "--wire-api",
+        wire_api,
     ])
+    if reasoning_effort:
+        command.extend(["--reasoning-effort", reasoning_effort])
     if top_p is not None:
         command.extend(["--top-p", str(top_p)])
     if max_http_attempts is not None:
@@ -452,8 +466,6 @@ def _build_command(
     if judge_guarantee:
         command.extend(["--judge-guarantee", judge_guarantee])
     effective_extra = dict(request_extra or {})
-    if reasoning_effort:
-        effective_extra["reasoning"] = {"effort": reasoning_effort}
     if effective_extra:
         command.extend(
             [
@@ -493,6 +505,7 @@ def run_suite(
     max_wall_seconds: float | None = None,
     min_interval_seconds: float = 0.0,
     floor_effect_after: int | None = 3,
+    wire_api: str = "chat_completions",
     reasoning_effort: str | None = None,
     request_extra: dict[str, Any] | None = None,
     checkpoint_path: Path | None = None,
@@ -513,6 +526,18 @@ def run_suite(
         raise ValueError("manifest is not ready; fix inventory issues or pass --allow-config-drift explicitly")
     if not provider or not model:
         raise ValueError("provider and model are required")
+    if wire_api not in {"chat_completions", "responses"}:
+        raise ValueError("wire_api must be 'chat_completions' or 'responses'")
+    if reasoning_effort not in {None, "minimal", "low", "medium", "high", "xhigh"}:
+        raise ValueError("reasoning_effort must be a supported named effort or omitted")
+    if reasoning_effort is not None and (provider, wire_api) not in {
+        ("mercury", "chat_completions"),
+        ("atria", "responses"),
+    }:
+        raise ValueError(
+            "controlled reasoning is defined here only for Mercury Chat Completions "
+            "and Atria Responses; do not infer a provider-specific equivalent"
+        )
     if provider_outage_patience_seconds < 0:
         raise ValueError("provider-outage-patience-seconds must not be negative")
     if provider_outage_backoff_seconds <= 0:
@@ -851,6 +876,7 @@ def run_suite(
         "max_api_calls": max_api_calls,
         "max_tokens_total": max_tokens_total,
         "floor_effect_after": floor_effect_after,
+        "wire_api": wire_api,
         "reasoning_effort": reasoning_effort,
         "reasoning_enabled": reasoning_effort is not None,
         "request_extra": dict(request_extra or {}),
@@ -1121,6 +1147,7 @@ def run_suite(
             max_retries=max_retries,
             keep_images=keep_images,
             keep_workspace=keep_workspace,
+            wire_api=wire_api,
             reasoning_effort=reasoning_effort,
             request_extra=request_extra,
             case_id=case_id,

@@ -169,3 +169,64 @@ def test_atria_responses_skips_reasoning_items_and_keeps_only_message_text():
     )
     assert completion.content == "answer"
     assert "private chain" not in completion.content
+
+
+def test_responses_reads_item_level_text_field():
+    output = [{"type": "message", "text": "direct-text"}]
+    _opener, completion = _responses_call(
+        "atria", output=output, input_text="hi", model="Atria-Dawn-Preview"
+    )
+    assert completion.content == "direct-text"
+
+
+def test_responses_reads_string_content():
+    output = [{"type": "message", "content": "string-content"}]
+    _opener, completion = _responses_call(
+        "atria", output=output, input_text="hi", model="Atria-Dawn-Preview"
+    )
+    assert completion.content == "string-content"
+
+
+def test_responses_prefers_output_text_convenience_field():
+    class _Opener:
+        def __call__(self, req, timeout=None):
+            return _FakeResponsesResponse(
+                {
+                    "model": "Atria-Dawn-Preview",
+                    "status": "completed",
+                    "output_text": "convenience-answer",
+                    "output": [],
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                }
+            )
+
+    client = ProviderClient("atria", "test-key-not-a-real-secret", opener=_Opener())
+    completion = client.complete_responses("hi", model="Atria-Dawn-Preview")
+    assert completion.content == "convenience-answer"
+
+
+def test_responses_raises_a_diagnostic_error_when_reasoning_ate_the_budget():
+    from arena.providers import ProviderError
+
+    class _Opener:
+        def __call__(self, req, timeout=None):
+            # status=incomplete + a reasoning-only output: the visible answer was
+            # truncated away because max_output_tokens went to reasoning.
+            return _FakeResponsesResponse(
+                {
+                    "model": "Atria-Dawn-Preview",
+                    "status": "incomplete",
+                    "output": [{"type": "reasoning", "summary": []}],
+                    "usage": {"input_tokens": 10, "output_tokens": 1024},
+                }
+            )
+
+    client = ProviderClient("atria", "test-key-not-a-real-secret", opener=_Opener())
+    with pytest.raises(ProviderError) as exc:
+        client.complete_responses(
+            "hi", model="Atria-Dawn-Preview", reasoning_effort="high", max_output_tokens=1024
+        )
+    message = str(exc.value)
+    assert "no text" in message
+    assert "incomplete" in message          # status surfaced for diagnosis
+    assert "max_output_tokens" in message   # the truncation hint is in the log

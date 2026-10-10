@@ -121,11 +121,11 @@ def test_generator_rejects_degenerate_specs() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_calibrated_baseline_shows_zero_susceptibility() -> None:
+def test_exact_oracle_baseline_shows_zero_susceptibility() -> None:
     """A correct order-invariant target must NOT be flagged (negative control)."""
     for seed in range(10):
         task = sample_bayesian_matched_facts(seed=seed, n_facts=4)
-        trial = build_trial(task, BASELINES["calibrated"](task))
+        trial = build_trial(task, BASELINES["exact_oracle"](task))
         susc = compute_susceptibility(trial)
         assert susc.diverged_endpoints == ()
         assert susc.belief_delta == Fraction(0)
@@ -172,12 +172,56 @@ def test_divergence_is_reported_per_endpoint_not_collapsed() -> None:
 
 def test_single_turn_inquiry_regret_and_recovery_are_not_measurable() -> None:
     task = sample_bayesian_matched_facts(seed=2, n_facts=4)
-    trial = build_trial(task, BASELINES["calibrated"](task))
+    trial = build_trial(task, BASELINES["exact_oracle"](task))
     assert trial.arm_a.inquiry_regret == NOT_MEASURABLE
     assert trial.arm_a.recovery == NOT_MEASURABLE
+    assert trial.arm_a.inquiry_regret_status == NOT_MEASURABLE
+    assert trial.arm_a.recovery_status == NOT_MEASURABLE
     susc = compute_susceptibility(trial)
     assert not susc.inquiry_regret_comparable
     assert not susc.recovery_comparable
+    assert susc.inquiry_regret_status == NOT_MEASURABLE
+    assert susc.recovery_status == NOT_MEASURABLE
+
+
+def test_empty_diagnostic_choice_list_is_measured_not_zero_filled() -> None:
+    task = sample_bayesian_matched_facts(seed=17, n_facts=3)
+    trial = build_trial(task, lambda presentation: {"diagnostic_choices": []})
+    susc = compute_susceptibility(trial)
+
+    assert trial.arm_a.diagnostic_choices == ()
+    assert trial.arm_a.diagnostic_choices_status == "measured"
+    assert susc.diagnostic_choices_status == "measured"
+    assert susc.diagnostic_choice_delta == ()
+    assert trial.arm_a.elicited_belief_status == NOT_MEASURABLE
+    assert trial.arm_a.terminal_outcome_status == NOT_MEASURABLE
+    assert trial.arm_a.inquiry_regret_status == NOT_MEASURABLE
+    assert trial.arm_a.recovery_status == NOT_MEASURABLE
+
+
+def test_unavailable_arm_endpoints_stay_distinct_from_design_not_measurable() -> None:
+    task = sample_bayesian_matched_facts(seed=18, n_facts=3)
+
+    def unavailable(presentation):
+        return {
+            "_source_status": "unavailable",
+            "elicited_belief": None,
+            "terminal_answer": None,
+            "diagnostic_choices": None,
+            "inquiry_regret": NOT_MEASURABLE,
+            "recovery": NOT_MEASURABLE,
+        }
+
+    trial = build_trial(task, unavailable)
+    susc = compute_susceptibility(trial)
+    assert trial.arm_a.elicited_belief_status == "unavailable"
+    assert trial.arm_a.diagnostic_choices_status == "unavailable"
+    assert trial.arm_a.terminal_outcome_status == "unavailable"
+    assert trial.arm_a.inquiry_regret_status == NOT_MEASURABLE
+    assert trial.arm_a.recovery_status == NOT_MEASURABLE
+    assert susc.belief_delta_status == "unavailable"
+    assert susc.inquiry_regret_status == NOT_MEASURABLE
+    assert susc.recovery_status == NOT_MEASURABLE
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +293,7 @@ def test_diagnostic_choices_must_come_from_the_declared_menu() -> None:
 class _FakeCompletion:
     def __init__(self, content: str) -> None:
         self.content = content
+        self.finish_reason = "stop"
 
 
 class _FakeClient:
@@ -290,7 +335,32 @@ def test_model_adapter_survives_unparseable_response() -> None:
     assert arm.elicited_belief is None
     assert arm.terminal_answer is None
     assert arm.terminal_correct is None
-    assert arm.justification == "unparseable_response"
+    assert arm.justification.startswith("unparseable_response")
+
+
+def test_model_adapter_marks_invalid_requested_endpoints_unavailable() -> None:
+    task = sample_bayesian_matched_facts(seed=19, n_facts=3)
+    client = _FakeClient(
+        '{"posterior_world1": null, "verdict": "unknown", '
+        '"most_supported": "unknown", "diagnostic_choices": ["not_in_menu"]}'
+    )
+    arm = run_arm(task, "a", make_model_source(client, "mercury-2.5"))
+
+    assert arm.elicited_belief_status == "unavailable"
+    assert arm.belief_correctness_status == "unavailable"
+    assert arm.terminal_outcome_status == "unavailable"
+    assert arm.diagnostic_choices_status == "unavailable"
+    assert arm.inquiry_regret_status == NOT_MEASURABLE
+    assert arm.recovery_status == NOT_MEASURABLE
+
+
+def test_out_of_range_elicited_belief_is_unavailable_not_incorrect_zero() -> None:
+    task = sample_bayesian_matched_facts(seed=20, n_facts=3)
+    arm = run_arm(task, "a", lambda _presentation: {"elicited_belief": "2"})
+
+    assert arm.elicited_belief is None
+    assert arm.elicited_belief_status == "unavailable"
+    assert arm.belief_correct is None
 
 
 # ---------------------------------------------------------------------------
@@ -321,17 +391,39 @@ def test_mercury_profile_plans_a_covering_matrix_within_budget() -> None:
     assert plan["provider"] == "mercury"
     assert plan["model"] == "mercury-2.5"
     assert plan["reasoning_effort"] == "high"
-    # 3 n_facts x 2 priors = 6 cells; 6 x 24 seeds x 2 arms = 288 calls.
+    assert plan["wire_api"] == "chat_completions"
+    # 3 n_facts x 2 priors = 6 cells; 6 x 6 seeds x 2 arms = 72 calls.
     assert plan["cell_count"] == 6
-    assert plan["seed_count"] == 24
-    assert plan["planned_api_calls"] == 288
+    assert plan["seed_count"] == 6
+    assert plan["planned_api_calls"] == 72
     assert plan["within_budget"] is True
+
+
+def test_t1_plan_refuses_a_provider_model_identity_mismatch() -> None:
+    profile = load_profile("experiments/t1_mercury.yaml")
+    profile["target"]["provider"] = "atria"
+    with pytest.raises(SystemExit, match="T1 atria profile must pin model"):
+        plan_from_profile(profile)
+
+
+def test_t1_plan_refuses_an_unpinned_api_base() -> None:
+    profile = load_profile("experiments/t1_mercury.yaml")
+    profile["target"]["api_base"] = "https://example.invalid/v1"
+    with pytest.raises(SystemExit, match="T1 mercury profile must pin api_base"):
+        plan_from_profile(profile)
 
 
 def test_budget_gate_fires_before_any_provider_access() -> None:
     """The call ceiling is checked before a key is resolved (offline-safe gate)."""
     profile = {
-        "target": {"provider": "mercury", "model": "mercury-2.5"},
+        "operator": "same_fact_presentation",
+        "reasoning_mode": "controlled_reasoning_effort_high",
+        "target": {
+            "provider": "mercury", "model": "mercury-2.5",
+            "api_base": "https://api.inceptionlabs.ai/v1",
+            "api_key_env": "INCEPTION_API_KEY", "wire_api": "chat_completions",
+            "reasoning_effort": "high", "max_tokens": 8192,
+        },
         "matrix": {"seeds": 10, "n_facts": [3, 4, 5], "prior_world1": ["1/2", "1/3"]},
         "budget": {"max_api_calls": 5},  # 6 x 10 x 2 = 120 planned >> 5
     }
@@ -349,6 +441,7 @@ def test_profile_requires_a_target_mapping() -> None:
 class _FakeResponsesCompletion:
     def __init__(self, content: str, usage=None) -> None:
         self.content = content
+        self.finish_reason = "completed"
         self.usage = usage or {"prompt_tokens": 0, "completion_tokens": 0}
 
 
@@ -400,3 +493,37 @@ def test_model_adapter_rejects_unknown_wire_api() -> None:
     client = _FakeResponsesClient("{}")
     with pytest.raises(ValueError):
         make_model_source(client, "m", wire_api="carrier_pigeon")
+
+
+def test_run_probe_counts_unparseable_arms_as_unavailable_not_invariant() -> None:
+    # Every completion is truncated before the JSON answer, so every response
+    # is unavailable. It must not be laundered into "order_invariant" or
+    # conflated with endpoints that the single-turn design cannot measure.
+    class _C:
+        content = "Let me reason step by step about the likelihood ratios..."  # no JSON object
+        finish_reason = "length"
+        usage = {"prompt_tokens": 10, "completion_tokens": 1024}
+
+    class _TruncatingClient:
+        def complete(self, **kwargs):
+            return _C()
+
+    source = make_model_source(_TruncatingClient(), "mercury-2.5", reasoning_effort="high")
+    report = run_probe(lambda task: source, seeds=[0, 1, 2, 3], n_facts=4)
+    agg = report["aggregate"]
+    assert agg["trial_count"] == 4
+    assert agg["not_measurable_trials"] == 0
+    assert agg["unavailable_trials"] == 4
+    assert agg["order_invariant_trials"] == 0
+    assert agg["order_sensitive_trials"] == 0
+    assert report["trials"][0]["measurement_status"] == "unavailable"
+    assert report["trials"][0]["measurable"] is False
+    # The diagnostic names the cause (truncation), not a bare "unparseable_response".
+    just = report["trials"][0]["arms"]["a"]["justification"]
+    assert just.startswith("incomplete_response(finish=length)")
+    # The unavailable belief contrast is never zero-filled to "0". Inquiry
+    # regret and recovery remain separately marked not_measurable by design.
+    susceptibility = report["trials"][0]["susceptibility"]
+    assert susceptibility["elicited_belief"]["delta"] == "unavailable"
+    assert susceptibility["elicited_belief"]["status"] == "unavailable"
+    assert susceptibility["inquiry_regret"]["status"] == "not_measurable"

@@ -18,11 +18,28 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools import campaign_status_sidecar  # noqa: E402
+from tools.campaign_progress import write_progress  # noqa: E402
+from tools.campaign_status_sidecar import _body  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _restore_campaign_identity():
+    """configure_campaign mutates process-global campaign identity.
+
+    Restore the Atria defaults after every test so a Mercury-labelled test cannot
+    leak into the reuse tests, which match on STATUS_ISSUE_TITLE.
+    """
+    snapshot = dict(campaign_status_sidecar._CAMPAIGN)
+    yield
+    campaign_status_sidecar._CAMPAIGN.clear()
+    campaign_status_sidecar._CAMPAIGN.update(snapshot)
 
 
 def _run(tmp_path: Path, monkeypatch, api, listing=None) -> tuple[object, str | None]:
@@ -147,3 +164,51 @@ def test_a_listing_that_is_not_a_list_does_not_break_the_sidecar(
     target, error = _run(tmp_path, monkeypatch, api, listing={"message": "nope"})
 
     assert (target, error) == ((4, 904), None)
+
+
+def test_configure_campaign_gives_each_campaign_its_own_issue(tmp_path: Path) -> None:
+    # The point of generalizing: a Mercury campaign must report into a Mercury
+    # Issue, never reuse the Atria Issue #3. Reuse matches the exact title, so a
+    # distinct label must yield a distinct title, pin path, and comment header.
+    campaign_status_sidecar.configure_campaign(
+        label="Mercury covering campaign",
+        pin_file="experiments/mercury_status_issue.txt",
+    )
+    assert campaign_status_sidecar._CAMPAIGN["title"] == "Mercury covering campaign live status"
+    assert campaign_status_sidecar._CAMPAIGN["pin_path"] == "experiments/mercury_status_issue.txt"
+    assert campaign_status_sidecar._CAMPAIGN["title"] != campaign_status_sidecar.STATUS_ISSUE_TITLE
+
+    write_progress(tmp_path, phase="episodes", episodes_total=10, episodes_completed=2)
+    body = _body(tmp_path)
+    assert body.startswith("## Mercury covering campaign live status")
+
+
+def test_a_mercury_run_does_not_reuse_the_atria_issue(tmp_path: Path, monkeypatch) -> None:
+    # Even with an open Atria status Issue in the listing, a Mercury-labelled
+    # sidecar must skip it (title mismatch) and create its own.
+    campaign_status_sidecar.configure_campaign(label="Mercury covering campaign")
+    listing = [
+        {"number": 3, "title": campaign_status_sidecar.STATUS_ISSUE_TITLE},  # Atria's
+    ]
+
+    def api(_token, method, path, payload=None):
+        if method == "POST" and path == "/repos/owner/repository/issues":
+            assert payload["title"] == "Mercury covering campaign live status"
+            return {"number": 20}
+        if method == "POST" and path.endswith("/comments"):
+            return {"id": 920}
+        raise AssertionError(f"unexpected call {method} {path}")
+
+    monkeypatch.setattr(campaign_status_sidecar, "_pinned_issue_number", lambda: None)
+    target, error = _run(tmp_path, monkeypatch, api, listing=listing)
+
+    assert error is None
+    assert target == (20, 920), "must create a Mercury Issue, not reuse Atria's #3"
+
+
+def test_defaults_leave_the_atria_campaign_untouched() -> None:
+    # With no configure call the identity is byte-for-byte the original, so the
+    # deployed Atria workflow and every existing test are unaffected.
+    assert campaign_status_sidecar._CAMPAIGN["title"] == campaign_status_sidecar.STATUS_ISSUE_TITLE
+    assert campaign_status_sidecar._CAMPAIGN["pin_path"] == campaign_status_sidecar.STATUS_ISSUE_PIN
+    assert campaign_status_sidecar._CAMPAIGN["body_label"] == campaign_status_sidecar.BODY_LABEL
