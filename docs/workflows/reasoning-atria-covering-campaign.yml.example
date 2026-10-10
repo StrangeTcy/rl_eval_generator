@@ -3,9 +3,10 @@
 #
 # Launches Atria-Dawn-Preview at high reasoning effort via Responses API with
 # nested reasoning:{effort}; runs the T1 same_fact_presentation profile first, then
-# the full provider-pinned covering campaign. T1 is hard-capped at 70 minutes; the
-# covering controller receives the remaining step time, up to its 270-minute
-# profile ceiling. T1 interruption is not auto-replayed.
+# the full provider-pinned covering campaign. The Actions runner has a 2-hour
+# hard ceiling, so the live step is capped at 100 minutes and the overall job at
+# 115. T1 has 70 minutes; the controller gets only what remains. Scheduled runs
+# resume its checkpoint. T1 interruption is not auto-replayed.
 # Live status is posted to a reasoning-Atria Issue using a distinct label
 # and pin file. Paid access requires an explicit workflow_dispatch; choose
 # gates_only for a provider-free validation run.
@@ -41,7 +42,7 @@ concurrency:
 jobs:
   campaign:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 115
     steps:
       - name: Decide fresh dispatch versus supervised resume
         id: mode
@@ -187,7 +188,7 @@ jobs:
 
       - name: Run T1 and covering campaign with live Issue status
         if: steps.mode.outputs.mode != 'none' && steps.atria_rate.outputs.safe == 'true'
-        timeout-minutes: 340
+        timeout-minutes: 100
         env:
           ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
           GH_TOKEN: ${{ github.token }}
@@ -236,7 +237,7 @@ jobs:
           ELAPSED_SECONDS=$((SECONDS - STEP_STARTED))
           MAX_CAMPAIGN_SECONDS=$(.venv/bin/python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["campaign_job_seconds"])' \
             experiments/reasoning_atria_covering_campaign.yaml)
-          CAMPAIGN_SECONDS=$((20400 - ELAPSED_SECONDS - 60))
+          CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))
           if [ "$CAMPAIGN_SECONDS" -gt "$MAX_CAMPAIGN_SECONDS" ]; then
             CAMPAIGN_SECONDS=$MAX_CAMPAIGN_SECONDS
           fi

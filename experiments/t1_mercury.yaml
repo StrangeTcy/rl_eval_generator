@@ -44,8 +44,8 @@ rate_limit:
   min_interval_seconds: 0.2
 
 budget:
-  # 3 n_facts x 2 priors x 6 seeds x 2 arms = 72 planned calls.
-  max_api_calls: 600
+  # Exact ceiling blocks stale or edited matrices above 72 calls before provider access.
+  max_api_calls: 72
   max_tokens_total: 4000000
 
 output:
