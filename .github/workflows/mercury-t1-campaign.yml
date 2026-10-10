@@ -94,7 +94,7 @@ jobs:
           # The host controller reads this value. There is no Docker agent or
           # judge in this lean probe, so it never reaches a container, a command
           # argument, or an artifact.
-          MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
+          INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
         run: |
           set -euo pipefail
           python tools/matched_fact_probe.py \
