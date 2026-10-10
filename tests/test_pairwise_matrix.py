@@ -415,3 +415,39 @@ def test_ignored_launcher_flags_are_recorded_in_the_manifest() -> None:
     untouched: dict = {"campaign": {}}
     atria_campaign._record_ignored_launcher_flags(untouched, _Clean())
     assert "ignored_launcher_arguments" not in untouched["campaign"]
+
+
+@pytest.mark.parametrize("profile_name", [
+    "mercury_pairwise_campaign",
+    "reasoning_atria_pairwise_campaign",
+    "mercury_covering_campaign",
+    "reasoning_atria_covering_campaign",
+])
+def test_a_shipped_profile_ceiling_fits_the_bound_the_controller_checks(profile_name: str) -> None:
+    """`limits.max_http_attempts` is not a bill, it is a refusal: the controller
+    recomputes a worst-case bound from the plan and stops before spending a cent if
+    the plan exceeds the ceiling. A ceiling copied from another profile therefore
+    guarantees that refusal, which is what happened to the first pairwise dispatch
+    (bound 101,286 over 422 post-preflight cases against a copied 56,166). The bound
+    formula is re-derived here from the shipped profile, on the full plan rather than
+    the post-preflight count, so a verification verdict cannot make it fit."""
+    from tools.suite_inventory import build_manifest
+
+    profile = atria_campaign._load_yaml(ROOT / "experiments" / f"{profile_name}.yaml")
+    atria_campaign._validate_campaign_profile(profile)
+    plan = build_manifest(
+        root=ROOT,
+        matrix=str(atria_campaign.matrix_mode_of(profile)),
+        seeds=[0],
+        expand_interventions=atria_campaign.matrix_interventions_of(profile),
+    )
+    atria_campaign._apply_gate_blocked_exclusions(plan, profile)
+    limits = profile["limits"]
+    cases = len(plan["cases"])
+    bound = limits["max_retries"] + 1 + cases * limits["max_steps"] * (
+        1 + limits["invalid_retries"]
+    ) * (limits["max_retries"] + 1)
+    assert bound <= int(limits["max_http_attempts"]), (
+        f"{profile_name}: {cases} cases -> bound {bound} exceeds ceiling "
+        f"{limits['max_http_attempts']}"
+    )

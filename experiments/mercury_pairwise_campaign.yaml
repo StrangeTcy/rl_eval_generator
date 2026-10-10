@@ -4,7 +4,12 @@
 #
 # Matrix size is not hand-tuned: 496 vectors at seed 0 (358 pairwise + 138
 # intervention twins), 269 of them in environments with an exact-instance oracle
-# reference and therefore owing the gate. The ceilings below follow from that
+# reference and therefore owing the gate.
+#
+# The physical-attempt ceiling is the controller's own bound, 6 + N x max_steps
+# x (1 + invalid_retries) x (1 + max_retries) = 6 + 496 x 20 x 2 x 6 = 119,046,
+# sized on the FULL plan rather than the post-preflight count so the guard cannot
+# fire on how many twin cases verification drops. It is a bound, not a bill. The ceilings below follow from that
 # count via the repo's own per-case estimate (run_suite._estimated_case_budget:
 # 40 calls / 327,680 tokens per case) - 496 x 40 = 19,840 calls rounded up to
 # 21,200 for invalid-retry headroom, and 136,000,000 tokens = 0.84 x the
@@ -85,7 +90,7 @@ limits:
   max_tokens: 8192
   invalid_retries: 1
   max_retries: 5
-  max_http_attempts: 56166
+  max_http_attempts: 119046
   max_api_calls: 21200
   max_tokens_total: 136000000
   floor_effect_after: 0
