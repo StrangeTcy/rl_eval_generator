@@ -479,7 +479,7 @@ def _compatibility_check(
         "api_base": profile["api_base"],
         "model": profile["model"],
         "wire_api": wire_api,
-        "max_output_tokens": 128,
+        "max_output_tokens": compatibility_max_tokens,
         "temperature": profile.get("temperature") if wire_api == "chat_completions" else None,
         "top_p": profile.get("top_p") if wire_api == "chat_completions" else None,
         "stream": False,
@@ -508,14 +508,14 @@ def _compatibility_check(
                 messages,
                 model=str(profile["model"]),
                 reasoning_effort=str(effort) if effort is not None else None,
-                max_output_tokens=128,
+                max_output_tokens=compatibility_max_tokens,
                 request_extra=profile.get("request_extra") or None,
             )
         else:
             completion = client.complete(
                 model=str(profile["model"]),
                 messages=messages,
-                max_tokens=128,
+                max_output_tokens=compatibility_max_tokens,
                 temperature=float(profile.get("temperature", 0.0)),
                 top_p=float(profile["top_p"]) if profile.get("top_p") is not None else None,
                 request_extra=extras or None,
