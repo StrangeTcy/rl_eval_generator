@@ -468,6 +468,7 @@ def _compatibility_check(
     wire_api = str(profile.get("wire_api", "chat_completions"))
     effort = profile.get("reasoning_effort")
     limits = profile["limits"]
+    compatibility_max_tokens = int(limits["max_tokens"])
     interval = float(profile["rate_limit"]["min_interval_seconds"])
     max_retries = int(limits["max_retries"])
     extras = dict(profile.get("request_extra") or {})
