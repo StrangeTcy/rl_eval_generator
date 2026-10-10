@@ -43,7 +43,7 @@ on:
       ref:
         description: "Branch or full commit SHA containing the pinned T1 probe code"
         required: true
-        default: "arena/3fd95b93-rl-eval-generator"
+        default: main
       profile:
         description: "T1 campaign profile (target + covering matrix)"
         required: false

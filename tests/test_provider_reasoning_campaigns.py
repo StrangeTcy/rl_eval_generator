@@ -175,12 +175,12 @@ def test_full_campaign_profiles_pin_provider_wire_and_separate_t1_contract() -> 
     assert mercury["api_key_env"] == "INCEPTION_API_KEY"
     assert mercury["wire_api"] == "chat_completions"
     assert mercury["reasoning_effort"] == "high"
-    assert mercury["campaign_job_seconds"] == 16200
+    assert mercury["campaign_job_seconds"] == 6000
 
     assert reasoning_atria["provider"] == "atria"
     assert reasoning_atria["wire_api"] == "responses"
     assert reasoning_atria["reasoning_effort"] == "high"
-    assert reasoning_atria["campaign_job_seconds"] == 16200
+    assert reasoning_atria["campaign_job_seconds"] == 6000
     assert "temperature" not in reasoning_atria
     assert "top_p" not in reasoning_atria
 
@@ -193,12 +193,12 @@ def test_full_campaign_profiles_pin_provider_wire_and_separate_t1_contract() -> 
 
 
 def test_invocation_wall_budget_can_only_reduce_the_profile_ceiling() -> None:
-    assert _effective_campaign_job_seconds(16200, None) == 16200
-    assert _effective_campaign_job_seconds(16200, 16000) == 16000
+    assert _effective_campaign_job_seconds(6000, None) == 6000
+    assert _effective_campaign_job_seconds(6000, 5940) == 5940
     with pytest.raises(ValueError, match="must not exceed"):
-        _effective_campaign_job_seconds(16200, 16201)
+        _effective_campaign_job_seconds(6000, 6001)
     with pytest.raises(ValueError, match="at least 600"):
-        _effective_campaign_job_seconds(16200, 599)
+        _effective_campaign_job_seconds(6000, 599)
 
 
 def test_campaign_profile_validation_rejects_cross_wire_reasoning_and_wrong_secret() -> None:
@@ -303,7 +303,8 @@ def test_t1_profile_progress_and_reports_are_offline_testable(
 def test_t1_plans_keep_target_and_reasoning_identity_explicit(
     profile_name: str, provider: str, model: str, wire_api: str, secret: str,
 ) -> None:
-    plan = plan_from_profile(load_profile(ROOT / "experiments" / profile_name))
+    profile = load_profile(ROOT / "experiments" / profile_name)
+    plan = plan_from_profile(profile)
 
     assert plan["provider"] == provider
     assert plan["model"] == model
@@ -313,7 +314,14 @@ def test_t1_plans_keep_target_and_reasoning_identity_explicit(
     assert plan["max_tokens"] == 8192
     assert plan["planned_api_calls"] == 72
     assert plan["within_budget"] is True
-    assert load_profile(ROOT / "experiments" / profile_name)["target"]["api_key_env"] == secret
+    assert profile["matrix"]["seeds"] == 6
+    assert profile["budget"]["max_api_calls"] == 72
+    oversized_profile = copy.deepcopy(profile)
+    oversized_profile["matrix"]["seeds"] = 24
+    oversized_plan = plan_from_profile(oversized_profile)
+    assert oversized_plan["planned_api_calls"] == 288
+    assert oversized_plan["within_budget"] is False
+    assert profile["target"]["api_key_env"] == secret
 
 
 def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> None:
@@ -322,13 +330,19 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
 
     assert mercury["name"] == "Mercury covering campaign"
     assert atria["name"] == "Reasoning-Atria covering campaign"
-    mercury_run = next(step["run"] for step in mercury["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
-    atria_run = next(step["run"] for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
+    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "115"
+    assert atria["jobs"]["campaign"]["timeout-minutes"] == "115"
+    mercury_run_step = next(step for step in mercury["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
+    atria_run_step = next(step for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
+    assert mercury_run_step["timeout-minutes"] == "100"
+    assert atria_run_step["timeout-minutes"] == "100"
+    mercury_run = mercury_run_step["run"]
+    atria_run = atria_run_step["run"]
     assert "--label \"Mercury covering campaign\"" in mercury_run
     assert "experiments/mercury_covering_status_issue.txt" in mercury_run
     assert "set -euo pipefail" in mercury_run
     assert "4200s" in mercury_run
-    assert "CAMPAIGN_SECONDS=$((20400 - ELAPSED_SECONDS - 60))" in mercury_run
+    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in mercury_run
     assert "--job-seconds" in mercury_run
     assert '"$OUT/t1_interrupted.json"' in mercury_run
     mercury_restore = next(
@@ -343,7 +357,7 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
     assert "experiments/reasoning_atria_covering_status_issue.txt" in atria_run
     assert "set -euo pipefail" in atria_run
     assert "4200s" in atria_run
-    assert "CAMPAIGN_SECONDS=$((20400 - ELAPSED_SECONDS - 60))" in atria_run
+    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in atria_run
     assert "--job-seconds" in atria_run
     assert '"$OUT/t1_interrupted.json"' in atria_run
     atria_restore = next(
@@ -359,3 +373,8 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
         step["run"] for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Decide")
     )
     assert mercury["concurrency"]["group"] != atria["concurrency"]["group"]
+
+    mercury_t1 = _workflow_example("docs/workflows/mercury-t1-campaign.yml.example")
+    atria_t1 = _workflow_example("docs/workflows/reasoning-atria-t1-campaign.yml.example")
+    assert mercury_t1["on"]["workflow_dispatch"]["inputs"]["ref"]["default"] == "main"
+    assert atria_t1["on"]["workflow_dispatch"]["inputs"]["ref"]["default"] == "main"

@@ -47,8 +47,9 @@ manual_gate_blocked_exclusions:
       calibration_class: negative_control_is_not_a_negative_control
     - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
       calibration_class: reference_does_not_solve_its_own_instance
-# Reserve at least 70 minutes in the 340-minute workflow step for the 72-call T1 run.
-campaign_job_seconds: 16200
+# Per-controller invocation ceiling matches the 100-minute live workflow step.
+# The scheduled supervisor resumes the full campaign across durable checkpoints.
+campaign_job_seconds: 6000
 limits:
   max_steps: 20
   max_tokens: 8192
