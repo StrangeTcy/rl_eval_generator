@@ -1,0 +1,445 @@
+diff --git a/.github/workflows/mercury-covering-campaign.yml b/.github/workflows/mercury-covering-campaign.yml
+index e1c9d1c..9021636 100644
+--- a/.github/workflows/mercury-covering-campaign.yml
++++ b/.github/workflows/mercury-covering-campaign.yml
+@@ -3,9 +3,10 @@
+ #
+ # Launches mercury-2.5 at high reasoning effort on Chat Completions, runs the
+ # T1 same_fact_presentation profile first, then the full provider-pinned
+-# covering campaign. The Actions runner has a 2-hour hard ceiling, so the live
+-# step is capped at 100 minutes and the overall job at 115. T1 has 70 minutes;
+-# the controller gets only what remains. Scheduled runs resume its checkpoint.
++# covering campaign. One exact-instance gate case needs up to 108 minutes, so
++# the live step is capped at 330 minutes and the overall job at 350. T1 has 70
++# minutes; the controller gets the remaining live-step budget. Scheduled runs
++# resume its checkpoint.
+ # T1 interruption is an operator stop (not auto-replayed).
+ # Live status is posted to a Mercury-specific Issue using its distinct label
+ # and pin file. The paid mode is explicit at workflow_dispatch; choose
+@@ -27,6 +28,11 @@ on:
+           - paid
+           - gates_only
+         default: paid
++      resume_previous:
++        description: "Resume the latest campaign-state artifact instead of starting fresh"
++        required: true
++        type: boolean
++        default: true
+   schedule:
+     - cron: "13,43 * * * *"
+ 
+@@ -42,7 +48,7 @@ concurrency:
+ jobs:
+   campaign:
+     runs-on: ubuntu-latest
+-    timeout-minutes: 115
++    timeout-minutes: 350
+     steps:
+       - name: Decide fresh dispatch versus supervised resume
+         id: mode
+@@ -50,11 +56,12 @@ jobs:
+           GH_TOKEN: ${{ github.token }}
+         run: |
+           set -euo pipefail
+-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
++          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
++             && [ "${{ inputs.resume_previous }}" != "true" ]; then
+             echo "mode=fresh" >> "$GITHUB_OUTPUT"
+             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+             echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+-            echo "reason=explicit manual dispatch" >> "$GITHUB_OUTPUT"
++            echo "reason=explicit fresh manual dispatch" >> "$GITHUB_OUTPUT"
+             exit 0
+           fi
+           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+@@ -165,7 +172,7 @@ jobs:
+ 
+       - name: Run T1 and covering campaign with live Issue status
+         if: steps.mode.outputs.mode != 'none'
+-        timeout-minutes: 100
++        timeout-minutes: 330
+         env:
+           INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
+           GH_TOKEN: ${{ github.token }}
+@@ -214,10 +221,11 @@ jobs:
+           ELAPSED_SECONDS=$((SECONDS - STEP_STARTED))
+           MAX_CAMPAIGN_SECONDS=$(.venv/bin/python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["campaign_job_seconds"])' \
+             experiments/mercury_covering_campaign.yaml)
+-          CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))
++          CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))
+           if [ "$CAMPAIGN_SECONDS" -gt "$MAX_CAMPAIGN_SECONDS" ]; then
+             CAMPAIGN_SECONDS=$MAX_CAMPAIGN_SECONDS
+           fi
++          echo "Mercury campaign budget: elapsed=${ELAPSED_SECONDS}s profile_max=${MAX_CAMPAIGN_SECONDS}s effective=${CAMPAIGN_SECONDS}s"
+           if [ "$CAMPAIGN_SECONDS" -lt 600 ]; then
+             echo "Insufficient time remains for a safe covering-campaign tick."
+             exit 1
+diff --git a/.github/workflows/reasoning-atria-covering-campaign.yml b/.github/workflows/reasoning-atria-covering-campaign.yml
+index 70689ac..71264c3 100644
+--- a/.github/workflows/reasoning-atria-covering-campaign.yml
++++ b/.github/workflows/reasoning-atria-covering-campaign.yml
+@@ -3,10 +3,10 @@
+ #
+ # Launches Atria-Dawn-Preview at high reasoning effort via Responses API with
+ # nested reasoning:{effort}; runs the T1 same_fact_presentation profile first, then
+-# the full provider-pinned covering campaign. The Actions runner has a 2-hour
+-# hard ceiling, so the live step is capped at 100 minutes and the overall job at
+-# 115. T1 has 70 minutes; the controller gets only what remains. Scheduled runs
+-# resume its checkpoint. T1 interruption is not auto-replayed.
++# the full provider-pinned covering campaign. One exact-instance gate case needs
++# up to 108 minutes, so the live step is capped at 330 minutes and the overall
++# job at 350. T1 has 70 minutes; the controller gets the remaining live-step
++# budget. Scheduled runs resume its checkpoint. T1 interruption is not replayed.
+ # Live status is posted to a reasoning-Atria Issue using a distinct label
+ # and pin file. Paid access requires an explicit workflow_dispatch; choose
+ # gates_only for a provider-free validation run.
+@@ -27,6 +27,11 @@ on:
+           - paid
+           - gates_only
+         default: paid
++      resume_previous:
++        description: "Resume the latest campaign-state artifact instead of starting fresh"
++        required: true
++        type: boolean
++        default: true
+   schedule:
+     - cron: "13,43 * * * *"
+ 
+@@ -42,7 +47,7 @@ concurrency:
+ jobs:
+   campaign:
+     runs-on: ubuntu-latest
+-    timeout-minutes: 115
++    timeout-minutes: 350
+     steps:
+       - name: Decide fresh dispatch versus supervised resume
+         id: mode
+@@ -50,11 +55,12 @@ jobs:
+           GH_TOKEN: ${{ github.token }}
+         run: |
+           set -euo pipefail
+-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
++          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
++             && [ "${{ inputs.resume_previous }}" != "true" ]; then
+             echo "mode=fresh" >> "$GITHUB_OUTPUT"
+             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+             echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+-            echo "reason=explicit manual dispatch" >> "$GITHUB_OUTPUT"
++            echo "reason=explicit fresh manual dispatch" >> "$GITHUB_OUTPUT"
+             exit 0
+           fi
+           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+@@ -188,7 +194,7 @@ jobs:
+ 
+       - name: Run T1 and covering campaign with live Issue status
+         if: steps.mode.outputs.mode != 'none' && steps.atria_rate.outputs.safe == 'true'
+-        timeout-minutes: 100
++        timeout-minutes: 330
+         env:
+           ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+           GH_TOKEN: ${{ github.token }}
+@@ -237,10 +243,11 @@ jobs:
+           ELAPSED_SECONDS=$((SECONDS - STEP_STARTED))
+           MAX_CAMPAIGN_SECONDS=$(.venv/bin/python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["campaign_job_seconds"])' \
+             experiments/reasoning_atria_covering_campaign.yaml)
+-          CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))
++          CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))
+           if [ "$CAMPAIGN_SECONDS" -gt "$MAX_CAMPAIGN_SECONDS" ]; then
+             CAMPAIGN_SECONDS=$MAX_CAMPAIGN_SECONDS
+           fi
++          echo "Reasoning-Atria campaign budget: elapsed=${ELAPSED_SECONDS}s profile_max=${MAX_CAMPAIGN_SECONDS}s effective=${CAMPAIGN_SECONDS}s"
+           if [ "$CAMPAIGN_SECONDS" -lt 600 ]; then
+             echo "Insufficient time remains for a safe covering-campaign tick."
+             exit 1
+diff --git a/docs/workflows/mercury-covering-campaign.yml.example b/docs/workflows/mercury-covering-campaign.yml.example
+index e1c9d1c..4fbb955 100644
+--- a/docs/workflows/mercury-covering-campaign.yml.example
++++ b/docs/workflows/mercury-covering-campaign.yml.example
+@@ -3,9 +3,10 @@
+ #
+ # Launches mercury-2.5 at high reasoning effort on Chat Completions, runs the
+ # T1 same_fact_presentation profile first, then the full provider-pinned
+-# covering campaign. The Actions runner has a 2-hour hard ceiling, so the live
+-# step is capped at 100 minutes and the overall job at 115. T1 has 70 minutes;
+-# the controller gets only what remains. Scheduled runs resume its checkpoint.
++# covering campaign. One exact-instance gate case needs up to 108 minutes, so
++# the live step is capped at 330 minutes and the overall job at 350. T1 has 70
++# minutes; the controller gets the remaining live-step budget. Scheduled runs
++# resume its checkpoint.
+ # T1 interruption is an operator stop (not auto-replayed).
+ # Live status is posted to a Mercury-specific Issue using its distinct label
+ # and pin file. The paid mode is explicit at workflow_dispatch; choose
+@@ -27,6 +28,11 @@ on:
+           - paid
+           - gates_only
+         default: paid
++      resume_previous:
++        description: "Resume the latest campaign-state artifact instead of starting fresh"
++        required: true
++        type: boolean
++        default: true
+   schedule:
+     - cron: "13,43 * * * *"
+ 
+@@ -42,7 +48,7 @@ concurrency:
+ jobs:
+   campaign:
+     runs-on: ubuntu-latest
+-    timeout-minutes: 115
++    timeout-minutes: 350
+     steps:
+       - name: Decide fresh dispatch versus supervised resume
+         id: mode
+@@ -50,11 +56,12 @@ jobs:
+           GH_TOKEN: ${{ github.token }}
+         run: |
+           set -euo pipefail
+-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
++          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
++             && [ "${{ inputs.resume_previous }}" != "true" ]; then
+             echo "mode=fresh" >> "$GITHUB_OUTPUT"
+             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+             echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+-            echo "reason=explicit manual dispatch" >> "$GITHUB_OUTPUT"
++            echo "reason=explicit fresh manual dispatch" >> "$GITHUB_OUTPUT"
+             exit 0
+           fi
+           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+@@ -165,7 +172,7 @@ jobs:
+ 
+       - name: Run T1 and covering campaign with live Issue status
+         if: steps.mode.outputs.mode != 'none'
+-        timeout-minutes: 100
++        timeout-minutes: 330
+         env:
+           INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
+           GH_TOKEN: ${{ github.token }}
+@@ -214,10 +221,12 @@ jobs:
+           ELAPSED_SECONDS=$((SECONDS - STEP_STARTED))
+           MAX_CAMPAIGN_SECONDS=$(.venv/bin/python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["campaign_job_seconds"])' \
+             experiments/mercury_covering_campaign.yaml)
+-          CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))
++          # Keep one minute for sidecar cleanup before the 330-minute step limit.
++          CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))
+           if [ "$CAMPAIGN_SECONDS" -gt "$MAX_CAMPAIGN_SECONDS" ]; then
+             CAMPAIGN_SECONDS=$MAX_CAMPAIGN_SECONDS
+           fi
++          echo "Mercury campaign budget: elapsed=${ELAPSED_SECONDS}s profile_max=${MAX_CAMPAIGN_SECONDS}s effective=${CAMPAIGN_SECONDS}s"
+           if [ "$CAMPAIGN_SECONDS" -lt 600 ]; then
+             echo "Insufficient time remains for a safe covering-campaign tick."
+             exit 1
+diff --git a/docs/workflows/reasoning-atria-covering-campaign.yml.example b/docs/workflows/reasoning-atria-covering-campaign.yml.example
+index 70689ac..71264c3 100644
+--- a/docs/workflows/reasoning-atria-covering-campaign.yml.example
++++ b/docs/workflows/reasoning-atria-covering-campaign.yml.example
+@@ -3,10 +3,10 @@
+ #
+ # Launches Atria-Dawn-Preview at high reasoning effort via Responses API with
+ # nested reasoning:{effort}; runs the T1 same_fact_presentation profile first, then
+-# the full provider-pinned covering campaign. The Actions runner has a 2-hour
+-# hard ceiling, so the live step is capped at 100 minutes and the overall job at
+-# 115. T1 has 70 minutes; the controller gets only what remains. Scheduled runs
+-# resume its checkpoint. T1 interruption is not auto-replayed.
++# the full provider-pinned covering campaign. One exact-instance gate case needs
++# up to 108 minutes, so the live step is capped at 330 minutes and the overall
++# job at 350. T1 has 70 minutes; the controller gets the remaining live-step
++# budget. Scheduled runs resume its checkpoint. T1 interruption is not replayed.
+ # Live status is posted to a reasoning-Atria Issue using a distinct label
+ # and pin file. Paid access requires an explicit workflow_dispatch; choose
+ # gates_only for a provider-free validation run.
+@@ -27,6 +27,11 @@ on:
+           - paid
+           - gates_only
+         default: paid
++      resume_previous:
++        description: "Resume the latest campaign-state artifact instead of starting fresh"
++        required: true
++        type: boolean
++        default: true
+   schedule:
+     - cron: "13,43 * * * *"
+ 
+@@ -42,7 +47,7 @@ concurrency:
+ jobs:
+   campaign:
+     runs-on: ubuntu-latest
+-    timeout-minutes: 115
++    timeout-minutes: 350
+     steps:
+       - name: Decide fresh dispatch versus supervised resume
+         id: mode
+@@ -50,11 +55,12 @@ jobs:
+           GH_TOKEN: ${{ github.token }}
+         run: |
+           set -euo pipefail
+-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
++          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
++             && [ "${{ inputs.resume_previous }}" != "true" ]; then
+             echo "mode=fresh" >> "$GITHUB_OUTPUT"
+             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+             echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+-            echo "reason=explicit manual dispatch" >> "$GITHUB_OUTPUT"
++            echo "reason=explicit fresh manual dispatch" >> "$GITHUB_OUTPUT"
+             exit 0
+           fi
+           LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+@@ -188,7 +194,7 @@ jobs:
+ 
+       - name: Run T1 and covering campaign with live Issue status
+         if: steps.mode.outputs.mode != 'none' && steps.atria_rate.outputs.safe == 'true'
+-        timeout-minutes: 100
++        timeout-minutes: 330
+         env:
+           ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+           GH_TOKEN: ${{ github.token }}
+@@ -237,10 +243,11 @@ jobs:
+           ELAPSED_SECONDS=$((SECONDS - STEP_STARTED))
+           MAX_CAMPAIGN_SECONDS=$(.venv/bin/python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["campaign_job_seconds"])' \
+             experiments/reasoning_atria_covering_campaign.yaml)
+-          CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))
++          CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))
+           if [ "$CAMPAIGN_SECONDS" -gt "$MAX_CAMPAIGN_SECONDS" ]; then
+             CAMPAIGN_SECONDS=$MAX_CAMPAIGN_SECONDS
+           fi
++          echo "Reasoning-Atria campaign budget: elapsed=${ELAPSED_SECONDS}s profile_max=${MAX_CAMPAIGN_SECONDS}s effective=${CAMPAIGN_SECONDS}s"
+           if [ "$CAMPAIGN_SECONDS" -lt 600 ]; then
+             echo "Insufficient time remains for a safe covering-campaign tick."
+             exit 1
+diff --git a/experiments/mercury_covering_campaign.yaml b/experiments/mercury_covering_campaign.yaml
+index 8a389df..f809efe 100644
+--- a/experiments/mercury_covering_campaign.yaml
++++ b/experiments/mercury_covering_campaign.yaml
+@@ -48,8 +48,9 @@ manual_gate_blocked_exclusions:
+       calibration_class: negative_control_is_not_a_negative_control
+     - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+       calibration_class: reference_does_not_solve_its_own_instance
+-# Per-controller invocation ceiling matches the 100-minute live workflow step.
+-# The scheduled supervisor resumes the full campaign across durable checkpoints.
++# Per-controller invocation ceiling matches the 330-minute live workflow step.
++# This exceeds the 108-minute worst-case atomic gate row, even after a full T1
++# probe. The scheduled supervisor resumes the full campaign across checkpoints.
+ campaign_job_seconds: 19800
+ limits:
+   max_steps: 20
+diff --git a/tests/test_provider_reasoning_campaigns.py b/tests/test_provider_reasoning_campaigns.py
+index 41a3f95..e4f5325 100644
+--- a/tests/test_provider_reasoning_campaigns.py
++++ b/tests/test_provider_reasoning_campaigns.py
+@@ -175,12 +175,12 @@ def test_full_campaign_profiles_pin_provider_wire_and_separate_t1_contract() ->
+     assert mercury["api_key_env"] == "INCEPTION_API_KEY"
+     assert mercury["wire_api"] == "chat_completions"
+     assert mercury["reasoning_effort"] == "high"
+-    assert mercury["campaign_job_seconds"] == 6000
++    assert mercury["campaign_job_seconds"] == 19_800
+ 
+     assert reasoning_atria["provider"] == "atria"
+     assert reasoning_atria["wire_api"] == "responses"
+     assert reasoning_atria["reasoning_effort"] == "high"
+-    assert reasoning_atria["campaign_job_seconds"] == 6000
++    assert reasoning_atria["campaign_job_seconds"] == 19_800
+     assert "temperature" not in reasoning_atria
+     assert "top_p" not in reasoning_atria
+ 
+@@ -330,19 +330,24 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
+ 
+     assert mercury["name"] == "Mercury covering campaign"
+     assert atria["name"] == "Reasoning-Atria covering campaign"
+-    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "115"
+-    assert atria["jobs"]["campaign"]["timeout-minutes"] == "115"
++    # Both reasoning campaigns must be able to finish one 108-minute atomic
++    # gate row after a worst-case 70-minute T1 probe.
++    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "350"
++    assert atria["jobs"]["campaign"]["timeout-minutes"] == "350"
+     mercury_run_step = next(step for step in mercury["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
+     atria_run_step = next(step for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
+-    assert mercury_run_step["timeout-minutes"] == "100"
+-    assert atria_run_step["timeout-minutes"] == "100"
++    assert mercury_run_step["timeout-minutes"] == "330"
++    assert atria_run_step["timeout-minutes"] == "330"
+     mercury_run = mercury_run_step["run"]
+     atria_run = atria_run_step["run"]
+     assert "--label \"Mercury covering campaign\"" in mercury_run
+     assert "experiments/mercury_covering_status_issue.txt" in mercury_run
+     assert "set -euo pipefail" in mercury_run
+     assert "4200s" in mercury_run
+-    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in mercury_run
++    assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in mercury_run
++    mercury_profile = load_profile(ROOT / "experiments/mercury_covering_campaign.yaml")
++    assert int(mercury_run_step["timeout-minutes"]) * 60 == mercury_profile["campaign_job_seconds"]
++    assert mercury_profile["campaign_job_seconds"] - 4200 - 60 >= 6480
+     assert "--job-seconds" in mercury_run
+     assert '"$OUT/t1_interrupted.json"' in mercury_run
+     mercury_restore = next(
+@@ -357,7 +362,10 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
+     assert "experiments/reasoning_atria_covering_status_issue.txt" in atria_run
+     assert "set -euo pipefail" in atria_run
+     assert "4200s" in atria_run
+-    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in atria_run
++    assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in atria_run
++    atria_profile = load_profile(ROOT / "experiments/reasoning_atria_covering_campaign.yaml")
++    assert int(atria_run_step["timeout-minutes"]) * 60 == atria_profile["campaign_job_seconds"]
++    assert atria_profile["campaign_job_seconds"] - 4200 - 60 >= 6480
+     assert "--job-seconds" in atria_run
+     assert '"$OUT/t1_interrupted.json"' in atria_run
+     atria_restore = next(
+@@ -373,6 +381,21 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
+         step["run"] for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Decide")
+     )
+     assert mercury["concurrency"]["group"] != atria["concurrency"]["group"]
++    for workflow in (mercury, atria):
++        inputs = workflow["on"]["workflow_dispatch"]["inputs"]
++        assert inputs["resume_previous"] == {
++            "description": "Resume the latest campaign-state artifact instead of starting fresh",
++            "required": "true",
++            "type": "boolean",
++            "default": "true",
++        }
++        decide = next(
++            step["run"] for step in workflow["jobs"]["campaign"]["steps"]
++            if step.get("name", "").startswith("Decide")
++        )
++        assert 'inputs.resume_previous' in decide
++        assert '!= "true"' in decide
++        assert "explicit fresh manual dispatch" in decide
+ 
+     mercury_t1 = _workflow_example("docs/workflows/mercury-t1-campaign.yml.example")
+     atria_t1 = _workflow_example("docs/workflows/reasoning-atria-t1-campaign.yml.example")
+diff --git a/tools/atria_campaign.py b/tools/atria_campaign.py
+index f9e64d7..4b526f6 100644
+--- a/tools/atria_campaign.py
++++ b/tools/atria_campaign.py
+@@ -468,6 +468,7 @@ def _compatibility_check(
+     wire_api = str(profile.get("wire_api", "chat_completions"))
+     effort = profile.get("reasoning_effort")
+     limits = profile["limits"]
++    compatibility_max_tokens = int(limits["max_tokens"])
+     interval = float(profile["rate_limit"]["min_interval_seconds"])
+     max_retries = int(limits["max_retries"])
+     extras = dict(profile.get("request_extra") or {})
+@@ -478,7 +479,7 @@ def _compatibility_check(
+         "api_base": profile["api_base"],
+         "model": profile["model"],
+         "wire_api": wire_api,
+-        "max_output_tokens": 128,
++        "max_output_tokens": compatibility_max_tokens,
+         "temperature": profile.get("temperature") if wire_api == "chat_completions" else None,
+         "top_p": profile.get("top_p") if wire_api == "chat_completions" else None,
+         "stream": False,
+@@ -507,14 +508,14 @@ def _compatibility_check(
+                 messages,
+                 model=str(profile["model"]),
+                 reasoning_effort=str(effort) if effort is not None else None,
+-                max_output_tokens=128,
++                max_output_tokens=compatibility_max_tokens,
+                 request_extra=profile.get("request_extra") or None,
+             )
+         else:
+             completion = client.complete(
+                 model=str(profile["model"]),
+                 messages=messages,
+-                max_tokens=128,
++                max_tokens=compatibility_max_tokens,
+                 temperature=float(profile.get("temperature", 0.0)),
+                 top_p=float(profile["top_p"]) if profile.get("top_p") is not None else None,
+                 request_extra=extras or None,
+
