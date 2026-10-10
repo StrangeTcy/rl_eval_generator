@@ -151,11 +151,13 @@ def _difficulty_vectors(
             for combination in itertools.product(*choices)
         ]
     if matrix == "covering":
-        # Minimal deterministic set that exercises every level of every axis
-        # at least once: a base vector at each axis's first (sorted) level,
-        # then one additional vector per remaining level varying a single
-        # axis.  Count: 1 + sum(len(levels) - 1) per environment, versus the
-        # full cartesian product above.
+        # Strength-1 by construction, and minimal for it: a base vector at each
+        # axis's first (sorted) level, then one vector per remaining level
+        # varying a single axis, so count = 1 + sum(len(levels) - 1) per
+        # environment.  Every level of every axis is exercised, but no two axes
+        # ever move together - which means a two-axis interaction is not just
+        # under-sampled here, it is unobservable.  "pairwise" below is the
+        # cheapest design that can show one.
         base = [axis["levels"][0] for axis in axes]
         vectors = [
             {axis["id"]: level for axis, level in zip(axes, base, strict=True)}
@@ -168,6 +170,53 @@ def _difficulty_vectors(
                     {a["id"]: level for a, level in zip(axes, combination, strict=True)}
                 )
         return vectors
+    if matrix == "pairwise":
+        # Strength-2 covering array over the same candidate space as ``all``,
+        # built greedily so it stays a few hundred vectors instead of a product.
+        # Two guarantees, in this order:
+        #   * the uniform ladder - every axis at one shared level, so "all
+        #     axes at hard" is a row a reader can point at.  Pair coverage does
+        #     not imply it: covering (hard,hard) for each PAIR says nothing
+        #     about one vector holding hard on all six axes at once.
+        #   * every pair of axes at every combination of their levels, which is
+        #     what makes a two-axis interaction observable at all (``covering``
+        #     above varies one axis at a time and therefore cannot see one).
+        # Greedy selection is tie-broken by vector order and the result is
+        # sorted: case ids and campaign resume points are keyed on this list,
+        # so the same axes must always yield the same vectors.
+        choices = [axis["levels"] for axis in axes]
+        pairs = list(itertools.combinations(range(len(axes)), 2))
+        space = sorted(itertools.product(*choices))
+
+        def _pairs_of(vector: tuple[str, ...]) -> set[tuple[int, str, int, str]]:
+            return {(i, vector[i], j, vector[j]) for (i, j) in pairs}
+
+        shared = set(choices[0])
+        for levels in choices[1:]:
+            shared &= set(levels)
+        vectors = [tuple([level] * len(axes)) for level in sorted(shared)]
+        remaining = {
+            (i, level_i, j, level_j)
+            for (i, j) in pairs
+            for level_i in choices[i]
+            for level_j in choices[j]
+        }
+        for vector in vectors:
+            remaining -= _pairs_of(vector)
+        while remaining:
+            # ``space`` is sorted and max() keeps the first optimum, so ties
+            # fall to the earliest vector: no set iteration order is consulted.
+            best = max(space, key=lambda vector: len(_pairs_of(vector) & remaining))
+            if not (_pairs_of(best) & remaining):
+                break  # Unreachable by construction; fail closed rather than loop.
+            remaining -= _pairs_of(best)
+            vectors.append(best)
+        if remaining:
+            raise ValueError(f"pairwise design left {len(remaining)} axis-level pairs uncovered")
+        return [
+            {axis["id"]: level for axis, level in zip(axes, vector, strict=True)}
+            for vector in sorted(set(vectors))
+        ]
     if matrix == "representative":
         choices = []
         for axis in axes:
@@ -708,12 +757,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", type=Path, default=Path("suite_manifest.json"))
     parser.add_argument(
         "--matrix",
-        choices=("representative", "covering", "all"),
+        choices=("representative", "covering", "pairwise", "all"),
         default="representative",
         help=(
             "representative selects the first level per axis; covering exercises "
-            "every level of every axis with a minimal vector set; all expands "
-            "the full Cartesian product"
+            "every level of every axis one axis at a time; pairwise adds a "
+            "strength-2 covering array (every level pair of every axis pair, plus "
+            "the uniform all-easy/all-medium/all-hard ladder) at roughly 1.5x the "
+            "cost of covering and a fraction of all; all expands the full Cartesian product"
         ),
     )
     parser.add_argument("--seeds", default="0", help="comma-separated integer seeds")

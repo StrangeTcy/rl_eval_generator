@@ -845,13 +845,13 @@ def run_suite(
     selection = manifest.get("selection", {})
     matrix = selection.get("matrix") if isinstance(selection, dict) else None
     if (
-        matrix in {"all", "covering"}
+        matrix in {"all", "covering", "pairwise"}
         and not dry_run
         and max_tokens_total is None
         and max_output_tokens is None
     ):
         raise ValueError(
-            "all-matrix or covering-matrix execution requires --dry-run or an "
+            "all-, covering-, or pairwise-matrix execution requires --dry-run or an "
             "explicit --max-tokens-total/--max-output-tokens ceiling"
         )
     case_budget_calls, case_budget_tokens = _estimated_case_budget(
