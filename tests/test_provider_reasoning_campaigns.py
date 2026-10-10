@@ -14,12 +14,14 @@ if str(ROOT) not in sys.path:
 
 from arena.episode import EpisodeOptions, _complete_with_wire_api  # noqa: E402
 from tools.atria_campaign import (  # noqa: E402
+    _apply_gate_blocked_exclusions,
     _effective_campaign_job_seconds,
     _load_yaml,
     _validate_campaign_profile,
 )
 from tools.matched_fact_probe import load_profile, plan_from_profile, run_profile  # noqa: E402
 from tools.run_suite import _build_command  # noqa: E402
+from tools.suite_inventory import build_manifest  # noqa: E402
 
 
 class _WireRecorder:
@@ -190,6 +192,27 @@ def test_full_campaign_profiles_pin_provider_wire_and_separate_t1_contract() -> 
     assert contract["belief_correctness"] == "per_case_exact_posterior_match_not_calibration"
     assert contract["calibration_curve"] == "unavailable_no_population_metric"
     assert contract["aggregation"] == "separate_endpoint_channels_no_composite"
+
+
+def test_covering_http_attempt_ceiling_covers_all_manifest_cases() -> None:
+    base_manifest = build_manifest(root=ROOT, matrix="covering", seeds=[0])
+
+    for profile_path in (
+        ROOT / "experiments/mercury_covering_campaign.yaml",
+        ROOT / "experiments/reasoning_atria_covering_campaign.yaml",
+    ):
+        profile = _load_yaml(profile_path)
+        manifest = copy.deepcopy(base_manifest)
+        _apply_gate_blocked_exclusions(manifest, profile)
+        limits = profile["limits"]
+        theoretical = int(limits["max_retries"]) + 1 + (
+            manifest["case_count"]
+            * int(limits["max_steps"])
+            * (1 + int(limits["invalid_retries"]))
+            * (int(limits["max_retries"]) + 1)
+        )
+        assert theoretical == 56166
+        assert limits["max_http_attempts"] >= theoretical
 
 
 def test_invocation_wall_budget_can_only_reduce_the_profile_ceiling() -> None:
