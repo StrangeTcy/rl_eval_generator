@@ -1,25 +1,41 @@
 # Manual-copy example only. Do not commit this file under .github/workflows/.
 # Copy to .github/workflows/mercury-pairwise-campaign.yml after review.
 #
+# THIS FILE IS THE ONLY THING THAT HAS TO BE UPLOADED. Everything else the campaign
+# needs - tools/suite_inventory.py's pairwise mode, tools/twin_preflight.py,
+# tools/inherit_campaign_state.py and the
+# experiments/mercury_pairwise_campaign.yaml profile - is read from the checkout of
+# the `ref` input below, which currently points at the session branch (tip
+# 4202f83). The job therefore runs the campaign as
+# written there without any of it landing on main first; `campaign_ref.txt` records
+# the resolved commit on the first dispatch and every scheduled tick resumes at
+# that same commit, so a later push to the branch does not move a running campaign.
+# A workflow file cannot be created by this checkout (the App has no `workflows`
+# permission), which is why exactly one manual copy step remains.
+#
 # Launches mercury-2.5 at high reasoning effort on Chat Completions, runs the
-# T1 same_fact_presentation profile first, then the full provider-pinned
-# pairwise campaign. One exact-instance gate case needs up to 108 minutes, so
-# the live step is capped at 330 minutes and the overall job at 350. T1 has 70
-# minutes; the controller gets the remaining live-step budget. Scheduled runs
-# resume its checkpoint.
+# T1 same_fact_presentation profile first, then the provider-pinned strength-2
+# campaign: 496 vectors (358 pairwise over every axis plus the uniform
+# easy/medium/hard ladder, and 138 intervention twins), of which 269 owe an
+# exact-instance gate row. One gate case can need up to 108 minutes, so the live
+# step is capped at 330 minutes and the overall job at 350; the controller gets the
+# remaining live-step budget after T1's 70 minutes. Scheduled runs resume its
+# checkpoint, and gate rows already banked by this campaign are reused from its own
+# artifact - which is why a resume is cheap and a fresh dispatch is not.
 # T1 interruption is an operator stop (not auto-replayed).
-# Live status is posted to a Mercury-specific Issue using its distinct label
-# and pin file. The paid mode is explicit at workflow_dispatch; choose
-# gates_only for a provider-free validation run.
+# Live status is posted to a Mercury-specific Issue, via its own label and pin
+# file. Pick `paid` at the first dispatch: the execution mode is read back only
+# from the persisted intent, so a lineage started `gates_only` can never be
+# promoted later by a resume - a dropdown is ignored on that path.
 name: Mercury pairwise campaign
 
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Branch or full commit SHA containing the pinned campaign code"
+        description: "Branch or full commit SHA containing the pinned campaign code (main after this work lands there)"
         required: true
-        default: main
+        default: arena/595b91e0-rl-eval-generator
       execution_mode:
         description: "Choose whether this explicit dispatch may make provider calls"
         required: true
@@ -212,6 +228,7 @@ jobs:
           if [ -d "$INHERIT" ] && [ -n "$(ls -A "$INHERIT" 2>/dev/null || true)" ]; then
             .venv/bin/python tools/inherit_campaign_state.py \
               --from "$INHERIT" --to "$OUT" \
+              --allow-cross-revision-t1 \
               --profile experiments/mercury_pairwise_campaign.yaml \
               || echo "inheritance failed; the campaign will gate from scratch"
             cat "$OUT/inheritance_report.json" 2>/dev/null || true
@@ -281,10 +298,12 @@ jobs:
 
           if [ "$EXECUTION_MODE" = "paid" ]; then
             .venv/bin/python tools/atria_campaign.py \
+              --allow-cross-revision-t1 \
               --profile experiments/mercury_pairwise_campaign.yaml \
               --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS"
           else
             .venv/bin/python tools/atria_campaign.py \
+              --allow-cross-revision-t1 \
               --profile experiments/mercury_pairwise_campaign.yaml \
               --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS"
           fi
