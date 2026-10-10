@@ -508,14 +508,14 @@ def _compatibility_check(
                 messages,
                 model=str(profile["model"]),
                 reasoning_effort=str(effort) if effort is not None else None,
-                max_tokens=compatibility_max_tokens,
+                max_output_tokens=compatibility_max_tokens,
                 request_extra=profile.get("request_extra") or None,
             )
         else:
             completion = client.complete(
                 model=str(profile["model"]),
                 messages=messages,
-                max_output_tokens=compatibility_max_tokens,
+                max_tokens=compatibility_max_tokens,
                 temperature=float(profile.get("temperature", 0.0)),
                 top_p=float(profile["top_p"]) if profile.get("top_p") is not None else None,
                 request_extra=extras or None,
