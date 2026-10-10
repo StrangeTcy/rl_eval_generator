@@ -508,7 +508,7 @@ def _compatibility_check(
                 messages,
                 model=str(profile["model"]),
                 reasoning_effort=str(effort) if effort is not None else None,
-                max_output_tokens=compatibility_max_tokens,
+                max_tokens=compatibility_max_tokens,
                 request_extra=profile.get("request_extra") or None,
             )
         else:
