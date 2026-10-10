@@ -49,7 +49,7 @@ manual_gate_blocked_exclusions:
       calibration_class: reference_does_not_solve_its_own_instance
 # Per-controller invocation ceiling matches the 100-minute live workflow step.
 # The scheduled supervisor resumes the full campaign across durable checkpoints.
-campaign_job_seconds: 6000
+campaign_job_seconds: 19800
 limits:
   max_steps: 20
   max_tokens: 8192
