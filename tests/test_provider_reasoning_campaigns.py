@@ -175,12 +175,12 @@ def test_full_campaign_profiles_pin_provider_wire_and_separate_t1_contract() -> 
     assert mercury["api_key_env"] == "INCEPTION_API_KEY"
     assert mercury["wire_api"] == "chat_completions"
     assert mercury["reasoning_effort"] == "high"
-    assert mercury["campaign_job_seconds"] == 6000
+    assert mercury["campaign_job_seconds"] == 19_800
 
     assert reasoning_atria["provider"] == "atria"
     assert reasoning_atria["wire_api"] == "responses"
     assert reasoning_atria["reasoning_effort"] == "high"
-    assert reasoning_atria["campaign_job_seconds"] == 6000
+    assert reasoning_atria["campaign_job_seconds"] == 19_800
     assert "temperature" not in reasoning_atria
     assert "top_p" not in reasoning_atria
 
@@ -330,11 +330,13 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
 
     assert mercury["name"] == "Mercury covering campaign"
     assert atria["name"] == "Reasoning-Atria covering campaign"
-    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "115"
+    # Mercury's gate must be able to finish one 108-minute atomic row after a
+    # worst-case 70-minute T1 probe. Reasoning-Atria retains its shorter tick.
+    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "350"
     assert atria["jobs"]["campaign"]["timeout-minutes"] == "115"
     mercury_run_step = next(step for step in mercury["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
     atria_run_step = next(step for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
-    assert mercury_run_step["timeout-minutes"] == "100"
+    assert mercury_run_step["timeout-minutes"] == "330"
     assert atria_run_step["timeout-minutes"] == "100"
     mercury_run = mercury_run_step["run"]
     atria_run = atria_run_step["run"]
@@ -342,7 +344,10 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
     assert "experiments/mercury_covering_status_issue.txt" in mercury_run
     assert "set -euo pipefail" in mercury_run
     assert "4200s" in mercury_run
-    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in mercury_run
+    assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in mercury_run
+    mercury_profile = load_profile(ROOT / "experiments/mercury_covering_campaign.yaml")
+    assert int(mercury_run_step["timeout-minutes"]) * 60 == mercury_profile["campaign_job_seconds"]
+    assert mercury_profile["campaign_job_seconds"] - 4200 - 60 >= 6480
     assert "--job-seconds" in mercury_run
     assert '"$OUT/t1_interrupted.json"' in mercury_run
     mercury_restore = next(
