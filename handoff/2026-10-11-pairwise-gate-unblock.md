@@ -10,10 +10,33 @@ that the environments' own axes rewrite.
 | commit | what it changes |
 | --- | --- |
 | `9714d1a` | moco's reference finds its model file by the line it edits (its `naming` axis renames the file, and the `terminology` intervention renames it again); rope and glyph refuse with the axis named instead of a needle count; `tools/instance_oracle_preflight.py`; 13 reviewed omissions in the pairwise profiles |
-| `7a12eaa` | glyph's reference splices the whole path into the classifier (removes the 2-D `SpatialEncoderBlock` call and the `SpatialPool(size=4)` coordinate trap from `forward`); the 8 `architecture=hard` omissions are withdrawn because that fix makes them certifiable again; blocked-row reporting grouped by reason x axis so a cut log cannot lose a class |
+| `7a12eaa` | glyph's reference splices the whole path into the classifier (removes the 2-D `SpatialEncoderBlock` call and the `SpatialPool(size=4)` coordinate trap from `forward`); the 8 `architecture=hard` omissions are withdrawn - the patch now applies and the shapes are consistent, which is what `tools/instance_oracle_preflight.py` can prove; whether the judge accepts those references is unmeasured here and is the gates_only run's answer; blocked-row reporting grouped by reason x axis so a cut log cannot lose a class |
 
 `main` has neither: `git show main:tools/instance_oracle_gate.py` still opens `moco_model.py` by
 name and has no `_glyph_optimizer`. So every cron tick on main re-blocks on the same rows.
+
+## What the two blocked runs actually did, from the job step records
+
+`gh api repos/StrangeTcy/rl_eval_generator/actions/runs/<id>/jobs` gives step conclusions and
+timestamps; that is the only account of those runs that is not a reading of a truncated log.
+
+| run | dispatch | `Initialize fresh campaign state` | campaign step | outcome |
+| --- | --- | --- | --- | --- |
+| `38101874542` Mercury | workflow_dispatch 01:27:03Z | success (so mode=fresh, code = `inputs.ref`) | 01:27:38 -> 03:34:06Z | failure, then state uploaded |
+| `38101171391` Atria | schedule, campaign step 01:14 -> 02:13:08Z | skipped (so mode=resume, code = the ref recorded in the state artifact) | 01:27:34 -> 02:13:08Z | failure, then state uploaded |
+
+`Inherit exact-instance gate rows from the covering campaign` succeeded in both, so some gate rows in
+those runs may have been inherited rather than computed; the tool also prints a soft
+`inheritance failed; the campaign will gate from scratch` and still exits 0, so the step's success
+does not establish that anything was inherited.
+
+What is **not** readable from here: which commit each run checked out. Mercury's was whatever
+`arena/595b91e0-rl-eval-generator` pointed at when the dispatch was submitted (tip `75b639a`,
+committed 01:20:58Z) *only if* the default `ref` was submitted unchanged - the API does not expose a
+run's `inputs`. Atria's is the ref inside the state artifact, which lives on
+`productionresultssa16.blob.core.windows.net`; `gh run download` reaches a signed URL and then dies
+with `EOF` there. So the pin is not established, and the row classes in the pasted logs are
+consistent with pre-fix code without proving it.
 
 ## Verified in the sandbox, with the command that produced it
 
