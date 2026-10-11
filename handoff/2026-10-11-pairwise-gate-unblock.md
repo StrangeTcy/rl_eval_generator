@@ -248,6 +248,48 @@ steps and zero `bash -n` failures.
 Lesson kept: the launcher text is not documentation, it is code, and "the YAML parses and
 `bash -n` is clean" does not test that a variable exists where it is read.
 
+## First runner-produced gate diagnostics: 195 blocked rows -> 12, and what they still do not say
+
+Read from the Reasoning-Atria leg at `17:5x` on head `32c5f3a` (the fixed launcher): it banked
+`7 / 189` gate rows, then exited 2 with
+
+```
+atria campaign failed: exact-instance behavioral oracle coverage is incomplete; inspect
+runs/reasoning_atria_pairwise_campaign/instance_oracles.json before any paid call
+12 blocked exact-instance oracle row(s), 6 group(s): reference_did_not_grade_as_expected ...
+```
+
+What that establishes, with no inference added: the launcher fix worked (the campaign step ran for
+41 minutes of gate work instead of dying at line 69); T1 was not re-billed (`72 / 72` calls came
+from the banked marker); the paid phase was never reached, so nothing was spent; and the
+`architecture=hard` / 2-D-pooling class that blocked 195 rows is down to 12 rows, all `glyph`,
+all `reference_did_not_grade_as_expected`, in 6 axis groups each appearing twice (a base case and
+its `__visible_proxy` twin).
+
+What it does not establish, and why: the reference criterion is `verdict == "PASS"`, `score == 1.0`,
+`failure_mode == "pass"`, `patch_valid` (`tools/instance_oracle_gate.py:549-550`), and one reason
+string covers both "the reference did not reach a perfect score" and "the reference program is
+broken". Those have opposite repairs - raise the training budget, or fix the splice - so the row
+was made to record the judge's actual return: `observed` with variant, done, verdict, score,
+raw_accuracy, failure_mode, the checks that came back False, the last three judge notes,
+elapsed_seconds and a 400-char stderr tail (`8121377`). The campaign summary prints one `saw:`
+line per group, and the 6000-character cut became `DIAGNOSTIC_CHAR_LIMIT = 12000` with an explicit
+`cut at N chars, M further line(s)` notice, because a silent cut is what once made a 49-row
+failure set get read as 14 rows.
+
+No exclusions were written, and the profiles' existing ones are now counted in a test. Both
+pairwise profiles ship 8 glyph rows under `reference_does_not_solve_its_own_instance`, plus three
+classes the tool never emits: `reference_exists_per_environment_not_per_vector`,
+`oracle_assumes_easy_layout`, and `reference_fix_already_present_at_symptom_mask_hard`. That last
+claim is the one to test next, because two of today's six groups are `symptom_mask=hard` rows.
+`tests/test_gate_failure_diagnostics.py` pins the ceiling at 8 so a ninth cannot be added without
+a failing test, requires every omission to state a class, and forbids new hand-written vocabulary.
+
+Cost of the change, stated: `tools/instance_oracle_gate.py` is inside the gate context, so the
+next leg re-gates the 7 rows Atria already banked. That is the same mechanism that used to destroy
+everything on a documentation commit, now firing only for a real grading-code edit - once, and
+provably because the grader changed.
+
 ## The `CI` workflow is red, and it is red on `main` too
 
 Measured from `gh api repos/StrangeTcy/rl_eval_generator/actions/runs/<id>/jobs` step timestamps:
