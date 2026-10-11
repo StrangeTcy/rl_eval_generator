@@ -74,15 +74,59 @@ def _rope(workspace: Path, *, wrong: bool) -> None:
         _replace(workspace, "rope.py", "return torch.cat((-x2, x1), dim=-1)",
                  "return torch.stack((-x[..., 1::2], x[..., 0::2]), dim=-1).flatten(-2)")
     _replace(workspace, "attention.py", "offset = 0", "offset = cache.position_offset()")
+    # Both cache needles are generated text, not fixed text: rope's `symptom_mask` axis writes
+    # `return 0` plus a no-op append step at easy/medium and `return self.tokens_seen` plus a real
+    # increment at hard (envs/rope/config.yaml:148-160).  At hard the instance already reports the
+    # offset the reference would introduce, so saying "expected exactly one occurrence of 'return 0'"
+    # describes the symptom and hides the diagnosis.  Fail closed, and name the axis.
+    cache_source = (workspace / "cache.py").read_text(encoding="utf-8")
+    masked = cache_source.count("return 0")
+    stepping = cache_source.count("self.tokens_seen = self.tokens_seen")
+    if masked != 1 or stepping != 1:
+        raise ValueError(
+            "cache.py: the reference restores the cache offset by rewriting the masked "
+            f"`return 0` and no-op append step, and this instance has {masked} and {stepping} of "
+            "them; a vector whose symptom is not masked already carries the fix, so the pristine "
+            "instance cannot be certified by it (symptom_mask=hard)"
+        )
     _replace(workspace, "cache.py", "return 0", "return self.tokens_seen")
     _replace(workspace, "cache.py", "self.tokens_seen = self.tokens_seen",
              "self.tokens_seen += int(chunk_len)")
 
 
+# The line moco's temperature bug has to be applied to.  `l_pos`/`l_neg` are literal in
+# envs/moco/files/model.py, so unlike the module name, the queue attribute and the class name
+# they survive every renaming axis and the `terminology` intervention.
+_MOCO_LOGITS_LINE = re.compile(r"logits = torch\.cat\(\[l_pos, l_neg\], dim=1\)")
+
+
 def _moco(workspace: Path, *, wrong: bool) -> None:
-    _replace(workspace, "moco_model.py", "logits = torch.cat([l_pos, l_neg], dim=1)",
-             "logits = torch.cat([l_pos, l_neg], dim=1) / 1.0" if wrong
-             else "logits = torch.cat([l_pos, l_neg], dim=1) / self.tau")
+    """Divide the logits by the temperature, in whichever file this instance keeps them.
+
+    The temperature fix is one line, so the reference used to open ``moco_model.py`` by name and
+    ``_replace`` that single line.  But that filename is itself axis output: ``naming`` writes
+    ``contrastive.py`` at ``medium`` and ``engine.py`` at ``hard``
+    (envs/moco/config.yaml:11-26), and the ``terminology`` intervention renames the file again
+    (envs/moco/config.yaml:208-222).  Every vector that renamed it produced
+    ``FileNotFoundError`` from inside the gate, which the campaign records as ``oracle_error`` -
+    a defect in the reference, not in the instance, and one that cost a full tick to read.
+
+    So the file is located by the line the reference edits: exactly one occurrence anywhere in
+    the workspace, or the vector is refused rather than guessed at.  ``queue_ops.py`` stays a
+    literal - it carries no placeholders (envs/moco/files/queue_ops.py) and so cannot be renamed.
+    """
+    scale = " / 1.0" if wrong else " / self.tau"
+    matches = []
+    for path in sorted(workspace.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        matches.extend((path, source, match) for match in _MOCO_LOGITS_LINE.finditer(source))
+    if len(matches) != 1:
+        raise ValueError(
+            "expected exactly one moco logits concatenation in the workspace, found "
+            f"{len(matches)}; reference is not configured for this vector"
+        )
+    path, source, match = matches[0]
+    path.write_text(source[: match.end()] + scale + source[match.end() :], encoding="utf-8")
     _replace(workspace, "queue_ops.py", "queue[:, start:start + n] = keys.T",
              "queue[:, (torch.arange(n) + start) % k] = keys.T")
 
@@ -131,6 +175,21 @@ def _glyph_optimizer(workspace: Path, *, wrong: bool) -> None:
 
 
 def _glyph(workspace: Path, *, wrong: bool) -> None:
+    # Refuse the vectors this reference cannot be spliced into, before the judge is billed.
+    # The rewrite below hands the classifier an AdaptiveAvgPool2d, i.e. it expects 4-D features.
+    # At architecture=hard the instance instead routes features through SpatialEncoderBlock, whose
+    # forward is `x.view(x.size(0), -1)` (envs/glyph/config.yaml:40-54), so the pooled classifier
+    # receives 2-D and training dies in F.adaptive_avg_pool2d with "Input dimension should be at
+    # least 3" - which is what the gate rows for those vectors reported.  Making hard certifiable
+    # means moving the pooling upstream of that block and re-deriving the whole head; a reference
+    # that has not been run against the judge is not a reference, so the vector is refused here
+    # and omitted from the campaign, with the refusal named in the record instead of a crash.
+    if "class SpatialEncoderBlock" in (workspace / "model.py").read_text(encoding="utf-8"):
+        raise ValueError(
+            "model.py: this vector abstracts spatial features in its own encoder block, which "
+            "hands the classifier a 2-D tensor; the reference pools it, so it cannot certify "
+            "architecture=hard (the training crash would be the only result)"
+        )
     _replace(workspace, "model.py", "nn.MaxPool2d(2),\n        )",
              "nn.MaxPool2d(2),\n            nn.Conv2d(64, 128, kernel_size=3, padding=1),\n"
              "            nn.ReLU(),\n        )")

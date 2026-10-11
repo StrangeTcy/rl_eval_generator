@@ -217,6 +217,21 @@ jobs:
             echo "reason=no competing Atria consumer" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Refuse a plan whose exact-instance reference cannot be applied
+        if: steps.mode.outputs.mode == 'fresh'
+        run: |
+          set -euo pipefail
+          # The exact-instance gate patches a generated case before its judge ever sees it,
+          # and a stale literal inside a reference - a filename the `naming` axis renames, an
+          # exact-text needle the `optimizer` axis rewrites - surfaces as oracle_error rows
+          # after a tick of billed work. Two campaigns were blocked that way. This runs the
+          # same patch path with no Docker, no torch and no provider call, over every gated
+          # case of the plan the profile will ship, and refuses the dispatch in ~2 minutes.
+          # Fresh dispatches only: a resumed tick runs pinned code that already passed this.
+          .venv/bin/python tools/instance_oracle_preflight.py \
+            --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+            --out runs/reasoning_atria_pairwise_campaign/instance_oracle_preflight.json
+
       - name: Inherit exact-instance gate rows from the covering campaign
         if: steps.mode.outputs.mode != 'none'
         run: |

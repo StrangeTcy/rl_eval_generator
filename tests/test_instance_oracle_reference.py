@@ -1,4 +1,4 @@
-"""The glyph exact-instance reference must apply on every value of its `optimizer` axis.
+"""Exact-instance references must apply on every axis value the generator can emit.
 
 `tools/instance_oracle_gate.py` certifies a case by patching its workspace three ways and
 checking that the reference passes, the untouched instance fails, and the plausible-wrong variant
@@ -6,6 +6,9 @@ fails in the predicted place. Its glyph reference selected the optimizer by exac
 glyph's `optimizer` axis *chooses that text* - so only `easy` vectors were patchable, and the
 strength-2 pairwise campaign blocked on `oracle_error` for the rest, before any provider call.
 That is the failure this file pins: not the env, not the campaign, the reference's own matching.
+moco's reference carried the same disease in a different axis - it opened `moco_model.py` by name,
+and `naming` renames that file - while rope and glyph fail on vectors whose masked symptom the
+reference would only re-introduce. All three are checked here against real generated instances.
 
 The judge container is not available in this checkout, so the graded verdicts of the three
 variants are still measured on a runner. What is provable here is the invariant that was
@@ -29,7 +32,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import env_runner  # noqa: E402
-from tools.instance_oracle_gate import _glyph, _glyph_optimizer  # noqa: E402
+from tools.instance_oracle_gate import _glyph, _glyph_optimizer, _moco, _rope  # noqa: E402
 
 # What envs/glyph/config.yaml substitutes for %%OPT_LINE%%, per axis value.
 AXIS_LINES = {
@@ -136,3 +139,94 @@ def test_the_reference_is_readable_without_the_judge_dependency() -> None:
     block = source[source.index("def _glyph_optimizer") : source.index("def _glyph(")]
     assert "DockerBackend" not in block and "subprocess" not in block
     assert "import re" in source
+
+
+def _generate(tmp: Path, env: str, levels: list[str], interventions: str = "") -> tuple[Path, str]:
+    """A real generated workspace, at exactly the vector named, without the judge."""
+    episode_id = "oracle_" + uuid.uuid4().hex[:16]
+    old_dir = env_runner.EPISODES_DIR
+    try:
+        env_runner.EPISODES_DIR = tmp / "episodes"
+        args = SimpleNamespace(
+            episode_id=episode_id, env=env, difficulty=",".join(levels), seed=0,
+            max_steps=1, sandbox="local", keep_images=False, keep_workspace=True,
+            interventions=interventions,
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            env_runner.reset(args)
+        state = env_runner._load_state(episode_id)
+    finally:
+        env_runner.EPISODES_DIR = old_dir
+    return Path(state["workspace"]), episode_id
+
+
+# envs/moco/config.yaml axis order; `naming` is the one that renames the model module.
+MOCO_EASY = ["easy"] * 6
+GLYPH_EASY = ["easy"] * 6
+ROPE_EASY = ["easy"] * 8
+
+
+@pytest.mark.parametrize("naming", ["easy", "medium", "hard"])
+def test_the_moco_reference_patches_the_file_the_naming_axis_chose(tmp_path: Path, naming: str) -> None:
+    """`naming` writes the model into moco_model.py only at easy: medium renames it contrastive.py
+    and hard engine.py. Opening a literal filename is why 65 of 90 gated moco cases died with
+    FileNotFoundError inside the gate, and why the file has to be found by its content."""
+    workspace, _ = _generate(tmp_path, "moco", [naming] + MOCO_EASY[1:])
+    files_before = {p.name: p.read_text(encoding="utf-8") for p in workspace.glob("*.py")}
+    _moco(workspace, wrong=False)
+    changed = {name for name, text in files_before.items()
+               if (workspace / name).read_text(encoding="utf-8") != text}
+    assert "queue_ops.py" in changed
+    patched = [name for name in changed if name != "queue_ops.py"]
+    assert len(patched) == 1, f"naming={naming}: the model edit landed in {sorted(changed)}"
+    source = (workspace / patched[0]).read_text(encoding="utf-8")
+    assert source.count("logits = torch.cat([l_pos, l_neg], dim=1) / self.tau") == 1
+    ast.parse(source)
+
+
+def test_the_moco_reference_follows_the_terminology_intervention(tmp_path: Path) -> None:
+    """terminology renames the module again (envs/moco/config.yaml:208-222), so an easy-naming
+    vector under this intervention failed for the same reason its medium/hard siblings did."""
+    workspace, _ = _generate(tmp_path, "moco", MOCO_EASY, interventions="terminology")
+    _moco(workspace, wrong=True)
+    names = [p.name for p in workspace.glob("*.py")
+             if "logits = torch.cat([l_pos, l_neg], dim=1) / 1.0" in p.read_text(encoding="utf-8")]
+    assert names == ["retrieval_pooled_encoder.py"]
+
+
+def test_an_ambiguous_moco_target_is_refused_not_guessed(tmp_path: Path) -> None:
+    """Two candidate files means the generator changed shape; picking one would certify a patch
+    that is not the reference anyone read."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    line = "        logits = torch.cat([l_pos, l_neg], dim=1)\n"
+    body = "class M:\n    def forward(self):\n" + line
+    for name in ("moco_model.py", "engine.py"):
+        (workspace / name).write_text(body, encoding="utf-8")
+    with pytest.raises(ValueError, match="exactly one moco logits concatenation"):
+        _moco(workspace, wrong=False)
+
+
+def test_the_rope_reference_refuses_a_vector_that_is_already_fixed(tmp_path: Path) -> None:
+    """At symptom_mask=hard the cache offset is not masked, so rope's reference would be applying
+    its own fix to a file that already carries it. It fails closed - and now says which axis."""
+    workspace, _ = _generate(tmp_path, "rope", ROPE_EASY[:-1] + ["hard"])
+    with pytest.raises(ValueError, match="cannot be certified"):
+        _rope(workspace, wrong=False)
+
+
+def test_the_rope_reference_still_reaches_a_masked_vector(tmp_path: Path) -> None:
+    workspace, _ = _generate(tmp_path, "rope", ROPE_EASY)
+    _rope(workspace, wrong=False)
+    cache = (workspace / "cache.py").read_text(encoding="utf-8")
+    assert "return self.tokens_seen" in cache and "return 0" not in cache
+    ast.parse(cache)
+
+
+def test_the_glyph_reference_refuses_the_vector_it_cannot_shape_correctly(tmp_path: Path) -> None:
+    """architecture=hard abstracts spatial features in its own block, which hands the classifier a
+    2-D tensor; the reference's pooled classifier died in F.adaptive_avg_pool2d inside a billed
+    judge run. Refusing costs nothing and says why."""
+    workspace, _ = _generate(tmp_path, "glyph", ["hard"] + GLYPH_EASY[1:])
+    with pytest.raises(ValueError, match="architecture=hard"):
+        _glyph(workspace, wrong=False)
