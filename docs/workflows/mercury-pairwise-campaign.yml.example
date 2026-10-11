@@ -150,6 +150,23 @@ jobs:
             echo "state_staged=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Announce a refused tick instead of a silent green one
+        # A `mode=none` decision skips every remaining step and exits 0, so "the campaign is being
+        # continued on cron" and "the campaign refuses to be continued" are indistinguishable from
+        # the runs list. That indistinguishability is what made waiting for a tick a plausible plan
+        # for a day: the refusal was real, its reason sat in the log of a step nobody reads, and no
+        # state moved. Emit the supervisor's reason as an annotation - visible in the Checks UI and
+        # through GET /actions/runs/<id>/jobs, so a resume claim about this campaign can be
+        # falsified in one tick instead of one conversation - and keep the leg green: a refusal is a
+        # decision, not a fault, and a red X every half hour trains everyone to ignore the colour.
+        if: steps.mode.outputs.mode == 'none'
+        env:
+          REFUSAL_REASON: ${{ steps.mode.outputs.reason }}
+        run: |
+          set -euo pipefail
+          reason=$(printf '%s' "${REFUSAL_REASON:-no reason recorded}" | tr -d '\r\n' | sed 's/%/%25/g')
+          echo "::warning::this leg declined to continue the campaign: ${reason}"
+
       - name: Initialize fresh campaign state
         if: steps.mode.outputs.mode != 'none' && steps.mode.outputs.mode == 'fresh'
         run: |

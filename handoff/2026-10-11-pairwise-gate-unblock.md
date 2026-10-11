@@ -401,6 +401,37 @@ on `POST /actions/workflows/380866773/dispatches`. Same reason the launcher head
 for creating workflow files: the credential this session holds is read-scoped for Actions, so it
 can push code and read runs, and cannot start them.
 
+
+## Mercury's leg produced the same 12 rows, independently, on the same axis pair
+
+The operator pasted the leg that started at 19:33Z: 12 blocked rows, 6 groups, every one of them
+`red_herring=hard` or `symptom_mask=hard` (`hard/hard/hard/hard/hard/hard`,
+`hard/medium/hard/medium/hard/medium`, `medium/medium/easy/easy/hard/hard`,
+`medium/hard/medium/hard/medium/hard`, `medium/medium/hard/hard/easy/easy`,
+`easy/hard/easy/hard/easy/hard`), each as a base case and its `__visible_proxy` twin. That is the
+same six vectors Atria's artifact carried, from a different runner, a different provider and a
+different leg - the boundary the fix at `4ca1123` is built on is no longer resting on one artifact.
+This leg predates the fix and resumes at its own pinned commit, so it is confirmation of the
+*boundary*, not a verdict on the repair; only a leg started at a ref that carries it can be that.
+
+The log ended by offering the recipe: `to omit them, add under manual_gate_blocked_exclusions.cases`
+with `calibration_class: reference_does_not_solve_its_own_instance`. Not taken. Writing twelve
+exclusion lines converts a reference defect into a permanent coverage hole and makes the campaign
+green for the wrong reason; the two data-pipeline repairs are the answer, and they are in the repo.
+
+### The silence that made "wait for the tick" look reasonable is now an annotation
+
+`mode=none` skips every step and exits 0, which is how a refusal to resume and a successful
+continuation became the same colour in the runs list. Both pairwise launchers now carry one step,
+directly after the step that decides the mode, that emits the supervisor's reason as a
+`::warning::` annotation and stays green - visible in the Checks UI and via
+`GET /actions/runs/<id>/jobs`, so a resume claim can be contradicted by one tick. Pinned by
+`tests/test_pairwise_matrix.py::test_a_refused_tick_announces_itself_and_stays_green`, which asserts
+the placement, the `mode == 'none'` guard, that the reason reaches the shell through `env` rather
+than interpolation, and the absence of any `exit 1`/`failure` in the step. The covering pair is
+deliberately untouched: its `.github/workflows` copies are dirty in this sandbox and an equality
+pin there would turn a green suite red over a cosmetic half-edit.
+
 ## Files that are deliberately uncommitted in the sandbox
 
 `.github/workflows/*-covering-campaign.yml` differ here (they carry the `resume_previous` input and

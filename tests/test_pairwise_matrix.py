@@ -338,6 +338,30 @@ def _accepted_flags(tool_source: str) -> set[str]:
     return flags | set(COMPATIBILITY_FLAGS)
 
 
+
+def test_a_refused_tick_announces_itself_and_stays_green() -> None:
+    """`mode=none` is a decision the operator cannot see anywhere else: the leg goes green having
+    done nothing, and the reason lives in one step's log. Waiting for a scheduled resume looked like
+    a valid plan for exactly as long as that silence held, so the announcement, its placement right
+    after the decision that produces it, and its green-ness are all asserted."""
+    for name in ("mercury", "reasoning-atria"):
+        for path in (ROOT / f"handoff/{name}-pairwise-campaign.yml",
+                     ROOT / f"docs/workflows/{name}-pairwise-campaign.yml.example"):
+            chunks = path.read_text(encoding="utf-8").split("\n      - name: ")
+            step = [c for c in chunks if c.startswith("Announce a refused tick")]
+            assert len(step) == 1, f"{path.name}: the refusal must be announced exactly once"
+            assert chunks.index(step[0]) > 0 and chunks[chunks.index(step[0]) - 1].startswith(
+                "Decide fresh dispatch versus supervised resume"
+            ), f"{path.name}: the announcement must directly follow the step that decides mode"
+            body = step[0]
+            assert "steps.mode.outputs.mode == 'none'" in body, f"{path.name}: fires on a refusal only"
+            assert "REFUSAL_REASON: ${{ steps.mode.outputs.reason }}" in body
+            assert "${REFUSAL_REASON" in body and "${{ steps.mode.outputs.reason }}" not in body.split(
+                "run: |"
+            )[1], f"{path.name}: the reason must reach the shell through env, not interpolation"
+            assert "::warning::" in body and "::error::" not in body
+            assert "exit 1" not in body and "failure" not in body, f"{path.name}: a refusal is not red"
+
 def test_workflow_flags_are_accepted_by_the_tools_they_call() -> None:
     """Every ``--flag`` a launcher passes must exist in that tool's argparse.
 
