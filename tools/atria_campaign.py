@@ -62,6 +62,12 @@ from tools.run_suite import (  # noqa: E402
 )
 from tools.suite_inventory import _load_yaml, build_manifest  # noqa: E402
 
+# Ceiling keys a dispatcher may set with --limit. They bound spend and nothing else:
+# the measurement contract (provider, model, endpoint, wire surface, reasoning effort,
+# case manifest, gate context) stays exactly as pinned, so a budget change can never
+# move a verdict.
+CEILINGS = ("max_api_calls", "max_tokens_total", "max_http_attempts")
+
 RESUMABLE_PAUSE_REASONS = {
     "provider_error",
     "max_wall_seconds",
@@ -87,6 +93,46 @@ CAMPAIGN_TARGETS: dict[str, dict[str, Any]] = {
         "input_modalities": ["text"],
     },
 }
+
+
+def _apply_limit_overrides(
+    profile: Mapping[str, Any], args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> dict[str, Any]:
+    """Merge ``--limit KEY=INTEGER`` over the profile ceilings, with provenance.
+
+    The profile stays the record and the file the campaign is pinned to; this exists
+    so an operator can unblock a budget-stopped campaign from the dispatcher instead
+    of committing a number the pinned code will never read. Every accepted override is
+    printed, and the ones that let a resume past a ceiling it stopped at are written to
+    ``suite_checkpoint.json`` as ``ceiling_raises`` with the authorising handle - so the
+    rows bought above the original ceiling are attributable to a named decision, not to
+    the run.
+    """
+    limits = dict(profile["limits"])
+    for spec in args.limit_overrides or []:
+        key, sep, raw = str(spec).partition("=")
+        key = key.strip()
+        if not sep or key not in CEILINGS:
+            parser.error(
+                f"--limit expects KEY=INTEGER with KEY in {', '.join(CEILINGS)}; got {spec!r}"
+            )
+        try:
+            value = int(raw.strip())
+        except ValueError:
+            parser.error(f"--limit {key} needs an integer, got {raw.strip()!r}")
+        if value < 1:
+            parser.error(f"--limit {key} must be positive")
+        previous = limits.get(key)
+        limits[key] = value
+        print(
+            f"ceiling override: {key} {'unset' if previous is None else previous} -> {value}"
+            + (
+                f" (resume authorised by {args.ceiling_authorization})"
+                if args.ceiling_authorization
+                else ""
+            )
+        )
+    return limits
 
 
 def _sleep(seconds: float) -> None:
@@ -1436,6 +1482,21 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-cross-revision-t1", action="store_true",
         help="accepted and ignored here; it belongs to tools/inherit_campaign_state.py",
     )
+    parser.add_argument(
+        "--limit", dest="limit_overrides", action="append", default=[], metavar="KEY=INTEGER",
+        help=(
+            "set one spend ceiling for this invocation instead of editing the profile "
+            f"({', '.join(CEILINGS)}); a resumed campaign accepts a raise only with "
+            "--raise-ceiling, and a reduction is always refused"
+        ),
+    )
+    parser.add_argument(
+        "--raise-ceiling", dest="ceiling_authorization", default=None, metavar="OPERATOR",
+        help=(
+            "the handle that authorised raising a ceiling above the value the campaign "
+            "stopped at; recorded in suite_checkpoint.json beside the rows it buys"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.gates_only and args.allow_provider:
         parser.error("--gates-only and --allow-provider are mutually exclusive")
@@ -1466,7 +1527,7 @@ def main(argv: list[str] | None = None) -> int:
         if profile.get("provider") == "custom" and profile.get("name") in {"rehearsal", "rehearsal_autonomous"}:
             return _run_rehearsal_mode(profile, output, args, started)
 
-        limits = profile["limits"]
+        limits = _apply_limit_overrides(profile, args, parser)
         resilience = profile["resilience"]
         job_seconds = _effective_campaign_job_seconds(
             int(profile["campaign_job_seconds"]), args.job_seconds
@@ -1687,6 +1748,7 @@ def main(argv: list[str] | None = None) -> int:
             "provider_outage_patience_seconds": patience,
             "provider_outage_backoff_seconds": backoff,
             "gate_context_sha": gate_context_sha,
+            "ceiling_authorization": args.ceiling_authorization,
             "keep_images": args.keep_images,
             "keep_workspace": args.keep_workspace,
         }

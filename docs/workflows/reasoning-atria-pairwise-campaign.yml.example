@@ -49,6 +49,16 @@ on:
         required: true
         type: boolean
         default: true
+      max_tokens_total_override:
+        description: "Optional spend ceiling above the pinned profile's value. Only a number greater than the one a budget pause stopped at lifts that pause; it changes the budget, never the measurement contract."
+        required: false
+        default: ''
+        type: string
+      max_api_calls_override:
+        description: "Optional spend ceiling above the pinned profile's value, same rule as max_tokens_total_override."
+        required: false
+        default: ''
+        type: string
   schedule:
     - cron: "13,43 * * * *"
 
@@ -108,13 +118,26 @@ jobs:
             echo "reason=provider-free supervisor unavailable at pinned ref" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          LIMIT_ARGS=()
+          if [ -n "${ inputs.max_tokens_total_override }" ]; then
+            LIMIT_ARGS+=("max_tokens_total=${ inputs.max_tokens_total_override }")
+          fi
+          if [ -n "${ inputs.max_api_calls_override }" ]; then
+            LIMIT_ARGS+=("max_api_calls=${ inputs.max_api_calls_override }")
+          fi
           DECISION=$(python3 -c '
-          import importlib.util, json, sys
+          import importlib.util, inspect, json, sys
           spec = importlib.util.spec_from_file_location("campaign_supervisor", sys.argv[1])
           module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
-          print(json.dumps(module.decide_tick(sys.argv[2], expected_provider="atria")))
-          ' "$SUPERVISOR" "$STATE_STAGE")
+          kwargs = {"expected_provider": "atria"}
+          # A supervisor pinned before ceilings could be lifted from the dispatcher has
+          # no parameter to receive one, and handing it a stray argument would crash the
+          # mode decision. Read the pinned signature; pass only what it understands.
+          if "limits_override" in inspect.signature(module.decide_tick).parameters:
+              kwargs["limits_override"] = sys.argv[3:]
+          print(json.dumps(module.decide_tick(sys.argv[2], **kwargs)))
+          ' "$SUPERVISOR" "$STATE_STAGE" "${LIMIT_ARGS[@]}")
           MODE=$(printf '%s' "$DECISION" | jq -r '.mode')
           REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
           REF=$(printf '%s' "$DECISION" | jq -r '.ref // empty')
@@ -160,6 +183,15 @@ jobs:
           test -f tools/twin_preflight.py
           grep -q '"pairwise"' tools/suite_inventory.py
           test -f tools/inherit_campaign_state.py
+          # A ceiling override the pinned code cannot parse would otherwise be dropped
+          # on the floor: the operator would think they authorised more spend and the
+          # campaign would stop at the same number again. Refuse the leg instead.
+          if [ -n "${{ inputs.max_tokens_total_override }}${{ inputs.max_api_calls_override }}" ]; then
+            grep -q "def _apply_limit_overrides" tools/atria_campaign.py || {
+              echo "the pinned ref has no --limit support; dispatch a ref that does, or clear the override inputs"
+              exit 1
+            }
+          fi
 
       - name: Set up Python
         if: steps.mode.outputs.mode != 'none'
@@ -351,10 +383,14 @@ jobs:
             exit 1
           fi
 
+          if [ "${#LIMIT_ARGS[@]}" -gt 0 ]; then
+            LIMIT_ARGS+=(--raise-ceiling "${{ github.actor }}")
+          fi
           if [ "$EXECUTION_MODE" = "paid" ]; then
             .venv/bin/python tools/atria_campaign.py \
               --profile experiments/reasoning_atria_pairwise_campaign.yaml \
-              --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS"
+              --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS" \
+              "${LIMIT_ARGS[@]}"
           else
             .venv/bin/python tools/atria_campaign.py \
               --profile experiments/reasoning_atria_pairwise_campaign.yaml \

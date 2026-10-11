@@ -79,8 +79,66 @@ def _is_backoff_active(checkpoint: dict[str, Any]) -> str | None:
     return None
 
 
+# Pause reasons that mean "the operator's money ran out", not "the measurement is
+# invalid". They are terminal for the cron loop by default - see
+# CEILING_FIELDS in tools/run_suite.py - and a dispatched ceiling override that
+# actually exceeds the value the campaign stopped at is the only thing that lifts them.
+CEILING_PAUSE_REASONS = ("max_api_calls", "max_tokens_total", "max_http_attempts")
+
+
+def _normalised_override(limits_override: object) -> dict[str, int]:
+    """Accept ``{"max_api_calls": 300}`` or ``["max_api_calls=300"]``.
+
+    The launcher builds this from workflow inputs, where everything arrives as a
+    string; anything unparseable is dropped rather than guessed, because a ceiling the
+    supervisor cannot read cannot be compared against the recorded one.
+    """
+    parsed: dict[str, int] = {}
+    if isinstance(limits_override, dict):
+        items = list(limits_override.items())
+    elif isinstance(limits_override, (list, tuple, set)):
+        items = []
+        for entry in limits_override or ():
+            key, _, raw = str(entry).partition("=")
+            items.append((key.strip(), raw.strip()))
+    else:
+        items = []
+    for key, raw in items:
+        if str(key) not in CEILING_PAUSE_REASONS:
+            continue
+        try:
+            parsed[str(key)] = int(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+    return parsed
+
+
+def _ceiling_was_raised(
+    pause_reason: str,
+    limits_override: object,
+    checkpoint: dict[str, Any],
+) -> str | None:
+    """Return a reason when this tick is authorised to bill past a spent ceiling."""
+    if pause_reason not in CEILING_PAUSE_REASONS:
+        return None
+    override = _normalised_override(limits_override).get(pause_reason)
+    if override is None:
+        return None
+    recorded = (checkpoint.get("run") or {}).get(pause_reason)
+    if not isinstance(recorded, int):
+        # Nothing to compare against: refusing is the honest answer, because the
+        # alternative is resuming on the assumption that the ceiling still has room.
+        return None
+    if override <= recorded:
+        return None
+    return f"{pause_reason} raised by dispatcher {recorded} -> {override}"
+
+
 def decide_tick(
-    state_dir: str | os.PathLike[str], *, expected_provider: str = "atria"
+    state_dir: str | os.PathLike[str],
+    *,
+    expected_provider: str = "atria",
+    limits_override: object = None,
 ) -> dict[str, str]:
     """Decide whether a scheduled tick may continue staged campaign state.
 
@@ -212,12 +270,17 @@ def decide_tick(
         )
 
     pause_reason = str(checkpoint.get("pause_reason") or "")
-    if pause_reason not in RESUMABLE_PAUSE_REASONS:
+    ceiling_resume = _ceiling_was_raised(pause_reason, limits_override, checkpoint)
+    if pause_reason not in RESUMABLE_PAUSE_REASONS and not ceiling_resume:
         return _decision(
             mode="none",
             execution_mode="",
             ref="",
-            reason=f"operator pause: {pause_reason} (supervisor never raises ceilings)",
+            reason=(
+                f"operator pause: {pause_reason} (supervisor never raises ceilings; "
+                f"dispatch {pause_reason}=<a number above the spent value> to authorise "
+                "more spend against this campaign)"
+            ),
         )
     backoff_reason = _is_backoff_active(checkpoint)
     if backoff_reason:
@@ -239,6 +302,8 @@ def decide_tick(
     checkpoint_ref = str(((checkpoint.get("run") or {}).get("manifest_commit")) or "")
     resume_ref = checkpoint_ref or recorded_ref
     reason = f"resuming after {pause_reason}"
+    if ceiling_resume:
+        reason = f"resuming after {pause_reason}: {ceiling_resume}"
     if checkpoint_ref and checkpoint_ref != recorded_ref:
         reason = (
             f"resuming after {pause_reason} pinned to checkpoint commit "

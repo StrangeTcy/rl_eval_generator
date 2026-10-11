@@ -229,7 +229,64 @@ def _is_zero_score(result: dict[str, Any]) -> bool:
     return result.get("status") == "scored" and isinstance(score, (int, float)) and float(score) == 0.0
 
 
-def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+# Fields whose only purpose is to bound spend, and which an operator may therefore
+# raise between legs. Everything else in `immutable` describes the measurement and a
+# change there is a different campaign, not a bigger budget.
+CEILING_FIELDS = ("max_api_calls", "max_tokens_total", "max_http_attempts")
+
+
+def _ceiling_raises(
+    previous: dict[str, Any],
+    metadata: dict[str, Any],
+    *,
+    authorized_by: str | None,
+) -> list[dict[str, Any]]:
+    """Compare the ceiling fields, allowing only an authorised raise.
+
+    A campaign stopped by its ceiling writes ``pause_reason: max_tokens_total``, and
+    the supervisor refuses to resume that on purpose - it never raises ceilings. The
+    consequence was a dead end: the ceiling lives in ``experiments/*.yaml``, the
+    running campaign is pinned to the commit that read it, so raising the number
+    requires a commit the pinned campaign never sees, while a fresh dispatch to pick
+    up the commit discards the accumulated state. This makes the operator's intent
+    legible to the resume path: the value may grow, named and dated, and nothing else
+    may differ. Lowering it, or changing a measurement field, still refuses.
+    """
+    raises: list[dict[str, Any]] = []
+    for field in CEILING_FIELDS:
+        before, after = previous.get(field), metadata.get(field)
+        if before is None or after is None or after == before:
+            continue
+        if after < before:
+            raise ValueError(
+                f"checkpoint refuses to lower {field} mid-campaign: {before!r} -> "
+                f"{after!r}; spend already recorded against the larger budget"
+            )
+        if not authorized_by:
+            raise ValueError(
+                f"{field} was raised from {before!r} to {after!r}; a resume needs the "
+                "operator's explicit authorisation (--raise-ceiling <handle>) so the "
+                "budget change is recorded beside the rows it buys"
+            )
+        raises.append(
+            {
+                "field": field,
+                "from": before,
+                "to": after,
+                "authorized_by": str(authorized_by),
+                "at": _utc_now(),
+            }
+        )
+    return raises
+
+
+def _load_checkpoint(
+    path: Path,
+    *,
+    manifest: dict[str, Any],
+    metadata: dict[str, Any],
+    ceiling_authorization: str | None = None,
+) -> dict[str, Any]:
     if path.is_file():
         checkpoint = _read_json(path)
         previous = checkpoint.get("run", {})
@@ -270,12 +327,25 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
                 # their old default was Chat Completions.
                 continue
             if previous.get(field) != metadata.get(field):
+                if field in CEILING_FIELDS:
+                    # Checked by _ceiling_raises, which refuses an unauthorised
+                    # change and a reduction; reaching here means it was allowed.
+                    continue
                 raise ValueError(
                     f"checkpoint metadata mismatch for {field}: "
                     f"{previous.get(field)!r} != {metadata.get(field)!r}"
                 )
         if checkpoint.get("manifest_case_count") != manifest.get("case_count"):
             raise ValueError("manifest case count changed; use a new checkpoint")
+        raises = _ceiling_raises(previous, metadata, authorized_by=ceiling_authorization)
+        if raises:
+            recorded = checkpoint.get("ceiling_raises")
+            checkpoint["ceiling_raises"] = [*(recorded if isinstance(recorded, list) else []), *raises]
+            for entry in raises:
+                print(
+                    f"ceiling raised: {entry['field']} {entry['from']} -> {entry['to']} "
+                    f"authorised by {entry['authorized_by']} at {entry['at']}"
+                )
         return checkpoint
     return {
         "schema_version": 1,
@@ -519,6 +589,7 @@ def run_suite(
     provider_outage_backoff_seconds: float = 60.0,
     unreferenced_compile_only: bool = False,
     gate_context_sha: str | None = None,
+    ceiling_authorization: str | None = None,
     stop_after_gates: bool = False,
     gate_wall_seconds: float | None = None,
 ) -> dict[str, Any]:
@@ -889,7 +960,12 @@ def run_suite(
             "instance_coverage_complete": oracle_report.get("instance_coverage_complete") if oracle_report else None,
         },
     }
-    checkpoint = _load_checkpoint(checkpoint_path, manifest=manifest, metadata=metadata)
+    checkpoint = _load_checkpoint(
+        checkpoint_path,
+        manifest=manifest,
+        metadata=metadata,
+        ceiling_authorization=str(ceiling_authorization) if ceiling_authorization else None,
+    )
     checkpoint["run"].update(metadata)
     if gate_record is not None:
         checkpoint["instance_gate"] = gate_record

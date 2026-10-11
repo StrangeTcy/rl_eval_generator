@@ -143,16 +143,69 @@ Two honest limits, both measured rather than assumed:
   `c4b8e8f` reported `changed content: ['tools/atria_campaign.py']`. That is over-strict, kept
   deliberately, and the note is that this commit re-gates once - after it, only grading-path
   changes do.
-- The other half of the loop is untouched: `tools/campaign_supervisor.py:229-241` resumes pinned
-  to `checkpoint.run.manifest_commit`, so a campaign that is already running keeps running the
-  code it started with. Escaping that pin means a fresh dispatch, and a fresh dispatch is what
-  discards the `runs/` directory - now, with a content-addressed context, much less expensively,
-  because a gate row survives any commit that does not touch grading code.
+- The other half of the loop - `tools/campaign_supervisor.py` resuming pinned to
+  `checkpoint.run.manifest_commit`, so a running campaign keeps running the code it started with -
+  is now handled for the one thing it made unreachable: the spend ceilings. See the next section.
+  A fresh dispatch remains the only way to pick up *code* changes, and it still costs the episode
+  ledger (gate rows now survive any commit that does not touch grading code).
 
 Verified on this tree: `pytest tests/test_gate_context.py tests/test_inherit_campaign_state.py
 tests/test_atria_campaign.py tests/test_campaign_supervisor.py
 tests/test_exhaustive_campaign_recovery.py tests/test_campaign_completion_contract.py
 tests/test_paid_campaign_safety.py -q` -> 52 passed; full `pytest -q` -> no failures in 511 s.
+
+## Death B: the budget stop, and the way out that costs no commit
+
+The gate was not the only way a campaign dies after a couple of hours. Measured in this tree:
+
+- `tools/run_suite.py:1049-1064` records `pause_reason` as `max_api_calls`, `max_tokens_total`,
+  `max_output_tokens` or `max_http_attempts` when a ceiling is reached.
+- None of those is in `RESUMABLE_PAUSE_REASONS` (`tools/campaign_supervisor.py:23-33`), so the
+  supervisor returned `operator pause: max_tokens_total (supervisor never raises ceilings)` and the
+  cron loop stopped retrying. That refusal is correct as policy - the machine must not spend more
+  than the operator approved.
+- The dead end was in the escape hatch. `max_tokens_total` and `max_api_calls` are inside
+  `_load_checkpoint`'s `immutable` tuple (`tools/run_suite.py:236-256`), so raising the profile
+  number and resuming failed with `checkpoint metadata mismatch for max_tokens_total`; the profile
+  lives in the commit the campaign is pinned to, so a bump needs a commit; and the only way to run
+  a new commit is a fresh dispatch, which discards the accumulated ledger. There was no path at
+  all: every route either refused or destroyed work.
+
+Shipped instead: the ceiling is a dispatcher input, and the authorisation is written where the rows
+it buys are.
+
+- `tools/atria_campaign.py`: `--limit KEY=INTEGER` (repeatable, `KEY` in
+  `max_api_calls, max_tokens_total, max_http_attempts`) merged over the profile without rewriting
+  the profile, plus `--raise-ceiling HANDLE`.
+- `tools/run_suite.py`: `CEILING_FIELDS` are the only immutable checkpoint fields allowed to change,
+  only upward, only with an authorising handle, and every such raise is appended to
+  `suite_checkpoint.json` as `ceiling_raises` (`field / from / to / authorized_by / at`) so the
+  spend history of a leg is readable from the state artifact. A reduction is refused, `model`,
+  `provider`, `api_base`, `wire_api`, `reasoning_effort`, `max_tokens` and the rest still refuse,
+  and `max_output_tokens` is deliberately *not* liftable because it is part of the request shape,
+  not the budget.
+- `tools/campaign_supervisor.py`: a ceiling pause resumes only when the dispatched value exceeds
+  the recorded one (`_ceiling_was_raised`), the refusal message now names that action, and a
+  checkpoint without a recorded ceiling is refused rather than guessed at.
+- All four pairwise launcher copies gained `max_tokens_total_override` and `max_api_calls_override`
+  inputs, pass them as `LIMIT_ARGS` to the paid command only (with `--raise-ceiling
+  "$GITHUB_ACTOR"`), probe the pinned supervisor's signature with `inspect` so an older revision is
+  not handed an argument that would crash the mode decision, and refuse the leg in
+  `Refuse code missing campaign gates` when the pinned ref has no `def _apply_limit_overrides` -
+  silently ignoring an operator's authorisation is the worst available outcome.
+
+The number itself is yours, not mine. For the current profiles: `max_tokens_total: 136000000` at
+327,680 output tokens per case pays 415 cases, and the pairwise plan is 482, so a full sweep wants
+about 158M; `max_api_calls: 21200` is not the binding ceiling (530 cases at 40 calls). Dispatching
+`max_tokens_total_override=160000000` buys the remaining 67 cases against the campaign that already
+has the gate rows; raising nothing stops after 415.
+
+Verified on this tree: `tests/test_ceiling_override.py` 15 passed (supervisor lift/no-lift,
+checkpoint accept/refuse/append, CLI validation); `pytest tests/test_provider_reasoning_campaigns.py
+tests/test_ceiling_override.py tests/test_campaign_supervisor.py -q` 59 passed; every step body of
+all four launchers `bash -n` clean (10 and 11 run-steps per file) and YAML-parsing with
+`inputs=[ref, execution_mode, resume_previous, max_tokens_total_override, max_api_calls_override]`;
+full `pytest -q` no failures in 524 s.
 
 ## The `CI` workflow is red, and it is red on `main` too
 

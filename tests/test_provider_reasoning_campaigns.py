@@ -702,6 +702,43 @@ def test_provider_client_token_keywords_are_wire_specific() -> None:
     assert responses["max_output_tokens"].kind is inspect.Parameter.KEYWORD_ONLY
 
 
+def test_the_pairwise_launchers_carry_an_operator_ceiling_override() -> None:
+    """A budget stop has to be liftable from the dispatcher, or it is a dead end.
+
+    The ceiling lives in ``experiments/*.yaml`` and a running campaign is pinned to the
+    commit that read it, so editing the profile reaches neither the campaign nor its
+    accumulated state. The launcher therefore exposes the numbers as inputs, refuses the
+    leg when the pinned code cannot parse them, and hands the supervisor the override so a
+    pause is lifted only by a value above the one the campaign stopped at. All four copies
+    must agree; a launcher that bills ``--limit`` without the refusal guard would silently
+    ignore an operator's authorisation.
+    """
+    for rel in (
+        "handoff/mercury-pairwise-campaign.yml",
+        "handoff/reasoning-atria-pairwise-campaign.yml",
+        "docs/workflows/mercury-pairwise-campaign.yml.example",
+        "docs/workflows/reasoning-atria-pairwise-campaign.yml.example",
+    ):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        for token in (
+            "max_tokens_total_override:",
+            "max_api_calls_override:",
+            'LIMIT_ARGS+=("max_tokens_total=',
+            "LIMIT_ARGS+=(--raise-ceiling",
+            'grep -q "def _apply_limit_overrides"',
+            '"limits_override" in inspect.signature(module.decide_tick).parameters',
+            '"${LIMIT_ARGS[@]}"',
+        ):
+            assert token in text, f"{rel}: missing {token!r}"
+        # The override must reach only the paid branch: gates_only bills nothing, and a
+        # ceiling flag there would be decoration that reads like authorisation.
+        paid = text[text.index('if [ "$EXECUTION_MODE" = "paid" ]; then\n            .venv/bin/python tools/atria_campaign.py'):]
+        assert '"${LIMIT_ARGS[@]}"' in paid[:900], f"{rel}: override is not on the campaign command"
+        assert "LIMIT_ARGS" not in text[
+            text.index("--out \"$OUT\" --gates-only"):text.index("--out \"$OUT\" --gates-only") + 200
+        ], f"{rel}: gates_only branch must not carry a spend override"
+
+
 def test_the_paid_launcher_refuses_to_replay_an_interrupted_t1_phase() -> None:
     """T1's interruption marker has to cost the next leg something, or it is a comment in a file.
 
