@@ -172,3 +172,27 @@ them for free.
 136 M tokens (~1.4 x one 100 M grant). `bill_verified_only` drops the twins that did
 not verify (79 pass / 33 fail / 26 unverified measured), so the billed count starts
 near 437.
+
+## Pinned revisions: why a resumed tick cannot pick up a fix
+
+`resume_previous: true` (the default) makes the launcher *ignore* the `ref` input. The
+mode step reads the newest `<prefix>-state-<run>` artifact and checks out the revision it
+records - `campaign_ref.txt`, else `.run.manifest_commit` - because a campaign must not
+change code mid-lineage. Two consequences worth knowing before you read a failure:
+
+- A failed tick still re-uploads its state (`if: always()` on the staging step), so a
+  revision that cannot run re-pins itself on every tick. Waiting does not fix it.
+- Anything fixed after that revision - code, or a profile ceiling - is invisible to the
+  lineage until one dispatch with `resume_previous` unchecked, which is step 4 above.
+
+That is the whole story of Atria's exit-2 ticks: the pinned revision's
+`tools/atria_campaign.py` predated `--allow-cross-revision-t1` tolerance, and its profile
+ceiling `max_http_attempts: 56166` is below the bound for the plan it now guards
+(6 + 422 x 20 x 2 x 6 = 101,286), so removing the stray flag lines from the deployed
+launcher is not sufficient on its own - the next refusal is queued behind it. The ceiling
+fix (`119,046`, sized on the full 496-case plan) is in the profiles on this branch.
+
+`tests/test_launcher_flag_compatibility.py` is the guard: no launcher may hand a tool a flag
+that tool does not declare, no launcher may rely on the controller's *tolerance* of a
+swallowed flag, and a flag once moved to another tool stays declared where it used to live.
+
