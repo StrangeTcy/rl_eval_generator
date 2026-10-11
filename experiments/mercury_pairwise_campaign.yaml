@@ -66,6 +66,9 @@ manual_gate_blocked_exclusions:
     github_actions_run_id: 36346941741
     github_actions_run_url: https://github.com/StrangeTcy/rl_eval_generator/actions/runs/36346941741
     calibration_issue: https://github.com/StrangeTcy/rl_eval_generator/issues/1
+    pairwise_confirmation_run:
+      github_actions_run_id: 38094366275
+      github_actions_run_url: https://github.com/StrangeTcy/rl_eval_generator/actions/runs/38094366275
   cases:
     - case_id: glyph__architecture=easy_optimizer=hard_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
       calibration_class: reference_exists_per_environment_not_per_vector
@@ -81,6 +84,41 @@ manual_gate_blocked_exclusions:
       calibration_class: negative_control_is_not_a_negative_control
     - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
       calibration_class: reference_does_not_solve_its_own_instance
+    # Measured on the strength-2 pairwise plan by Actions run 38094366275 (Mercury, 2026-10-11),
+    # the campaign these omissions unblock. All three vectors have optimizer=easy, so the
+    # reference patch reaches them - what fails is the grading, not the matcher:
+    #   reference_does_not_solve_its_own_instance - Adam lr=1e-3 plus the wider classifier and
+    #     EPOCHS=18 does not move the judge's `optimization_progressed` check on this vector, so
+    #     the best-known fix leaves the episode unsolved and no paid answer could be certified.
+    #   negative_control_is_not_a_negative_control - the deliberately weak SGD lr=1e-4 control
+    #     PASSES on this vector, so the case cannot distinguish a right answer from a wrong one.
+    # Both classes already exist above, recorded for the covering plan: this list names specific
+    # vectors, and the pairwise matrix enumerates different ones, so the covering calibration
+    # could not cover them.
+    #
+    # Each vector is omitted in all three of its forms (base, __visible_proxy__, __terminology__).
+    # The proxy and terminology twins were reported failing and unreported-but-adjacent
+    # respectively, and the defect is in the instance rather than in how it is presented: leaving
+    # a renamed twin billable while omitting its base would grade the twin against a reference
+    # already known not to solve the underlying case.
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=hard_data_clue=medium_symptom_mask=medium__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=hard_data_clue=medium_symptom_mask=medium__visible_proxy__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=hard_data_clue=medium_symptom_mask=medium__terminology__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=medium_visible_tests=medium_data_clue=hard_symptom_mask=hard__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=medium_visible_tests=medium_data_clue=hard_symptom_mask=hard__visible_proxy__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=medium_visible_tests=medium_data_clue=hard_symptom_mask=hard__terminology__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=hard_symptom_mask=easy__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=hard_symptom_mask=easy__visible_proxy__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=hard_symptom_mask=easy__terminology__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
 # Per-controller invocation ceiling matches the 330-minute live workflow step.
 # This exceeds the 108-minute worst-case atomic gate row, even after a full T1
 # probe. The scheduled supervisor resumes the full campaign across checkpoints.
