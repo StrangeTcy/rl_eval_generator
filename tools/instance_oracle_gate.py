@@ -136,6 +136,106 @@ _OPTIMIZER_ASSIGNMENT = re.compile(
 )
 
 
+# ``envs/glyph/config.yaml`` renders ``%%EVAL_IMG_SIZE%%`` to 64 at every level of ``symptom_mask``,
+# while ``%%IMG_SIZE%%`` is 64 at easy/medium and 32 at hard.  The constant is pinned against those
+# values by tests/test_glyph_reference_traps.py, so a generator that moves the evaluation canvas
+# fails a test instead of silently shrinking the reference's repair.
+_GLYPH_EVAL_IMG_SIZE = 64
+_GLYPH_TRAIN_IMG_SIZE = re.compile(r"^IMG_SIZE = (\d+)$", re.MULTILINE)
+_GLYPH_INVERT_BUG = re.compile(r"^([ \t]*)self\.p_invert = 0\.1 \+ 1\.0$", re.MULTILINE)
+
+
+def _glyph_augmentation(workspace: Path, *, wrong: bool) -> None:
+    """Remove the one augmentation defect that is not a red herring.
+
+    ``red_herring=hard`` writes ``BuggyAugmentation`` into dataset.py with
+    ``self.p_invert = 0.1 + 1.0`` (envs/glyph/config.yaml:96-112).  Its ``__call__`` guards the
+    inversion with ``if random.random() < self.p_invert``, and that comparison is true for every
+    draw, so *every* training image is inverted while the judge builds its evaluation set from a
+    plain ``ToTensor``/``Normalize`` pipeline (envs/glyph/files/judge.py:24-31): the reference was
+    training on the negative of the distribution it was scored on.  That is the signature of five
+    of the twelve blocked gate rows - raw_accuracy 0.059 to 0.200 with ``anti_gaming_passed=false``,
+    and ``judge.py:93-99`` derives ``optimization_progressed`` from that very check (predictions
+    covering fewer than seven classes), which is why the note read ``optimizer_pathology_unfixed``
+    although the optimizer was already fixed.  The env's own docstring calls it "a subtle but
+    irrelevant off-by-one bug"; at hard it is neither, and no number of epochs repairs it.
+
+    Correcting the probability to its stated intent is the minimal edit, and it leaves the random
+    stream untouched - the draw still happens, so every glyph lands at the same position and only
+    the inversion changes.  At easy and medium there is nothing to repair and no-op is the right
+    answer for a reference (unlike the optimizer axis, where a no-op would certify a pristine
+    instance).  A ``BuggyAugmentation`` whose inversion site this pattern cannot read is refused:
+    a reference that certifies a training distribution nobody has inspected is not a reference.
+    """
+    if wrong:
+        return
+    path = workspace / "dataset.py"
+    source = path.read_text(encoding="utf-8")
+    matches = list(_GLYPH_INVERT_BUG.finditer(source))
+    if not matches:
+        if "class BuggyAugmentation" in source:
+            raise ValueError(
+                "dataset.py: BuggyAugmentation inverts training images through an assertion this "
+                "reference cannot read; refusing to certify a training distribution it has not neutralized"
+            )
+        return
+    if len(matches) != 1:
+        raise ValueError(
+            f"dataset.py: expected one unconditional-inversion site, found {len(matches)}; "
+            "reference is not configured for this vector"
+        )
+    matched = matches[0]
+    path.write_text(
+        source[: matched.start()] + matched.group(1) + "self.p_invert = 0.1" + source[matched.end():],
+        encoding="utf-8",
+    )
+
+
+def _glyph_training_resolution(workspace: Path, *, wrong: bool) -> None:
+    """Train on the canvas the judge evaluates on, when the vector draws them at different sizes.
+
+    ``symptom_mask=hard`` is two traps, and the reference only used to defuse one of them.  The
+    architecture half is the ``SpatialPool`` crop, which the classifier splice below does remove -
+    and the gate rows prove it, because those vectors report ``spatial_invariance_learned=true``.
+    The other half is in the data: ``%%IMG_SIZE%%`` drops to 32 while ``%%EVAL_IMG_SIZE%%`` stays
+    64, and ``generate_glyph`` draws shapes at absolute pixel sizes (5-10 px, 12 px margins,
+    envs/glyph/files/dataset.py:45-60), so the same class occupies a different fraction of the
+    canvas in the two pipelines.  The judge measures exactly that: accuracy on a 64x64 set
+    (envs/glyph/files/judge.py:24-31) against ``pass_threshold 0.85``, which a model fitted on
+    32x32 glyphs does not reach - it reported 0.271 with invariance and anti-gaming both green and
+    the note ``overfit_spatial_layout``, which ``judge.py:110-113`` emits only for a model that
+    learned a stable mapping and still generalizes poorly.  Two more rows collapsed to
+    ``optimization_progressed=false`` on the same axis.
+
+    The repair is applied in train.py rather than in dataset.py on purpose.  ``visible_tests.py``
+    asserts on ``IMG_SIZE`` and feeds the model ``torch.randn(4, 1, IMG_SIZE, IMG_SIZE)``; those
+    tests run in their own process against the file the agent sees, so leaving dataset.py at 32
+    keeps the agent-visible signal identical while ``generate_glyph`` - which reads the module
+    global at call time - hands training and internal evaluation the aligned canvas.  An
+    ``IMG_SIZE`` line this pattern does not recognize is refused rather than guessed at.
+    """
+    if wrong:
+        return
+    source = (workspace / "dataset.py").read_text(encoding="utf-8")
+    matches = list(_GLYPH_TRAIN_IMG_SIZE.finditer(source))
+    if len(matches) != 1:
+        raise ValueError(
+            "dataset.py: expected exactly one IMG_SIZE assignment, found "
+            f"{len(matches)}; reference is not configured for this vector"
+        )
+    if int(matches[0].group(1)) >= _GLYPH_EVAL_IMG_SIZE:
+        return
+    block = (
+        "\n# The judge scores 64x64 glyphs (see the env config's evaluation canvas); shapes are\n"
+        "# drawn at absolute pixel sizes, so training on a smaller canvas is training on a\n"
+        "# different distribution.  Align them here instead of in dataset.py, which the visible\n"
+        "# tests read.\n"
+        "import dataset as _glyph_dataset\n"
+        f"_glyph_dataset.IMG_SIZE = {_GLYPH_EVAL_IMG_SIZE}\n"
+    )
+    _replace(workspace, "train.py", "BATCH_SIZE = 64\n", "BATCH_SIZE = 64\n" + block)
+
+
 def _glyph_optimizer(workspace: Path, *, wrong: bool) -> None:
     """Point training at the reference optimizer whatever this vector's axis emitted.
 
@@ -185,13 +285,23 @@ def _glyph(workspace: Path, *, wrong: bool) -> None:
     ``x = SpatialPool(size=4)(x)`` in ``forward`` instead (envs/glyph/config.yaml:227-242), which
     crops the feature map to 4x4 - the whole map at the 32x32 training resolution, one quadrant of
     it at the 64x64 evaluation resolution. Splicing the classifier around either one is what the
-    gate rows reported: a training crash, or ``reference_did_not_grade_as_expected`` with
-    ``overfit_spatial_layout`` because the reference had re-introduced the bug it certifies.
+    gate rows reported: a training crash, or a head that pools a tensor the encoder had already
+    flattened.
 
     So both calls are taken out of ``forward`` as part of the splice. Neither holds parameters, so
     the checkpoint the judge loads is the same set of tensors, and removing them removes the trap
     rather than hiding it. A call into the classifier that this reference does not recognize is
     refused: pooling a head it cannot read would certify a program nobody has reasoned about.
+
+    ``architecture=hard`` is *not* what blocked the twelve gate rows, and an earlier version of
+    this docstring said it was.  Two vectors with ``architecture=hard, optimizer=hard`` graded
+    1.0 as they stand (``hard,hard,easy,easy,medium,medium`` and ``hard,hard,medium,medium,easy,easy``),
+    so the encoder call the splice removes was never the blocker; the axis that matters is whether
+    the vector injects a defect the splice cannot reach, upstream of the classifier, in the data
+    pipeline.  Those are ``red_herring=hard`` and ``symptom_mask=hard``, handled by
+    ``_glyph_augmentation`` and ``_glyph_training_resolution`` respectively.  Across all twelve
+    glyph vectors in that run, every blocked row has one or the other and every passing row has
+    neither, which is what the two helpers below exist for.
     """
     _replace(workspace, "model.py", "nn.MaxPool2d(2),\n        )",
              "nn.MaxPool2d(2),\n            nn.Conv2d(64, 128, kernel_size=3, padding=1),\n"
@@ -220,6 +330,8 @@ def _glyph(workspace: Path, *, wrong: bool) -> None:
         )
     model.write_text(source, encoding="utf-8")
     _glyph_optimizer(workspace, wrong=wrong)
+    _glyph_augmentation(workspace, wrong=wrong)
+    _glyph_training_resolution(workspace, wrong=wrong)
     if not wrong:
         _replace(workspace, "train.py", "EPOCHS = 10", "EPOCHS = 18\ntorch.manual_seed(0)")
 
