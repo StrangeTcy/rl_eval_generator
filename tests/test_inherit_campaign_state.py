@@ -58,7 +58,7 @@ def test_rows_in_the_new_plan_carry_at_the_same_revision(tmp_path: Path) -> None
     dropped = _case("moco", "hard")
     src = _source(tmp_path, {kept["case_id"]: _row(kept), dropped["case_id"]: _row(dropped)})
     plan = {kept["case_id"]: case_sha256(kept)}
-    report = inherit_state(src, tmp_path / "target", plan=plan, head_sha=HEAD)
+    report = inherit_state(src, tmp_path / "target", plan=plan, context_sha=HEAD)
     assert report["gate_rows_status"] == "inherited"
     assert report["gate_rows_inherited"] == 1
     assert report["gate_rows_dropped_not_in_plan"] == 1, "a case this plan never bills is not carried"
@@ -73,7 +73,7 @@ def test_a_different_revision_refuses_the_carry_and_says_so(tmp_path: Path) -> N
     case = _case("glyph", "easy")
     src = _source(tmp_path, {case["case_id"]: _row(case)}, context=OTHER)
     target = tmp_path / "target"
-    report = inherit_state(src, target, plan={case["case_id"]: case_sha256(case)}, head_sha=HEAD)
+    report = inherit_state(src, target, plan={case["case_id"]: case_sha256(case)}, context_sha=HEAD)
     assert report["gate_rows_status"] == "refused_gate_context_differs"
     assert report["gate_rows_inherited"] == 0
     assert not (target / GATE_FILE).exists(), "no gate file may be written under a borrowed context"
@@ -85,7 +85,7 @@ def test_an_edited_case_definition_invalidates_only_its_own_row(tmp_path: Path) 
     stale = dict(case)
     stale["difficulty_levels"] = {"a": "medium"}  # plan drifted under the cached row
     src = _source(tmp_path, {case["case_id"]: _row(stale)})
-    report = inherit_state(src, tmp_path / "t", plan={case["case_id"]: case_sha256(case)}, head_sha=HEAD)
+    report = inherit_state(src, tmp_path / "t", plan={case["case_id"]: case_sha256(case)}, context_sha=HEAD)
     assert report["gate_rows_dropped_hash_mismatch"] == 1
     assert report["gate_rows_inherited"] == 0
 
@@ -97,7 +97,7 @@ def test_rows_this_campaign_already_banked_are_never_overwritten(tmp_path: Path)
     target.mkdir()
     own = {"case_sha256": case_sha256(case), "row": {"status": "passed", "note": "mine"}, "attempts": 1}
     (target / GATE_FILE).write_text(json.dumps({"gate_context_sha": HEAD, "rows": {case["case_id"]: own}}), encoding="utf-8")
-    inherit_state(src, target, plan={case["case_id"]: case_sha256(case)}, head_sha=HEAD)
+    inherit_state(src, target, plan={case["case_id"]: case_sha256(case)}, context_sha=HEAD)
     rows = json.loads((target / GATE_FILE).read_text(encoding="utf-8"))["rows"]
     assert rows[case["case_id"]]["row"]["note"] == "mine"
 
@@ -107,7 +107,7 @@ def test_the_episode_ledger_and_markers_are_never_inherited(tmp_path: Path) -> N
     for name in ("suite_checkpoint.json", "campaign_intent.json", "wrapper_failed.json"):
         (src / name).write_text(json.dumps({"results": [{"case_id": "someone_elses_episode"}]}), encoding="utf-8")
     target = tmp_path / "target"
-    report = inherit_state(src, target, plan={}, head_sha=HEAD)
+    report = inherit_state(src, target, plan={}, context_sha=HEAD)
     assert report["gate_rows_status"] == "source_has_no_rows"
     for name in ("suite_checkpoint.json", "campaign_intent.json", "wrapper_failed.json"):
         assert not (target / name).exists(), f"{name} is campaign-scoped"
@@ -121,24 +121,27 @@ def test_t1_follows_the_same_revision_rule_unless_told_otherwise(tmp_path: Path)
     plan = {case["case_id"]: case_sha256(case)}
 
     target = tmp_path / "t1"
-    report = inherit_state(src, target, plan=plan, head_sha=HEAD)
+    report = inherit_state(src, target, plan=plan, context_sha=HEAD, head_sha=HEAD)
+    # T1 is judged on the revision the source campaign recorded, not on the gate
+    # context: its report measures model-plus-code behaviour across the whole leg.
     assert report["t1_inherited"] is False and "differs_from_head" in report["t1_reason"]
     assert not (target / T1_REPORT).exists()
 
     target = tmp_path / "t2"
-    report = inherit_state(src, target, plan=plan, head_sha=HEAD, allow_cross_revision_t1=True)
+    report = inherit_state(src, target, plan=plan, context_sha=HEAD, head_sha=OTHER,
+                           allow_cross_revision_t1=True)
     assert report["t1_inherited"] is True
     assert report["t1_source_ref"] == OTHER, "the borrowed provenance is recorded, not hidden"
     assert json.loads((target / T1_REPORT).read_text(encoding="utf-8"))["calls"] == 72
 
     (src / CAMPAIGN_REF).write_text(HEAD + "\n", encoding="utf-8")
     target = tmp_path / "t3"
-    report = inherit_state(src, target, plan=plan, head_sha=HEAD)
+    report = inherit_state(src, target, plan=plan, context_sha=HEAD, head_sha=HEAD)
     assert report["t1_inherited"] is True and report["t1_reason"] == "same_revision"
 
 
 def test_missing_source_is_not_a_failure(tmp_path: Path) -> None:
-    report = inherit_state(tmp_path / "absent", tmp_path / "target", plan={}, head_sha=HEAD)
+    report = inherit_state(tmp_path / "absent", tmp_path / "target", plan={}, context_sha=HEAD)
     assert report["gate_rows_status"] == "no_source_file"
     assert report["t1_reason"] == "no_source_report"
 
@@ -180,3 +183,28 @@ def test_pairwise_workflows_inherit_from_the_covering_campaign_only(slug: Path) 
 
 def paid_start(text: str) -> int:
     return text.index("Run T1 and pairwise campaign with live Issue status")
+
+
+def test_the_carry_keys_on_grading_code_not_on_the_commit(tmp_path: Path) -> None:
+    """The property the revision-pinned rule was missing.
+
+    Two campaigns at different commits, with byte-identical verdict-producing code,
+    produce the same verdict context, so the row carries. Recording the revision in
+    the report is provenance, not a condition -- and before this, a documentation
+    commit alone was enough to throw away every banked gate row.
+    """
+    case = _case("glyph", "easy")
+    src = _source(tmp_path, {case["case_id"]: _row(case)})
+    plan = {case["case_id"]: case_sha256(case)}
+    report = inherit_state(
+        src,
+        tmp_path / "target",
+        plan=plan,
+        context_sha=HEAD,
+        head_sha=OTHER,
+    )
+    assert report["gate_rows_status"] == "inherited", report
+    assert report["gate_rows_inherited"] == 1
+    assert report["context_sha"] == HEAD and report["head_sha"] == OTHER, (
+        "the revision is recorded beside the context, never used to judge the carry"
+    )

@@ -93,18 +93,26 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
-def _gate_context_sha() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return result.stdout.strip() or None
+def _gate_context_sha() -> str:
+    """Identity of the code that *produces* gate verdicts, not of the repository HEAD.
+
+    ``run_suite`` banks exact-instance gate rows across runner jobs and only reuses
+    them under an unchanged gate context. The context used to be ``git rev-parse
+    HEAD``, so any commit -- a handoff note, a launcher comment -- threw away every
+    row and the gate restarted from zero; with cron editing the repository between
+    legs, the campaign could never finish gating and died at the same blocked-row
+    message each tick. What a row actually claims is "this grading code produced this
+    verdict on this instance", so the context is now the digest of the
+    verdict-relevant file set (tools/gate_context.py): unrelated commits keep the
+    work, and any change to a generator, an environment template, or the gate
+    invalidates it.
+
+    No fallback to a revision hash on a missing input: an incomplete context would
+    silently re-gate hours of work, so tools.gate_context raises instead.
+    """
+    from tools.gate_context import compute as _verdict_context
+
+    return _verdict_context()
 
 
 def _manifest_cases_sha256(manifest: Mapping[str, Any]) -> str:

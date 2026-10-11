@@ -101,6 +101,59 @@ immediately before the step `Run T1 and pairwise campaign with live Issue status
 `handoff/mercury-pairwise-campaign.yml` and `handoff/reasoning-atria-pairwise-campaign.yml` already
 carry that step inside a complete file, with comments, if a whole-file copy is easier.
 
+## "And in a couple of hours it dies again" - the root cause, found and fixed
+
+The dispatcher click was never the whole story, and the reason is a cache-invalidation
+bug, not a hard problem. Read from these lines:
+
+- `tools/run_suite.py:656-660` states the gate phase "can cost more CPU-hours than one
+  runner job (Glyph/MoCo reference training dominates)", so rows accumulate per case into
+  `instance_oracles_partial.json` and a resume revalidates only the missing ones.
+- `tools/run_suite.py:666` accepts a banked row only when its `gate_context_sha` equals the
+  current one, and `tools/atria_campaign.py:96` computed that context as
+  `git rev-parse HEAD` - the whole-repository revision.
+- `tools/inherit_campaign_state.py` refused to re-key rows across contexts on purpose
+  ("Gate rows get no such exception - accepting a row produced by different grading code
+  would launder the guard").
+
+Put together: every commit - including a commit to a handoff note, a launcher comment, or a
+test - invalidated 100% of the banked gate rows, and the 255 gated rows of the 482-case plan
+restarted from zero. A campaign that ticks on cron while the repository is being edited
+therefore cannot finish gating, whatever it gates correctly. `GateCaseBlockedRepeatedly`
+(two failures across dispatches, `run_suite.py:690-700`) never fired either, because a context
+mismatch drops the whole row dict including the attempt counters (`partial_rows = {}`).
+The death loop was structural.
+
+Fix: the gate context is now the digest of the verdict-producing file set - the transitive
+import closure of `run_suite`, `instance_oracle_gate`, `instance_oracle_preflight`,
+`suite_inventory`, plus every file under `envs/` and the root `requirements.txt` - computed by
+the new `tools/gate_context.py` and returned by `_gate_context_sha()`. Measured on this tree:
+296 files, 297 counting `gate_context.py` itself. `tools/gate_context.py --json` prints the
+inventory and per-file digests for auditing. Properties pinned by `tests/test_gate_context.py`:
+a README/workflow/handoff edit leaves the digest unchanged; an edit to `envs/glyph/config.yaml`,
+`tools/instance_oracle_gate.py`, `arena.py` or `requirements.txt` moves it; a module that the
+gate newly imports is covered without touching the list (that bug was caught by the test: seeds
+listed in both places were skipped before their imports were read); a missing input raises
+instead of hashing a smaller set.
+
+Two honest limits, both measured rather than assumed:
+
+- `tools/atria_campaign.py` is inside the context (something in the closure imports it), so
+  controller edits still re-gate. Demonstrated by the diff itself: comparing this tree against
+  `c4b8e8f` reported `changed content: ['tools/atria_campaign.py']`. That is over-strict, kept
+  deliberately, and the note is that this commit re-gates once - after it, only grading-path
+  changes do.
+- The other half of the loop is untouched: `tools/campaign_supervisor.py:229-241` resumes pinned
+  to `checkpoint.run.manifest_commit`, so a campaign that is already running keeps running the
+  code it started with. Escaping that pin means a fresh dispatch, and a fresh dispatch is what
+  discards the `runs/` directory - now, with a content-addressed context, much less expensively,
+  because a gate row survives any commit that does not touch grading code.
+
+Verified on this tree: `pytest tests/test_gate_context.py tests/test_inherit_campaign_state.py
+tests/test_atria_campaign.py tests/test_campaign_supervisor.py
+tests/test_exhaustive_campaign_recovery.py tests/test_campaign_completion_contract.py
+tests/test_paid_campaign_safety.py -q` -> 52 passed; full `pytest -q` -> no failures in 511 s.
+
 ## The `CI` workflow is red, and it is red on `main` too
 
 Measured from `gh api repos/StrangeTcy/rl_eval_generator/actions/runs/<id>/jobs` step timestamps:

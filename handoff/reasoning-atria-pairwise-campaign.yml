@@ -240,10 +240,13 @@ jobs:
           # Strength-2 does not subsume strength-1 case for case: 142 of the 241
           # covering vectors recur here, 99 are not in this plan at all, and 216 are
           # new. Only the exact-instance gate rows carry across that boundary, and
-          # only at the same revision - they are keyed on the case content hash and
-          # accepted under gate_context_sha == git rev-parse HEAD. The tool refuses
-          # rather than rewriting that context, and the episode ledger, intent and
-          # terminal markers are never inherited.
+          # only under the same verdict context - they are keyed on the case content
+          # hash and accepted under gate_context_sha == the digest of the
+          # verdict-relevant files that tools/gate_context.py computes (never
+          # `git rev-parse HEAD`: a revision-pinned context discarded every banked
+          # row on a documentation commit, so the gate restarted from zero each tick
+          # and never finished). The tool refuses rather than rewriting that context,
+          # and the episode ledger, intent and terminal markers are never inherited.
           if [ -s "$OUT/instance_oracles_partial.json" ]; then
             echo "this campaign already has gate rows of its own; nothing to inherit"
             exit 0

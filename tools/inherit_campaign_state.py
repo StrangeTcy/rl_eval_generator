@@ -5,11 +5,17 @@ Why this is legitimate at all: switching matrix mode changes case ids, so a
 campaign moving from strength-1 to strength-2 cannot *resume* the old run. But the
 gate rows are not plan-bound - ``run_suite`` keys each row on the case dict's own
 content hash and accepts it only under the same gate context, and the gate context
-is ``git rev-parse HEAD``. So a verified row carries across a plan change when, and
-only when, both campaigns run the same commit. When the commits differ, refusing the
-carry is the correct outcome, not an inconvenience: the row's verdict is a claim
+is the digest of the verdict-relevant file set (``tools/gate_context.py``), not the
+repository revision. So a verified row carries across a plan change when, and only
+when, both campaigns run grading code that is byte-identical. When that digest
+differs -- a generator, an environment template, a requirement changed -- refusing
+the carry is the correct outcome, not an inconvenience: the row's verdict is a claim
 about *this* code grading *this* instance. This tool therefore never rewrites a
 ``gate_context_sha`` to make rows acceptable.
+
+A commit-only difference no longer blocks the carry, and that is the point: the
+previous revision-pinned rule discarded every banked row on a documentation commit,
+which turned a multi-leg gate phase into a loop that could never finish.
 
 What is never inherited: the episode ledger (``suite_checkpoint.json``), the
 campaign intent, terminal markers, and anything else campaign-scoped - budget
@@ -41,6 +47,8 @@ GATE_FILE = "instance_oracles_partial.json"
 T1_REPORT = "t1_same_fact_presentation.json"
 T1_PLAN = "t1_plan.json"
 CAMPAIGN_REF = "campaign_ref.txt"
+
+from tools import gate_context  # noqa: E402  (same repo-root sys.path trick as above)
 # Explicitly not inherited; named so an operator can see the boundary was drawn.
 NOT_INHERITED = ("suite_checkpoint.json", "campaign_intent.json", "wrapper_failed.json")
 
@@ -98,15 +106,23 @@ def inherit_state(
     target: Path,
     *,
     plan: dict[str, str],
-    head_sha: str | None,
+    context_sha: str | None,
+    head_sha: str | None = None,
     allow_cross_revision_t1: bool = False,
 ) -> dict[str, Any]:
-    """Copy what the new campaign can lawfully reuse; report every judgement."""
+    """Copy what the new campaign can lawfully reuse; report every judgement.
+
+    ``context_sha`` is the identity rows must be keyed on -- the verdict-context
+    digest this campaign will compute, i.e. what ``run_suite`` compares against.
+    ``head_sha`` is recorded for provenance only; defaulting it to the digest keeps
+    callers that think in revisions honest by accident rather than by luck.
+    """
     target.mkdir(parents=True, exist_ok=True)
     report: dict[str, Any] = {
         "source": str(source),
         "target": str(target),
-        "head_sha": head_sha,
+        "context_sha": context_sha,
+        "head_sha": head_sha if head_sha is not None else current_head(),
         "gate_rows_total": 0,
         "gate_rows_inherited": 0,
         "gate_rows_dropped_not_in_plan": 0,
@@ -131,7 +147,7 @@ def inherit_state(
         report["gate_rows_source_context_sha"] = source_context
         if not rows:
             report["gate_rows_status"] = "source_has_no_rows"
-        elif not head_sha or source_context != head_sha:
+        elif not context_sha or source_context != context_sha:
             # Refusing here is the point of the check: the verdict was produced by
             # different code, so re-gating is what an honest campaign does.
             report["gate_rows_status"] = "refused_gate_context_differs"
@@ -140,7 +156,7 @@ def inherit_state(
             if target_gate.is_file():
                 try:
                     existing = json.loads(target_gate.read_text(encoding="utf-8"))
-                    if isinstance(existing.get("rows"), dict) and existing.get("gate_context_sha") == head_sha:
+                    if isinstance(existing.get("rows"), dict) and existing.get("gate_context_sha") == context_sha:
                         kept = dict(existing["rows"])
                 except (OSError, json.JSONDecodeError):
                     kept = {}
@@ -164,7 +180,7 @@ def inherit_state(
             report["gate_rows_inherited"] = inherited
             report["gate_rows_status"] = "inherited" if inherited else "nothing_reusable"
             if inherited:
-                merged = {"gate_context_sha": head_sha, "rows": kept}
+                merged = {"gate_context_sha": context_sha, "rows": kept}
                 tmp = target_gate.with_suffix(".json.tmp")
                 tmp.write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
                 tmp.replace(target_gate)
@@ -205,6 +221,9 @@ def main() -> int:
     parser.add_argument("--profile", type=Path, default=None, help="profile whose matrix defines the new plan")
     parser.add_argument("--manifest", type=Path, default=None, help="explicit manifest json (overrides --profile)")
     parser.add_argument("--head", default=None, help="override the current revision (tests/audits only)")
+    parser.add_argument("--context", default=None,
+                        help="override the verdict-context digest rows must match "
+                             "(defaults to tools/gate_context.compute())")
     parser.add_argument(
         "--allow-cross-revision-t1", action="store_true",
         help="copy T1's report even if the source campaign ran a different revision (recorded in the report)",
@@ -213,10 +232,16 @@ def main() -> int:
     if not args.source.is_dir():
         print(f"nothing to inherit from {args.source}; starting clean")
         return 0
+    # Rows are matched on the verdict context; the revision is recorded beside it.
+    # --head stays a revision override for audits, so an operator who wants the old
+    # revision-pinned behaviour can still ask for it explicitly.
+    context = args.context if args.context is not None else (
+        args.head if args.head is not None else gate_context.compute()
+    )
     head = args.head if args.head is not None else current_head()
     plan = plan_cases(profile_path=args.profile, manifest_path=args.manifest)
     report = inherit_state(
-        args.source, args.target, plan=plan, head_sha=head,
+        args.source, args.target, plan=plan, context_sha=context, head_sha=head,
         allow_cross_revision_t1=bool(args.allow_cross_revision_t1),
     )
     out = args.target / "inheritance_report.json"
