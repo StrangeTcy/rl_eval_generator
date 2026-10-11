@@ -49,6 +49,16 @@ on:
         required: true
         type: boolean
         default: true
+      max_tokens_total_override:
+        description: "Optional spend ceiling above the pinned profile's value. Only a number greater than the one a budget pause stopped at lifts that pause; it changes the budget, never the measurement contract."
+        required: false
+        default: ''
+        type: string
+      max_api_calls_override:
+        description: "Optional spend ceiling above the pinned profile's value, same rule as max_tokens_total_override."
+        required: false
+        default: ''
+        type: string
   schedule:
     - cron: "13,43 * * * *"
 
@@ -108,13 +118,26 @@ jobs:
             echo "reason=provider-free supervisor unavailable at pinned ref" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          LIMIT_ARGS=()
+          if [ -n "${ inputs.max_tokens_total_override }" ]; then
+            LIMIT_ARGS+=("max_tokens_total=${ inputs.max_tokens_total_override }")
+          fi
+          if [ -n "${ inputs.max_api_calls_override }" ]; then
+            LIMIT_ARGS+=("max_api_calls=${ inputs.max_api_calls_override }")
+          fi
           DECISION=$(python3 -c '
-          import importlib.util, json, sys
+          import importlib.util, inspect, json, sys
           spec = importlib.util.spec_from_file_location("campaign_supervisor", sys.argv[1])
           module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
-          print(json.dumps(module.decide_tick(sys.argv[2], expected_provider="atria")))
-          ' "$SUPERVISOR" "$STATE_STAGE")
+          kwargs = {"expected_provider": "atria"}
+          # A supervisor pinned before ceilings could be lifted from the dispatcher has
+          # no parameter to receive one, and handing it a stray argument would crash the
+          # mode decision. Read the pinned signature; pass only what it understands.
+          if "limits_override" in inspect.signature(module.decide_tick).parameters:
+              kwargs["limits_override"] = sys.argv[3:]
+          print(json.dumps(module.decide_tick(sys.argv[2], **kwargs)))
+          ' "$SUPERVISOR" "$STATE_STAGE" "${LIMIT_ARGS[@]}")
           MODE=$(printf '%s' "$DECISION" | jq -r '.mode')
           REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
           REF=$(printf '%s' "$DECISION" | jq -r '.ref // empty')
@@ -160,6 +183,15 @@ jobs:
           test -f tools/twin_preflight.py
           grep -q '"pairwise"' tools/suite_inventory.py
           test -f tools/inherit_campaign_state.py
+          # A ceiling override the pinned code cannot parse would otherwise be dropped
+          # on the floor: the operator would think they authorised more spend and the
+          # campaign would stop at the same number again. Refuse the leg instead.
+          if [ -n "${{ inputs.max_tokens_total_override }}${{ inputs.max_api_calls_override }}" ]; then
+            grep -q "def _apply_limit_overrides" tools/atria_campaign.py || {
+              echo "the pinned ref has no --limit support; dispatch a ref that does, or clear the override inputs"
+              exit 1
+            }
+          fi
 
       - name: Set up Python
         if: steps.mode.outputs.mode != 'none'
@@ -217,6 +249,21 @@ jobs:
             echo "reason=no competing Atria consumer" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Refuse a plan whose exact-instance reference cannot be applied
+        if: steps.mode.outputs.mode == 'fresh'
+        run: |
+          set -euo pipefail
+          # The exact-instance gate patches a generated case before its judge ever sees it,
+          # and a stale literal inside a reference - a filename the `naming` axis renames, an
+          # exact-text needle the `optimizer` axis rewrites - surfaces as oracle_error rows
+          # after a tick of billed work. Two campaigns were blocked that way. This runs the
+          # same patch path with no Docker, no torch and no provider call, over every gated
+          # case of the plan the profile will ship, and refuses the dispatch in ~2 minutes.
+          # Fresh dispatches only: a resumed tick runs pinned code that already passed this.
+          .venv/bin/python tools/instance_oracle_preflight.py \
+            --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+            --out runs/reasoning_atria_pairwise_campaign/instance_oracle_preflight.json
+
       - name: Inherit exact-instance gate rows from the covering campaign
         if: steps.mode.outputs.mode != 'none'
         run: |
@@ -225,10 +272,13 @@ jobs:
           # Strength-2 does not subsume strength-1 case for case: 142 of the 241
           # covering vectors recur here, 99 are not in this plan at all, and 216 are
           # new. Only the exact-instance gate rows carry across that boundary, and
-          # only at the same revision - they are keyed on the case content hash and
-          # accepted under gate_context_sha == git rev-parse HEAD. The tool refuses
-          # rather than rewriting that context, and the episode ledger, intent and
-          # terminal markers are never inherited.
+          # only under the same verdict context - they are keyed on the case content
+          # hash and accepted under gate_context_sha == the digest of the
+          # verdict-relevant files that tools/gate_context.py computes (never
+          # `git rev-parse HEAD`: a revision-pinned context discarded every banked
+          # row on a documentation commit, so the gate restarted from zero each tick
+          # and never finished). The tool refuses rather than rewriting that context,
+          # and the episode ledger, intent and terminal markers are never inherited.
           if [ -s "$OUT/instance_oracles_partial.json" ]; then
             echo "this campaign already has gate rows of its own; nothing to inherit"
             exit 0
@@ -295,6 +345,20 @@ jobs:
             .venv/bin/python tools/t1_paired_report.py \
               --m0 --seeds 6 --out "$OUT/t1_m0.json" > /dev/null
             if [ ! -f "$OUT/t1_same_fact_presentation.json" ]; then
+              # An interrupted leg leaves no T1 result, so this block would replay the whole probe
+              # from the start - paid, and up to 4200 seconds of it. The cleanup trap writes
+              # t1_interrupted.json with resume_policy operator_review_required_no_replay, and
+              # nothing read that marker, which made the declared policy decorative: the next tick
+              # simply spent the calls again, and the tick after that, until the phase completed on
+              # its own. Refuse instead, and name the way out. This sits inside the paid branch, so
+              # a gates_only dispatch is never blocked by a stale marker, and a fresh dispatch does
+              # not restore one.
+              if [ -f "$OUT/t1_interrupted.json" ]; then
+                echo "T1 was interrupted on an earlier leg and never completed: refusing to replay" \
+                     "it here (see $OUT/t1_interrupted.json). Run the dedicated T1 workflow to" \
+                     "finish the phase, or remove the marker to accept the replay."
+                exit 1
+              fi
               printf '{"phase":"started","resume_policy":"operator_review_on_interruption"}\n' \
                 > "$OUT/t1_started.json"
               timeout --foreground --signal=TERM --kill-after=30s 4200s \
@@ -319,14 +383,16 @@ jobs:
             exit 1
           fi
 
+          if [ "${#LIMIT_ARGS[@]}" -gt 0 ]; then
+            LIMIT_ARGS+=(--raise-ceiling "${{ github.actor }}")
+          fi
           if [ "$EXECUTION_MODE" = "paid" ]; then
             .venv/bin/python tools/atria_campaign.py \
-              --allow-cross-revision-t1 \
               --profile experiments/reasoning_atria_pairwise_campaign.yaml \
-              --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS"
+              --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS" \
+              "${LIMIT_ARGS[@]}"
           else
             .venv/bin/python tools/atria_campaign.py \
-              --allow-cross-revision-t1 \
               --profile experiments/reasoning_atria_pairwise_campaign.yaml \
               --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS"
           fi
