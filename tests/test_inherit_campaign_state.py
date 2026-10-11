@@ -208,3 +208,118 @@ def test_the_carry_keys_on_grading_code_not_on_the_commit(tmp_path: Path) -> Non
     assert report["context_sha"] == HEAD and report["head_sha"] == OTHER, (
         "the revision is recorded beside the context, never used to judge the carry"
     )
+
+
+# --------------------------------------------------------------------------- rekey
+# Rows banked before the context stopped being a git revision are keyed on a 40-hex
+# SHA that no content digest can ever equal. Without a rule they would be dropped
+# silently forever; with a bare exception the guard would be laundered. The rule these
+# tests pin is the proof version: adopt the rows only when `git diff` over the
+# verdict-relevant files between the revision they were produced at and the reading
+# checkout comes back empty, and record the proof in the report.
+import subprocess  # noqa: E402
+
+
+def _git(repo: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", "-c", "user.email=t@example.invalid", "-c", "user.name=t", *args],
+        cwd=repo, check=True, capture_output=True, text=True,
+    )
+    return completed.stdout.strip()
+
+
+@pytest.fixture()
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
+    (tmp_path / "arena.py").write_text("A = 1\n", encoding="utf-8")
+    (tmp_path / "notes.md").write_text("first\n", encoding="utf-8")
+    _git(tmp_path, "init", "-q", "--initial-branch=main")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "one")
+    first = _git(tmp_path, "rev-parse", "HEAD")
+    from tools import gate_context
+
+    monkeypatch.setattr(
+        gate_context, "verdict_relevant_files", lambda: [tmp_path / "arena.py"]
+    )
+    return tmp_path, first
+
+
+def test_identical_grading_code_across_commits_is_proved_not_asserted(repo) -> None:
+    from tools.inherit_campaign_state import grading_code_identical
+
+    tmp, first = repo
+    (tmp / "notes.md").write_text("a documentation commit\n", encoding="utf-8")
+    _git(tmp, "add", "-A")
+    _git(tmp, "commit", "-q", "-m", "docs")
+    identical, note = grading_code_identical(first, root=tmp)
+    assert identical, note
+    assert "byte-identical" in note
+
+
+def test_grading_code_that_moved_refuses_with_the_file_named(repo) -> None:
+    from tools.inherit_campaign_state import grading_code_identical
+
+    tmp, first = repo
+    (tmp / "arena.py").write_text("A = 2  # the grader changed\n", encoding="utf-8")
+    _git(tmp, "add", "-A")
+    _git(tmp, "commit", "-q", "-m", "grading")
+    identical, note = grading_code_identical(first, root=tmp)
+    assert not identical
+    assert "arena.py" in note, note
+
+
+def test_an_unreachable_revision_refuses_and_names_the_fetch(repo) -> None:
+    from tools.inherit_campaign_state import grading_code_identical
+
+    tmp, _ = repo
+    identical, note = grading_code_identical("f" * 40, root=tmp)
+    assert not identical
+    assert "git fetch" in note, "a refusal the operator cannot act on is a dead end"
+
+
+def test_a_content_digest_context_is_not_mistaken_for_a_revision(repo) -> None:
+    from tools.inherit_campaign_state import grading_code_identical
+
+    tmp, _ = repo
+    identical, note = grading_code_identical("content-sha256:" + "a" * 64, root=tmp)
+    assert not identical and "not a revision" in note
+
+
+def test_legacy_rows_carry_once_the_proof_holds(tmp_path: Path, repo) -> None:
+    from tools.inherit_campaign_state import grading_code_identical  # noqa: F401
+
+    tmp, first = repo
+    (tmp / "notes.md").write_text("docs only\n", encoding="utf-8")
+    _git(tmp, "add", "-A")
+    _git(tmp, "commit", "-q", "-m", "docs")
+    case = _case("glyph", "easy")
+    src = _source(tmp_path / "legacy", {case["case_id"]: _row(case)}, context=first)
+    target = tmp_path / "target"
+    report = inherit_state(
+        src,
+        target,
+        plan={case["case_id"]: case_sha256(case)},
+        context_sha="content-sha256:" + "b" * 64,
+        grading_diff_root=tmp,
+    )
+    assert report["gate_rows_status"] == "inherited", report
+    assert report["gate_rows_rekeyed_from"] == first
+    assert "byte-identical" in report["gate_rows_rekey_note"]
+    written = json.loads((target / GATE_FILE).read_text(encoding="utf-8"))
+    assert written["gate_context_sha"] == "content-sha256:" + "b" * 64, (
+        "the adopted rows are re-keyed to the identity the reader will check, not hidden"
+    )
+
+
+def test_legacy_rows_still_refuse_when_the_grader_changed(tmp_path: Path, repo) -> None:
+    case = _case("glyph", "easy")
+    src = _source(tmp_path / "legacy", {case["case_id"]: _row(case)}, context="c" * 40)
+    report = inherit_state(
+        src,
+        tmp_path / "target",
+        plan={case["case_id"]: case_sha256(case)},
+        context_sha="content-sha256:" + "b" * 64,
+        grading_diff_root=repo[0],
+    )
+    assert report["gate_rows_status"] == "refused_gate_context_differs"
+    assert "fetch" in report["gate_rows_refusal_note"], report["gate_rows_refusal_note"]

@@ -17,6 +17,13 @@ A commit-only difference no longer blocks the carry, and that is the point: the
 previous revision-pinned rule discarded every banked row on a documentation commit,
 which turned a multi-leg gate phase into a loop that could never finish.
 
+Gate rows are adopted across identities only on proof, never on policy: the tool shows,
+with `git diff` over the verdict-relevant file set, that the code which produced them is
+byte-identical to the code which will read them. That is what lets rows banked under the
+old ``git rev-parse HEAD`` context survive the move to a content digest without
+weakening the guard - see ``grading_code_identical()``. An unreachable revision is a
+refusal that names the fetch to run, never a guess.
+
 What is never inherited: the episode ledger (``suite_checkpoint.json``), the
 campaign intent, terminal markers, and anything else campaign-scoped - budget
 accounting, per-case dispositions and the research contract belong to one campaign.
@@ -33,6 +40,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -51,6 +59,66 @@ CAMPAIGN_REF = "campaign_ref.txt"
 from tools import gate_context  # noqa: E402  (same repo-root sys.path trick as above)
 # Explicitly not inherited; named so an operator can see the boundary was drawn.
 NOT_INHERITED = ("suite_checkpoint.json", "campaign_intent.json", "wrapper_failed.json")
+
+
+REVISION_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
+def grading_code_identical(
+    source_context: str | None,
+    *,
+    root: Path | None = None,
+) -> tuple[bool, str]:
+    """Can rows banked under the old revision-pinned context be adopted here?
+
+    Rows were keyed on ``git rev-parse HEAD`` until the context became the digest of the
+    verdict-producing files, so every campaign that ran before that change holds rows
+    under a 40-character revision that no future content digest can equal. Refusing all
+    of them would silently void the inheritance step this tool implements; accepting
+    them by fiat would launder the guard. So the answer is computed instead of asserted:
+    the verdict-relevant files (``tools/gate_context.py``'s list) must be byte-identical
+    between the revision the rows were produced at and the code that will read them. That
+    is the same claim the old key was trying to make, stated about the files that matter.
+
+    Fails closed. An unreachable revision -- a shallow checkout, a rewritten branch --
+    returns a refusal that names the fetch to run, because guessing here means trusting a
+    verdict produced by code nobody looked at.
+    """
+    if not source_context or not REVISION_SHA.match(str(source_context)):
+        return False, "source context is not a revision, so there is nothing to compare"
+    root = root or ROOT
+
+    def _relative(path: Path) -> str:
+        # The checkout the rows came from and the checkout being compared against can
+        # be different trees (tests, audits), so resolve each path against whichever
+        # root owns it rather than assuming one.
+        for base in (root, ROOT):
+            try:
+                return str(path.relative_to(base))
+            except ValueError:
+                continue
+        return str(path)
+
+    paths = sorted(_relative(path) for path in gate_context.verdict_relevant_files())
+    try:
+        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "diff", "--name-only", f"{source_context}", "HEAD", "--", *paths],
+            cwd=root, check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip().splitlines()
+        return False, (
+            f"cannot read {source_context} in this checkout"
+            + (f" ({detail[-1]})" if detail else "")
+            + f"; fetch it first: git fetch --no-tags --depth=1 origin {source_context}"
+        )
+    except OSError as exc:
+        return False, f"git unavailable: {exc}"
+    changed = [line for line in completed.stdout.splitlines() if line.strip()]
+    if changed:
+        listed = ", ".join(changed[:5]) + (" ..." if len(changed) > 5 else "")
+        return False, f"grading code differs in {len(changed)} file(s): {listed}"
+    return True, f"grading code byte-identical to {source_context[:12]}"
 
 
 def case_sha256(case: dict[str, Any]) -> str:
@@ -109,6 +177,7 @@ def inherit_state(
     context_sha: str | None,
     head_sha: str | None = None,
     allow_cross_revision_t1: bool = False,
+    grading_diff_root: Path | None = None,
 ) -> dict[str, Any]:
     """Copy what the new campaign can lawfully reuse; report every judgement.
 
@@ -145,13 +214,31 @@ def inherit_state(
         source_context = payload.get("gate_context_sha")
         report["gate_rows_total"] = len(rows)
         report["gate_rows_source_context_sha"] = source_context
+        carry = False
         if not rows:
             report["gate_rows_status"] = "source_has_no_rows"
-        elif not context_sha or source_context != context_sha:
-            # Refusing here is the point of the check: the verdict was produced by
-            # different code, so re-gating is what an honest campaign does.
+        elif not context_sha:
+            # Without a current context there is nothing to key the rows to, and the
+            # campaign that would read them rejects them anyway. Say which side failed.
             report["gate_rows_status"] = "refused_gate_context_differs"
+            report["gate_rows_refusal_note"] = "no current verdict context could be computed"
+        elif source_context == context_sha:
+            carry = True
         else:
+            identical, note = grading_code_identical(source_context, root=grading_diff_root)
+            if identical:
+                # Rows banked under the old revision-pinned key, from grading code
+                # provably identical to this checkout's. The proof is recorded beside
+                # the rows, so the carry is auditable rather than taken on trust.
+                report["gate_rows_rekeyed_from"] = source_context
+                report["gate_rows_rekey_note"] = note
+                carry = True
+            else:
+                # Refusing here is the point of the check: the verdict was produced by
+                # different code, so re-gating is what an honest campaign does.
+                report["gate_rows_status"] = "refused_gate_context_differs"
+                report["gate_rows_refusal_note"] = note
+        if carry:
             kept: dict[str, Any] = {}
             if target_gate.is_file():
                 try:
@@ -198,8 +285,10 @@ def inherit_state(
             # Crossing revisions for T1 is an operator judgement, not a default: the
             # probe measures model-plus-code behaviour, so a report from another
             # revision is inherited only when asked for, and its source ref is
-            # recorded beside it. Gate rows get no such exception - accepting a row
-            # produced by different grading code would launder the guard.
+            # recorded beside it. Gate rows get no such exception: a row from other
+            # grading code is adopted only when grading_code_identical() proves the
+            # verdict-relevant files are byte-identical, which is a check rather than
+            # an operator's word.
             shutil.copyfile(source_t1, target / T1_REPORT)
             if (source / T1_PLAN).is_file():
                 shutil.copyfile(source / T1_PLAN, target / T1_PLAN)
