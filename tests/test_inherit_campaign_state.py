@@ -326,7 +326,7 @@ def test_legacy_rows_still_refuse_when_the_grader_changed(tmp_path: Path, repo) 
 
 
 def test_a_checkout_without_the_content_digest_still_keys_on_the_revision(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The launcher runs this tool against the campaign's *pinned* checkout.
 
@@ -335,11 +335,26 @@ def test_a_checkout_without_the_content_digest_still_keys_on_the_revision(
     kill the leg over a bookkeeping detail. The tool follows the reader's convention and
     says so out loud.
     """
+    import json as _json
+
     import tools.inherit_campaign_state as mod
 
     case = _case("glyph", "easy")
     src = _source(tmp_path, {case["case_id"]: _row(case)}, context=HEAD)
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        _json.dumps({"cases": [{"case_id": case["case_id"], **case}]}), encoding="utf-8"
+    )
     monkeypatch.setattr(mod, "gate_context", None)
     monkeypatch.setattr(mod, "current_head", lambda root=ROOT: HEAD)
-    report = mod.inherit_state(src, tmp_path / "target", plan={case["case_id"]: case_sha256(case)}, context_sha=HEAD)
-    assert report["gate_rows_status"] == "inherited", report
+    monkeypatch.setattr(
+        sys, "argv",
+        ["inherit", "--from", str(src), "--to", str(tmp_path / "target"),
+         "--manifest", str(manifest)],
+    )
+    assert mod.main() == 0, "the step must not fail the leg over a missing module"
+    captured = capsys.readouterr()
+    assert "keying gate rows on the revision" in captured.out, captured.out
+    written = json.loads((tmp_path / "target" / GATE_FILE).read_text(encoding="utf-8"))
+    assert written["gate_context_sha"] == HEAD
+    assert list(written["rows"]) == [case["case_id"]]
