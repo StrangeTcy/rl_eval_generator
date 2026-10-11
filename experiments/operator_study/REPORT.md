@@ -193,6 +193,29 @@ Two conditions on the next step, in order:
    enumeration instruction into a format *without* an underdetermined value — otherwise the
    model run reproduces the ambiguity this offline comparison separates.
 
+## Strategy IR cards
+
+`spec/strategy-ir/` holds the cards in the field order `research_protocol/strategy_ir.md` §2
+prescribes - two versions of `observational_equivalence_check` (family `elimination`; v1
+`disconfirmed_in_scope`, v2 `under_test`) and `state_enumeration` (family `search`,
+`under_test`) - plus `applications.yaml`, §3's separate record of the eight applications
+actually made, each carrying trigger evidence, obligation checks and the measurement it points
+at. Splitting the operator into two cards is not presentation: the measurement attributes the
+accuracy to the enumeration and the over-interpretation to the abstention clause, and one card
+bundling them would let a gain in one be reported as support for the other.
+
+`tests/test_strategy_ir_cards.py` enforces the documented field list, the enums, and two rules
+that prose cannot be trusted for - an unreviewed card may not claim `supported_in_scope`, and a
+`disconfirmed_in_scope` card must name a concrete counterexample - because upstream states the
+schema is not machine-enforced and `scripts/validate_ir.py` is not implemented. All three tests
+were confirmed to fail on mutated copies of the cards.
+
+Two §2 fields carry no more than what exists: `family` names one of twelve *proposed* ids in a
+file this repository does not import (the ids are recorded in the test as a file contract), and
+`provenance.origin` is `agent-proposed` for all three - no source backs them, which is what the
+protocol asks to be told rather than smoothed over. `spec/strategy-cards/observational-equivalence-check.yaml`
+is the pre-schema draft, kept for its `disposition` block and marked superseded.
+
 ## Reproducing
 
 ```bash

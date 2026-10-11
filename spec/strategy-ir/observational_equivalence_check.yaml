@@ -1,0 +1,230 @@
+# Strategy IR cards, field-for-field per
+# https://github.com/StrangeTcy/epistemic-compiler/blob/main/research_protocol/strategy_ir.md
+# section 2 ("Strategy card schema").
+#
+# The upstream protocol is not in this checkout and that file records `scripts/validate_ir.py`
+# as not implemented, so conformance here is to the documented field list and the only
+# mechanical check is this repository's `tests/test_strategy_ir_cards.py`. Nothing in these
+# cards is a promotion: `review_status` is `unreviewed` throughout, because the upstream
+# intake record says Gate 1 remains an explicit human decision.
+#
+# Two versions of one strategy, because the measurement separated the operator into two
+# components, and the disposition of the conjunction is not the disposition of either part.
+
+---
+strategy_id: observational_equivalence_check
+version: 1
+name: Enumerate the compatible states, then check whether the evidence separates them
+family: elimination
+status: disconfirmed_in_scope
+
+scope:
+  problem_classes:
+    - >-
+      hidden-state inference from a public observation, where the environment states its own
+      likelihood structure
+    - >-
+      exact-classification tasks whose answer format has a value for "the observations do not
+      determine this"
+  preconditions:
+    - >-
+      the compatible-state space is enumerable from information the answerer is given, not
+      from the hidden state
+    - the grader can score an underdetermined answer, so the response format contains such a value
+    - instance, model, decoding and scoring are held fixed across the comparison arms
+
+trigger:
+  structural_conditions:
+    - two or more hidden states assign positive likelihood to the same observation
+    - a candidate answer commits to one state, or reports a degree of support for one
+  diagnostic_questions:
+    - which states survive the observation unchanged?
+    - is there any observation in this task that separates the surviving states?
+    - >-
+      if none does, what does the prior alone already support, and is that a different claim
+      from what this observation supports?
+  exclusion_conditions:
+    - >-
+      the answer format has no underdetermined value - measured in both modal epistemic
+      environments, see counterexamples
+    - >-
+      the state is already named in the prompt, so there is nothing for the answerer to be
+      uncertain about
+
+transformation:
+  input_representation: the task as posed, a public observation plus a prior, and a required answer over hidden states
+  operation: >-
+    Before committing, enumerate the states compatible with the observation; test whether the
+    evidence separates them; where it does not, preserve the uncertainty by reporting the states
+    as indistinguishable, or the weakest answer the format allows, rather than inventing a
+    unique explanation.
+  output_representation: an answer whose commitment is bounded by what the observation separates
+
+expected_effect:
+  measurable_prediction: >-
+    The rate of answers asserting a unique explanation for observationally identical states
+    falls, and identifiable-case accuracy does not decrease.
+  outcome_measure: >-
+    claims_a_separation_rate on non-identifiable items; strict_correct accuracy per stratum;
+    most_supported over-commit and under-commit rates, read from Instance.grade fields rather
+    than from justification prose.
+
+obligations:
+  - the enumeration must be exhaustive over the states the observation permits, using only information the answerer is given
+  - the transformation must not change the instance, the oracle, or the scoring
+  - >-
+    preserved distinctions must be recorded - the prior still constrains the answer when the
+    observation does not
+
+failure_modes:
+  - >-
+    the family's own declared mode, a cheap test that is non-discriminating or whose result is
+    overinterpreted, is the one realized: reading "the evidence does not separate them" as
+    "answer neither" discards the prior, which is evidence of a different kind
+  - >-
+    where the format cannot express underdetermination, obeying the clause literally produces
+    an ungradeable submission rather than a cautious one
+  - >-
+    a null result may mean the instruction never fired, which is why the overlay is byte-checked
+    and pair_id-pinned before any outcome is read
+
+validation:
+  discriminating_tests:
+    - >-
+      matched instances, control against intervention, on generated twins: 27 of 27 twin checks
+      pass, every presentation twin keeps pair_id and every task-changing control moves it
+    - >-
+      the component split, state_enumeration arm without the gate against equivalence_check arm
+      with it, same instances
+    - the literal-obedience arm, to price the format boundary rather than infer it
+  baseline: >-
+    same model, same instance, same decoding, existing task instructions; offline, the
+    environment's shipped heuristics as answer source
+  falsification_condition: >-
+    the gate leaves the false-unique-explanation rate unchanged, or lowers identifiable-case
+    accuracy, or costs format-invalid submissions in an environment whose format was expected to
+    absorb it. The first two did not occur; the third did, in two of three environments.
+
+exemplars:
+  - >-
+    epistemic_games, non-identifiable items (n=48): claims_a_separation 1.000 under control
+    against 0.000 under the gate, exact McNemar p=1.19e-07 on accuracy 0.000 to 0.500
+
+counterexamples:
+  - >-
+    epistemic_games, skewed prior with uninformative evidence: the graded answer is posterior
+    0.6 with most_supported world1, and the clause yields neither - under-commit rate 0.500,
+    accuracy capped at 0.500 where 1.000 is reachable
+  - >-
+    epistemic_nested_knowledge and epistemic_fragmented_observation: every item identifiable to
+    the answerer (non-identifiable n=0), boolean answer format; the literal clause moves
+    format_invalid_rate from 0.00 to 1.00 and accuracy to 0.000, exact McNemar p<0.0001
+
+related_strategy_ids:
+  - state_enumeration
+
+provenance:
+  origin: user-proposed
+  source_refs:
+    - https://github.com/StrangeTcy/epistemic-compiler/blob/main/research_protocol/strategy_ir.md
+    - https://github.com/StrangeTcy/epistemic-compiler/blob/main/research_protocol/strategy_families.yaml
+    - spec/operators/equivalence_check.md
+    - spec/observational-equivalence-check.yaml
+    - experiments/operator_study/REPORT.md
+  episode_refs:
+    - experiments/operator_study/raw_results.jsonl
+    - experiments/operator_study/summary.json
+  review_status: unreviewed
+
+---
+strategy_id: observational_equivalence_check
+version: 2
+name: Bound the claim about the evidence, not the answer
+family: elimination
+status: under_test
+
+scope:
+  problem_classes:
+    - >-
+      hidden-state inference where the answer format distinguishes "this evidence separates
+      nothing" from "no state is supported"
+  preconditions:
+    - >-
+      the answer vocabulary can state underdetermination about the evidence while still
+      reporting the posterior the prior and evidence jointly support
+    - >-
+      internal consistency between the reported posterior and the reported support claim is
+      enforceable, and the strategy does not rely on the enforcer to supply it
+
+trigger:
+  structural_conditions:
+    - two or more states assign equal positive likelihood to the observation
+    - the prior is not uniform, so the graded answer is asymmetric even where the evidence is silent
+  diagnostic_questions:
+    - what does this observation fail to settle, as distinct from what nothing settles?
+    - which number do the prior and this evidence jointly support, and does the support claim follow that number?
+  exclusion_conditions:
+    - >-
+      environments whose answer format has no underdetermined value - the clause has no
+      expression there and must not be issued
+
+transformation:
+  input_representation: the task as posed, with the prior stated
+  operation: >-
+    Enumerate the compatible states; where the evidence fails to separate them, say so about
+    this evidence and no further - report the separation as absent while keeping the posterior
+    the prior and evidence jointly support, and commit only to what that number implies.
+  output_representation: a verdict about the evidence and a degree of support about the state, kept separate
+
+expected_effect:
+  measurable_prediction: >-
+    The false-unique-explanation rate falls to zero without introducing the mirror error, and
+    accuracy reaches the reachable ceiling in both strata.
+  outcome_measure: >-
+    claims_a_separation_rate, overcommit_rate and undercommit_rate on non-identifiable items;
+    strict_correct accuracy per stratum.
+
+obligations:
+  - the enumeration remains exhaustive and public-information-only
+  - the uncertainty statement is scoped to the evidence, so it may not be reported as an absence of support
+  - reported posterior and reported support stay internally consistent by construction
+
+failure_modes:
+  - >-
+    the scoping is lost in transcription and the clause collapses back into answering neither
+  - >-
+    in an environment where the correct answer genuinely is that no state is supported, this
+    wording and version 1's coincide, so a null between them is evidence about neither
+
+validation:
+  discriminating_tests:
+    - the arm that distinguishes it from version 1, same instances, gate wording scoped to the evidence
+    - >-
+      the arm that distinguishes it from pure enumeration, same enumeration, with and without
+      permission to withhold the separation claim
+  baseline: control instructions, and the version-1 instruction, on identical matched instances
+  falsification_condition: >-
+    a stratum where the scoped clause does not reach the accuracy the enumeration arm reaches,
+    or where under-commit remains nonzero. Offline it reaches 1.000 with 0.000 separation, 0.000
+    over-commit and 0.000 under-commit on non-identifiable items, and unchanged 1.000 on
+    identifiable items.
+
+exemplars:
+  - >-
+    epistemic_games, skewed prior with uninformative evidence: verdict indistinguishable about
+    the transcript, posterior 0.6 and support world1 carried from the prior - the case version 1
+    loses and version 2 answers correctly
+counterexamples: []
+related_strategy_ids:
+  - state_enumeration
+  - observational_equivalence_check
+
+provenance:
+  origin: agent-proposed
+  source_refs:
+    - spec/operators/equivalence_check_revised.md
+    - experiments/operator_study/REPORT.md
+  episode_refs:
+    - experiments/operator_study/raw_results.jsonl
+    - experiments/operator_study/summary.json
+  review_status: unreviewed

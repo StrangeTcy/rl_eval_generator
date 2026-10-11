@@ -1,4 +1,8 @@
 # Candidate Strategy IR card: the observational-equivalence check.
+# SUPERSEDED by spec/strategy-ir/observational_equivalence_check.yaml, which follows the
+# field list that research_protocol/strategy_ir.md later prescribed. Kept because its
+# `disposition` block is the record of the decision the schema does not ask for; nothing
+# should be added to this file.
 #
 # `research_protocol/strategy_ir.md` is not in this checkout - nor is the epistemic
 # compiler it is normally emitted by - so this card follows the precedent the causal-layer
