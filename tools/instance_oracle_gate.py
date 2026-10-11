@@ -23,6 +23,7 @@ import contextlib
 import hashlib
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -86,6 +87,49 @@ def _moco(workspace: Path, *, wrong: bool) -> None:
              "queue[:, (torch.arange(n) + start) % k] = keys.T")
 
 
+_OPTIMIZER_ASSIGNMENT = re.compile(
+    r"^(?P<indent>[ \t]*)optimizer = optim\.\w+\([^\n]*?\)\s*(?:#[^\n]*)?$", re.MULTILINE
+)
+
+
+def _glyph_optimizer(workspace: Path, *, wrong: bool) -> None:
+    """Point training at the reference optimizer whatever this vector's axis emitted.
+
+    glyph's ``optimizer`` axis selects the line: ``easy`` writes SGD at lr=1e-5 with a trailing
+    comment, ``medium`` SGD at lr=1e-4, ``hard`` AdamW at lr=1e-3 with weight decay. The reference
+    matched only the ``easy`` spelling by exact text, so two thirds of glyph vectors could not be
+    gated at all: the needle was absent, ``_replace`` raised, and the campaign blocked on
+    ``oracle_error`` for every one of them with the honest-but-useless diagnosis "reference is not
+    configured for this vector" - the reference existed per environment, not per vector.
+
+    Matching the assignment instead keeps the patch a real intervention at every axis value and
+    still fails closed. No match or an ambiguous one means the generator has changed shape and the
+    reference must be re-read, not guessed. And for the *reference* variant, a patch that would
+    leave the file unchanged is refused: certifying a program that already carries the answer
+    proves nothing about the agent. (The plausible-wrong variant may coincide with the pristine
+    line - a negative control that matches the untouched instance fails, which is the outcome the
+    gate requires.)
+    """
+    target = ("optimizer = optim.SGD(model.parameters(), lr=1e-4)" if wrong
+              else "optimizer = optim.Adam(model.parameters(), lr=1e-3)")
+    path = workspace / "train.py"
+    source = path.read_text(encoding="utf-8")
+    matches = list(_OPTIMIZER_ASSIGNMENT.finditer(source))
+    if len(matches) != 1:
+        raise ValueError(
+            "train.py: expected exactly one optimizer assignment, found "
+            f"{len(matches)}; reference is not configured for this vector"
+        )
+    matched = matches[0]
+    replacement = matched.group("indent") + target
+    if not wrong and matched.group(0) == replacement:
+        raise ValueError(
+            "train.py: the pristine instance already carries the reference optimizer; "
+            "this vector cannot be certified by it"
+        )
+    path.write_text(source[: matched.start()] + replacement + source[matched.end() :], encoding="utf-8")
+
+
 def _glyph(workspace: Path, *, wrong: bool) -> None:
     _replace(workspace, "model.py", "nn.MaxPool2d(2),\n        )",
              "nn.MaxPool2d(2),\n            nn.Conv2d(64, 128, kernel_size=3, padding=1),\n"
@@ -104,9 +148,7 @@ def _glyph(workspace: Path, *, wrong: bool) -> None:
         "        )"
     )
     model.write_text(source[:start] + classifier + source[end:], encoding="utf-8")
-    _replace(workspace, "train.py", "optimizer = optim.SGD(model.parameters(), lr=1e-5)",
-             "optimizer = optim.SGD(model.parameters(), lr=1e-4)" if wrong
-             else "optimizer = optim.Adam(model.parameters(), lr=1e-3)")
+    _glyph_optimizer(workspace, wrong=wrong)
     if not wrong:
         _replace(workspace, "train.py", "EPOCHS = 10", "EPOCHS = 18\ntorch.manual_seed(0)")
 
