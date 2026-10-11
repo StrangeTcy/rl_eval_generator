@@ -47,8 +47,9 @@ Measured with the compare API (`git merge-base` is unavailable here: the sandbox
 shows `main` as a single parentless commit):
 
     gh api repos/StrangeTcy/rl_eval_generator/compare/main...arena/595b91e0-rl-eval-generator
-    status=diverged  ahead_by=17  behind_by=4  merge_base=5bd367a  files=48
+    status=diverged  ahead_by=18  behind_by=4  merge_base=5bd367a  files=48
 
+ahead_by counts this file's own commit too, so it moves whenever the branch moves.
 Main's four commits since that base touch 4 paths - `tools/atria_campaign.py`, and the three workflow
 adds - so exactly one path is changed on both sides. That one is not a competing edit: both sides pass
 `max_output_tokens` to `complete_responses` and `max_tokens` to `complete`, which is main's
