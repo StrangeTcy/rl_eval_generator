@@ -56,7 +56,10 @@ T1_REPORT = "t1_same_fact_presentation.json"
 T1_PLAN = "t1_plan.json"
 CAMPAIGN_REF = "campaign_ref.txt"
 
-from tools import gate_context  # noqa: E402  (same repo-root sys.path trick as above)
+try:  # noqa: E402  (same repo-root sys.path trick as above)
+    from tools import gate_context
+except ImportError:  # pragma: no cover - only on a checkout predating the content digest
+    gate_context = None
 # Explicitly not inherited; named so an operator can see the boundary was drawn.
 NOT_INHERITED = ("suite_checkpoint.json", "campaign_intent.json", "wrapper_failed.json")
 
@@ -324,9 +327,22 @@ def main() -> int:
     # Rows are matched on the verdict context; the revision is recorded beside it.
     # --head stays a revision override for audits, so an operator who wants the old
     # revision-pinned behaviour can still ask for it explicitly.
-    context = args.context if args.context is not None else (
-        args.head if args.head is not None else gate_context.compute()
-    )
+    if args.context is not None:
+        context = args.context
+    elif args.head is not None:
+        context = args.head
+    elif gate_context is not None:
+        context = gate_context.compute()
+    else:
+        # The launcher runs this tool against the campaign's pinned checkout, so an
+        # old checkout can be missing tools/gate_context.py while its run_suite still
+        # keys rows on `git rev-parse HEAD`. Keying on the revision there is not a
+        # fallback to a weaker rule - it is the identity that reader will check.
+        context = current_head()
+        print(
+            "no tools/gate_context.py in this checkout: keying gate rows on the "
+            "revision, which is what this pinned run_suite compares against"
+        )
     head = args.head if args.head is not None else current_head()
     plan = plan_cases(profile_path=args.profile, manifest_path=args.manifest)
     report = inherit_state(

@@ -323,3 +323,23 @@ def test_legacy_rows_still_refuse_when_the_grader_changed(tmp_path: Path, repo) 
     )
     assert report["gate_rows_status"] == "refused_gate_context_differs"
     assert "fetch" in report["gate_rows_refusal_note"], report["gate_rows_refusal_note"]
+
+
+def test_a_checkout_without_the_content_digest_still_keys_on_the_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The launcher runs this tool against the campaign's *pinned* checkout.
+
+    A pinned ref that predates tools/gate_context.py has a run_suite which still keys
+    rows on `git rev-parse HEAD`, so a hard import here would crash the inherit step and
+    kill the leg over a bookkeeping detail. The tool follows the reader's convention and
+    says so out loud.
+    """
+    import tools.inherit_campaign_state as mod
+
+    case = _case("glyph", "easy")
+    src = _source(tmp_path, {case["case_id"]: _row(case)}, context=HEAD)
+    monkeypatch.setattr(mod, "gate_context", None)
+    monkeypatch.setattr(mod, "current_head", lambda root=ROOT: HEAD)
+    report = mod.inherit_state(src, tmp_path / "target", plan={case["case_id"]: case_sha256(case)}, context_sha=HEAD)
+    assert report["gate_rows_status"] == "inherited", report
