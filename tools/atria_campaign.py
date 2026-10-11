@@ -859,6 +859,11 @@ def _campaign_failure_diagnostics(output: Path) -> dict[str, Any]:
 
 # How a blocked gate row maps onto the vocabulary the profiles already use for reviewed omissions.
 # The name is the diagnosis, so a campaign log can be acted on without re-deriving it.
+# Upper bound on the diagnostics block, in characters. Sized so a group listing with each
+# group's observed grade and judge notes still fits; the tail is the paste-ready omission
+# stanza, which is the part an operator should be suspicious of reading in isolation.
+DIAGNOSTIC_CHAR_LIMIT = 12000
+
 _BLOCKED_ROW_CALIBRATION_CLASS = {
     "reference_did_not_grade_as_expected": "reference_does_not_solve_its_own_instance",
     "plausible_wrong_did_not_grade_as_expected": "negative_control_is_not_a_negative_control",
@@ -903,9 +908,15 @@ def _gate_failure_groups(failures: list[dict[str, Any]]) -> list[dict[str, Any]]
         reason = str(row.get("error") or row.get("reason") or row.get("status") or "failed")
         case_id = str(row.get("case_id") or "unknown case")
         key = (reason, _axis_signature(case_id))
-        entry = grouped.setdefault(key, {"reason": key[0], "axes": key[1], "count": 0, "case_ids": []})
+        entry = grouped.setdefault(
+            key, {"reason": key[0], "axes": key[1], "count": 0, "case_ids": [], "observed": None}
+        )
         entry["count"] += 1
         entry["case_ids"].append(case_id)
+        if entry["observed"] is None and isinstance(row.get("observed"), dict):
+            # One example per group is enough to read the shape; the rows all carry their
+            # own copy in instance_oracles.json.
+            entry["observed"] = row["observed"]
     return sorted(grouped.values(), key=lambda item: (-item["count"], item["reason"], item["axes"]))
 
 
@@ -939,6 +950,21 @@ def _format_failure_diagnostics(diagnostics: Mapping[str, Any]) -> str:
             rest = group["count"] - len(shown)
             example = ", ".join(shown) + (f" (+{rest} more)" if rest else "")
             lines.append(f"  {group['reason']} x{group['count']} on {group['axes']} - {example}")
+            observed = group.get("observed")
+            if isinstance(observed, dict):
+                detail = " ".join(
+                    f"{name}={observed[name]}"
+                    for name in ("variant", "done", "verdict", "score", "raw_accuracy", "failure_mode")
+                    if observed.get(name) is not None
+                )
+                failed = ",".join(observed.get("failed_checks") or []) or "none"
+                notes = "; ".join(observed.get("notes") or [])
+                lines.append(f"      saw: {detail} checks_failing={failed}")
+                if notes:
+                    lines.append(f"      judge notes: {notes[:300]}")
+                tail = str(observed.get("stderr_tail") or "").strip().replace(newline, " | ")
+                if tail:
+                    lines.append(f"      stderr: {tail[-300:]}")
         if len(groups) > 25:
             omitted = sum(group["count"] for group in groups[25:])
             lines.append(f"  +{len(groups) - 25} further group(s) covering {omitted} row(s):"
@@ -959,9 +985,15 @@ def _format_failure_diagnostics(diagnostics: Mapping[str, Any]) -> str:
         sections.append(newline.join(lines))
     if not sections:
         return ""
-    # Bounded so the cap can never hide the shape of the failure set: the counts and the groups are
-    # assembled first, and only the trailing omission stanza is at risk of being cut.
-    return (" Provider-free diagnostics:" + newline + newline.join(sections) + newline)[:6000]
+    # A cap that cuts silently is how a 49-row failure set got read as 14 rows once: the counts
+    # and groups are assembled first, and if the tail has to go, the text says how much of it did.
+    text = " Provider-free diagnostics:" + newline + newline.join(sections) + newline
+    if len(text) <= DIAGNOSTIC_CHAR_LIMIT:
+        return text
+    kept = text[:DIAGNOSTIC_CHAR_LIMIT]
+    dropped = len(text.splitlines()) - len(kept.splitlines())
+    return kept + f"  [... cut at {DIAGNOSTIC_CHAR_LIMIT} chars, {dropped} further line(s); " \
+                  f"instance_oracles.json and campaign_report.json hold every row]{newline}"
 
 
 def _recorded_episode_count(output: Path) -> int:

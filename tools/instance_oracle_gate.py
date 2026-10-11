@@ -625,6 +625,26 @@ def validate_case(
                 result["variants"].append(row)
                 if not row["accepted"]:
                     result["reason"] = f"{label}_did_not_grade_as_expected"
+                    # The reason alone cannot distinguish an under-trained reference from a
+                    # reference whose patched program no longer computes what it is supposed
+                    # to, and those two call for opposite edits (more epochs versus a better
+                    # splice). Persist what the judge actually returned, so the campaign log
+                    # and instance_oracles.json can be acted on without rerunning the row.
+                    result["observed"] = {
+                        "variant": label,
+                        "done": bool(row.get("done")),
+                        "verdict": row.get("verdict"),
+                        "score": row.get("score"),
+                        "raw_accuracy": row.get("raw_accuracy"),
+                        "failure_mode": row.get("failure_mode"),
+                        "failed_checks": sorted(
+                            name for name, value in (row.get("checks") or {}).items()
+                            if value is False
+                        ),
+                        "notes": [str(note)[:200] for note in (row.get("notes") or [])][-3:],
+                        "elapsed_seconds": row.get("elapsed_seconds"),
+                        "stderr_tail": str(row.get("stderr_tail") or "")[-400:],
+                    }
                     break
             else:
                 result["status"] = "passed"
