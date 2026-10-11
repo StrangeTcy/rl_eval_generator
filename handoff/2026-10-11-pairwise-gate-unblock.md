@@ -101,6 +101,53 @@ immediately before the step `Run T1 and pairwise campaign with live Issue status
 `handoff/mercury-pairwise-campaign.yml` and `handoff/reasoning-atria-pairwise-campaign.yml` already
 carry that step inside a complete file, with comments, if a whole-file copy is easier.
 
+## The `CI` workflow is red, and it is red on `main` too
+
+Measured from `gh api repos/StrangeTcy/rl_eval_generator/actions/runs/<id>/jobs` step timestamps:
+
+```
+dd31840 (this branch) : job smoke 13:04:28Z -> 13:04:37Z, step "Run pytest -q" failure, elapsed 2s
+f3f7097 (main)         : job smoke 22:36:06Z -> 22:36:17Z, step "Run pytest -q" failure, elapsed 2s
+```
+
+Two seconds means pytest never reached a test: `.github/workflows/ci.yml` runs `pip install -r
+requirements.txt` then `pytest -q`, and the step exits 2 at startup. Ruled out by measurement, not
+by taste: the root-level `test_cat_theo.py` / `test_weird_machine.py` scripts are not collected
+(`pyproject.toml:54-56` sets `testpaths = ["tests"]`), and there is no `conftest.py` anywhere in
+the tracked tree (`git ls-files | grep conftest` is empty, 0 lines back). Reproducing CI on a clean
+checkout - `git archive HEAD | tar -x -C /tmp/ci_tree`, then `.venv/bin/python -m pytest -q` - runs
+663 tests for over two minutes with no failures, so the startup error is specific to the runner
+environment. The difference I can name is that `setup-python` installs into an image that already
+carries plugins, while a bare venv gets only `PyYAML` and `pytest` from `requirements.txt`. Naming
+the module needs the 2-second log, which is one click for you and unreachable from this sandbox
+(the log endpoint redirects to a blob host this network refuses).
+
+Consequence to keep straight: until that startup failure is fixed, `CI` says nothing about any
+commit on this branch, including the T1 refusal and the guard fix below. Local full-suite results
+are the only green this branch currently has.
+
+## Guard test `test_a_chained_campaign_presents_a_resume_as_a_resume` - fixed at `dd31840`
+
+This was a real failure on this branch's chain (`3f11513`, `294539f`, `0b66319`, `332c8c9`), and
+it was reproducible here while CI's red was not. Cause read from the files: `.github/workflows/
+atria-campaign.yml` has the chain step (line 757) and presents an explicit resume by unsetting the
+variable for the controller process - `env -u GITHUB_EVENT_NAME python tools/atria_campaign.py` at
+line 661, with the policy comment at line 658 ("never override GITHUB_EVENT_NAME in the workflow
+env") - while the test accepted only a step-level `GITHUB_EVENT_NAME` override. Measured across the
+copies: live `chain=1 env-u=1 override=0`; `docs/workflows/atria-campaign.yml.example`
+`chain=0` (so it is skipped); the chained example carries the override; all four pairwise copies
+have `chain=0`.
+
+Both mechanisms give the controller what it needs, and the unset is the stronger one:
+`_should_reset_output` reads a missing variable as `event local is a resume`
+(`tools/atria_campaign.py:954-955`) so there is no template for a runner to resolve wrongly, and it
+still refuses to wipe when recorded episodes exist (`:957-961`). The assertion now names the outcome
+- a chained campaign must present its resume as a resume by either mechanism - and fails with the
+wipe it prevents when a workflow presents neither. The live file was never a place to fix this: this
+branch cannot push to `.github/workflows/` (the automation token has no `workflows` permission, per
+the guard's own docstring), so the test moved. Verified: `pytest tests/test_campaign_workflow_guard.py
+-q` -> 6 passed; bare `pytest -q` on this tree -> no failures (511 s).
+
 ## Two known open items, neither of them a gate weakening
 
 - T1 replay after an interruption. The launcher's T1 block guarded only on the absence of
