@@ -354,6 +354,53 @@ the guard's own docstring), so the test moved. Verified: `pytest tests/test_camp
   decision, and budget pauses are not in `RESUMABLE_PAUSE_REASONS`, so a ceiling stop is terminal
   for the cron loop.
 
+
+## A code fix cannot reach a campaign on the next tick - what "continue now" actually costs
+
+Written after the glyph reference fix (`4ca1123`), because I told the operator in chat that the
+`:13`/`:43` tick would "check this branch out again and pick the fix up". It will not, and the
+sentence was wrong: `decide_tick` resumes at the commit the state was *created* from, not at the
+ref string - `resume_ref = checkpoint.run.manifest_commit or recorded_ref`
+(`tools/campaign_supervisor.py:302-303`, with the comment above it explaining why a branch name is
+not trustworthy: "it cannot have moved since the dispatch"). The same pin applies to the
+interrupted-active-worker path at `:256-258`. So every cron tick after a push re-runs the code that
+produced the banked rows; a fix that lives only in the repo is invisible to a resumed campaign.
+
+The other half: a gate wall is not resumable by design. A `pause_reason` outside
+`RESUMABLE_PAUSE_REASONS` returns `mode=none` with "operator pause: ..."
+(`tools/campaign_supervisor.py:274-282`), and a `mode=none` leg skips every step and exits 0 -
+which is what Atria's scheduled leg at 19:32Z was: green, and doing nothing.
+
+So continuing a blocked campaign means one manual `workflow_dispatch`, and the fresh branch is the
+first thing the mode step tests: `workflow_dispatch` + `resume_previous != "true"` takes `ref` and
+`execution_mode` straight from the inputs and reports `mode=fresh`
+(deployed `.github/workflows/reasoning-atria-pairwise-campaign.yml:85-90`). The values, for either
+pairwise campaign:
+
+    ref             arena/595b91e0-rl-eval-generator
+    execution_mode  paid
+    resume_previous false
+
+`gates_only` is the wrong pick even though the next hours are all gating: the mode is read back only
+from the persisted intent, so a lineage that starts `gates_only` can never be promoted to paid by a
+resume, while `paid` itself costs nothing until the gate wall passes (the wall runs before any
+credential is resolved - `tools/run_suite.py:655-670`).
+
+What fresh throws away, measured rather than guessed: gate rows are reused only when
+`gated_manifest_sha256` *and* `gate_context_sha` both match (`tools/run_suite.py:715-720`, partial
+resume at `:737`). Editing any grading code moves `gate_context_sha`, so the 126 rows Atria banked
+and the rows Mercury was banking were already unreachable the moment the diagnostics landed at
+`8121377` - the reference fix did not create that cost, it paid it once more. Re-grading is
+provider-free at 2-4 minutes a row over the 269 gated rows, i.e. several legs of the 330-minute
+live step.
+
+And the dispatch itself is an operator action from here: `gh workflow run
+reasoning-atria-pairwise-campaign.yml --ref main -f ref=... -f execution_mode=paid -f
+resume_previous=false` from this sandbox returns `HTTP 403: Resource not accessible by integration`
+on `POST /actions/workflows/380866773/dispatches`. Same reason the launcher header already records
+for creating workflow files: the credential this session holds is read-scoped for Actions, so it
+can push code and read runs, and cannot start them.
+
 ## Files that are deliberately uncommitted in the sandbox
 
 `.github/workflows/*-covering-campaign.yml` differ here (they carry the `resume_previous` input and
