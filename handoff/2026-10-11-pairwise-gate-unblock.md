@@ -207,6 +207,47 @@ all four launchers `bash -n` clean (10 and 11 run-steps per file) and YAML-parsi
 `inputs=[ref, execution_mode, resume_previous, max_tokens_total_override, max_api_calls_override]`;
 full `pytest -q` no failures in 524 s.
 
+## The launcher I shipped killed the first leg: `LIMIT_ARGS: unbound variable`
+
+Reported from the runner after the manual paste of `handoff/mercury-pairwise-campaign.yml` into
+`.github/workflows/mercury-pairwise-campaign.yml` (main `057ad23`, verified byte-identical to my
+copy by diff = 0 lines):
+
+```
+/home/runner/work/_temp/8b4dc55c-....sh: line 69: LIMIT_ARGS: unbound variable
+Mercury campaign budget: elapsed=501s profile_max=19800s effective=19239s
+Error: Process completed with exit code 1.
+```
+
+Two defects, both mine, both in the workflow file rather than in the campaign code:
+
+1. **A shell variable does not cross a step boundary.** I built `LIMIT_ARGS` in
+   `Decide fresh dispatch versus supervised resume` (file lines 121-126) and expanded it in
+   `Run T1 and pairwise campaign with live Issue status` (line 370). Each `run:` block is its own
+   `bash` process, so the second step never declared it and `set -u` aborted the leg - after the
+   budget line, before the campaign command, so nothing was billed and the state artifact still
+   uploaded (`Stage campaign state for upload` is `if: always()`), which is why the lineage is not
+   lost.
+2. **A Python `.format()` call ate a brace pair.** The mode-step block came from a template
+   formatted with `provider=%s`, so `${{ inputs.max_tokens_total_override }}` was emitted as
+   `${ inputs.max_tokens_total_override }`. GitHub only substitutes double-brace expressions, and
+   bash's "bad substitution" inside an `if` condition does not trip `set -e` - so the step survived
+   with an empty array and a *real* ceiling override would have been dropped silently in the mode
+   decision. Fixed on both sides.
+
+Now: each step that touches the array declares it (`declares=1, references=3` in the mode step and
+`declares=1, references=6` in the campaign step, measured by parsing the YAML), the expansion uses
+the nounset-safe `${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}` form that an empty array needs on a
+scheduled tick, and `tests/test_provider_reasoning_campaigns.py` *executes* the campaign step's own
+lines - blank inputs (asserts rc 0 and no arguments), filled (asserts exactly
+`--limit max_tokens_total=160000000 --limit max_api_calls=30000 --raise-ceiling tester`), and a
+single input - plus a static rule that no run body may contain a single-brace `${{ }}`-looking
+expression. Verified: 38 passed in that file; all four launcher copies YAML-parse with 10/11/13/14
+steps and zero `bash -n` failures.
+
+Lesson kept: the launcher text is not documentation, it is code, and "the YAML parses and
+`bash -n` is clean" does not test that a variable exists where it is read.
+
 ## The `CI` workflow is red, and it is red on `main` too
 
 Measured from `gh api repos/StrangeTcy/rl_eval_generator/actions/runs/<id>/jobs` step timestamps:

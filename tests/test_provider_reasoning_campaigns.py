@@ -765,3 +765,129 @@ def test_the_paid_launcher_refuses_to_replay_an_interrupted_t1_phase() -> None:
         probe = next(i for i, line in enumerate(lines) if "4200s" in line)
         assert paid < refusal < probe, relative
         assert "exit 1" in "\n".join(lines[refusal:refusal + 6]), relative
+
+
+def _limit_block(text: str, *, start_marker: str, end_marker: str) -> str:
+    lines = text.splitlines()
+    try:
+        first = next(i for i, line in enumerate(lines) if start_marker in line)
+    except StopIteration:
+        raise AssertionError(f"no block starting with {start_marker!r}")
+    body = []
+    for line in lines[first:]:
+        body.append(line)
+        if end_marker in line:
+            break
+    else:
+        raise AssertionError(f"block {start_marker!r} never reached {end_marker!r}")
+    return "\n".join(body)
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "handoff/mercury-pairwise-campaign.yml",
+        "handoff/reasoning-atria-pairwise-campaign.yml",
+        "docs/workflows/mercury-pairwise-campaign.yml.example",
+        "docs/workflows/reasoning-atria-pairwise-campaign.yml.example",
+    ],
+)
+def test_the_ceiling_arguments_are_built_and_expanded_in_the_same_step(rel: str) -> None:
+    """A shell variable does not cross a step boundary, and an empty array is unbound.
+
+    The first version of this plumbing built ``LIMIT_ARGS`` in the mode-decision step and
+    expanded it in the campaign step. Every leg then died on ``LIMIT_ARGS: unbound
+    variable`` - reported from the runner as line 69 of the temp script - because the
+    second step never declared it. Each step that touches the array must declare it, and
+    the expansion must be the nounset-safe form, which is also what an empty array needs
+    on a scheduled tick where the inputs are blank.
+    """
+    import subprocess
+    import yaml as _yaml
+
+    text = (ROOT / rel).read_text(encoding="utf-8")
+    doc = _yaml.safe_load(text)
+    job = doc["jobs"][next(iter(doc["jobs"]))]
+    touched = [s for s in job["steps"] if "LIMIT_ARGS" in (s.get("run") or "")]
+    assert touched, f"{rel}: no step builds the ceiling arguments at all"
+    for step in touched:
+        body = step["run"]
+        assert "LIMIT_ARGS=()" in body, (
+            f"{rel} step {step.get('name')!r} expands LIMIT_ARGS without declaring it; "
+            "steps are separate shells"
+        )
+        assert '${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}' in body, (
+            f"{rel} step {step.get('name')!r}: a bare ${{LIMIT_ARGS[@]}} aborts under "
+            "set -u whenever both override inputs are empty, i.e. on every scheduled tick"
+        )
+    # GitHub expressions must keep their double braces: a single-brace ${ inputs.x } is
+    # passed through to bash verbatim and dies as a bad substitution.
+    assert "${ inputs." not in text and "${ github." not in text, (
+        f"{rel}: a Python format-string ate one brace pair from a GitHub expression"
+    )
+
+
+def test_the_built_arguments_actually_expand_under_nounset() -> None:
+    """Run the campaign step's own lines, with blank inputs and with filled ones.
+
+    That step is where a leg died with "LIMIT_ARGS: unbound variable", so this executes
+    exactly those bytes: the block is lifted out of the step that bills, the GitHub
+    expressions are replaced the way the runner replaces them, and the printed array is
+    what the campaign command receives.
+    """
+    import re
+    import subprocess
+    import yaml as _yaml
+
+    rel = "handoff/mercury-pairwise-campaign.yml"
+    doc = _yaml.safe_load((ROOT / rel).read_text(encoding="utf-8"))
+    job = doc["jobs"][next(iter(doc["jobs"]))]
+    step = next(
+        s for s in job["steps"]
+        if str(s.get("name", "")).startswith("Run T1 and pairwise campaign")
+    )
+    block = _limit_block(step["run"], start_marker="LIMIT_ARGS=()", end_marker="--raise-ceiling")
+    if not block.rstrip().endswith("fi"):
+        block += chr(10) + "          fi"  # the extractor stops on the last line it was told to find
+    newline = chr(10)
+    trailer = newline + 'printf "%s\\n" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}' + newline
+
+    def render(source: str, **values: str) -> str:
+        def value(match: "re.Match[str]") -> str:
+            # Exactly what the runner does: textual replacement, quotes and all coming
+            # from the step's own source. An empty input therefore yields -n "" and the
+            # branch is skipped, rather than the literal two-character string.
+            return values.get(match.group(1).replace(".", "_"), "")
+
+        return re.sub(r"\$\{\{\s*(inputs\.[a-z_.]+|github\.actor)\s*\}\}", value, source)
+
+    def run(source: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", "-c", "set -euo pipefail" + newline + source + trailer],
+            capture_output=True, text=True,
+        )
+
+    blank = run(render(block))
+    assert blank.returncode == 0, (
+        "a scheduled tick with both override boxes empty must not abort: " + blank.stderr
+    )
+    assert blank.stdout.strip() == "", blank.stdout
+
+    filled = run(render(
+        block,
+        inputs_max_tokens_total_override="160000000",
+        inputs_max_api_calls_override="30000",
+        github_actor="tester",
+    ))
+    assert filled.returncode == 0, filled.stderr
+    assert filled.stdout.split() == [
+        "--limit", "max_tokens_total=160000000",
+        "--limit", "max_api_calls=30000",
+        "--raise-ceiling", "tester",
+    ], filled.stdout
+
+    partial = run(render(block, inputs_max_api_calls_override="30000", github_actor="op"))
+    assert partial.returncode == 0, partial.stderr
+    assert partial.stdout.split() == [
+        "--limit", "max_api_calls=30000", "--raise-ceiling", "op",
+    ], partial.stdout
