@@ -103,12 +103,16 @@ carry that step inside a complete file, with comments, if a whole-file copy is e
 
 ## Two known open items, neither of them a gate weakening
 
-- `t1: gate`. `tools/run_suite.py` has no handling for it, so a `paid` tick whose T1 phase is
-  incomplete still pauses rather than skipping T1 - the 108-minute idle shape. The change is: accept
-  `t1: gate` in the pairwise profiles, refuse in `run_suite.py` when T1 is incomplete and neither
-  `--execute-t1` nor `--t1-plan-file` is supplied, and skip the T1 block in `campaign_preflight`
-  for that value. Not shipped here because it cannot be exercised against a live runner from this
-  sandbox.
+- T1 replay after an interruption. The launcher's T1 block guarded only on the absence of
+  `$OUT/t1_same_fact_presentation.json`, while its cleanup trap writes `$OUT/t1_interrupted.json`
+  declaring `operator_review_required_no_replay` - which nothing read. So a tick after an
+  interrupted T1 replayed the probe (paid, up to 4200 s) instead of stopping. The pairwise
+  launcher copies now refuse inside the paid branch; the covering pair must take the same 13
+  lines in both `.github/workflows/` and `docs/workflows/` at once, because
+  `test_deployed_and_documented_covering_workflows_share_the_wall_budget` pins those two files
+  to equality. `tools/run_suite.py` is not involved: it has no T1 machinery at all (`grep -c t1`
+  returns 0 there), which is also why the `campaign_preflight.py` story in an earlier handoff
+  note of mine was wrong - no such file exists.
 - Plan size against the ceiling you set: 482 cases x 40 calls / 327,680 tokens reserves about
   158 M tokens against `max_tokens_total: 136000000`, i.e. roughly 415 cases fit. That is a sizing
   decision, and budget pauses are not in `RESUMABLE_PAUSE_REASONS`, so a ceiling stop is terminal

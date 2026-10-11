@@ -700,3 +700,31 @@ def test_provider_client_token_keywords_are_wire_specific() -> None:
     assert "max_output_tokens" not in chat
     assert "max_output_tokens" in responses
     assert responses["max_output_tokens"].kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_the_paid_launcher_refuses_to_replay_an_interrupted_t1_phase() -> None:
+    """T1's interruption marker has to cost the next leg something, or it is a comment in a file.
+
+    The cleanup trap writes ``t1_interrupted.json`` promising ``operator_review_required_no_replay``,
+    while the T1 block guarded only on the absence of the *result*. So a leg interrupted during T1
+    replayed the whole probe on the next tick - paid calls, up to the 4200-second ceiling - and kept
+    replaying it every tick until the phase happened to finish. Refusing is the difference between a
+    policy and a log line. It must sit inside the paid branch, so a ``gates_only`` dispatch is never
+    blocked by a stale marker, and ahead of the probe, so the replay cannot start first.
+
+    The covering launchers are deliberately not asserted here: their deployed copies are held in
+    parity by ``test_deployed_and_documented_covering_workflows_share_the_wall_budget``, and the
+    deployed path is copied by hand, so the change reaches them as a pair, not from this branch.
+    """
+    for relative in (
+        "docs/workflows/mercury-pairwise-campaign.yml.example",
+        "docs/workflows/reasoning-atria-pairwise-campaign.yml.example",
+    ):
+        steps = _workflow_example(relative)["jobs"]["campaign"]["steps"]
+        step = next(item for item in steps if str(item.get("name", "")).startswith("Run T1"))
+        lines = step["run"].splitlines()
+        refusal = next(i for i, line in enumerate(lines) if "refusing to replay" in line)
+        paid = next(i for i, line in enumerate(lines) if '"$EXECUTION_MODE"' in line)
+        probe = next(i for i, line in enumerate(lines) if "4200s" in line)
+        assert paid < refusal < probe, relative
+        assert "exit 1" in "\n".join(lines[refusal:refusal + 6]), relative

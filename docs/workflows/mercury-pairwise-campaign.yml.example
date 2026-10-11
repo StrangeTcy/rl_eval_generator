@@ -287,6 +287,20 @@ jobs:
             .venv/bin/python tools/t1_paired_report.py \
               --m0 --seeds 6 --out "$OUT/t1_m0.json" > /dev/null
             if [ ! -f "$OUT/t1_same_fact_presentation.json" ]; then
+              # An interrupted leg leaves no T1 result, so this block would replay the whole probe
+              # from the start - paid, and up to 4200 seconds of it. The cleanup trap writes
+              # t1_interrupted.json with resume_policy operator_review_required_no_replay, and
+              # nothing read that marker, which made the declared policy decorative: the next tick
+              # simply spent the calls again, and the tick after that, until the phase completed on
+              # its own. Refuse instead, and name the way out. This sits inside the paid branch, so
+              # a gates_only dispatch is never blocked by a stale marker, and a fresh dispatch does
+              # not restore one.
+              if [ -f "$OUT/t1_interrupted.json" ]; then
+                echo "T1 was interrupted on an earlier leg and never completed: refusing to replay" \
+                     "it here (see $OUT/t1_interrupted.json). Run the dedicated T1 workflow to" \
+                     "finish the phase, or remove the marker to accept the replay."
+                exit 1
+              fi
               printf '{"phase":"started","resume_policy":"operator_review_on_interruption"}\n' \
                 > "$OUT/t1_started.json"
               timeout --foreground --signal=TERM --kill-after=30s 4200s \
