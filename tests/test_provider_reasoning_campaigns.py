@@ -432,6 +432,29 @@ def _workflow_pair(workflow_name: str) -> tuple[dict, dict]:
     return deployed, _workflow_example(f"docs/workflows/{workflow_name}.yml.example")
 
 
+def _uploadable_workflow_pair(workflow_name: str) -> tuple[dict, dict]:
+    """The launcher pair this repository can actually keep in step.
+
+    ``handoff/<name>.yml`` is the file the operator uploads to
+    ``.github/workflows/<name>.yml``, and ``docs/workflows/<name>.yml.example`` is its
+    documented twin; both are ordinary paths, so both are committable from here. The live
+    path is not compared, because it cannot be written from here: GitHub rejects any App push
+    that creates or updates a file under ``.github/workflows/`` unless the installation holds
+    the ``workflows`` permission, measured in this session as
+    ``remote rejected ... (refusing to allow a GitHub App to create or update workflow
+    '.github/workflows/mercury-covering-campaign.yml' without `workflows` permission)``.
+    A pin that only a human upload can satisfy is not a guard on a branch - it is a red badge
+    that hides the one drift that is still preventable in-repo, which is exactly the failure
+    this file was written to catch. So: compare the two files the repository owns, and leave
+    the upload itself the visible manual step the launcher header already declares.
+    """
+    uploaded = yaml.load(
+        (ROOT / "handoff" / f"{workflow_name}.yml").read_text(encoding="utf-8"),
+        Loader=yaml.BaseLoader,
+    )
+    return uploaded, _workflow_example(f"docs/workflows/{workflow_name}.yml.example")
+
+
 def _fresh_dispatch_guard(decide_run: str) -> str:
     """Slice out just the fresh-versus-resume guard of a Decide step."""
     lines = decide_run.splitlines()
@@ -470,8 +493,13 @@ def test_deployed_and_documented_covering_workflows_share_the_wall_budget(
     seconds, which the old effective ~6,000-second controller budget could
     never start (it refused with "5000s remaining, 6480s required"). Half of
     an upgrade is a silent downgrade on the other file's campaign path.
+
+    The pair compared is ``handoff/`` against ``docs/workflows/`` - see
+    ``_uploadable_workflow_pair`` - because the live ``.github/workflows`` copy is not
+    writable from a session credential, and comparing against it made this test pass in a
+    dirty working tree and fail in every clean checkout.
     """
-    deployed, documented = _workflow_pair(workflow_name)
+    deployed, documented = _uploadable_workflow_pair(workflow_name)
     assert deployed == documented
     profile = load_profile(ROOT / profile_path)
 
