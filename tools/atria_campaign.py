@@ -803,22 +803,111 @@ def _campaign_failure_diagnostics(output: Path) -> dict[str, Any]:
     }
 
 
+# How a blocked gate row maps onto the vocabulary the profiles already use for reviewed omissions.
+# The name is the diagnosis, so a campaign log can be acted on without re-deriving it.
+_BLOCKED_ROW_CALIBRATION_CLASS = {
+    "reference_did_not_grade_as_expected": "reference_does_not_solve_its_own_instance",
+    "plausible_wrong_did_not_grade_as_expected": "negative_control_is_not_a_negative_control",
+    "transcription_did_not_fail_as_expected": "hardcoded_output_control_does_not_hold",
+    "oracle_error": "reference_not_configured_for_this_vector",
+    "blocked": "reference_not_run_for_this_environment",
+}
+
+
+def _axis_signature(case_id: str) -> str:
+    """The non-easy axis levels of a case id, so a failure set can be described by its shape.
+
+    Ids are ``env__axis=level_axis=level...__seed-0``, with an optional intervention segment before
+    the seed; a vector the generator emits as a plain CSV list has no ``=`` to split on, so it is
+    named whole rather than guessed at.
+    """
+    parts = str(case_id).split("__")
+    if len(parts) < 3:
+        return "unrecognised case id"
+    vector = parts[1]
+    if "=" not in vector:
+        return f"vector {vector}" if vector else "unvectorled"
+    # Axis names contain underscores, so the pairs are re-joined rather than split on them: a token
+    # without `=` belongs to the name of the pair that follows it (`symptom` + `mask=hard`).
+    levels: list[str] = []
+    pending = ""
+    for token in vector.split("_"):
+        if "=" not in token:
+            pending = f"{pending}_{token}" if pending else token
+            continue
+        name, _, value = token.partition("=")
+        levels.append(f"{pending}_{name}={value}" if pending else f"{name}={value}")
+        pending = ""
+    hard = sorted(level for level in levels if not level.endswith("=easy"))
+    return ", ".join(hard) if hard else "all axes easy"
+
+
+def _gate_failure_groups(failures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse blocked rows into reason x axis-signature groups, largest first."""
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in failures:
+        reason = str(row.get("error") or row.get("reason") or row.get("status") or "failed")
+        case_id = str(row.get("case_id") or "unknown case")
+        key = (reason, _axis_signature(case_id))
+        entry = grouped.setdefault(key, {"reason": key[0], "axes": key[1], "count": 0, "case_ids": []})
+        entry["count"] += 1
+        entry["case_ids"].append(case_id)
+    return sorted(grouped.values(), key=lambda item: (-item["count"], item["reason"], item["axes"]))
+
+
 def _format_failure_diagnostics(diagnostics: Mapping[str, Any]) -> str:
-    details: list[str] = []
+    """Summarise blocked gate rows by cause and axis levels, never by the first twenty ids.
+
+    The listing this replaces printed at most twenty rows per category, and the caller then cut the
+    string at 6000 characters, so a campaign that blocked on forty-odd rows described itself with a
+    truncated sample and every reading of that sample was a guess about the rest - which is how a
+    fix shipped for 14 rows while 35 more of the same class went unmentioned. Groups are bounded, so
+    the summary survives the same cut: how many rows, for which reason, on which axis levels, with
+    ids and a paste-ready omission stanza for as many as fit.
+
+    It is a summary of what the gate recorded, not a diagnosis of the instances: the groups name the
+    axis levels the blocked rows share, which is where to look, not what is wrong.
+    """
+    newline = chr(10)
+    sections: list[str] = []
     for key, label in (
         ("generation_preflight_failed_cases", "generation"),
         ("exact_instance_failed_cases", "exact-instance oracle"),
         ("partial_exact_instance_failed_cases", "partial exact-instance oracle"),
     ):
-        failures = diagnostics.get(key) or []
-        for row in failures[:20]:
-            case_id = row.get("case_id") or "unknown case"
-            reason = row.get("error") or row.get("reason") or row.get("status")
-            details.append(f"{label}: {case_id} ({reason or 'failed'})")
-    if not details:
+        failures = [row for row in (diagnostics.get(key) or []) if isinstance(row, dict)]
+        if not failures:
+            continue
+        groups = _gate_failure_groups(failures)
+        lines = [f"{len(failures)} blocked {label} row(s), {len(groups)} group(s):"]
+        for group in groups[:25]:
+            shown = group["case_ids"][:2]
+            rest = group["count"] - len(shown)
+            example = ", ".join(shown) + (f" (+{rest} more)" if rest else "")
+            lines.append(f"  {group['reason']} x{group['count']} on {group['axes']} - {example}")
+        if len(groups) > 25:
+            omitted = sum(group["count"] for group in groups[25:])
+            lines.append(f"  +{len(groups) - 25} further group(s) covering {omitted} row(s):"
+                         " see instance_oracles.json")
+        sections.append(newline.join(lines))
+    omissions = [
+        row
+        for row in (diagnostics.get("exact_instance_failed_cases") or [])
+        if isinstance(row, dict) and str(row.get("reason") or "") in _BLOCKED_ROW_CALIBRATION_CLASS
+    ]
+    if omissions:
+        lines = ["  to omit them, add under manual_gate_blocked_exclusions.cases:"]
+        for row in omissions[:12]:
+            lines.append(f"    - case_id: {row.get('case_id')}")
+            lines.append(f"      calibration_class: {_BLOCKED_ROW_CALIBRATION_CLASS[str(row.get('reason'))]}")
+        if len(omissions) > 12:
+            lines.append(f"    # +{len(omissions) - 12} more of the same; instance_oracles.json holds all of them")
+        sections.append(newline.join(lines))
+    if not sections:
         return ""
-    suffix = " Provider-free diagnostics: " + "; ".join(details)
-    return suffix[:6000]
+    # Bounded so the cap can never hide the shape of the failure set: the counts and the groups are
+    # assembled first, and only the trailing omission stanza is at risk of being cut.
+    return (" Provider-free diagnostics:" + newline + newline.join(sections) + newline)[:6000]
 
 
 def _recorded_episode_count(output: Path) -> int:

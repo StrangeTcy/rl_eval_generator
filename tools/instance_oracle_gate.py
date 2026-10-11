@@ -175,26 +175,31 @@ def _glyph_optimizer(workspace: Path, *, wrong: bool) -> None:
 
 
 def _glyph(workspace: Path, *, wrong: bool) -> None:
-    # Refuse the vectors this reference cannot be spliced into, before the judge is billed.
-    # The rewrite below hands the classifier an AdaptiveAvgPool2d, i.e. it expects 4-D features.
-    # At architecture=hard the instance instead routes features through SpatialEncoderBlock, whose
-    # forward is `x.view(x.size(0), -1)` (envs/glyph/config.yaml:40-54), so the pooled classifier
-    # receives 2-D and training dies in F.adaptive_avg_pool2d with "Input dimension should be at
-    # least 3" - which is what the gate rows for those vectors reported.  Making hard certifiable
-    # means moving the pooling upstream of that block and re-deriving the whole head; a reference
-    # that has not been run against the judge is not a reference, so the vector is refused here
-    # and omitted from the campaign, with the refusal named in the record instead of a crash.
-    if "class SpatialEncoderBlock" in (workspace / "model.py").read_text(encoding="utf-8"):
-        raise ValueError(
-            "model.py: this vector abstracts spatial features in its own encoder block, which "
-            "hands the classifier a 2-D tensor; the reference pools it, so it cannot certify "
-            "architecture=hard (the training crash would be the only result)"
-        )
+    """Capacity, a permutation-invariant head, and a path into the classifier that keeps both.
+
+    The rewrite is a classifier splice, and two of glyph's own axis values sit *upstream* of the
+    classifier where a splice cannot reach them. ``architecture=hard`` routes features through
+    SpatialEncoderBlock, whose forward is ``x.view(x.size(0), -1)`` (envs/glyph/config.yaml:40-54),
+    so a classifier that pools is handed 2-D and dies in ``F.adaptive_avg_pool2d``; and
+    ``symptom_mask=hard`` keeps the coordinate trap out of the classifier entirely, calling
+    ``x = SpatialPool(size=4)(x)`` in ``forward`` instead (envs/glyph/config.yaml:227-242), which
+    crops the feature map to 4x4 - the whole map at the 32x32 training resolution, one quadrant of
+    it at the 64x64 evaluation resolution. Splicing the classifier around either one is what the
+    gate rows reported: a training crash, or ``reference_did_not_grade_as_expected`` with
+    ``overfit_spatial_layout`` because the reference had re-introduced the bug it certifies.
+
+    So both calls are taken out of ``forward`` as part of the splice. Neither holds parameters, so
+    the checkpoint the judge loads is the same set of tensors, and removing them removes the trap
+    rather than hiding it. A call into the classifier that this reference does not recognize is
+    refused: pooling a head it cannot read would certify a program nobody has reasoned about.
+    """
     _replace(workspace, "model.py", "nn.MaxPool2d(2),\n        )",
              "nn.MaxPool2d(2),\n            nn.Conv2d(64, 128, kernel_size=3, padding=1),\n"
              "            nn.ReLU(),\n        )")
     model = workspace / "model.py"
     source = model.read_text(encoding="utf-8")
+    for trap in ("        x = SpatialPool(size=4)(x)\n", "        x = self.encoder(x)\n"):
+        source = source.replace(trap, "")
     start = source.index("self.classifier = nn.Sequential(")
     end = source.index("\n\n    def forward", start)
     classifier = (
@@ -206,7 +211,14 @@ def _glyph(workspace: Path, *, wrong: bool) -> None:
         "            nn.Linear(128, num_classes)\n"
         "        )"
     )
-    model.write_text(source[:start] + classifier + source[end:], encoding="utf-8")
+    source = source[:start] + classifier + source[end:]
+    downstream = source[source.index("\n\n    def forward", start):]
+    if "SpatialPool(" in downstream or "self.encoder(" in downstream:
+        raise ValueError(
+            "model.py: a spatial crop or pre-flattening encoder still leads into the classifier, "
+            "so the pooled head would not certify this vector; reference is not configured for it"
+        )
+    model.write_text(source, encoding="utf-8")
     _glyph_optimizer(workspace, wrong=wrong)
     if not wrong:
         _replace(workspace, "train.py", "EPOCHS = 10", "EPOCHS = 18\ntorch.manual_seed(0)")

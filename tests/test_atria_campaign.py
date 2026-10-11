@@ -312,3 +312,55 @@ def test_fresh_output_reset_refuses_to_remove_unrecognized_directory(tmp_path: P
         atria_campaign._reset_fresh_campaign_output(unrelated)
 
     assert (unrelated / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_blocked_gate_rows_are_reported_by_group_so_a_cut_log_cannot_lose_a_class() -> None:
+    """A listing capped at twenty rows per category is how a blocked campaign read as a small one.
+
+    The log named 14 rows while the artifact held 49, and every reading of that sample was a guess
+    about the rest. The shape of a failure set - which reason, on which axis levels, how many - is
+    what an omission list has to be written from, and it is bounded, so it is what the summary leads
+    with.
+    """
+    rows = [
+        {
+            "case_id": f"moco__naming={'hard' if index % 2 else 'medium'}_distractors=easy_"
+                       "queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0",
+            "status": "blocked",
+            "reason": "oracle_error",
+        }
+        for index in range(35)
+    ] + [
+        {
+            "case_id": "glyph__architecture=hard_optimizer=hard_red_herring=easy_visible_tests=easy"
+                       "_data_clue=medium_symptom_mask=medium__seed-0",
+            "status": "blocked",
+            "reason": "plausible_wrong_did_not_grade_as_expected",
+        }
+    ] * 8
+
+    formatted = atria_campaign._format_failure_diagnostics({"exact_instance_failed_cases": rows})
+
+    assert "43 blocked exact-instance oracle row(s), 3 group(s):" in formatted
+    assert "oracle_error x18 on naming=medium" in formatted
+    assert "oracle_error x17 on naming=hard" in formatted
+    assert "plausible_wrong_did_not_grade_as_expected x8 on architecture=hard" in formatted
+    # axis names contain underscores, so a naive split reported `mask=medium` for `symptom_mask=medium`
+    assert "symptom_mask=medium" in formatted
+    assert "calibration_class: reference_not_configured_for_this_vector" in formatted
+
+
+def test_more_groups_than_fit_are_counted_rather_than_dropped() -> None:
+    rows = [
+        {
+            "case_id": f"glyph__ax{index:02d}=hard_optimizer=medium_red_herring=easy__seed-0",
+            "status": "blocked",
+            "reason": "reference_did_not_grade_as_expected",
+        }
+        for index in range(30)
+    ]
+
+    formatted = atria_campaign._format_failure_diagnostics({"exact_instance_failed_cases": rows})
+
+    assert "30 blocked exact-instance oracle row(s), 30 group(s):" in formatted
+    assert "+5 further group(s) covering 5 row(s)" in formatted

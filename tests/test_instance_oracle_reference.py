@@ -223,10 +223,46 @@ def test_the_rope_reference_still_reaches_a_masked_vector(tmp_path: Path) -> Non
     ast.parse(cache)
 
 
-def test_the_glyph_reference_refuses_the_vector_it_cannot_shape_correctly(tmp_path: Path) -> None:
-    """architecture=hard abstracts spatial features in its own block, which hands the classifier a
-    2-D tensor; the reference's pooled classifier died in F.adaptive_avg_pool2d inside a billed
-    judge run. Refusing costs nothing and says why."""
-    workspace, _ = _generate(tmp_path, "glyph", ["hard"] + GLYPH_EASY[1:])
-    with pytest.raises(ValueError, match="architecture=hard"):
+@pytest.mark.parametrize("vector", [
+    ["hard", "hard", "easy", "easy", "medium", "medium"],      # the crash the gate rows reported
+    ["hard", "hard", "hard", "hard", "hard", "hard"],
+    ["hard", "medium", "hard", "medium", "hard", "medium"],
+    ["easy", "easy", "easy", "easy", "easy", "hard"],          # trap parked in forward instead
+    ["medium", "easy", "medium", "easy", "hard", "hard"],
+])
+def test_the_glyph_reference_leaves_no_spatial_path_into_the_pooled_head(
+    tmp_path: Path, vector: list[str]
+) -> None:
+    """`x = self.classifier(x)` must be the only thing standing between the features and the head.
+
+    architecture=hard flattens inside its own encoder block, so a classifier that pools receives 2-D
+    and training dies in F.adaptive_avg_pool2d; symptom_mask=hard parks `SpatialPool(size=4)` in
+    `forward`, cropping the feature map to the training resolution, which is how a reference that
+    rewrote only the classifier came back with `overfit_spatial_layout`. Both calls are spliced out
+    with the classifier, so the pooled head is reached by nothing but the feature stack.
+    """
+    workspace, _ = _generate(tmp_path, "glyph", vector)
+    _glyph(workspace, wrong=False)
+    source = (workspace / "model.py").read_text(encoding="utf-8")
+    # The trap classes define their own `forward` above the model, so the model's is the last one.
+    head = source[source.rindex("    def forward"):source.index("\ndef ", source.rindex("    def forward"))]
+    body = [line.strip() for line in head.splitlines() if line.strip().startswith("x =")]
+    assert body[:2] == ["x = self.features(x)", "x = self.classifier(x)"], body[:3]
+    assert "SpatialPool(" not in head and "self.encoder(" not in head
+    assert "nn.AdaptiveAvgPool2d((1, 1))" in source
+    ast.parse(source)
+    ast.parse((workspace / "train.py").read_text(encoding="utf-8"))
+
+
+def test_a_forward_the_reference_cannot_read_is_refused(tmp_path: Path) -> None:
+    """A trap the splice does not recognize stops the certification instead of being stepped over."""
+    workspace, _ = _generate(tmp_path, "glyph", ["hard", "easy", "easy", "easy", "easy", "hard"])
+    model = workspace / "model.py"
+    model.write_text(
+        model.read_text(encoding="utf-8").replace(
+            "        x = SpatialPool(size=4)(x)", "        x = SpatialPool( size=4 )(x)"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="still leads into the classifier"):
         _glyph(workspace, wrong=False)

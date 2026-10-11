@@ -135,30 +135,6 @@ manual_gate_blocked_exclusions:
       calibration_class: reference_fix_already_present_at_symptom_mask_hard
     - case_id: rope__paper_clarity=medium_implementation_style=medium_notation_mismatch=medium_visible_tests=easy_hidden_context=easy_interaction_depth=easy_investigation_difficulty=hard_symptom_mask=hard__seed-0
       calibration_class: reference_fix_already_present_at_symptom_mask_hard
-    # 8 case(s) of this profile, measured by tools/instance_oracle_preflight.py:
-    #   reference_pools_a_2_d_tensor_at_architecture_hard
-    #   architecture=hard routes features through the instance's own SpatialEncoderBlock, whose forward
-    #   is a flatten, so the reference's pooled classifier would be handed 2-D and training would
-    #   die in F.adaptive_avg_pool2d - which is how the gate rows for these vectors read. The
-    #   reference now refuses them at patch time (tools/instance_oracle_gate.py:_glyph) instead
-    #   of paying a judge run to crash. Certifying them needs the pooling moved upstream of that
-    #   block, and a reference nobody has run against the judge is not a reference.
-    - case_id: glyph__architecture=hard_optimizer=hard_red_herring=easy_visible_tests=easy_data_clue=medium_symptom_mask=medium__seed-0
-      calibration_class: reference_pools_a_2_d_tensor_at_architecture_hard
-    - case_id: glyph__architecture=hard_optimizer=hard_red_herring=easy_visible_tests=easy_data_clue=medium_symptom_mask=medium__visible_proxy__seed-0
-      calibration_class: reference_pools_a_2_d_tensor_at_architecture_hard
-    - case_id: glyph__architecture=hard_optimizer=hard_red_herring=hard_visible_tests=hard_data_clue=hard_symptom_mask=hard__seed-0
-      calibration_class: reference_pools_a_2_d_tensor_at_architecture_hard
-    - case_id: glyph__architecture=hard_optimizer=hard_red_herring=hard_visible_tests=hard_data_clue=hard_symptom_mask=hard__visible_proxy__seed-0
-      calibration_class: reference_pools_a_2_d_tensor_at_architecture_hard
-    - case_id: glyph__architecture=hard_optimizer=hard_red_herring=medium_visible_tests=medium_data_clue=easy_symptom_mask=easy__seed-0
-      calibration_class: reference_pools_a_2_d_tensor_at_architecture_hard
-    - case_id: glyph__architecture=hard_optimizer=hard_red_herring=medium_visible_tests=medium_data_clue=easy_symptom_mask=easy__visible_proxy__seed-0
-      calibration_class: reference_pools_a_2_d_tensor_at_architecture_hard
-    - case_id: glyph__architecture=hard_optimizer=medium_red_herring=hard_visible_tests=medium_data_clue=hard_symptom_mask=medium__seed-0
-      calibration_class: reference_pools_a_2_d_tensor_at_architecture_hard
-    - case_id: glyph__architecture=hard_optimizer=medium_red_herring=hard_visible_tests=medium_data_clue=hard_symptom_mask=medium__visible_proxy__seed-0
-      calibration_class: reference_pools_a_2_d_tensor_at_architecture_hard
 # Per-controller invocation ceiling matches the 330-minute live workflow step.
 # This exceeds the 108-minute worst-case atomic gate row, even after a full T1
 # probe. The scheduled supervisor resumes the full campaign across checkpoints.
