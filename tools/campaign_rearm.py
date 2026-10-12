@@ -40,7 +40,10 @@ from typing import Any, Mapping
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.campaign_supervisor import RESUMABLE_PAUSE_REASONS  # noqa: E402
+from tools.campaign_supervisor import (  # noqa: E402
+    RESUMABLE_PAUSE_REASONS,
+    RESUME_BACKOFF_SECONDS,
+)
 
 BUSY_RUN_STATUSES = {"queued", "in_progress", "requested", "waiting", "pending"}
 
@@ -59,13 +62,22 @@ IMMEDIATE_HANDOVER_REASONS = {"max_wall_seconds"}
 
 
 def cooldown_seconds_for(reason: str) -> int:
-    """How long the group must sit idle before a successor is asked for.
+    """The *self-imposed* floor: how long the group sits idle before a successor is asked for.
 
-    A leg that ran out of wall time has nothing wrong with it, so it hands over at once; every
-    other resumable pause is a provider or case failure that must not be re-attempted immediately
-    (10 minutes), which is the bound the covering campaign's CHAIN already uses.
+    ``max_wall_seconds`` has nothing wrong with it and needs no extra courtesy wait; every other
+    resumable pause is a provider or case failure that waits 10 minutes first, matching the covering
+    campaign's CHAIN. What actually governs is ``RESUME_BACKOFF_SECONDS`` below: the successor leg
+    runs ``campaign_supervisor.decide_tick``, which answers ``mode="none"`` to any resume attempted
+    inside the supervisor's own backoff window (``tools/campaign_supervisor.py:285-292``, no bypass
+    flag exists there), and a refused leg does not re-arm either - so dispatching early does not
+    resume early, it just ends the chain. This is why the floor is the maximum of the two.
     """
     return 0 if str(reason) in IMMEDIATE_HANDOVER_REASONS else DEFAULT_COOLDOWN_SECONDS
+
+
+def effective_floor_seconds(reason: str, override: int | None = None) -> int:
+    base = cooldown_seconds_for(reason) if override is None else max(0, int(override))
+    return max(base, int(RESUME_BACKOFF_SECONDS))
 
 
 def decide_rearm(
@@ -123,12 +135,17 @@ def decide_rearm(
     started = _parse_timestamp(newest_run.get("updated_at")) or _parse_timestamp(newest_run.get("created_at"))
     if started is None:
         return False, "the most recent leg carries no readable timestamp"
-    floor = cooldown_seconds_for(reason) if min_interval_seconds is None else int(min_interval_seconds)
+    floor = effective_floor_seconds(reason, min_interval_seconds)
     age = int((now - started).total_seconds())
     if age < floor:
+        governing = (
+            "the supervisor's own resume backoff"
+            if RESUME_BACKOFF_SECONDS >= cooldown_seconds_for(reason)
+            else f"the cooldown for pause_reason={reason!r}"
+        )
         return False, (
-            f"the most recent leg ended {age} s ago, below the {floor} s cooldown for "
-            f"pause_reason={reason!r}; cron is the fallback"
+            f"the most recent leg ended {age} s ago, below the {floor} s floor set by {governing}; "
+            "a successor dispatched now would be refused with mode=none and would not re-arm"
         )
     return True, f"pause_reason={reason!r} after a {age} s idle gap at chain_depth={chain_depth}"
 

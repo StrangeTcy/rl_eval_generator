@@ -561,8 +561,9 @@ jobs:
       # for 2+ hours") and which was measured again on 2026-10-12: no run of any workflow here was
       # created between 09:47Z and 19:04Z while both pairwise workflows kept reporting state active.
       # So the leg that banked the rows asks for the next one, on the same terms as the covering
-      # campaign's CHAIN: max_wall_seconds hands over at once, any other resumable pause waits
-      # 10 minutes, chaining stops after 40 legs, and a cancelled leg, a regressed state upload or
+      # campaign's CHAIN, and it waits out the supervisor's own 20-minute resume backoff before
+      # asking, because a successor that arrives inside that window is refused with mode=none and
+      # does not re-arm. Chaining stops after 40 legs; a cancelled leg, a regressed state upload or
       # a wrapper_failed.json marker never continues. Fail-open by construction: a refused or
       # unreachable re-arm prints the reason and leaves the leg green, and the cron stays as the
       # fallback. To stop the chain without disabling the workflow, cancel the running leg.

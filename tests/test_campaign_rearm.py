@@ -42,18 +42,30 @@ def _decide(report=PAUSED, newest_run=IDLE_LONG_AGO, **overrides):
     return decide_rearm(report, newest_run=newest_run, **kwargs)
 
 
-def test_a_clean_wall_pause_hands_over_at_once_and_a_failure_pause_waits() -> None:
-    """The covering CHAIN's rule: nothing is wrong with a leg that merely ran out of time."""
-    assert cooldown_seconds_for("max_wall_seconds") == 0
-    assert cooldown_seconds_for("provider_error") == 600 == cooldown_seconds_for("infrastructure_error")
+def test_the_floor_never_undercuts_the_supervisors_own_resume_backoff() -> None:
+    """The bug this test exists for: chaining into a leg that would refuse.
+
+    ``campaign_supervisor.decide_tick`` answers ``mode="none"`` to any resume younger than
+    ``RESUME_BACKOFF_SECONDS`` (tools/campaign_supervisor.py:285-292), and that refused leg does not
+    re-arm either - so a re-arm that dispatches inside the window does not resume sooner, it ends
+    the chain. The re-arm must therefore never ask earlier than the backoff, for any reason.
+    """
+    from tools.campaign_rearm import effective_floor_seconds
+    from tools.campaign_supervisor import RESUMABLE_PAUSE_REASONS, RESUME_BACKOFF_SECONDS
+
+    assert effective_floor_seconds("max_wall_seconds") == RESUME_BACKOFF_SECONDS == 1200
+    assert effective_floor_seconds("provider_error") == 1200
+    for reason in sorted(RESUMABLE_PAUSE_REASONS):
+        assert effective_floor_seconds(reason, 0) >= RESUME_BACKOFF_SECONDS, reason
+        assert effective_floor_seconds(reason, 99_999) == 99_999, reason
+
     fresh = {"status": "completed", "updated_at": (NOW - timedelta(seconds=10)).isoformat().replace("+00:00", "Z")}
     ok, reason = _decide(newest_run=fresh)
-    assert ok, reason
-    for report, wait in (({"status": "paused", "pause_reason": "provider_error", "resumable": True}, 300),
-                         ({"status": "paused", "pause_reason": "provider_error", "resumable": True}, 700)):
-        run = {"status": "completed", "updated_at": (NOW - timedelta(seconds=wait)).isoformat().replace("+00:00", "Z")}
-        ok, reason = _decide(report, newest_run=run)
-        assert ok is (wait >= 600), (wait, reason)
+    assert not ok and "mode=none" in reason, reason
+    inside = {"status": "completed", "updated_at": (NOW - timedelta(seconds=1199)).isoformat().replace("+00:00", "Z")}
+    assert not _decide(newest_run=inside)[0]
+    outside = {"status": "completed", "updated_at": (NOW - timedelta(seconds=1201)).isoformat().replace("+00:00", "Z")}
+    assert _decide(newest_run=outside)[0], _decide(newest_run=outside)[1]
 
 
 def test_chaining_stops_after_the_cap_and_a_human_dispatch_resets_it() -> None:
