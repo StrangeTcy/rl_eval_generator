@@ -276,3 +276,54 @@ def test_describe_error_truncates_and_names_the_type() -> None:
     long = campaign_status_sidecar._describe_error(ValueError("x" * 500))
     assert long.startswith("ValueError: ")
     assert len(long) <= 200
+
+
+def test_gate_denominator_survives_the_move_to_episodes(tmp_path: Path) -> None:
+    """`189 / ?` is not a finished wall, and reading it as one is a live failure mode.
+
+    The progress file only carries ``gate_total`` while the campaign is inside the gate, so
+    every status comment written after the phase flips prints a bare row count. That is the
+    exact line an operator (or an agent) uses to decide whether a campaign is still gating,
+    so the denominator is recovered from durable state: ``instance_gate.gated_case_count``
+    in the checkpoint, which ``run_suite`` records as ``len(gated_cases)``.
+    """
+    write_progress(tmp_path, phase="episodes", episodes_total=416, episodes_completed=17)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {str(index): {} for index in range(189)}}), encoding="utf-8"
+    )
+    (tmp_path / "suite_checkpoint.json").write_text(
+        json.dumps({"instance_gate": {"gated_case_count": 189, "passed": True}}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `189 / 189`" in body
+    assert "?" not in body.split("**Gate checkpointed:**")[1].splitlines()[0]
+    assert "**Gate progress:** `████████████████████`" in body
+
+
+def test_gate_denominator_falls_back_to_the_leg_report(tmp_path: Path) -> None:
+    """A leg mid-gate has no checkpoint gate record yet; the report copy is the next durable one."""
+    write_progress(tmp_path, phase="exact-instance gate", gate_completed=56)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {str(index): {} for index in range(56)}}), encoding="utf-8"
+    )
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "paused", "gated_case_count": 189}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `56 / 189`" in body
+
+
+def test_gate_denominator_stays_unknown_rather_than_invented(tmp_path: Path) -> None:
+    """Nothing durable, no denominator: the question mark is the honest answer."""
+    write_progress(tmp_path, phase="exact-instance gate", gate_completed=3)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {"0": {}, "1": {}, "2": {}}}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `3 / ?`" in body

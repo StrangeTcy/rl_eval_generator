@@ -271,6 +271,16 @@ def _body(output: Path) -> str:
             rows = partial.get("rows")
             completed = len(rows) if isinstance(rows, dict) else 0
         total = progress.get("gate_total")
+        if not isinstance(total, int):
+            # Once the phase has moved to `episodes`, the progress file no longer carries the
+            # denominator and this line reads `189 / ?` - which nobody can tell apart from a
+            # completed wall. The wall size is durable: run_suite records `gated_case_count` as
+            # len(gated_cases) in the checkpoint's instance_gate, and the leg report copies it.
+            gate = checkpoint.get("instance_gate") if isinstance(checkpoint, dict) else None
+            if isinstance(gate, dict):
+                total = gate.get("gated_case_count")
+            if not isinstance(total, int) and isinstance(report, dict):
+                total = report.get("gated_case_count")
         lines.append(f"- **Gate checkpointed:** `{completed} / {total if isinstance(total, int) else '?'}`")
         if isinstance(total, int):
             bar = _progress_bar(completed, total)

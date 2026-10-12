@@ -483,3 +483,45 @@ creates or updates a workflow path (`refusing to allow a GitHub App to create or
 tried to commit the covering copies). So the input exists for a campaign the moment the operator pastes
 `handoff/<name>-pairwise-campaign.yml` over `main`'s copy; until then a rebase dispatch simply has no
 field to fill in.
+
+## 2026-10-12 (late): what the 189-row wall actually is, and what it proves
+
+Reproduced provider-free from this repository's own functions, at `5579aa4`:
+
+| step | function | cases |
+|---|---|---|
+| build | `build_manifest(matrix="pairwise", seeds=[0], expand_interventions=profile)` | 496 |
+| reviewed omissions | `_apply_gate_blocked_exclusions` | 482 (14 of the 21 entries match this manifest) |
+| twin lane | `verify_manifest_twins(mode="bill_verified_only")` | 44 groups, 132 cases, 56 unverified → 426 |
+| modality lane | `inventory_selected_modalities(provider=atria, model, target modalities)` | 10 unsupported `rope` cases → 416 |
+| gate set | `_order_cases_referenced_first` + env in `REFERENCES` | **189** |
+
+Every intermediate lands on a number a live leg printed: `132 intervention cases, 56 unverified`
+is the leg's own `twin preflight` line, `416` is the sidecar's `/ 416`, `189` is its
+`Gate checkpointed 189`. Both pairwise profiles are identical here (`reasoning_atria` and
+`mercury` give the same four numbers), so this is the campaign's selection, not a paraphrase of it.
+
+Consequences, most important first:
+
+- The wall is 189 rows and 189 rows are banked. Paid work cannot begin unless
+  `instance_coverage_complete = all(row["status"] == "passed" for row in gate_rows)`
+  (`tools/run_suite.py:872-904`, raised before any credential is built), so the gate is
+  **complete and green**, not partial.
+- 12 of those 189 rows are the blocked class: `glyph__` with `red_herring=hard` or
+  `symptom_mask=hard`. Those are the 12 ids the state artifact's `instance_oracles.json` listed as
+  blocked before `4ca1123`, so their passing is the validation of the repair. It is not validation of
+  anything else: no `rope` or `moco` code was touched.
+- The 21 profile omissions delete a further 9 blocked-class glyph rows (27 in the built manifest, 18
+  after exclusions, 12 inside the wall after the twin lane). Those 9 have still never been graded
+  post-repair. They stay omitted: reproducing them locally is unfaithful here (a hand-built call to
+  `validate_manifest_instances` blocks in 6 s on `FAIL_CODE: empty_patch` because the judge rejects
+  the reconstructed `no_op`, and `requirements.txt` ships no torch), and widening a gate without
+  evidence is the exact failure `tests/test_gate_failure_diagnostics.py:175-183` exists to catch. Lift
+  them when a leg enumerates them and passes, not before.
+- Two of my own claims today were wrong in opposite directions and are recorded so nobody repeats
+  them: `189 / 189` was quoted from a line that literally reads `189 / ?` (the denominator is absent
+  from the progress file once the phase is `episodes`), and the follow-on "482 ≠ 189 ⇒ the campaigns
+  are 39% through gating" was an artifact of stopping at the manifest instead of the campaign's own
+  three narrowing steps. The sidecar now recovers the denominator from
+  `checkpoint.instance_gate.gated_case_count` (falling back to the leg report), so `?` prints only
+  when no durable count exists. Legs still pinned to a commit before this one keep printing `?`.
