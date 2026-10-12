@@ -231,12 +231,20 @@ def _body(output: Path) -> str:
     phase = str(progress.get("phase") or "starting")
     current = progress.get("current_case") or run.get("active_case_id") or "—"
     status = str(report.get("status") or run.get("execution_state") or "in progress")
+    # `campaign_report.json` is written when a leg ENDS, so while a leg is running this line is the
+    # previous leg's verdict and the counters around it are live. Labelled with the report's own
+    # timestamp for a reason: an unlabeled `paused` under a running leg reads as "the campaign
+    # stopped", which is how a campaign that is mid-flight gets declared dead.
+    report_ts = str(report.get("updated_at") or "")
+    status_line = f"- **Campaign state:** `{status}`"
+    if report.get("status") and report_ts:
+        status_line += f" (report from `{report_ts}`, the last leg that finished)"
     campaign_started_at = checkpoint.get("started_at") or state.get("campaign_started_at")
     lines = [
         f"## {_CAMPAIGN['body_label']} live status",
         "",
         f"- **Updated:** {progress.get('updated_at') or report.get('updated_at') or datetime.now(UTC).isoformat()}",
-        f"- **Campaign state:** `{status}`",
+        status_line,
         f"- **Campaign elapsed:** {_elapsed(campaign_started_at)}",
         f"- **Phase:** `{phase}`",
         f"- **Current case:** `{current}`",

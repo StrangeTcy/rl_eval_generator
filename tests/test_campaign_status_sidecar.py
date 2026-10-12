@@ -106,6 +106,31 @@ def test_sidecar_renders_terminal_state_pause_reason_and_retries(tmp_path: Path)
     assert "**Campaign elapsed:**" in body
 
 
+def test_campaign_state_line_names_the_leg_that_wrote_the_report(tmp_path: Path) -> None:
+    """The state line must not masquerade as live during a running leg.
+
+    Report written at 14:42, heartbeat at 21:15: `paused / max_wall_seconds` is run 14's ending, not
+    the current state, and a reader who takes it as current will conclude a working campaign died.
+    """
+    write_progress(tmp_path, phase="cases")
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({
+            "status": "paused",
+            "pause_reason": "max_wall_seconds",
+            "updated_at": "2026-10-12T14:42:11Z",
+        }),
+        encoding="utf-8",
+    )
+    # write_progress stamps its own live updated_at (tools/campaign_progress.py:30), which is the
+    # point: the timestamp line is now, the state line is hours old, and only the label keeps those
+    # from being read as the same moment.
+    body = _body(tmp_path)
+    from tools.campaign_progress import PROGRESS_FILE
+    live = json.loads((tmp_path / PROGRESS_FILE).read_text())["updated_at"]
+    assert f"- **Updated:** {live}" in body
+    assert "Campaign state:** `paused` (report from `2026-10-12T14:42:11Z`" in body
+
+
 def test_sidecar_reuses_one_durable_issue_and_comment(tmp_path: Path, monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
 
