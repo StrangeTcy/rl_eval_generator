@@ -69,7 +69,7 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  actions: write  # read, plus the successor dispatch tools/campaign_rearm.py asks for
   issues: write
 
 concurrency:
@@ -527,3 +527,27 @@ jobs:
           path: ${{ runner.temp }}/mercury_upload/
           if-no-files-found: warn
           retention-days: 90
+
+      # A resumable pause is only a pause if something starts the successor leg. The repository's
+      # cron is not under its control - GitHub skips and delays schedule events, and a workflow can
+      # stop producing them while still reporting state: active, which is how both pairwise
+      # lineages ended up idle for hours on 2026-10-12 with rows safely banked. So the leg that
+      # did the work asks for the next one. Fail-open by construction: a refused, unauthorized or
+      # unreachable re-arm prints the reason and leaves the leg green, and the cron stays as the
+      # fallback. It never carries rebase_onto_ref or an execution mode, so it cannot re-pin the
+      # code a lineage runs or promote gates-only to paid - those remain human dispatches.
+      - name: Re-arm the next leg after a resumable pause
+        if: always() && steps.mode.outputs.mode != 'none'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          OUT=runs/mercury_pairwise_campaign
+          if [ ! -x .venv/bin/python ]; then
+            echo "campaign re-arm skipped: no virtualenv in this leg, so the scheduler was not asked"
+            exit 0
+          fi
+          .venv/bin/python tools/campaign_rearm.py \
+            --report "$OUT/campaign_report.json" \
+            --ref "${{ steps.mode.outputs.ref }}" \
+            || echo "campaign re-arm did not run; the scheduled trigger remains the fallback"

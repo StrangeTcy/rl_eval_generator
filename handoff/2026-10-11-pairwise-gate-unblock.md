@@ -525,3 +525,23 @@ Consequences, most important first:
   three narrowing steps. The sidecar now recovers the denominator from
   `checkpoint.instance_gate.gated_case_count` (falling back to the leg report), so `?` prints only
   when no durable count exists. Legs still pinned to a commit before this one keep printing `?`.
+
+## 2026-10-12 (afternoon): the cadence died with the cron intact, so the legs now re-arm themselves
+
+Both pairwise campaigns went silent while everything that is supposed to restart them looked healthy. Measured at 17:17Z against the last status comments (14:41Z / 14:42Z):
+
+- `Reasoning-Atria pairwise campaign`: run 14 `09:45Z -> 14:42Z completed/failure`, 75 / 416 episodes, `Campaign state: paused`, `Pause reason: max_wall_seconds`.
+- `Mercury pairwise campaign`: run 18 `09:46Z -> 14:41Z completed/failure`, 162 / 416 episodes, same pause reason.
+- Both workflow files on `main` still carry `schedule: cron: "13,43 * * * *"`, and both workflows still report `state: active`. **No run was created by any workflow in the repository after 09:46Z** - not for these two, not for `Atria covering campaign`, whose last run was 02:39Z. So the trigger definition is fine and the runner simply stopped being handed events; nothing in the repository could see or repair that.
+- Ledger state is safe, which is the part worth saying plainly: `run 13` / `run 17` are the zero-minute refused ticks and each lists **no artifact**, so a tick that decides `mode=none` cannot overwrite the lineage state. The rows in 162 / 416 and 75 / 416 are exactly what the legs uploaded.
+
+The fix is not "dispatch it again". `tools/campaign_rearm.py` runs as the last step of both pairwise launchers, after the state upload, and asks the API for the successor run when and only when the leg's own `campaign_report.json` says `status: paused` with a `resumable` pause. Guards, each with a test:
+
+- a leg already `queued`/`in_progress`/`waiting` -> skip (no pile-ups);
+- a spin floor: the most recent leg must be older than `--min-interval-seconds` (30 min default), so a leg that dies in four minutes cannot drive the scheduler;
+- the run list must be *readable*; unknown "is something running?" is answered by refusing;
+- a workflow whose `state` is not `active` is reported rather than raced against;
+- every failure path prints a reason and exits 0, so a broken re-arm costs one missed tick instead of reddening a campaign. The cron remains, additive.
+- the payload is `resume_previous: true` plus the leg's own `ref`. It never sends `rebase_onto_ref` and never mentions an execution mode, so a re-arm cannot re-pin code or authorize billing; those stay human dispatches.
+
+The launcher gains `permissions.actions: write` for that POST, which is the only privilege change. Tests: `tests/test_campaign_rearm.py` (decision branches, two executed fail-open CLI runs, and static checks over all four launcher copies - last step, `always() && mode != 'none'`, upload precedes it, flags validated against this tool's argparse, and `resume_previous`'s default pinned to `true` because that default is the backstop if the payload is ever rejected).
