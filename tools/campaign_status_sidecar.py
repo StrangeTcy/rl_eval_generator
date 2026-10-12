@@ -237,8 +237,11 @@ def _body(output: Path) -> str:
     # stopped", which is how a campaign that is mid-flight gets declared dead.
     report_ts = str(report.get("updated_at") or "")
     status_line = f"- **Campaign state:** `{status}`"
-    if report.get("status") and report_ts:
-        status_line += f" (report from `{report_ts}`, the last leg that finished)"
+    if report.get("status"):
+        status_line += (
+            f" (report from `{report_ts}`, the last leg that finished)" if report_ts
+            else " (untimed report from the last leg that finished; this leg may be running)"
+        )
     campaign_started_at = checkpoint.get("started_at") or state.get("campaign_started_at")
     lines = [
         f"## {_CAMPAIGN['body_label']} live status",

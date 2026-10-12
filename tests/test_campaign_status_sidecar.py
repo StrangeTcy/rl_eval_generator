@@ -130,6 +130,14 @@ def test_campaign_state_line_names_the_leg_that_wrote_the_report(tmp_path: Path)
     assert f"- **Updated:** {live}" in body
     assert "Campaign state:** `paused` (report from `2026-10-12T14:42:11Z`" in body
 
+    # An older leg's report has no `updated_at` at all (only some writers set it: compare
+    # tools/atria_campaign.py:1501 with :1737), and a bare `paused` is exactly the misread this line
+    # exists to prevent, so the fallback wording carries the same warning without a timestamp.
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "paused", "pause_reason": "infrastructure_error"}), encoding="utf-8"
+    )
+    assert "untimed report from the last leg that finished" in _body(tmp_path)
+
 
 def test_sidecar_reuses_one_durable_issue_and_comment(tmp_path: Path, monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
