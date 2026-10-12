@@ -13,9 +13,11 @@ The ledgers were safe; the cadence was not, and "dispatch it again" is not a fix
 So a leg that pauses resumably requests its own successor over the REST API with the job
 token. Three properties are deliberate:
 
-* It refuses rather than spins. A dispatch needs the group to be idle *and* the most recent
-  leg to be older than ``--min-interval-seconds``, so a fast-failing leg cannot drive the
-  scheduler in a loop; and if the API cannot be read, it refuses, because "is a leg already
+* It refuses rather than spins, on the same terms the covering campaign's CHAIN already uses, so
+  one repo does not grow two scheduler workarounds: a ``max_wall_seconds`` pause hands over at
+  once, every other resumable pause waits 10 minutes, chaining stops after 40 legs, and a leg
+  that was cancelled, that regressed its state upload, or that left a ``wrapper_failed.json``
+  marker never continues. If the API cannot be read it refuses too, because "is a leg already
   running?" is exactly the question the answer is needed for.
 * It never reddens a leg. Every failure path prints the reason and exits 0: a broken re-arm
   must cost one missed tick, not a red campaign and a paused ledger. The cron stays as the
@@ -52,16 +54,44 @@ def _parse_timestamp(value: Any) -> datetime | None:
         return None
 
 
+DEFAULT_COOLDOWN_SECONDS = 600
+IMMEDIATE_HANDOVER_REASONS = {"max_wall_seconds"}
+
+
+def cooldown_seconds_for(reason: str) -> int:
+    """How long the group must sit idle before a successor is asked for.
+
+    A leg that ran out of wall time has nothing wrong with it, so it hands over at once; every
+    other resumable pause is a provider or case failure that must not be re-attempted immediately
+    (10 minutes), which is the bound the covering campaign's CHAIN already uses.
+    """
+    return 0 if str(reason) in IMMEDIATE_HANDOVER_REASONS else DEFAULT_COOLDOWN_SECONDS
+
+
 def decide_rearm(
-    report: Mapping[str, Any] | None,
+    report,
     *,
-    newest_run: Mapping[str, Any] | None,
+    newest_run,
     now: datetime,
-    min_interval_seconds: int,
+    min_interval_seconds: int | None = None,
     workflow_state: str | None,
     token_present: bool,
+    chain_depth: int = 0,
+    max_chain_depth: int = 40,
+    marker_paths=(),
+    stage_failed: bool = False,
+    was_cancelled: bool = False,
 ) -> tuple[bool, str]:
-    """Return (dispatch?, reason). Pure: no network, no clock, so every branch is testable."""
+    """Return (dispatch?, reason). Pure: no network, no clock, no filesystem, so every branch
+    is testable. Order matters: the stops a human would use are checked first, so a cancelled
+    leg or a regressed upload cannot be talked into a successor by a report written before it."""
+    if was_cancelled:
+        return False, "this leg was cancelled; a cancelled leg is the documented way to stop the chain"
+    if stage_failed:
+        return False, "the state upload was refused because the checkpoint regressed; never continue from a regressed state"
+    for marker in marker_paths:
+        if marker and os.path.exists(marker):
+            return False, f"terminal marker {os.path.basename(marker)} is present, so the campaign stopped on purpose"
     if not isinstance(report, Mapping) or not report:
         return False, "no campaign report was written, so there is nothing to prove a resumable pause"
     status = str(report.get("status") or "")
@@ -73,6 +103,11 @@ def decide_rearm(
         resumable = reason in RESUMABLE_PAUSE_REASONS
     if not resumable:
         return False, f"pause_reason={reason!r} is not resumable; a successor leg would refuse this state"
+    if chain_depth >= max_chain_depth:
+        return False, (
+            f"chain_depth={chain_depth} reached the cap of {max_chain_depth}; cron remains the only "
+            "successor from here, and a human dispatch resets the count"
+        )
     if not token_present:
         return False, "no GITHUB_TOKEN in the environment, so no dispatch can be authorized"
     if workflow_state not in (None, "active"):
@@ -88,13 +123,14 @@ def decide_rearm(
     started = _parse_timestamp(newest_run.get("updated_at")) or _parse_timestamp(newest_run.get("created_at"))
     if started is None:
         return False, "the most recent leg carries no readable timestamp"
+    floor = cooldown_seconds_for(reason) if min_interval_seconds is None else int(min_interval_seconds)
     age = int((now - started).total_seconds())
-    if age < min_interval_seconds:
+    if age < floor:
         return False, (
-            f"the most recent leg ended {age // 60} min ago, below the {min_interval_seconds // 60} min "
-            "floor; refusing to spin the scheduler"
+            f"the most recent leg ended {age} s ago, below the {floor} s cooldown for "
+            f"pause_reason={reason!r}; cron is the fallback"
         )
-    return True, f"pause_reason={reason!r} with the group idle for {age // 60} min"
+    return True, f"pause_reason={reason!r} after a {age} s idle gap at chain_depth={chain_depth}"
 
 
 def _request(url: str, token: str | None, *, data: bytes | None = None, method: str | None = None) -> tuple[int, Any]:
@@ -128,10 +164,21 @@ def find_workflow(api: str, repo: str, token: str | None, name: str) -> tuple[di
     return None, {"error": f"no workflow named {name!r} in {repo}"}
 
 
-def dispatch_next_leg(api: str, repo: str, token: str | None, workflow_id: Any, ref: str) -> tuple[bool, str]:
-    inputs: dict[str, Any] = {"resume_previous": True}
+def successor_inputs(ref: str, chain_depth: int) -> dict[str, Any]:
+    """Exactly the manual click, plus the counter the cap reads. Nothing else.
+
+    ``rebase_onto_ref`` is never set here, and no execution mode is passed, so a chained leg can
+    only resume what is already authorized to bill.
+    """
+    inputs: dict[str, Any] = {"resume_previous": True, "chain_depth": str(int(chain_depth) + 1)}
     if ref:
         inputs["ref"] = ref
+    return inputs
+
+
+def dispatch_next_leg(api: str, repo: str, token: str | None, workflow_id: Any, ref: str,
+                      chain_depth: int = 0) -> tuple[bool, str]:
+    inputs = successor_inputs(ref, chain_depth)
     payload = json.dumps({"inputs": inputs}).encode("utf-8")
     status, body = _request(
         f"{api}/repos/{repo}/actions/workflows/{workflow_id}/dispatches",
@@ -154,9 +201,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--min-interval-seconds",
         type=int,
-        default=1800,
-        help="smallest gap enforced between legs; the floor on spinning the scheduler",
+        default=None,
+        help="override the reason-graded cooldown with a single floor",
     )
+    parser.add_argument("--chain-depth", type=int, default=0, help="this leg's chain_depth input")
+    parser.add_argument("--max-chain-depth", type=int, default=40, help="stop chaining after this many legs")
+    parser.add_argument("--marker", action="append", default=[], dest="markers",
+                        help="path whose presence means the campaign stopped on purpose (repeatable)")
+    parser.add_argument("--stage-failed", action="store_true", help="the state upload was refused as a regression")
+    parser.add_argument("--cancelled", action="store_true", help="this leg was cancelled")
     parser.add_argument("--dry-run", action="store_true", help="print the decision without dispatching")
     args = parser.parse_args(argv)
 
@@ -190,6 +243,11 @@ def main(argv: list[str] | None = None) -> int:
         min_interval_seconds=args.min_interval_seconds,
         workflow_state=(str(workflow["state"]) if workflow else None),
         token_present=bool(token),
+        chain_depth=args.chain_depth,
+        max_chain_depth=args.max_chain_depth,
+        marker_paths=args.markers,
+        stage_failed=args.stage_failed,
+        was_cancelled=args.cancelled,
     )
     if not decision:
         print(f"campaign re-arm skipped: {reason}")
@@ -197,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print(f"campaign re-arm would dispatch: {reason} (dry run)")
         return 0
-    ok, detail = dispatch_next_leg(api, args.repo, token or None, workflow["id"], args.ref)
+    ok, detail = dispatch_next_leg(api, args.repo, token or None, workflow["id"], args.ref, args.chain_depth)
     line = f"campaign re-arm {reason} -> {detail}"
     print(f"::notice::{line}" if ok else f"warning: {line}")
     return 0

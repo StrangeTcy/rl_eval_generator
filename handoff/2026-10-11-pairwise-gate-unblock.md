@@ -545,3 +545,34 @@ The fix is not "dispatch it again". `tools/campaign_rearm.py` runs as the last s
 - the payload is `resume_previous: true` plus the leg's own `ref`. It never sends `rebase_onto_ref` and never mentions an execution mode, so a re-arm cannot re-pin code or authorize billing; those stay human dispatches.
 
 The launcher gains `permissions.actions: write` for that POST, which is the only privilege change. Tests: `tests/test_campaign_rearm.py` (decision branches, two executed fail-open CLI runs, and static checks over all four launcher copies - last step, `always() && mode != 'none'`, upload precedes it, flags validated against this tool's argparse, and `resume_previous`'s default pinned to `true` because that default is the backstop if the payload is ever rejected).
+
+## 2026-10-12 (evening): the pairwise re-arm was rebuilt to match the CHAIN that already existed
+
+`b8fc6e4` added `tools/campaign_rearm.py` to both pairwise launchers with a flat 30-minute floor and
+no depth cap. That was a parallel invention: `Atria covering campaign`'s launcher on `main` has
+carried a self-dispatching CHAIN for weeks, and it documents the exact failure being fixed here -
+"GitHub drops most scheduled ticks on this repo: after run 36791154490 ended at 04:35 UTC nothing ran
+for 2+ hours". Reading the sibling file first would have produced this the first time. Today's
+measurement is the same event, larger: no run of *any* workflow in the repository was created between
+09:47Z and 19:04Z, while `push` still worked (CI run 315 at 17:33Z) and all three scheduled workflows
+still reported `state: active` with `cron: "13,43 * * * *"` intact.
+
+The pairwise re-arm now carries the covering CHAIN's semantics instead of its own:
+
+- `max_wall_seconds` hands over at once; every other resumable pause waits 600 s, so a provider
+  outage cannot tight-loop;
+- a `chain_depth` input counts continuations and chaining stops at 40 legs, so a chain cannot run
+  unattended through a weekend; a manual dispatch resets it because the input defaults to `0`;
+- the three human stops are checked *before* the report is believed: `!cancelled()` on the step, the
+  `stage` step's outcome (a regressed checkpoint must never be continued from), and a present
+  `wrapper_failed.json`. Cancelling the running leg is therefore the documented way to stop the
+  chain without disabling the workflow;
+- the payload is `successor_inputs()` - `resume_previous: true`, `ref`, `chain_depth + 1`, and
+  nothing else. `rebase_onto_ref` and `execution_mode` are never sent, and a test pins both absent so
+  a chain can only resume what is already authorized to bill.
+
+`permissions.actions: write` remains the only privilege change. Tests: `tests/test_campaign_rearm.py`
+grew to 12, adding the graded cooldown, the cap, the three stops, the payload shape, and launcher
+checks for the new input, the `!cancelled()` guard and the flag/tool agreement. `pytest` over rearm,
+rebase, pairwise matrix, provider campaigns, workflow guard, sidecar, inherit, launcher flags, gate
+context and ceiling override: 158 passed.

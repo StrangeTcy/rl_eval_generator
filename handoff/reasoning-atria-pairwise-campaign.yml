@@ -64,6 +64,10 @@ on:
         required: false
         default: ''
         type: string
+      chain_depth:
+        description: "Internal: how many self-dispatched continuations precede this one. The re-arm step increments it; a human dispatch resets it to 0 and the cap is 40."
+        required: false
+        default: "0"
   schedule:
     - cron: "13,43 * * * *"
 
@@ -552,17 +556,21 @@ jobs:
           retention-days: 90
 
       # A resumable pause is only a pause if something starts the successor leg. The repository's
-      # cron is not under its control - GitHub skips and delays schedule events, and a workflow can
-      # stop producing them while still reporting state: active, which is how both pairwise
-      # lineages ended up idle for hours on 2026-10-12 with rows safely banked. So the leg that
-      # did the work asks for the next one. Fail-open by construction: a refused, unauthorized or
+      # cron is not under its control - GitHub drops scheduled ticks on this repo, which the Atria
+      # covering launcher already documents ("after run 36791154490 ended at 04:35 UTC nothing ran
+      # for 2+ hours") and which was measured again on 2026-10-12: no run of any workflow here was
+      # created between 09:47Z and 19:04Z while both pairwise workflows kept reporting state active.
+      # So the leg that banked the rows asks for the next one, on the same terms as the covering
+      # campaign's CHAIN: max_wall_seconds hands over at once, any other resumable pause waits
+      # 10 minutes, chaining stops after 40 legs, and a cancelled leg, a regressed state upload or
+      # a wrapper_failed.json marker never continues. Fail-open by construction: a refused or
       # unreachable re-arm prints the reason and leaves the leg green, and the cron stays as the
-      # fallback. It never carries rebase_onto_ref or an execution mode, so it cannot re-pin the
-      # code a lineage runs or promote gates-only to paid - those remain human dispatches.
+      # fallback. To stop the chain without disabling the workflow, cancel the running leg.
       - name: Re-arm the next leg after a resumable pause
-        if: always() && steps.mode.outputs.mode != 'none'
+        if: always() && !cancelled() && steps.mode.outputs.mode != 'none'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
         run: |
           set -uo pipefail
           OUT=runs/reasoning_atria_pairwise_campaign
@@ -570,7 +578,12 @@ jobs:
             echo "campaign re-arm skipped: no virtualenv in this leg, so the scheduler was not asked"
             exit 0
           fi
+          STAGE_FAILED=
+          if [ "${{ steps.stage.outcome }}" = "failure" ]; then STAGE_FAILED=--stage-failed; fi
           .venv/bin/python tools/campaign_rearm.py \
             --report "$OUT/campaign_report.json" \
             --ref "${{ steps.mode.outputs.ref }}" \
+            --chain-depth "${CHAIN_DEPTH:-0}" \
+            --marker "$OUT/wrapper_failed.json" \
+            ${STAGE_FAILED} \
             || echo "campaign re-arm did not run; the scheduled trigger remains the fallback"
