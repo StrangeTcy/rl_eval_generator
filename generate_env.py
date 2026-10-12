@@ -21,9 +21,15 @@ from typing import Dict, List, Optional
 
 try:
     import yaml
-except ImportError:
+except ImportError:  # a hard exit here once silenced CI
+    # `tests/test_information_policy.py` and `tests/test_observational_equivalence_check.py`
+    # import this module at collection time. Calling sys.exit(1) from an import turned a
+    # missing dependency into a pytest INTERNALERROR - CI died in 1.5 s with "Process
+    # completed with exit code 2" and no test ever ran, and nothing in the log said why.
+    # Raising keeps the same message, but it surfaces as an ordinary collection error naming
+    # PyYAML, and the CLI keeps its exit status through main()'s guard below.
     print("ERROR: PyYAML is required. Install with: pip install pyyaml")
-    sys.exit(1)
+    raise
 
 
 ROOT = Path(__file__).resolve().parent
