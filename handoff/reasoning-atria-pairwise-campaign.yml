@@ -49,6 +49,11 @@ on:
         required: true
         type: boolean
         default: true
+      rebase_onto_ref:
+        description: "Optional branch or full SHA to re-pin this campaign's CODE to while carrying its existing state forward - the paid T1 result, the banked gate rows, the ceiling counters. The controller accepts it only when the grading-code digest is the single field that moved; a provider, model, endpoint, effort, execution mode, manifest or profile difference is still refused. Refused if the carried state records a terminal failure or an interrupted T1. The execution mode is read back from the carried intent, so this can neither promote nor demote what is authorised to bill. Leave empty to keep the pinned commit."
+        required: false
+        default: ''
+        type: string
       max_tokens_total_override:
         description: "Optional spend ceiling above the pinned profile's value. Only a number greater than the one a budget pause stopped at lifts that pause; it changes the budget, never the measurement contract."
         required: false
@@ -82,6 +87,77 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          REBASE="${{ inputs.rebase_onto_ref }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$REBASE" ]; then
+            # Three ways to continue, and the two obvious ones each lose something. A resume runs the
+            # commit pinned inside its own state artifact (tools/campaign_supervisor.py takes
+            # resume_ref from checkpoint.run.manifest_commit), so it can never pick up a fix; a fresh
+            # dispatch takes the new code and throws the paid T1 result, the banked gate rows and the
+            # ceiling counters away - then re-bills T1 for the privilege. A rebase is the third path:
+            # new code at $REBASE, the ledger of the latest state artifact, and --rebase-intent so the
+            # controller records the moved grading-context digest instead of refusing to continue.
+            # Authorization does not change here: the mode is read back from the carried intent, never
+            # from this dropdown, so a rebase cannot promote a gates-only lineage into a billable one.
+            LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+              --jq '[.artifacts[] | select(.name | startswith("reasoning-atria-pairwise-state-")) | select(.expired == false)] | sort_by(.created_at) | last // empty')
+            if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+              echo "mode=fresh" >> "$GITHUB_OUTPUT"
+              echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+              echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+              echo "reason=rebase requested but no state artifact exists; dispatching fresh at $REBASE" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            ARTIFACT_ID=$(printf '%s' "$LATEST" | jq -r '.id')
+            STATE_STAGE="$RUNNER_TEMP/reasoning_atria_state"
+            rm -rf "$STATE_STAGE"
+            mkdir -p "$STATE_STAGE"
+            gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/reasoning_atria_state.zip"
+            unzip -q "$RUNNER_TEMP/reasoning_atria_state.zip" -d "$STATE_STAGE"
+            if [ ! -s "$STATE_STAGE/campaign_intent.json" ]; then
+              # No intent means no continuation authority, and inventing one from a dispatch dropdown
+              # is the promotion the resume path already refuses. Fall back to fresh, and say so.
+              echo "mode=fresh" >> "$GITHUB_OUTPUT"
+              echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+              echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+              echo "reason=carried state has no campaign intent; rebasing onto $REBASE as a fresh lineage" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ -f "$STATE_STAGE/wrapper_failed.json" ]; then
+              # Refused, never cleared. `tools/inherit_campaign_state.py` keeps the same rule for
+              # cross-campaign inheritance (wrapper_failed.json is in its NOT_INHERITED list), and a
+              # rebase is not a licence to walk past a recorded terminal failure - if the operator
+              # has decided the cause is dead, they dispatch fresh and re-bill T1, or they clear the
+              # artifact deliberately. Either way the decision stays theirs and visible.
+              TERMINAL=$(jq -r '.pause_reason // "unknown"' "$STATE_STAGE/wrapper_failed.json" 2>/dev/null || true)
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=operator stop: the carried state records a terminal failure ($TERMINAL); a rebase will not clear it" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ -f "$STATE_STAGE/t1_started.json" ] && [ ! -f "$STATE_STAGE/t1_same_fact_presentation.json" ]; then
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=operator stop: carried T1 was interrupted before its report; a rebase never replays paid calls" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # `|| true` on purpose: a carried intent that will not parse must reach the refusal below,
+            # which names the problem in the leg's output, rather than killing the step with a raw jq
+            # parse error that looks like infrastructure and says nothing about the state file.
+            CARRIED_MODE=$(jq -r '.execution_mode // empty' "$STATE_STAGE/campaign_intent.json" 2>/dev/null || true)
+            case "$CARRIED_MODE" in
+              paid|gates_only) ;;
+              *) CARRIED_MODE="" ;;
+            esac
+            if [ -z "$CARRIED_MODE" ]; then
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=carried intent has no readable execution mode; refusing to guess what may bill" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "mode=rebase" >> "$GITHUB_OUTPUT"
+            echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+            echo "execution_mode=$CARRIED_MODE" >> "$GITHUB_OUTPUT"
+            echo "state_staged=true" >> "$GITHUB_OUTPUT"
+            echo "reason=rebasing the carried ledger onto $REBASE, keeping the carried $CARRIED_MODE mode" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
              && [ "${{ inputs.resume_previous }}" != "true" ]; then
             echo "mode=fresh" >> "$GITHUB_OUTPUT"
@@ -267,7 +343,7 @@ jobs:
           fi
 
       - name: Refuse a plan whose exact-instance reference cannot be applied
-        if: steps.mode.outputs.mode == 'fresh'
+        if: contains(fromJSON('["fresh", "rebase"]'), steps.mode.outputs.mode)
         run: |
           set -euo pipefail
           # The exact-instance gate patches a generated case before its judge ever sees it,
@@ -277,6 +353,8 @@ jobs:
           # same patch path with no Docker, no torch and no provider call, over every gated
           # case of the plan the profile will ship, and refuses the dispatch in ~2 minutes.
           # Fresh dispatches only: a resumed tick runs pinned code that already passed this.
+          # A rebase runs new code against an old ledger, so it must clear this too - it is the
+          # check that catches a reference which cannot be applied to a vector it certifies.
           .venv/bin/python tools/instance_oracle_preflight.py \
             --profile experiments/reasoning_atria_pairwise_campaign.yaml \
             --out runs/reasoning_atria_pairwise_campaign/instance_oracle_preflight.json
@@ -414,15 +492,24 @@ jobs:
           if [ "${#LIMIT_ARGS[@]}" -gt 0 ]; then
             LIMIT_ARGS+=(--raise-ceiling "${{ github.actor }}")
           fi
+          REBASE_ARG=()
+          if [ "${{ steps.mode.outputs.mode }}" = "rebase" ]; then
+            # Declared here, not in the mode step: Actions steps do not share a shell, and this is
+            # the only step that invokes the controller. The ${ARR[@]+...} form keeps `set -u` from
+            # failing on an empty array, which is what a non-rebase dispatch leaves behind.
+            REBASE_ARG+=(--rebase-intent)
+          fi
           if [ "$EXECUTION_MODE" = "paid" ]; then
             .venv/bin/python tools/atria_campaign.py \
               --profile experiments/reasoning_atria_pairwise_campaign.yaml \
               --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS" \
-              "${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}"
+              "${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}" \
+              "${REBASE_ARG[@]+"${REBASE_ARG[@]}"}"
           else
             .venv/bin/python tools/atria_campaign.py \
               --profile experiments/reasoning_atria_pairwise_campaign.yaml \
-              --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS"
+              --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS" \
+              "${REBASE_ARG[@]+"${REBASE_ARG[@]}"}"
           fi
 
       - name: Stage campaign state for upload

@@ -439,3 +439,47 @@ the 330-minute budget block). Their content is already committed at `handoff/mer
 and `handoff/reasoning-atria-covering-campaign.yml` - byte-identical - so nothing is lost if this
 sandbox goes away; main's mercury covering copy still lacks the input, which is the one difference
 that matters for that campaign's resume path.
+
+## The rebase dispatch: a fix can now reach a campaign without throwing its ledger away
+
+Everything above this section describes the forced choice: a resume re-runs the commit pinned in its
+own state artifact (`resume_ref = checkpoint.run.manifest_commit or recorded_ref`,
+`tools/campaign_supervisor.py`), so it can never carry a fix; a fresh dispatch takes the new ref and
+discards the paid T1 result, the episode ledger and the ceiling counters, then re-bills T1. Both are
+correct as safety properties - a lineage must not silently change what it measures - so the answer is
+a third path that is explicitly authorized at both ends, added on 2026-10-11:
+
+- New launcher input `rebase_onto_ref` (empty by default) in both pairwise launchers. A
+  `workflow_dispatch` with it set decides `mode=rebase`: `ref` comes from the input, every other step
+  runs unchanged, and the controller call gains `--rebase-intent`.
+- `tools/atria_campaign.py` accepts that flag inside `_record_campaign_intent` only when the drifted
+  intent field is *exactly* `gate_context_sha`, and only when `GITHUB_EVENT_NAME` is
+  `workflow_dispatch`. It then rewrites the intent and records the previous digest as
+  `rebased_from_gate_context_sha` plus `rebased_at`/`rebased_by`, so the rows graded after a rebase are
+  attributable instead of being quietly compared against a stale digest. Any other drift - provider,
+  model, endpoint, effort, execution mode, manifest, profile identity - still raises, and the message
+  now names which fields changed.
+- The mode stays whatever the carried intent says. A rebase cannot promote a `gates_only` lineage or
+  demote a paid one, because the branch reads `execution_mode` out of `campaign_intent.json`, not out
+  of the dropdown.
+- Two carried states are refused outright, each with the reason in the leg's output: an interrupted T1
+  (`t1_started.json` without `t1_same_fact_presentation.json`) and a recorded terminal failure
+  (`wrapper_failed.json`, the same file `tools/inherit_campaign_state.py` keeps in `NOT_INHERITED`).
+  A corrupt or unreadable intent is also refused rather than guessed at, and `jq` failures inside that
+  check are swallowed on purpose so the refusal branch is what reports the problem.
+- With no state artifact, or one without an intent, the rebase degrades to a plain fresh dispatch and
+  says so in the reason - it never fabricates a carried authorization.
+- Because a rebase runs new grading code, the provider-free preflight step ("Refuse a plan whose
+  exact-instance reference cannot be applied") now fires on `fresh` *and* `rebase`; the fresh-state
+  initializer deliberately stays `fresh`-only, so a rebase keeps the ledger it was given.
+- Gate rows are still re-graded after a rebase, by design: they are keyed on `gate_context_sha`, which
+  is what just moved. What the rebase saves is the *paid* part - T1's 72 matched-arm calls and every
+  recorded episode row - not the free part.
+
+What is **not** solved by this file: the launcher that actually runs lives in
+`.github/workflows/` on `main`, and GitHub refuses any push from this session's App credential that
+creates or updates a workflow path (`refusing to allow a GitHub App to create or update workflow
+'.github/workflows/mercury-covering-campaign.yml' without 'workflows' permission`, measured when I
+tried to commit the covering copies). So the input exists for a campaign the moment the operator pastes
+`handoff/<name>-pairwise-campaign.yml` over `main`'s copy; until then a rebase dispatch simply has no
+field to fill in.

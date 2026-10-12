@@ -195,6 +195,7 @@ def _record_campaign_intent(
     execution_mode: str,
     gate_context_sha: str | None,
     profile: Mapping[str, Any] | None = None,
+    allow_gate_context_rebase: bool = False,
 ) -> dict[str, Any]:
     """Persist the only continuation authority a scheduled run may trust.
 
@@ -239,9 +240,36 @@ def _record_campaign_intent(
     if isinstance(existing, dict):
         comparable = {key: existing.get(key) for key in expected}
         if comparable != expected:
+            drifted = sorted(key for key in expected if comparable.get(key) != expected[key])
+            if allow_gate_context_rebase and drifted == ["gate_context_sha"]:
+                # An explicit operator rebase: the grading code moved and nothing else did. The
+                # digest exists to stop a campaign resuming against a verdict produced by other
+                # rules, and that is precisely the reason a *fix* to the reference or the checks
+                # used to require a fresh dispatch - which discards the paid T1 result, the banked
+                # gate rows and the ceiling counters, and then re-bills T1. Here the lineage keeps
+                # its ledger and records what moved, so the rows written after this point are
+                # attributable to the new context without pretending they were always comparable.
+                # Only a manual dispatch can reach this branch, and only for this one field:
+                # provider, model, endpoint, effort, mode and manifest identity still refuse, and a
+                # scheduled tick never gets to decide that its own code context may change.
+                if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
+                    raise ValueError(
+                        "campaign intent drifted in gate context but this is not an explicit "
+                        f"workflow_dispatch; refusing to re-pin {drifted} from a {os.environ.get('GITHUB_EVENT_NAME') or 'bare'} run"
+                    )
+                value = {
+                    **existing,
+                    **expected,
+                    "rebased_from_gate_context_sha": existing.get("gate_context_sha"),
+                    "rebased_at": _utc_now(),
+                    "rebased_by": os.environ.get("GITHUB_WORKFLOW") or "manual",
+                }
+                write_json(path, value)
+                return value
             raise ValueError(
                 "campaign intent differs from the restored state; refuse to "
                 "continue with a changed provider, model, mode, manifest, or code context"
+                f" (changed: {', '.join(drifted)})"
             )
         return existing
     value = {**expected, "recorded_at": _utc_now()}
@@ -1515,6 +1543,18 @@ def main(argv: list[str] | None = None) -> int:
         help="accepted and ignored here; it belongs to tools/inherit_campaign_state.py",
     )
     parser.add_argument(
+        "--rebase-intent", action="store_true",
+        help=(
+            "operator authorization to keep this campaign's ledger while its grading-code digest "
+            "moves: accepted only when gate_context_sha is the sole field that changed, only on an "
+            "explicit workflow_dispatch, and it rewrites the intent with the prior digest recorded "
+            "as rebased_from_gate_context_sha. A provider, model, endpoint, effort, execution mode, "
+            "manifest or profile difference is still refused. Without this flag the campaign refuses "
+            "to resume at a new code context, which is what previously forced a fresh dispatch and a "
+            "second paid T1."
+        ),
+    )
+    parser.add_argument(
         "--limit", dest="limit_overrides", action="append", default=[], metavar="KEY=INTEGER",
         help=(
             "set one spend ceiling for this invocation instead of editing the profile "
@@ -1747,6 +1787,7 @@ def main(argv: list[str] | None = None) -> int:
             execution_mode=execution_mode,
             gate_context_sha=gate_context_sha,
             profile=profile,
+            allow_gate_context_rebase=bool(args.rebase_intent),
         )
         scheduler_kwargs: dict[str, Any] = {
             "output_dir": output,
