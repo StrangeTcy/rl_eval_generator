@@ -222,6 +222,38 @@ jobs:
           REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
           REF=$(printf '%s' "$DECISION" | jq -r '.ref // empty')
           EXECUTION_MODE=$(printf '%s' "$DECISION" | jq -r '.execution_mode // empty')
+          # A human click is not a tick, and it must not be answered with a countdown.
+          # RESUME_BACKOFF_SECONDS (tools/campaign_supervisor.py, applied in decide_tick ahead of any
+          # resume, and reachable from no CLI flag) exists to stop a cron loop hammering a provider
+          # that just failed. The covering campaign exempts the operator from exactly that window -
+          # its YAML checks `age < 1200 and not manual_continue` - while the pairwise path delegates
+          # to decide_tick and had no way to say "a person is here". So a click 49 s after a pause was
+          # refused with `backoff: paused 49s ago, retry in 1150s` (Mercury run 21,
+          # 2026-10-12T21:27:51Z) and left the operator holding a green tick. Lift the window and
+          # nothing else:
+          #   * only for a workflow_dispatch whose chain_depth is 0 or empty - a hand, never this
+          #     workflow's own re-arm, which must keep waiting or it rebuilds the tight loop;
+          #   * only when the window was the single objection (the reason begins "backoff:"), so an
+          #     operator stop, a spent ceiling or a missing artifact keeps refusing;
+          #   * with the execution mode read back from the carried intent, never from the dropdown, so
+          #     a manual start cannot authorise billing that a resume could not.
+          CHAIN="${{ inputs.chain_depth }}"
+          case "$CHAIN" in ''|0) HUMAN_CLICK=1 ;; *) HUMAN_CLICK=0 ;; esac
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$HUMAN_CLICK" = 1 ] \
+             && [ "$MODE" = "none" ] && [ "${REASON#backoff:}" != "$REASON" ]; then
+            CARRIED_MODE=$(jq -r '.execution_mode // empty' "$STATE_STAGE/campaign_intent.json" 2>/dev/null || true)
+            case "$CARRIED_MODE" in
+              paid|gates_only)
+                MODE=resume
+                REF="${REF:-$PINNED_REF}"
+                EXECUTION_MODE=$CARRIED_MODE
+                REASON="manual dispatch: the resume backoff was lifted for this click (it had said: $REASON)"
+                ;;
+              *)
+                REASON="$REASON - a manual dispatch could not lift it: the carried intent has no readable execution mode"
+                ;;
+            esac
+          fi
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "reason=$REASON" >> "$GITHUB_OUTPUT"
           if [ "$MODE" != "none" ]; then

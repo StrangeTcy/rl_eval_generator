@@ -193,5 +193,94 @@ def test_handoff_and_docs_twins_stay_identical() -> None:
         assert left == right, f"{name}: the pasteable copy drifted from the documented one"
 
 
+def _bypass_block(path: Path) -> str:
+    """The manual-dispatch bypass, extracted from the launcher that ships it.
+
+    Not a re-typed copy: the block is sliced out of the step's own `run:` body, so this test grades
+    the shell that will actually run on a runner, including its quoting.
+    """
+    body = [s for s in _steps(path) if str(s.get("name", "")).startswith("Decide")][0]["run"]
+    start = body.index('CHAIN="${{ inputs.chain_depth }}"')
+    stop = body.index('echo "mode=$MODE"', start)
+    return body[start:stop]
+
+
+def _run_bypass(tmp_path: Path, *, chain: str, event: str, mode: str, reason: str,
+                intent: str | None) -> dict[str, str]:
+    """Run the shipped bypass block under bash, with the launcher's own variable contract."""
+    block = _bypass_block(LAUNCHERS[0]).replace("${{ inputs.chain_depth }}", chain)
+    # A fresh stage per call: intent=None must mean "the file is absent", not "whatever the previous
+    # call in this test left behind".
+    stage = tmp_path / f"state-{sum(1 for _ in tmp_path.iterdir())}"
+    stage.mkdir(parents=True)
+    if intent is not None:
+        (stage / "campaign_intent.json").write_text(intent, encoding="utf-8")
+    script = tmp_path / "bypass.sh"
+    script.write_text("\n".join([
+        "set -uo pipefail",
+        f'GITHUB_EVENT_NAME="{event}"',
+        f'MODE="{mode}"',
+        f'REASON="{reason}"',
+        'REF=""',
+        'PINNED_REF="abc123def"',
+        f'STATE_STAGE="{stage}"',
+        block,
+        'printf "%s|%s|%s|%s\n" "${MODE:-}" "${REF:-}" "${EXECUTION_MODE:-}" "${REASON:-}"',
+    ]) + "\n", encoding="utf-8")
+    proc = subprocess.run(["bash", str(script)], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    got, _, tail = proc.stdout.strip().partition("|")
+    ref, _, rest = tail.partition("|")
+    execution_mode, _, why = rest.partition("|")
+    return {"mode": got, "ref": ref, "execution_mode": execution_mode, "reason": why}
+
+
+def test_a_human_click_starts_the_leg_instead_of_counting_down(tmp_path: Path) -> None:
+    """The behaviour the operator asked for in one sentence, and the limits on it.
+
+    Measured cause: Mercury run 21 (2026-10-12T21:27:51Z) was a manual `workflow_dispatch` 49 s after
+    a pause and its only output was the annotation `this leg declined to continue the campaign:
+    backoff: paused 49s ago, retry in 1150s`. `decide_tick` applies RESUME_BACKOFF_SECONDS to every
+    resume and takes no bypass flag, so the exemption had to live in the step that calls it.
+    """
+    for path in LAUNCHERS:
+        assert "HUMAN_CLICK" in path.read_text(encoding="utf-8"), f"{path.name}: no manual bypass"
+
+    paid = '{"execution_mode": "paid"}'
+    got = _run_bypass(tmp_path, chain="0", event="workflow_dispatch", mode="none",
+                      reason="backoff: paused 49s ago, retry in 1150s", intent=paid)
+    assert got["mode"] == "resume" and got["ref"] == "abc123def" and got["execution_mode"] == "paid", got
+    assert "backoff: paused 49s ago" in got["reason"], "the lifted refusal must still be quoted"
+
+    # A chained successor is a workflow_dispatch too, and it must keep waiting: an immediate
+    # re-dispatch inside the window is what re-creates the tight loop the window exists to stop.
+    for chain in ("1", "39"):
+        got = _run_bypass(tmp_path, chain=chain, event="workflow_dispatch", mode="none",
+                          reason="backoff: paused 49s ago, retry in 1150s", intent=paid)
+        assert got["mode"] == "none" and got["reason"].startswith("backoff:"), (chain, got)
+
+    # A click cannot clear an objection that is not the window.
+    for reason in ("operator pause: max_api_calls", "no Mercury pairwise state artifact",
+                   "ceiling override is not above the spent value"):
+        got = _run_bypass(tmp_path, chain="0", event="workflow_dispatch", mode="none",
+                          reason=reason, intent=paid)
+        assert got["mode"] == "none", (reason, got)
+
+    # A cron tick is not a click, whatever its inputs look like.
+    got = _run_bypass(tmp_path, chain="", event="schedule", mode="none",
+                      reason="backoff: paused 49s ago, retry in 1150s", intent=paid)
+    assert got["mode"] == "none", got
+
+    # Billing authority is read back from the carried intent, never from the form: no readable
+    # intent, no resume - and the reason says who tried.
+    for intent in (None, "{}", '{"execution_mode": "paid-ish"}', '{"execution_mode": "gates_only"}'):
+        got = _run_bypass(tmp_path, chain="0", event="workflow_dispatch", mode="none",
+                          reason="backoff: paused 49s ago", intent=intent)
+        if intent == '{"execution_mode": "gates_only"}':
+            assert got["mode"] == "resume" and got["execution_mode"] == "gates_only", got
+        else:
+            assert got["mode"] == "none" and "no readable execution mode" in got["reason"], (intent, got)
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
