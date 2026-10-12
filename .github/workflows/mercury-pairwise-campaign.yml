@@ -49,6 +49,11 @@ on:
         required: true
         type: boolean
         default: true
+      rebase_onto_ref:
+        description: "Optional branch or full SHA to re-pin this campaign's CODE to while carrying its existing state forward - the paid T1 result, the banked gate rows, the ceiling counters. The controller accepts it only when the grading-code digest is the single field that moved; a provider, model, endpoint, effort, execution mode, manifest or profile difference is still refused. Refused if the carried state records a terminal failure or an interrupted T1. The execution mode is read back from the carried intent, so this can neither promote nor demote what is authorised to bill. Leave empty to keep the pinned commit."
+        required: false
+        default: ''
+        type: string
       max_tokens_total_override:
         description: "Optional spend ceiling above the pinned profile's value. Only a number greater than the one a budget pause stopped at lifts that pause; it changes the budget, never the measurement contract."
         required: false
@@ -59,12 +64,16 @@ on:
         required: false
         default: ''
         type: string
+      chain_depth:
+        description: "Internal: how many self-dispatched continuations precede this one. The re-arm step increments it; a human dispatch resets it to 0 and the cap is 40."
+        required: false
+        default: "0"
   schedule:
     - cron: "13,43 * * * *"
 
 permissions:
   contents: read
-  actions: read
+  actions: write  # read, plus the successor dispatch tools/campaign_rearm.py asks for
   issues: write
 
 concurrency:
@@ -82,6 +91,77 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          REBASE="${{ inputs.rebase_onto_ref }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$REBASE" ]; then
+            # Three ways to continue, and the two obvious ones each lose something. A resume runs the
+            # commit pinned inside its own state artifact (tools/campaign_supervisor.py takes
+            # resume_ref from checkpoint.run.manifest_commit), so it can never pick up a fix; a fresh
+            # dispatch takes the new code and throws the paid T1 result, the banked gate rows and the
+            # ceiling counters away - then re-bills T1 for the privilege. A rebase is the third path:
+            # new code at $REBASE, the ledger of the latest state artifact, and --rebase-intent so the
+            # controller records the moved grading-context digest instead of refusing to continue.
+            # Authorization does not change here: the mode is read back from the carried intent, never
+            # from this dropdown, so a rebase cannot promote a gates-only lineage into a billable one.
+            LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+              --jq '[.artifacts[] | select(.name | startswith("mercury-pairwise-state-")) | select(.expired == false)] | sort_by(.created_at) | last // empty')
+            if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+              echo "mode=fresh" >> "$GITHUB_OUTPUT"
+              echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+              echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+              echo "reason=rebase requested but no state artifact exists; dispatching fresh at $REBASE" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            ARTIFACT_ID=$(printf '%s' "$LATEST" | jq -r '.id')
+            STATE_STAGE="$RUNNER_TEMP/mercury_state"
+            rm -rf "$STATE_STAGE"
+            mkdir -p "$STATE_STAGE"
+            gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/mercury_state.zip"
+            unzip -q "$RUNNER_TEMP/mercury_state.zip" -d "$STATE_STAGE"
+            if [ ! -s "$STATE_STAGE/campaign_intent.json" ]; then
+              # No intent means no continuation authority, and inventing one from a dispatch dropdown
+              # is the promotion the resume path already refuses. Fall back to fresh, and say so.
+              echo "mode=fresh" >> "$GITHUB_OUTPUT"
+              echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+              echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+              echo "reason=carried state has no campaign intent; rebasing onto $REBASE as a fresh lineage" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ -f "$STATE_STAGE/wrapper_failed.json" ]; then
+              # Refused, never cleared. `tools/inherit_campaign_state.py` keeps the same rule for
+              # cross-campaign inheritance (wrapper_failed.json is in its NOT_INHERITED list), and a
+              # rebase is not a licence to walk past a recorded terminal failure - if the operator
+              # has decided the cause is dead, they dispatch fresh and re-bill T1, or they clear the
+              # artifact deliberately. Either way the decision stays theirs and visible.
+              TERMINAL=$(jq -r '.pause_reason // "unknown"' "$STATE_STAGE/wrapper_failed.json" 2>/dev/null || true)
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=operator stop: the carried state records a terminal failure ($TERMINAL); a rebase will not clear it" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ -f "$STATE_STAGE/t1_started.json" ] && [ ! -f "$STATE_STAGE/t1_same_fact_presentation.json" ]; then
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=operator stop: carried T1 was interrupted before its report; a rebase never replays paid calls" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # `|| true` on purpose: a carried intent that will not parse must reach the refusal below,
+            # which names the problem in the leg's output, rather than killing the step with a raw jq
+            # parse error that looks like infrastructure and says nothing about the state file.
+            CARRIED_MODE=$(jq -r '.execution_mode // empty' "$STATE_STAGE/campaign_intent.json" 2>/dev/null || true)
+            case "$CARRIED_MODE" in
+              paid|gates_only) ;;
+              *) CARRIED_MODE="" ;;
+            esac
+            if [ -z "$CARRIED_MODE" ]; then
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=carried intent has no readable execution mode; refusing to guess what may bill" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "mode=rebase" >> "$GITHUB_OUTPUT"
+            echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+            echo "execution_mode=$CARRIED_MODE" >> "$GITHUB_OUTPUT"
+            echo "state_staged=true" >> "$GITHUB_OUTPUT"
+            echo "reason=rebasing the carried ledger onto $REBASE, keeping the carried $CARRIED_MODE mode" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
              && [ "${{ inputs.resume_previous }}" != "true" ]; then
             echo "mode=fresh" >> "$GITHUB_OUTPUT"
@@ -149,6 +229,23 @@ jobs:
             echo "execution_mode=$EXECUTION_MODE" >> "$GITHUB_OUTPUT"
             echo "state_staged=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Announce a refused tick instead of a silent green one
+        # A `mode=none` decision skips every remaining step and exits 0, so "the campaign is being
+        # continued on cron" and "the campaign refuses to be continued" are indistinguishable from
+        # the runs list. That indistinguishability is what made waiting for a tick a plausible plan
+        # for a day: the refusal was real, its reason sat in the log of a step nobody reads, and no
+        # state moved. Emit the supervisor's reason as an annotation - visible in the Checks UI and
+        # through GET /actions/runs/<id>/jobs, so a resume claim about this campaign can be
+        # falsified in one tick instead of one conversation - and keep the leg green: a refusal is a
+        # decision, not a fault, and a red X every half hour trains everyone to ignore the colour.
+        if: steps.mode.outputs.mode == 'none'
+        env:
+          REFUSAL_REASON: ${{ steps.mode.outputs.reason }}
+        run: |
+          set -euo pipefail
+          reason=$(printf '%s' "${REFUSAL_REASON:-no reason recorded}" | tr -d '\r\n' | sed 's/%/%25/g')
+          echo "::warning::this leg declined to continue the campaign: ${reason}"
 
       - name: Initialize fresh campaign state
         if: steps.mode.outputs.mode != 'none' && steps.mode.outputs.mode == 'fresh'
@@ -227,7 +324,7 @@ jobs:
           git rev-parse HEAD > "$OUT/campaign_ref.txt"
 
       - name: Refuse a plan whose exact-instance reference cannot be applied
-        if: steps.mode.outputs.mode == 'fresh'
+        if: contains(fromJSON('["fresh", "rebase"]'), steps.mode.outputs.mode)
         run: |
           set -euo pipefail
           # The exact-instance gate patches a generated case before its judge ever sees it,
@@ -237,6 +334,8 @@ jobs:
           # same patch path with no Docker, no torch and no provider call, over every gated
           # case of the plan the profile will ship, and refuses the dispatch in ~2 minutes.
           # Fresh dispatches only: a resumed tick runs pinned code that already passed this.
+          # A rebase runs new code against an old ledger, so it must clear this too - it is the
+          # check that catches a reference which cannot be applied to a vector it certifies.
           .venv/bin/python tools/instance_oracle_preflight.py \
             --profile experiments/mercury_pairwise_campaign.yaml \
             --out runs/mercury_pairwise_campaign/instance_oracle_preflight.json
@@ -374,15 +473,24 @@ jobs:
           if [ "${#LIMIT_ARGS[@]}" -gt 0 ]; then
             LIMIT_ARGS+=(--raise-ceiling "${{ github.actor }}")
           fi
+          REBASE_ARG=()
+          if [ "${{ steps.mode.outputs.mode }}" = "rebase" ]; then
+            # Declared here, not in the mode step: Actions steps do not share a shell, and this is
+            # the only step that invokes the controller. The ${ARR[@]+...} form keeps `set -u` from
+            # failing on an empty array, which is what a non-rebase dispatch leaves behind.
+            REBASE_ARG+=(--rebase-intent)
+          fi
           if [ "$EXECUTION_MODE" = "paid" ]; then
             .venv/bin/python tools/atria_campaign.py \
               --profile experiments/mercury_pairwise_campaign.yaml \
               --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS" \
-              "${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}"
+              "${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}" \
+              "${REBASE_ARG[@]+"${REBASE_ARG[@]}"}"
           else
             .venv/bin/python tools/atria_campaign.py \
               --profile experiments/mercury_pairwise_campaign.yaml \
-              --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS"
+              --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS" \
+              "${REBASE_ARG[@]+"${REBASE_ARG[@]}"}"
           fi
 
       - name: Stage campaign state for upload
@@ -423,3 +531,37 @@ jobs:
           path: ${{ runner.temp }}/mercury_upload/
           if-no-files-found: warn
           retention-days: 90
+
+      # A resumable pause is only a pause if something starts the successor leg. The repository's
+      # cron is not under its control - GitHub drops scheduled ticks on this repo, which the Atria
+      # covering launcher already documents ("after run 36791154490 ended at 04:35 UTC nothing ran
+      # for 2+ hours") and which was measured again on 2026-10-12: no run of any workflow here was
+      # created between 09:47Z and 19:04Z while both pairwise workflows kept reporting state active.
+      # So the leg that banked the rows asks for the next one, on the same terms as the covering
+      # campaign's CHAIN, and it 🙊s out the supervisor's own 20-minute resume backoff before
+      # asking, because a successor that arrives inside that window is refused with mode=none and
+      # does not re-arm. Chaining stops after 40 legs; a cancelled leg, a regressed state upload or
+      # a wrapper_failed.json marker never continues. Fail-open by construction: a refused or
+      # unreachable re-arm prints the reason and leaves the leg green, and the cron stays as the
+      # fallback. To stop the chain without disabling the workflow, cancel the running leg.
+      - name: Re-arm the next leg after a resumable pause
+        if: always() && !cancelled() && steps.mode.outputs.mode != 'none'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
+        run: |
+          set -uo pipefail
+          OUT=runs/mercury_pairwise_campaign
+          if [ ! -x .venv/bin/python ]; then
+            echo "campaign re-arm skipped: no virtualenv in this leg, so the scheduler was not asked"
+            exit 0
+          fi
+          STAGE_FAILED=
+          if [ "${{ steps.stage.outcome }}" = "failure" ]; then STAGE_FAILED=--stage-failed; fi
+          .venv/bin/python tools/campaign_rearm.py \
+            --report "$OUT/campaign_report.json" \
+            --ref "${{ steps.mode.outputs.ref }}" \
+            --chain-depth "${CHAIN_DEPTH:-0}" \
+            --marker "$OUT/wrapper_failed.json" \
+            ${STAGE_FAILED} \
+            || echo "campaign re-arm did not run; the scheduled trigger remains the fallback"
