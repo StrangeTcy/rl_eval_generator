@@ -222,6 +222,38 @@ jobs:
           REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
           REF=$(printf '%s' "$DECISION" | jq -r '.ref // empty')
           EXECUTION_MODE=$(printf '%s' "$DECISION" | jq -r '.execution_mode // empty')
+          # A human click is not a tick, and it must not be answered with a countdown.
+          # RESUME_BACKOFF_SECONDS (tools/campaign_supervisor.py, applied in decide_tick ahead of any
+          # resume, and reachable from no CLI flag) exists to stop a cron loop hammering a provider
+          # that just failed. The covering campaign exempts the operator from exactly that window -
+          # its YAML checks `age < 1200 and not manual_continue` - while the pairwise path delegates
+          # to decide_tick and had no way to say "a person is here". So a click 49 s after a pause was
+          # refused with `backoff: paused 49s ago, retry in 1150s` (Mercury run 21,
+          # 2026-10-12T21:27:51Z) and left the operator holding a green tick. Lift the window and
+          # nothing else:
+          #   * only for a workflow_dispatch whose chain_depth is 0 or empty - a hand, never this
+          #     workflow's own re-arm, which must keep waiting or it rebuilds the tight loop;
+          #   * only when the window was the single objection (the reason begins "backoff:"), so an
+          #     operator stop, a spent ceiling or a missing artifact keeps refusing;
+          #   * with the execution mode read back from the carried intent, never from the dropdown, so
+          #     a manual start cannot authorise billing that a resume could not.
+          CHAIN="${{ inputs.chain_depth }}"
+          case "$CHAIN" in ''|0) HUMAN_CLICK=1 ;; *) HUMAN_CLICK=0 ;; esac
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$HUMAN_CLICK" = 1 ] \
+             && [ "$MODE" = "none" ] && [ "${REASON#backoff:}" != "$REASON" ]; then
+            CARRIED_MODE=$(jq -r '.execution_mode // empty' "$STATE_STAGE/campaign_intent.json" 2>/dev/null || true)
+            case "$CARRIED_MODE" in
+              paid|gates_only)
+                MODE=resume
+                REF="${REF:-$PINNED_REF}"
+                EXECUTION_MODE=$CARRIED_MODE
+                REASON="manual dispatch: the resume backoff was lifted for this click (it had said: $REASON)"
+                ;;
+              *)
+                REASON="$REASON - a manual dispatch could not lift it: the carried intent has no readable execution mode"
+                ;;
+            esac
+          fi
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "reason=$REASON" >> "$GITHUB_OUTPUT"
           if [ "$MODE" != "none" ]; then
@@ -561,10 +593,12 @@ jobs:
       # for 2+ hours") and which was measured again on 2026-10-12: no run of any workflow here was
       # created between 09:47Z and 19:04Z while both pairwise workflows kept reporting state active.
       # So the leg that banked the rows asks for the next one, on the same terms as the covering
-      # campaign's CHAIN, and it 🙊s out the supervisor's own 20-minute resume backoff before
-      # asking, because a successor that arrives inside that window is refused with mode=none and
-      # does not re-arm. Chaining stops after 40 legs; a cancelled leg, a regressed state upload or
-      # a wrapper_failed.json marker never continues. Fail-open by construction: a refused or
+      # campaign's CHAIN. A pause inside the supervisor's 1200 s resume window is waited out here,
+      # in the finished leg (capped by --sleep-cap), because a successor dispatched inside that window
+      # is refused with mode=none and a refused leg does not re-arm - so refusing to wait is the same
+      # as never continuing. Chaining stops after 40 legs; a cancelled leg, a regressed state upload
+      # or a wrapper_failed.json marker never continues. Every decline is annotated, because the step
+      # stays green by design and a silent decline reads as a working chain. Fail-open by construction: a refused or
       # unreachable re-arm prints the reason and leaves the leg green, and the cron stays as the
       # fallback. To stop the chain without disabling the workflow, cancel the running leg.
       - name: Re-arm the next leg after a resumable pause
@@ -577,6 +611,7 @@ jobs:
           OUT=runs/reasoning_atria_pairwise_campaign
           if [ ! -x .venv/bin/python ]; then
             echo "campaign re-arm skipped: no virtualenv in this leg, so the scheduler was not asked"
+            echo "::warning::campaign re-arm declined: no virtualenv in this leg, the scheduler was not asked"
             exit 0
           fi
           STAGE_FAILED=
@@ -585,6 +620,8 @@ jobs:
             --report "$OUT/campaign_report.json" \
             --ref "${{ steps.mode.outputs.ref }}" \
             --chain-depth "${CHAIN_DEPTH:-0}" \
+            --sleep-cap 1800 \
             --marker "$OUT/wrapper_failed.json" \
             ${STAGE_FAILED} \
-            || echo "campaign re-arm did not run; the scheduled trigger remains the fallback"
+            || { echo "campaign re-arm did not run; the scheduled trigger remains the fallback"; \
+                 echo "::warning::campaign re-arm declined: the tool exited non-zero, see its output above"; }
