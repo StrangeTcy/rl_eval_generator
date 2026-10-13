@@ -189,6 +189,13 @@ def test_the_finished_leg_sits_out_the_window_then_asks(monkeypatch, tmp_path, c
     assert "would dispatch" in out, out
 
 
+# Why the deployed path is not in this list: pushing a file under `.github/workflows/` is refused for
+# this credential even on its own branch - measured, not assumed:
+#   ! [remote rejected] arena/... (refusing to allow a GitHub App to create or update workflow
+#   `.github/workflows/mercury-pairwise-campaign.yml` without `workflows` permission)
+# So the branch owns the tool, the profile, the sidecar and the supervisor, and the workflow file owns
+# only the two steps that read them. `main`'s launcher, and whatever a scheduled tick does, are out of
+# reach from here by design.
 LAUNCHERS = [
     ROOT / "handoff/mercury-pairwise-campaign.yml",
     ROOT / "handoff/reasoning-atria-pairwise-campaign.yml",
@@ -258,7 +265,7 @@ def test_the_rearm_runs_from_the_workflows_own_ref_not_the_pinned_checkout() -> 
         assert 'REARM="$RUNNER_TEMP/campaign_rearm.py"' in body, path.name
         assert '.venv/bin/python "$REARM"' in body, path.name
         assert 'cp tools/campaign_rearm.py "$REARM"' in body, f"{path.name}: the checkout copy is the fallback"
-        assert "no campaign_rearm.py to run" in body, f"{path.name}: a missing tool must be announced"
+        assert "no compilable campaign_rearm.py" in body, f"{path.name}: a missing tool must be announced"
         assert "GH_TOKEN" in (step.get("env") or {}), f"{path.name}: the provider-free fetch needs a token"
 
 
@@ -319,11 +326,55 @@ def test_the_wrapper_stop_is_declared_and_the_chain_never_carries_it() -> None:
     assert "clear_wrapper_stop" not in successor_inputs("abc123", 3)
 
 
-def test_handoff_and_docs_twins_stay_identical() -> None:
+def test_every_copy_of_each_launcher_is_identical() -> None:
+    """One byte stream, two paths: the handoff file and the documented example.
+
+    A copy that lives in one place only is the point - the operator stopped hand-copying files, and a
+    launcher edited in one location is how a main-side and a branch-side definition disagree for a day.
+    The same accident already happened to `tools/campaign_rearm.py` on main (hand upload at e72ec43,
+    identifiers replaced by emoji, syntactically invalid), which is what the re-arm step's compile gate
+    is there to survive.
+    """
     for name in ("mercury-pairwise-campaign", "reasoning-atria-pairwise-campaign"):
-        left = (ROOT / "handoff" / f"{name}.yml").read_bytes()
-        right = (ROOT / "docs/workflows" / f"{name}.yml.example").read_bytes()
-        assert left == right, f"{name}: the pasteable copy drifted from the documented one"
+        texts = {
+            "handoff": (ROOT / "handoff" / f"{name}.yml").read_bytes(),
+            "example": (ROOT / "docs/workflows" / f"{name}.yml.example").read_bytes(),
+        }
+        assert texts["handoff"] == texts["example"], (
+            name, {k: len(v.splitlines()) for k, v in texts.items()}
+        )
+
+
+def test_a_doomed_rebase_is_refused_before_it_costs_a_leg_and_a_terminal_marker() -> None:
+    """The 3-minute death, caught at one API call instead.
+
+    `tools/run_suite.py:294` keeps `manifest_commit` immutable in a resumed checkpoint and
+    `--rebase-intent` waives only `gate_context_sha` (tools/atria_campaign.py:244), so rebasing a lineage
+    that has an episode ledger raises inside the controller, exits 2, and writes the marker that then
+    needs an operator acknowledgement. Mercury runs 22 and 24 (2026-10-12T23:59:57Z,
+    2026-10-13T01:09:31Z) are that pair, both at 190 / 416.
+    """
+    for path in LAUNCHERS:
+        body = [s for s in _steps(path) if str(s.get("name", "")).startswith("Decide")][0]["run"]
+        assert "CARRIED_COMMIT=$(jq -r '.run.manifest_commit" in body, path.name
+        assert 'TARGET_COMMIT=$(gh api "repos/${{ github.repository }}/commits/$REBASE"' in body, path.name
+        start = body.index("CARRIED_COMMIT=")
+        stop = body.index('if [ ! -s "$STATE_STAGE/campaign_intent.json" ]')
+        preflight = body[start:stop]
+        assert '"mode=none"' in preflight and preflight.index('"mode=none"') < preflight.index("exit 0"), path.name
+        assert "rebase_onto_ref empty" in preflight, f"{path.name}: the refusal must name the fix"
+        assert "campaign_intent.json" not in preflight, f"{path.name}: refuse before reading the intent"
+        assert "run_suite.py:294" in preflight, f"{path.name}: cite the rule the rebase collides with"
+
+
+def test_the_rearm_refuses_to_execute_a_copy_that_does_not_compile() -> None:
+    """A mangled upload must not be able to masquerade as a declined re-arm."""
+    for path in LAUNCHERS:
+        body = _steps(path)[-1]["run"]
+        assert 'COMPILES=' in body and 'ast.parse' in body, path.name
+        assert body.index("COMPILES=") < body.index('python -c "$COMPILES" "$REARM"'), path.name
+        assert "does not compile; using the pinned checkout" in body, path.name
+        assert "no compilable campaign_rearm.py" in body, path.name
 
 
 def _bypass_block(path: Path, *, clear: str = "false") -> str:
