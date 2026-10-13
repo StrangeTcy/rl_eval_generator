@@ -518,3 +518,36 @@ def test_a_leg_arming_its_successor_is_not_an_other_leg() -> None:
     source = inspect.getsource(campaign_rearm.main)
     assert "args.exclude_run" in source and "per_page=20" in source, source
     assert "--exclude-run" in source or "exclude-run" in inspect.getsource(campaign_rearm)
+
+
+def test_an_empty_run_list_is_idle_and_not_blindness() -> None:
+    """The state a campaign's first leg is in, and the one that used to need a human.
+
+    ``main`` asks the workflow for its runs, removes this leg from the answer (``other_legs``) and hands
+    what is left to ``decide_rearm``. An empty remainder used to be read as "the run list could not be
+    read", which is true of a 403 and equally true of a lineage whose runs have aged out of the listing -
+    and answering either with a refusal means the second leg of a campaign can only ever arrive by hand.
+    The distinction is now an argument, and the safe default (unreadable) is the one that refuses.
+    """
+    passed, reason = _decide(newest_run=None, run_list_readable=True)
+    assert passed is True, reason
+    assert "no other leg on record" in reason and "max_wall_seconds" in reason, reason
+
+    # Unreadable stays refused, and so does the default: nothing is dispatched on an assumption.
+    refused, why = _decide(newest_run=None)
+    assert refused is False and "refusing to dispatch blind" in why, why
+
+    # The exemption is for the age floor only. Everything a pause has to clear still has to clear.
+    for kwargs in ({"workflow_state": "disabled_manually"}, {"token_present": False},
+                   {"chain_depth": 40}, {"stage_failed": True}, {"was_cancelled": True}):
+        blocked, why = _decide(newest_run=None, run_list_readable=True, **kwargs)
+        assert blocked is False, (kwargs, why)
+
+    # And a sibling that is genuinely busy arrives as a newest_run, so it still refuses.
+    busy = {"id": 9, "status": "in_progress", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    assert _decide(newest_run=busy, run_list_readable=True)[0] is False
+
+    # main threads the flag: readable listing -> True, and the flag is re-passed after the handover sleep.
+    source = inspect.getsource(campaign_rearm.main)
+    assert source.count("run_list_readable=run_list_readable") == 2, source
+    assert "run_list_readable = status == 200" in source, source

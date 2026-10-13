@@ -1,3 +1,10 @@
+# Held outside .github/workflows/ on purpose, and this is the measurement that decided it: pushing this
+# file to its real path was rejected by the server - "refusing to allow a GitHub App to create or update
+# workflow `.github/workflows/campaign-kick.yml` without `workflows` permission" (16:01 UTC, push of
+# 5939fba). The App that carries this workspace cannot add a trigger, so the trigger is not mine to give.
+# This is the copy that would go in, unchanged, if it ever becomes obtainable; tests/test_campaign_kick.py
+# parses it and asserts it stays narrow (push-only, one branch, no schedule block, actions:write and
+# nothing else), so the example cannot rot into something wider than the tool it calls.
 # One campaign leg, started by a push, for the case where the scheduler produces no tick.
 #
 # This file is deliberately narrow and it is deliberately not on the default branch's schedule: it reacts

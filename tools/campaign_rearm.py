@@ -159,6 +159,7 @@ def decide_rearm(
     stage_failed: bool = False,
     was_cancelled: bool = False,
     sleep_cap: int | None = DEFAULT_SLEEP_CAP,
+    run_list_readable: bool = False,
 ) -> tuple[bool, str]:
     """Return (dispatch?, reason). Pure: no network, no clock, no filesystem, so every branch
     is testable. Order matters: the stops a human would use are checked first, so a cancelled
@@ -194,7 +195,13 @@ def decide_rearm(
             "dispatch here would be indistinguishable from a successful one"
         )
     if newest_run is None:
-        return False, "the workflow's run list could not be read; refusing to dispatch blind"
+        if not run_list_readable:
+            return False, "the workflow's run list could not be read; refusing to dispatch blind"
+        # Readable, and empty once this leg is excluded from it: no sibling that could be busy, and no
+        # finished leg whose age has to be sat out. That is the state of a lineage whose previous runs
+        # have aged out of the list - or of a first leg - and answering it with "dispatch blind" is what
+        # made a second run of a campaign require a human, which is the whole thing being fixed.
+        return True, f"pause_reason={reason!r} with no other leg on record at chain_depth={chain_depth}"
     run_status = str(newest_run.get("status") or "")
     if run_status in BUSY_RUN_STATUSES:
         return False, f"a leg is already {run_status}; the concurrency group would only queue another"
@@ -318,6 +325,10 @@ def main(argv: list[str] | None = None) -> int:
 
     newest_run: Mapping[str, Any] | None = None
     workflow: dict | None = None
+    # Three states, and the difference between the last two is what this file exists to get right: the
+    # list was never asked for (nothing to conclude), it was asked for and failed (refuse to dispatch
+    # blind), or it came back with only this leg in it (idle, and free to arm a successor).
+    run_list_readable = False
     if report and report.get("status") == "paused" and token:
         workflow, lookup_error = find_workflow(api, args.repo, token or None, args.workflow)
         if lookup_error:
@@ -327,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"{api}/repos/{args.repo}/actions/workflows/{workflow['id']}/runs?per_page=20", token or None
                 )
             listed = (body.get("workflow_runs") or []) if status == 200 else []
+            run_list_readable = status == 200
             siblings = other_legs(listed, args.exclude_run)
             if listed and not siblings:
                 print("campaign re-arm: the only leg on record is this one, so it does not count as busy")
@@ -346,6 +358,7 @@ def main(argv: list[str] | None = None) -> int:
         marker_paths=args.markers,
         stage_failed=args.stage_failed,
         was_cancelled=args.cancelled,
+        run_list_readable=run_list_readable,
     )
     if not decision:
         # The refusal may be purely temporal, in which case the fix is to wait, not to hand the
@@ -369,6 +382,7 @@ def main(argv: list[str] | None = None) -> int:
                 marker_paths=args.markers,
                 stage_failed=args.stage_failed,
                 was_cancelled=args.cancelled,
+                run_list_readable=run_list_readable,
             )
     if not decision:
         # A decline is a decision, and it must not live only in a log nobody opens: like the refused-tick

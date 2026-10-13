@@ -11,7 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools import campaign_kick  # noqa: E402
+try:
+    from tools import campaign_kick  # noqa: E402
+except ImportError as exc:  # a tree without the tool skips, it does not redden CI - see test_campaign_rearm
+    pytest.skip(f"no tools/campaign_kick.py in this tree ({exc})", allow_module_level=True)
 
 NOW = datetime(2026, 10, 13, 15, 20, tzinfo=timezone.utc)
 BRANCH = "arena/595b91e0-rl-eval-generator"
@@ -237,3 +240,30 @@ def test_the_cli_prints_the_verdict_and_exits_zero(tmp_path: Path, monkeypatch) 
         assert campaign_kick.main() == 0
     out = buf.getvalue()
     assert "::warning::campaign kick:" in out and "already queued or running" in out, out
+
+
+WORKFLOW_EXAMPLE = ROOT / "tools" / "campaign_kick_workflow.yml"
+
+
+def test_the_workflow_that_would_run_this_stays_narrow() -> None:
+    """The trigger half of the mechanism, held at the width it was designed with.
+
+    It cannot be installed from here - the App that carries this workspace has no `workflows` permission,
+    which is what the push of 5939fba measured when the server answered "refusing to allow a GitHub App to
+    create or update workflow ... without `workflows` permission" - so the guarantee that keeps it honest is
+    this test: push-only, one branch, no `schedule:` (a kick that schedules itself is a loop), the only
+    elevated permission is `actions: write`, and the step it runs is the tested tool.
+    """
+    import yaml
+
+    doc = yaml.safe_load(WORKFLOW_EXAMPLE.read_text(encoding="utf-8"))
+    trigger = doc.get(True, doc.get("on"))
+    assert list(trigger) == ["push"], trigger
+    assert trigger["push"] == {"branches": [BRANCH]}, trigger["push"]
+    assert doc["permissions"] == {"contents": "read", "actions": "write"}, doc["permissions"]
+    steps = doc["jobs"]["kick"]["steps"]
+    run = [step for step in steps if "run" in step]
+    assert len(run) == 1, steps
+    assert "tools/campaign_kick.py" in run[0]["run"], run[0]
+    assert run[0]["env"]["GITHUB_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}", run[0]
+    assert "schedule" not in trigger and "schedule" not in doc["jobs"]["kick"], "a self-scheduling kick is a loop"
