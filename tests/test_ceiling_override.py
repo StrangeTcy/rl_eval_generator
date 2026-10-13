@@ -324,3 +324,47 @@ def test_a_refusal_names_every_difference_not_just_the_first(tmp_path: Path) -> 
     # The match is on the key name, so `api_key_env` - an environment variable name, not a value -
     # is hidden too. Losing that one name from a diagnostic is the cheaper side of the mistake.
     assert printable["api_base"] == "https://api/x/v1" and printable["api_key_env"] == "<redacted>"
+
+# Measured pair from the wedged Mercury lineage: the ledger's own commit and the stamp its carried
+# manifest was given by the leg that re-pinned it. `git merge-base --is-ancestor` says 0ddcd39 is an
+# ancestor of 5cb4205, so the move is a fast-forward of one lineage - not a fork onto unrelated code.
+LEDGER_COMMIT = "0ddcd396b45f46b9fbbba7d477b34221a3724ef2"
+MANIFEST_COMMIT = "5cb4205ae3f69c72809e4834e52006b3406fb3a7"
+
+
+def test_a_hand_started_descendant_carries_the_ledger_without_being_asked(tmp_path: Path, monkeypatch) -> None:
+    """Ancestor + manual dispatch is its own authority; the flag is the fallback, not the only door.
+
+    Run 28 (38335486606) reached the controller without `--rebase-intent`, refused this exact pair, and
+    wrote a fourth marker. A dispatch that names a ref but forgets an acknowledgement cannot be told
+    apart from one that named the wrong ref, and that ambiguity is what kept the loop turning.
+    """
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    previous = {"provider": "mercury", "manifest_commit": LEDGER_COMMIT}
+    current = {**previous, "manifest_commit": MANIFEST_COMMIT}
+
+    checkpoint = _load(tmp_path / "ancestor", previous, current)
+    moves = checkpoint["manifest_commit_moves"]
+    assert moves[0]["authorized_by"] == "manual-ancestry", moves
+    assert checkpoint["run"]["manifest_commit"] == MANIFEST_COMMIT
+
+    # Backwards is not a fast-forward, so it is still a refusal...
+    with pytest.raises(ValueError, match="checkpoint metadata mismatch for manifest_commit"):
+        _load(tmp_path / "rewind", current, previous)
+
+    # ...and so is a scheduled tick, which may not re-pin a lineage no matter how tidy its history is.
+    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+    with pytest.raises(ValueError, match="checkpoint metadata mismatch for manifest_commit"):
+        _load(tmp_path / "cron", previous, current)
+
+    # An object the checkout cannot see - a sibling branch, a rewritten lineage, prose - never authorizes.
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    for bogus in ("not-a-sha", "0" * 40, "z" * 8):
+        with pytest.raises(ValueError, match="checkpoint metadata mismatch for manifest_commit"):
+            _load(tmp_path / f"bogus-{bogus}", previous, {**previous, "manifest_commit": bogus})
+
+    # A 7-character abbreviation is a commit reference, and git resolves it the same way: the check is
+    # ancestry, not string length. Asserted so nobody "hardens" this into a format test.
+    short = _load(tmp_path / "abbrev", previous, {**previous, "manifest_commit": MANIFEST_COMMIT[:7]})
+    assert short["run"]["manifest_commit"] == MANIFEST_COMMIT[:7]
+

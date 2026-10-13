@@ -280,6 +280,45 @@ def _ceiling_raises(
     return raises
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _commit_ancestor(older: Any, newer: Any) -> bool:
+    """True only when both objects are commits in this checkout and `older` is reachable from `newer`.
+
+    A resumed ledger and a re-pinned code ref are two commits, and the question that decides whether
+    carrying the ledger forward is safe is not "are they different" - it is "is the ledger's commit an
+    ancestor of the code being run". An ancestor means a fast-forward: no forked history, no commit in
+    the ledger that this tree does not also contain, so the rows already banked were produced by code
+    that this leg's code includes. Anything else - a sibling branch, a rewritten lineage, an object
+    this checkout cannot even see - answers False and the refusal stands. Fail-closed on purpose: a
+    leg that cannot ask git is a leg that does not move the stamp.
+    """
+    def sha(value: Any) -> str:
+        text = str(value or "")
+        if len(text) < 7 or len(text) > 40 or any(char not in "0123456789abcdef" for char in text):
+            return ""
+        return text
+
+    old_sha, new_sha = sha(older), sha(newer)
+    if not old_sha or not new_sha:
+        return False
+    for value in (old_sha, new_sha):
+        probe = subprocess.run(
+            ["git", "-C", str(_REPO_ROOT), "cat-file", "-e", f"{value}^{{commit}}"],
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode != 0:
+            return False
+    check = subprocess.run(
+        ["git", "-C", str(_REPO_ROOT), "merge-base", "--is-ancestor", old_sha, new_sha],
+        capture_output=True,
+        text=True,
+    )
+    return check.returncode == 0
+
+
 def _without_secrets(block: dict[str, Any]) -> dict[str, Any]:
     """A printable copy of a run block: endpoint identifiers are diagnostics, credentials are not.
 
@@ -351,7 +390,20 @@ def _load_checkpoint(
                     # Checked by _ceiling_raises, which refuses an unauthorised
                     # change and a reduction; reaching here means it was allowed.
                     continue
-                if field == "manifest_commit" and allow_manifest_commit_rebase:
+                authorized = allow_manifest_commit_rebase
+                if field == "manifest_commit" and not authorized:
+                    # A hand-started leg whose code is a descendant of the ledger's own commit needs
+                    # no extra flag to be trusted with the move; the ancestry is the authority, and
+                    # `--rebase-intent` exists for the case where a launcher cannot say it. Measured
+                    # reason this matters: run 28 (38335486606, 02:08:46Z, 2m29s) reached the
+                    # controller without the flag, refused this pair, and wrote a fourth marker - a
+                    # dispatch that selects a ref but not the acknowledgement cannot tell the two
+                    # apart from the run page, which is how the loop kept turning.
+                    authorized = (
+                        os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+                        and _commit_ancestor(previous.get(field), metadata.get(field))
+                    )
+                if field == "manifest_commit" and authorized:
                     origin = previous.get(field)
                     # What binds a banked verdict is the grading-code digest, and
                     # that is checked on its own terms: rows are reused only while
@@ -369,7 +421,9 @@ def _load_checkpoint(
                         {
                             "from": origin,
                             "to": metadata.get(field),
-                            "authorized_by": "rebase-intent",
+                            "authorized_by": (
+                                "rebase-intent" if allow_manifest_commit_rebase else "manual-ancestry"
+                            ),
                             "at": _utc_now(),
                         },
                     ]

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -253,6 +254,20 @@ def _body(output: Path) -> str:
         f"- **Current case:** `{current}`",
         f"- **Current elapsed:** {_elapsed(progress.get('current_started_at'))}",
     ]
+    # Which code this leg actually ran, named in the report instead of inferred from a refusal. Four
+    # legs of this campaign died on a stamp mismatch and none of them could say whether the checkout
+    # was the one that waives it - the Actions log is not readable from the API that can read this
+    # comment - so the ambiguity itself cost the time.
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parents[1]), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except Exception:  # noqa: BLE001 - a status line must never be able to break a leg
+        head = ""
+    if head:
+        lines.append(f"- **Leg code:** `{head}` @ `{os.environ.get('GITHUB_REF_NAME', 'unknown')}`")
     t1_interrupted = _read_json(output / "t1_interrupted.json")
     if (
         t1_interrupted.get("status") == "interrupted"

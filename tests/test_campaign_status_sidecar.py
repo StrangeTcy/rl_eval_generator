@@ -31,6 +31,18 @@ def _issue_selection_is_off(monkeypatch):
     )
 
 
+def test_the_report_names_the_code_the_leg_ran(tmp_path: Path) -> None:
+    """Four legs died on a stamp mismatch and none of them said which checkout they were defending.
+
+    The Actions log is not readable from the API that can read this comment, so the comment has to carry
+    the fact: `Leg code: <sha> @ <ref>` distinguishes a leg that ran the waiver from one that never saw it.
+    """
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "running", "updated_at": "2026-10-13T02:11:08Z"}), encoding="utf-8"
+    )
+    body = campaign_status_sidecar._body(tmp_path)
+    assert "- **Leg code:** `" in body, body
+
 def test_sidecar_renders_durable_gate_progress_without_network(tmp_path: Path) -> None:
     write_progress(
         tmp_path,
