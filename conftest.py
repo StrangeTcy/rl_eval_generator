@@ -13,6 +13,7 @@ unsafe and a green one cannot make it safe.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -29,7 +30,10 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001 - pytest'
 
         note = maybe_kick_from_ci(ROOT)
     except BaseException as exc:  # noqa: BLE001 - the suite must survive any of this
-        print(f"\ncampaign kick: skipped, the check itself failed ({type(exc).__name__}: {exc})")
-        return
-    if note:
-        print(f"\ncampaign kick: {note}")
+        note = f"skipped, the check itself failed ({type(exc).__name__}: {exc})"
+    in_ci = bool(os.environ.get("GITHUB_RUN_ID")) or (ROOT / "campaign_kick.json").exists()
+    if note and in_ci:
+        # ::warning:: because a log line from a CI job whose endpoints are closed is not readable by
+        # anyone; an annotation is. The verdict of a kick - dispatched, refused, or declined - has to
+        # reach the person who pushed the instruction, and this is the only channel that reaches them.
+        print(f"\n::warning::campaign kick: {note}")
