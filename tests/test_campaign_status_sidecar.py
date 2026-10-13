@@ -106,6 +106,30 @@ def test_sidecar_renders_terminal_state_pause_reason_and_retries(tmp_path: Path)
     assert "**Campaign elapsed:**" in body
 
 
+def test_a_wrapper_crash_is_legible_in_the_comment_without_log_access(tmp_path: Path) -> None:
+    """`blocked` is not an explanation, and the log that holds one is not readable by everyone.
+
+    Mercury run 22 (2026-10-12T23:59:53Z) wrote a `blocked` report plus wrapper_failed.json after 2h22m
+    that banked nothing; the only account of why sat in the artifact. The sidecar quotes it.
+    """
+    (tmp_path / "wrapper_failed.json").write_text(
+        json.dumps({
+            "pause_reason": "infrastructure_error",
+            "detail": "RuntimeError:  judge\n\nstack  exited 1",
+            "recorded_at": "2026-10-12T23:59:49Z",
+        }),
+        encoding="utf-8",
+    )
+    body = _body(tmp_path)
+    assert "**Wrapper failure:** `infrastructure_error` at `2026-10-12T23:59:49Z`" in body
+    assert "RuntimeError: judge stack exited 1" in body, "the detail must be flattened, not raw"
+    assert "wrapper_failed" not in body.split("Wrapper failure")[0], "no line before it should name the file"
+
+    # Absent marker: nothing is appended, because a healthy leg must not look like a crashed one.
+    (tmp_path / "wrapper_failed.json").unlink()
+    assert "Wrapper failure" not in _body(tmp_path)
+
+
 def test_campaign_state_line_names_the_leg_that_wrote_the_report(tmp_path: Path) -> None:
     """The state line must not masquerade as live during a running leg.
 

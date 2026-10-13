@@ -233,9 +233,90 @@ def test_every_flag_the_launcher_passes_exists_in_the_tool() -> None:
             "dry-run"} <= accepted
     for path in LAUNCHERS:
         body = _steps(path)[-1]["run"]
+        # Only the tool invocation is a flag surface: the same step also calls `gh api --jq`, and
+        # grading that as a campaign_rearm.py flag is how a guard starts failing on unrelated edits.
+        body = body[body.index('.venv/bin/python "$REARM"'):]
         for flag in re.findall(r"(?<![\w-])--[a-z0-9-]+", body):
             assert flag.replace("--", "") in accepted, f"{path.name}: campaign_rearm.py does not accept {flag}"
         assert "--marker" in body and "--chain-depth" in body, f"{path.name}: the stops must be wired, not just available"
+
+
+def test_the_rearm_runs_from_the_workflows_own_ref_not_the_pinned_checkout() -> None:
+    """A handover that depends on the pinned tree is a handover that vanishes on old lineages.
+
+    Atria run 15 (19:47:25 -> 2026-10-13T00:42:26Z) is the clean case that still did not continue: its
+    report said `paused` / `max_wall_seconds` with 125 / 416 banked - exactly what the re-arm is for -
+    and its job listing has no Re-arm step at all, because the definition it ran predates the paste.
+    The mirror image of that, a new definition checking out an old pin, is answered here: the tool is
+    fetched from the ref the workflow file came from, with the checkout as fallback and an annotation
+    when neither has it.
+    """
+    for path in LAUNCHERS:
+        step = _steps(path)[-1]
+        body = step["run"]
+        assert "contents/tools/campaign_rearm.py?ref=${{ github.sha }}" in body, path.name
+        assert 'REARM="$RUNNER_TEMP/campaign_rearm.py"' in body, path.name
+        assert '.venv/bin/python "$REARM"' in body, path.name
+        assert 'cp tools/campaign_rearm.py "$REARM"' in body, f"{path.name}: the checkout copy is the fallback"
+        assert "no campaign_rearm.py to run" in body, f"{path.name}: a missing tool must be announced"
+        assert "GH_TOKEN" in (step.get("env") or {}), f"{path.name}: the provider-free fetch needs a token"
+
+
+def test_a_hand_click_can_clear_a_recorded_wrapper_stop_and_only_that(tmp_path: Path) -> None:
+    """The lever that did not exist: two crashes in a row stop the campaign with no way to proceed.
+
+    Mercury run 23 (2026-10-13T00:48:01Z) was refused by this guard - `operator stop: the carried state
+    records a terminal failure (wrapper_exception); a rebase will not clear it` - and the refusal was
+    correct by the campaign's own rule (tools/atria_campaign.py:1592-1596,
+    tools/campaign_supervisor.py:207-215). But the operator was left holding a resume that refuses and a
+    fresh dispatch that drops 190 banked episodes and re-bills T1, i.e. no lever at all. So the
+    acknowledgement is a dispatch input: recorded on the run's own page, limited to a harness crash, and
+    self-terminating because the new leg clears the marker at its start.
+    """
+    paid = '{"execution_mode": "paid"}'
+    crash = {"pause_reason": "wrapper_exception", "detail": "RuntimeError: judge exited 1"}
+    stop = "operator stop: wrapper_exception (wrapper recorded a terminal failure)"
+
+    def decide(**kw):
+        args = {"chain": "0", "event": "workflow_dispatch", "mode": "none", "reason": stop,
+                "intent": paid, "clear": "true", "marker": crash}
+        args.update(kw)
+        return _run_bypass(tmp_path / f"case-{len(list(tmp_path.iterdir()))}", **args)
+
+    got = decide()
+    assert got["mode"] == "resume" and got["execution_mode"] == "paid", got
+    assert "the wrapper-stop was lifted" in got["reason"], got
+    assert stop in got["reason"], "the lifted refusal must still be quoted"
+
+    for label, kw in (
+        ("no acknowledgement", {"clear": "false"}),
+        ("a spend ceiling is not liftable", {"marker": {"pause_reason": "max_api_calls"}}),
+        ("exhausted retries are not liftable",
+         {"marker": {"pause_reason": "infrastructure_error_retries_exhausted"}}),
+        ("no marker file at all", {"marker": None}),
+        ("a chained successor cannot self-authorise", {"chain": "2"}),
+    ):
+        got = decide(**kw)
+        assert got["mode"] == "none", (label, got)
+
+    # A cron tick never reaches the lift, however it is configured.
+    assert decide(event="schedule", chain="")["mode"] == "none"
+
+
+def test_the_wrapper_stop_is_declared_and_the_chain_never_carries_it() -> None:
+    """The input exists, defaults to no, and is not part of a self-dispatched successor's payload."""
+    for path in LAUNCHERS:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        inputs = (raw.get(True, raw.get("on")) or {})["workflow_dispatch"]["inputs"]
+        assert inputs["clear_wrapper_stop"]["default"] is False, f"{path.name}: must default to no"
+        assert inputs["clear_wrapper_stop"]["type"] == "boolean", path.name
+        text = path.read_text(encoding="utf-8")
+        assert text.count("clear_wrapper_stop") >= 3, f"{path.name}: declared and wired in both paths"
+        assert "operator cleared a recorded wrapper stop" in text, f"{path.name}: the lift must be announced"
+        for reason in ("wrapper_exception", "wrapper_transient_error", "infrastructure_error",
+                       "docker_unavailable"):
+            assert reason in text, (path.name, reason)
+    assert "clear_wrapper_stop" not in successor_inputs("abc123", 3)
 
 
 def test_handoff_and_docs_twins_stay_identical() -> None:
@@ -245,7 +326,7 @@ def test_handoff_and_docs_twins_stay_identical() -> None:
         assert left == right, f"{name}: the pasteable copy drifted from the documented one"
 
 
-def _bypass_block(path: Path) -> str:
+def _bypass_block(path: Path, *, clear: str = "false") -> str:
     """The manual-dispatch bypass, extracted from the launcher that ships it.
 
     Not a re-typed copy: the block is sliced out of the step's own `run:` body, so this test grades
@@ -254,19 +335,23 @@ def _bypass_block(path: Path) -> str:
     body = [s for s in _steps(path) if str(s.get("name", "")).startswith("Decide")][0]["run"]
     start = body.index('CHAIN="${{ inputs.chain_depth }}"')
     stop = body.index('echo "mode=$MODE"', start)
-    return body[start:stop]
+    return body[start:stop].replace("${{ inputs.clear_wrapper_stop }}", clear)
 
 
 def _run_bypass(tmp_path: Path, *, chain: str, event: str, mode: str, reason: str,
-                intent: str | None) -> dict[str, str]:
+                intent: str | None, clear: str = "false",
+                marker: dict | None = None) -> dict[str, str]:
     """Run the shipped bypass block under bash, with the launcher's own variable contract."""
-    block = _bypass_block(LAUNCHERS[0]).replace("${{ inputs.chain_depth }}", chain)
+    block = _bypass_block(LAUNCHERS[0], clear=clear).replace("${{ inputs.chain_depth }}", chain)
     # A fresh stage per call: intent=None must mean "the file is absent", not "whatever the previous
     # call in this test left behind".
+    tmp_path.mkdir(parents=True, exist_ok=True)
     stage = tmp_path / f"state-{sum(1 for _ in tmp_path.iterdir())}"
     stage.mkdir(parents=True)
     if intent is not None:
         (stage / "campaign_intent.json").write_text(intent, encoding="utf-8")
+    if marker is not None:
+        (stage / "wrapper_failed.json").write_text(json.dumps(marker), encoding="utf-8")
     script = tmp_path / "bypass.sh"
     script.write_text("\n".join([
         "set -uo pipefail",

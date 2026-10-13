@@ -261,6 +261,21 @@ def _body(output: Path) -> str:
         lines.append(
             "- **T1 status:** `interrupted; operator review required; no automatic replay`"
         )
+    wrapper = _read_json(output / "wrapper_failed.json")
+    if wrapper:
+        # The one thing a harness crash leaves that a human can actually use is the detail it recorded,
+        # and it lives only in the artifact: `Campaign state: blocked` is not an explanation, and the
+        # Actions log of a leg is not readable from the API the way a comment is. So put it in the
+        # comment. Reporting only - the marker still means "stop for an operator".
+        lines.append(
+            "- **Wrapper failure:** `{}` at `{}`".format(
+                wrapper.get("pause_reason") or "unrecorded",
+                wrapper.get("recorded_at") or "unknown time",
+            )
+        )
+        detail = " ".join(str(wrapper.get("detail") or "").split())[:400]
+        if detail:
+            lines.append(f"  - {detail}")
     if progress.get("progress_kind") == "t1_same_fact_presentation":
         completed = progress.get("t1_api_calls_completed")
         total = progress.get("t1_api_calls_total")

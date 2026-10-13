@@ -101,6 +101,7 @@ def _decide_tail(text: str) -> str:
     run = (
         run.replace("${{ inputs.rebase_onto_ref }}", "$INPUT_REBASE")
         .replace("${{ inputs.execution_mode }}", "$INPUT_MODE")
+        .replace("${{ inputs.clear_wrapper_stop }}", "$INPUT_CLEAR")
         .replace("${{ github.repository }}", "o/r")
     )
     marker = 'if [ ! -s "$STATE_STAGE/campaign_intent.json" ]; then'
@@ -111,9 +112,9 @@ def _decide_tail(text: str) -> str:
     return "\n".join(lines[:-1]) + "\n"
 
 
-def _run_tail(tmp_path: Path, stage_files: dict[str, str]) -> dict[str, str]:
+def _run_tail(tmp_path: Path, stage_files: dict[str, str], *, clear: str = "false") -> dict[str, str]:
     stage = tmp_path / "state"
-    stage.mkdir()
+    stage.mkdir(parents=True)
     for name, body in stage_files.items():
         (stage / name).write_text(body, encoding="utf-8")
     out = tmp_path / "github_output"
@@ -121,7 +122,7 @@ def _run_tail(tmp_path: Path, stage_files: dict[str, str]) -> dict[str, str]:
     script.write_text(_decide_tail(LAUNCHER_TEXT), encoding="utf-8")
     env = {
         "PATH": "/usr/bin:/bin", "STATE_STAGE": str(stage), "GITHUB_OUTPUT": str(out),
-        "REBASE": "arena/session-branch", "INPUT_MODE": "paid",
+        "REBASE": "arena/session-branch", "INPUT_MODE": "paid", "INPUT_CLEAR": clear,
     }
     done = subprocess.run(
         ["bash", "-euo", "pipefail", "-c", f'. "{script}"'], env=env, capture_output=True, text=True
@@ -160,6 +161,44 @@ def test_a_rebase_refuses_a_state_with_a_terminal_marker(tmp_path: Path) -> None
     assert outputs["mode"] == "none"
     assert "terminal failure" in outputs["reason"]
     assert "exhausted_provider_rate_budget" in outputs["reason"]
+
+
+def test_an_operator_acknowledgement_carries_the_ledger_past_a_harness_crash(tmp_path: Path) -> None:
+    """The one lift that had to exist: without it the marker is a dead end, not a decision point.
+
+    Measured on the live campaign: Mercury run 23 (2026-10-13T00:48:01Z) was refused by exactly this
+    guard after run 22's wrapper crashed, and the alternatives were a resume the supervisor refuses and
+    a fresh dispatch that drops 190 banked episodes and re-bills T1. A harness crash is not a
+    measurement verdict, so an explicit `clear_wrapper_stop=true` on a hand dispatch proceeds - while the
+    marker's own rule (tools/atria_campaign.py:1592-1596: cleared at the start of every run) means a
+    repeat crash stops again. A spend ceiling, an interrupted T1 and exhausted retries are not lifted.
+    """
+    crash = json.dumps({"pause_reason": "wrapper_exception", "detail": "RuntimeError: judge exited 1"})
+    carried = _run_tail(tmp_path / "lift", {
+        "campaign_intent.json": json.dumps({"execution_mode": "paid", "provider": "mercury"}),
+        "t1_same_fact_presentation.json": "{}",
+        "wrapper_failed.json": crash,
+    }, clear="true")
+    assert carried["mode"] == "rebase", carried
+    assert carried["execution_mode"] == "paid", "the lift must not change what is authorised to bill"
+    assert carried["ref"] == "arena/session-branch"
+
+    for reason in ("max_api_calls", "infrastructure_error_retries_exhausted", "wrapper_exception"):
+        unacknowledged = _run_tail(tmp_path / f"no-{reason}", {
+            "campaign_intent.json": json.dumps({"execution_mode": "paid"}),
+            "t1_same_fact_presentation.json": "{}",
+            "wrapper_failed.json": json.dumps({"pause_reason": reason}),
+        }, clear="false")
+        assert unacknowledged["mode"] == "none", (reason, unacknowledged)
+        assert "terminal failure" in unacknowledged["reason"], unacknowledged
+
+    for reason in ("max_api_calls", "infrastructure_error_retries_exhausted"):
+        still_refused = _run_tail(tmp_path / f"ceil-{reason}", {
+            "campaign_intent.json": json.dumps({"execution_mode": "paid"}),
+            "t1_same_fact_presentation.json": "{}",
+            "wrapper_failed.json": json.dumps({"pause_reason": reason}),
+        }, clear="true")
+        assert still_refused["mode"] == "none", (reason, still_refused)
 
 
 def test_the_launcher_refuses_to_replay_an_interrupted_t1(tmp_path: Path) -> None:

@@ -49,6 +49,11 @@ on:
         required: true
         type: boolean
         default: true
+      clear_wrapper_stop:
+        description: "Operator acknowledgement for a state the campaign stopped on purpose. A leg whose wrapper crashed leaves wrapper_failed.json in the state artifact, and by design nothing resumes from it (tools/atria_campaign.py:1592-1596, tools/campaign_supervisor.py:207-215) - which left no lever, because resuming is refused and dispatching fresh drops the banked episodes and re-bills T1. This lifts ONLY that harness-crash stop, for a hand dispatch: pause_reason wrapper_exception, wrapper_transient_error, infrastructure_error or docker_unavailable. It never lifts a spend ceiling, an interrupted T1, a compatibility refusal or an exhausted retry count, and a self-dispatched successor cannot use it. The new leg clears the marker itself, so a repeat crash stops again."
+        required: false
+        default: false
+        type: boolean
       rebase_onto_ref:
         description: "Optional branch or full SHA to re-pin this campaign's CODE to while carrying its existing state forward - the paid T1 result, the banked gate rows, the ceiling counters. The controller accepts it only when the grading-code digest is the single field that moved; a provider, model, endpoint, effort, execution mode, manifest or profile difference is still refused. Refused if the carried state records a terminal failure or an interrupted T1. The execution mode is read back from the carried intent, so this can neither promote nor demote what is authorised to bill. Leave empty to keep the pinned commit."
         required: false
@@ -127,15 +132,27 @@ jobs:
               exit 0
             fi
             if [ -f "$STATE_STAGE/wrapper_failed.json" ]; then
-              # Refused, never cleared. `tools/inherit_campaign_state.py` keeps the same rule for
-              # cross-campaign inheritance (wrapper_failed.json is in its NOT_INHERITED list), and a
-              # rebase is not a licence to walk past a recorded terminal failure - if the operator
-              # has decided the cause is dead, they dispatch fresh and re-bill T1, or they clear the
-              # artifact deliberately. Either way the decision stays theirs and visible.
+              # Refused by default, and only an explicit operator acknowledgement lifts it. The rule is
+              # the campaign's own ("one automatic restart is allowed, a repeat failure rewrites it and
+              # the supervisor stands down for an operator", tools/atria_campaign.py:1592-1596) and
+              # `tools/inherit_campaign_state.py` keeps wrapper_failed.json in its NOT_INHERITED list -
+              # but that left the operator with no lever at all: a resume is refused by the marker and a
+              # fresh dispatch drops 190 banked episodes and re-bills T1. So the acknowledgement is a
+              # dispatch input, recorded on the run's own page, limited to a harness crash (a wrapper
+              # dying is not a measurement verdict), and self-terminating: the new leg clears the marker
+              # at its start, so if it crashes again the stop comes back.
               TERMINAL=$(jq -r '.pause_reason // "unknown"' "$STATE_STAGE/wrapper_failed.json" 2>/dev/null || true)
-              echo "mode=none" >> "$GITHUB_OUTPUT"
-              echo "reason=operator stop: the carried state records a terminal failure ($TERMINAL); a rebase will not clear it" >> "$GITHUB_OUTPUT"
-              exit 0
+              LIFTABLE=0
+              case "$TERMINAL" in
+                wrapper_exception|wrapper_transient_error|infrastructure_error|docker_unavailable) LIFTABLE=1 ;;
+              esac
+              if [ "${{ inputs.clear_wrapper_stop }}" = "true" ] && [ "$LIFTABLE" = 1 ]; then
+                echo "::notice::operator cleared a recorded wrapper stop ($TERMINAL) for this dispatch; a repeat crash stops the chain again"
+              else
+                echo "mode=none" >> "$GITHUB_OUTPUT"
+                echo "reason=operator stop: the carried state records a terminal failure ($TERMINAL); clear_wrapper_stop lifts it only for a harness crash" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
             fi
             if [ -f "$STATE_STAGE/t1_started.json" ] && [ ! -f "$STATE_STAGE/t1_same_fact_presentation.json" ]; then
               echo "mode=none" >> "$GITHUB_OUTPUT"
@@ -239,15 +256,28 @@ jobs:
           #     a manual start cannot authorise billing that a resume could not.
           CHAIN="${{ inputs.chain_depth }}"
           case "$CHAIN" in ''|0) HUMAN_CLICK=1 ;; *) HUMAN_CLICK=0 ;; esac
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$HUMAN_CLICK" = 1 ] \
-             && [ "$MODE" = "none" ] && [ "${REASON#backoff:}" != "$REASON" ]; then
+          LIFT=""
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$HUMAN_CLICK" = 1 ] && [ "$MODE" = "none" ]; then
+            case "$REASON" in
+              backoff:*) LIFT="backoff" ;;
+              "operator stop:"*)
+                # The same short list the rebase path accepts: a harness crash, nothing else.
+                if [ "${{ inputs.clear_wrapper_stop }}" = "true" ]; then
+                  case "$(jq -r '.pause_reason // empty' "$STATE_STAGE/wrapper_failed.json" 2>/dev/null || true)" in
+                    wrapper_exception|wrapper_transient_error|infrastructure_error|docker_unavailable)
+                      LIFT="wrapper-stop" ;;
+                  esac
+                fi ;;
+            esac
+          fi
+          if [ -n "$LIFT" ]; then
             CARRIED_MODE=$(jq -r '.execution_mode // empty' "$STATE_STAGE/campaign_intent.json" 2>/dev/null || true)
             case "$CARRIED_MODE" in
               paid|gates_only)
                 MODE=resume
                 REF="${REF:-$PINNED_REF}"
                 EXECUTION_MODE=$CARRIED_MODE
-                REASON="manual dispatch: the resume backoff was lifted for this click (it had said: $REASON)"
+                REASON="manual dispatch: the $LIFT was lifted for this click (it had said: $REASON)"
                 ;;
               *)
                 REASON="$REASON - a manual dispatch could not lift it: the carried intent has no readable execution mode"
@@ -582,6 +612,7 @@ jobs:
         if: always() && !cancelled() && steps.mode.outputs.mode != 'none'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
         run: |
           set -uo pipefail
@@ -591,9 +622,26 @@ jobs:
             echo "::warning::campaign re-arm declined: no virtualenv in this leg, the scheduler was not asked"
             exit 0
           fi
+          # The re-arm is operations, not measurement, so it runs from the ref this workflow file came
+          # from and not from the campaign's pinned checkout. The difference is whether the mechanism
+          # exists at all: a leg resumed from an old checkpoint checks out an old commit, and that tree
+          # has no tools/campaign_rearm.py, which is how a handover silently becomes a no-op. Fetch the
+          # copy that matches this file; fall back to the checkout; announce if neither has it.
+          REARM="$RUNNER_TEMP/campaign_rearm.py"
+          if ! gh api "repos/${{ github.repository }}/contents/tools/campaign_rearm.py?ref=${{ github.sha }}" \
+               --jq '.content' 2>/dev/null | base64 -d > "$REARM" || [ ! -s "$REARM" ]; then
+            if [ -f tools/campaign_rearm.py ]; then
+              cp tools/campaign_rearm.py "$REARM"
+              echo "campaign re-arm: using the copy in the pinned checkout"
+            else
+              echo "campaign re-arm skipped: no campaign_rearm.py at ${{ github.sha }} or in the checkout"
+              echo "::warning::campaign re-arm declined: no campaign_rearm.py to run; the scheduled trigger remains the fallback"
+              exit 0
+            fi
+          fi
           STAGE_FAILED=
           if [ "${{ steps.stage.outcome }}" = "failure" ]; then STAGE_FAILED=--stage-failed; fi
-          .venv/bin/python tools/campaign_rearm.py \
+          .venv/bin/python "$REARM" \
             --report "$OUT/campaign_report.json" \
             --ref "${{ steps.mode.outputs.ref }}" \
             --chain-depth "${CHAIN_DEPTH:-0}" \
