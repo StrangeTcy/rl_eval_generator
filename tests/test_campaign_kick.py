@@ -191,3 +191,49 @@ def test_no_instruction_means_no_network_call_at_all(tmp_path: Path, monkeypatch
     _ci_env(monkeypatch)
     assert campaign_kick.maybe_kick_from_ci(tmp_path) == ""
     assert calls == [], "an idle repository must not be polled for a kick that was never written"
+
+
+def test_one_kick_can_wake_every_stalled_campaign(tmp_path: Path, monkeypatch) -> None:
+    """A missing scheduler tick is a repo-wide symptom, so the instruction may name both workflows and the
+    push dispatches one leg of each; a blank name list is not an instruction at all."""
+    _kick(tmp_path, workflow=["Mercury pairwise campaign", "Reasoning-Atria pairwise campaign"],
+          dispatch_ref="main")
+    calls = _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 1, "name": "Mercury pairwise campaign", "state": "active"},
+            {"id": 2, "name": "Reasoning-Atria pairwise campaign", "state": "active"}]}),
+        "status=queued": (200, {"total_count": 0}),
+        "status=in_progress": (200, {"total_count": 0}),
+        "workflows/2/dispatches": (403, {"error": "Resource not accessible by integration"}),
+    })
+    _ci_env(monkeypatch)
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    posts = [c for c in calls if c[0] == "POST"]
+    assert len(posts) == 2, posts
+    assert {json.loads(p[2])["ref"] for p in posts} == {"main"}, posts
+    assert "dispatched:" in note and "refused:" in note, note
+
+    for blank in ([], [""], ["  "], None, ""):
+        _kick(tmp_path, workflow=blank)
+        assert campaign_kick.read_kick(tmp_path) is None, blank
+
+
+def test_the_cli_prints_the_verdict_and_exits_zero(tmp_path: Path, monkeypatch) -> None:
+    import contextlib
+    import io
+
+    _kick(tmp_path)
+    _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 1, "name": "Mercury pairwise campaign", "state": "active"}]}),
+        "status=queued": (200, {"total_count": 0}),
+        "status=in_progress": (200, {"total_count": 1}),
+    })
+    _ci_env(monkeypatch)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_RUN_ID", "1")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        assert campaign_kick.main() == 0
+    out = buf.getvalue()
+    assert "::warning::campaign kick:" in out and "already queued or running" in out, out

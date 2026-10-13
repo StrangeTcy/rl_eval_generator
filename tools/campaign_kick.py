@@ -60,7 +60,7 @@ def read_kick(root: Path) -> dict[str, Any] | None:
         kick = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if not isinstance(kick, dict) or not str(kick.get("workflow") or ""):
+    if not isinstance(kick, dict) or not kick_targets(kick):
         return None
     expires = _parse_time(kick.get("expires_at"))
     if expires is None or expires <= _now():
@@ -95,6 +95,13 @@ def decide(
     if busy:
         return False, "a leg of this workflow is already queued or running; kicking would queue a second"
     return True, f"kicking {kick['workflow']!r} for the push on {ref or '?'}"
+
+
+def kick_targets(kick: dict[str, Any]) -> list[str]:
+    """The workflow names a kick names - one, or several, since a stalled scheduler stalls every campaign."""
+    raw = kick.get("workflow")
+    items = raw if isinstance(raw, (list, tuple)) else [raw]
+    return [name for name in (x.strip() for x in items if isinstance(x, str)) if name]
 
 
 def _request(url: str, token: str, *, body: bytes | None = None, method: str = "GET") -> tuple[int, Any]:
@@ -168,19 +175,41 @@ def maybe_kick_from_ci(root: Path) -> str:
         )
         if not go:
             return f"skipped: {reason}"
-        workflow, error = find_workflow(api, repo, token, str(kick["workflow"]))
-        if workflow is None:
-            return f"skipped: {error}"
-        if leg_busy(api, repo, token, workflow["id"]):
-            return f"skipped: a leg of {kick['workflow']!r} is already queued or running"
-        ok, detail = dispatch(
-            api,
-            repo,
-            token,
-            workflow["id"],
-            str(kick.get("dispatch_ref") or os.environ.get("GITHUB_REF_NAME") or ""),
-            kick_inputs(kick),
-        )
-        return ("dispatched: " if ok else "refused: ") + detail
+        notes = []
+        for name in kick_targets(kick):
+            workflow, error = find_workflow(api, repo, token, name)
+            if workflow is None:
+                notes.append(f"skipped: {error}")
+                continue
+            if leg_busy(api, repo, token, workflow["id"]):
+                notes.append(f"skipped: a leg of {name!r} is already queued or running")
+                continue
+            ok, detail = dispatch(
+                api,
+                repo,
+                token,
+                workflow["id"],
+                str(kick.get("dispatch_ref") or os.environ.get("GITHUB_REF_NAME") or ""),
+                kick_inputs(kick),
+            )
+            notes.append(("dispatched: " if ok else "refused: ") + detail)
+        return "; ".join(notes)
     except Exception as exc:  # noqa: BLE001 - a kick must never be able to break the job that carries it
         return f"skipped: kick check raised {type(exc).__name__}: {exc}"
+
+
+def main() -> int:
+    """CLI entry: print the verdict, exit 0 either way.
+
+    A kick is a favour CI does a campaign, not a build requirement, so a refusal must never turn a job
+    red; the ``::warning::`` annotation is what makes the verdict readable, because the log itself is not.
+    """
+    root = Path(os.environ.get("GITHUB_WORKSPACE") or ".")
+    note = maybe_kick_from_ci(root)
+    if note:
+        print(("::warning::" if os.environ.get("GITHUB_RUN_ID") else "") + f"campaign kick: {note}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
