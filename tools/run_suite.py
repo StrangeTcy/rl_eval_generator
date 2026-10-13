@@ -280,6 +280,24 @@ def _ceiling_raises(
     return raises
 
 
+def _without_secrets(block: dict[str, Any]) -> dict[str, Any]:
+    """A printable copy of a run block: endpoint identifiers are diagnostics, credentials are not.
+
+    The test is the key name, not its value, so anything named like a secret stays out of the Actions
+    log even when the block is otherwise being dumped for an operator to read.
+    """
+    printable = {}
+    for key, value in block.items():
+        lowered = str(key).lower()
+        if isinstance(value, str) and any(
+            token in lowered for token in ("api_key", "access_token", "bearer", "password")
+        ):
+            printable[key] = "<redacted>"
+        else:
+            printable[key] = value
+    return printable
+
+
 def _load_checkpoint(
     path: Path,
     *,
@@ -313,6 +331,7 @@ def _load_checkpoint(
             "reasoning_effort",
             "wire_api",
         )
+        blocked: list[str] = []
         for field in immutable:
             if field == "max_http_attempts" and previous.get(field) is None:
                 # A preflight checkpoint may intentionally leave the live
@@ -364,10 +383,21 @@ def _load_checkpoint(
                         "will be re-graded, not inherited"
                     )
                     continue
-                raise ValueError(
-                    f"checkpoint metadata mismatch for {field}: "
-                    f"{previous.get(field)!r} != {metadata.get(field)!r}"
-                )
+                blocked.append(field)
+        if blocked:
+            # Report every difference at once. Refusing on the first one is what cost three Mercury
+            # legs (runs 22, 24, 25) ~2.5 minutes and a re-dispatch each, to learn one field per
+            # try, and it is why the operator had to keep re-running the same click. The two blocks
+            # are printed beside the complaint so the next answer comes from the log, not from a
+            # state artifact neither of us can download.
+            detail = ", ".join(
+                f"{field}={previous.get(field)!r} != {metadata.get(field)!r}" for field in blocked
+            )
+            raise ValueError(
+                f"checkpoint metadata mismatch for {', '.join(blocked)}: {detail}\n"
+                f"  carried by the ledger: {_without_secrets(previous)}\n"
+                f"  computed by this leg:  {_without_secrets(metadata)}"
+            )
         if checkpoint.get("manifest_case_count") != manifest.get("case_count"):
             raise ValueError("manifest case count changed; use a new checkpoint")
         raises = _ceiling_raises(previous, metadata, authorized_by=ceiling_authorization)

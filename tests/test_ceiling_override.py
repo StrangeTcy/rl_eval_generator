@@ -299,3 +299,28 @@ def test_cli_accepts_only_the_ceiling_keys() -> None:
     assert profile["limits"] == {"max_tokens_total": 100}, (
         "the profile the campaign is pinned to is never rewritten in place"
     )
+
+def test_a_refusal_names_every_difference_not_just_the_first(tmp_path: Path) -> None:
+    """Three Mercury legs bought one field each; that price is the reason this exists.
+
+    Runs 22, 24 and 25 each died ~2.5 minutes into `_load_checkpoint`, each printing only the first
+    mismatching field, so learning that a carried artifact contradicts itself took three dispatches.
+    Neither side can download the state artifact to check, so the leg has to answer completely.
+    """
+    previous = {"provider": "mercury", "model": "mercury-2.5", "manifest_commit": "0ddcd39"}
+    current = {"provider": "atria", "model": "other-1", "manifest_commit": "5cb4205"}
+    with pytest.raises(ValueError) as caught:
+        _load(tmp_path, previous, current)
+    text = str(caught.value)
+    assert "checkpoint metadata mismatch for manifest_commit, provider, model" in text, text
+    assert "'0ddcd39' != '5cb4205'" in text, text
+    assert "carried by the ledger:" in text and "computed by this leg:" in text, text
+    # The printed blocks are diagnostics, so they must not be able to carry a credential. No field
+    # in the immutable set holds a secret today; this is the guard for the day one is added.
+    printable = run_suite._without_secrets(
+        {"api_key": "sk-live-secret", "bearer": "tok", "api_base": "https://api/x/v1", "api_key_env": "MERCURY_API_KEY"}
+    )
+    assert printable["api_key"] == "<redacted>" and printable["bearer"] == "<redacted>", printable
+    # The match is on the key name, so `api_key_env` - an environment variable name, not a value -
+    # is hidden too. Losing that one name from a diagnostic is the cheaper side of the mistake.
+    assert printable["api_base"] == "https://api/x/v1" and printable["api_key_env"] == "<redacted>"
