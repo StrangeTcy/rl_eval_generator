@@ -1,0 +1,8 @@
+{
+  "workflow": "Mercury pairwise campaign",
+  "branch": "arena/595b91e0-rl-eval-generator",
+  "dispatch_ref": "arena/595b91e0-rl-eval-generator",
+  "committed_at": "2026-10-13T15:44:30+00:00",
+  "expires_at": "2026-10-13T16:34:30+00:00",
+  "reason": "GitHub has created no scheduled tick since run 34 at 09:26 UTC, so Mercury (254/416 episodes, paused and resumable, no marker) has no way to start its next leg; this push starts that leg from the branch whose code is running today (32a350d @ main, with the re-arm busy-check fix 88b6ca8)."
+}
