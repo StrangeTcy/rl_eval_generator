@@ -131,11 +131,62 @@ def _run_cli(tmp_path: Path, report: object, *args: str) -> subprocess.Completed
 
 
 def test_a_broken_rearm_never_reddens_a_leg(tmp_path: Path) -> None:
-    """Every refusal - unreadable report, unroutable API - exits green and says why."""
+    """Every refusal - unreadable report, unroutable API - exits green and says why, loudly.
+
+    Green is the point (a decline is not a fault), which is exactly why the decline also has to be an
+    annotation: run 22 of the Mercury lineage ended 2026-10-12T23:59:53Z with a re-arm step that
+    succeeded in 1 s and nobody knew it had said no until a human went looking.
+    """
     for report in (None, {}, PAUSED):
-        proc = _run_cli(tmp_path, report)
+        proc = _run_cli(tmp_path, report, "--sleep-cap", "0")
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert "re-arm skipped" in proc.stdout, proc.stdout
+        assert "::warning::campaign re-arm declined:" in proc.stdout, proc.stdout
+
+
+def test_handover_wait_is_the_seconds_sitting_out_buys_a_successor() -> None:
+    """Pure arithmetic for the wait: how long, and when waiting cannot help."""
+    from tools.campaign_rearm import handover_wait
+
+    fresh = {"status": "completed",
+             "updated_at": (NOW - timedelta(seconds=10)).isoformat().replace("+00:00", "Z")}
+    assert handover_wait(PAUSED, fresh, NOW) == 1190
+    assert handover_wait(PAUSED, fresh, NOW, sleep_cap=600) == 0, "beyond the cap: nobody waits"
+    assert handover_wait(PAUSED, fresh, NOW, sleep_cap=0) == 0, "waiting disabled"
+    assert handover_wait(PAUSED, IDLE_LONG_AGO, NOW) == 0, "nothing to wait for"
+    assert handover_wait({"status": "blocked", "pause_reason": "infrastructure_error",
+                          "resumable": False}, fresh, NOW) == 0, "a blocked lineage never waits"
+    assert handover_wait(PAUSED, {"status": "in_progress"}, NOW) == 0, "no readable timestamp"
+
+
+def test_the_finished_leg_sits_out_the_window_then_asks(monkeypatch, tmp_path, capsys) -> None:
+    """Refusing to dispatch inside the window used to mean never dispatching at all.
+
+    Measured on the real thing: run 22 banked nothing for 2h22m, its report said `blocked`, and with
+    `0e8cb71`'s floor any `paused` leg ending 3 s before the decision would have declined the same way
+    - a chain that can only ever decline. This test runs main() with the sleep and the network pinned
+    out and requires both halves of the behaviour: it waits, and then it asks.
+    """
+    from tools import campaign_rearm
+
+    slept: list[float] = []
+    fresh_run = {"status": "completed",
+                 "updated_at": (datetime.now(timezone.utc) - timedelta(seconds=3))
+                 .isoformat().replace("+00:00", "Z")}
+    monkeypatch.setattr(campaign_rearm, "SLEEP", lambda seconds: slept.append(seconds))
+    monkeypatch.setattr(campaign_rearm, "find_workflow", lambda *a, **k: ({"id": 7, "state": "active"}, None))
+    monkeypatch.setattr(campaign_rearm, "_request", lambda *a, **k: (200, {"workflow_runs": [fresh_run]}))
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    path = tmp_path / "campaign_report.json"
+    path.write_text(json.dumps(PAUSED), encoding="utf-8")
+
+    assert campaign_rearm.main(["--report", str(path), "--repo", "o/r", "--workflow", "w",
+                                "--api-url", "https://api.invalid", "--sleep-cap", "1800",
+                                "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert len(slept) == 1 and 1180 <= slept[0] <= 1200, (slept, out)
+    assert "sitting it out" in out, out
+    assert "would dispatch" in out, out
 
 
 LAUNCHERS = [
@@ -178,7 +229,8 @@ def test_every_flag_the_launcher_passes_exists_in_the_tool() -> None:
     source = (ROOT / "tools/campaign_rearm.py").read_text(encoding="utf-8")
     accepted = set(re.findall(r'add_argument\(\s*"--([a-z0-9-]+)"', source))
     assert {"report", "repo", "workflow", "api-url", "ref", "chain-depth", "max-chain-depth",
-            "marker", "stage-failed", "cancelled", "min-interval-seconds", "dry-run"} <= accepted
+            "marker", "stage-failed", "cancelled", "min-interval-seconds", "sleep-cap",
+            "dry-run"} <= accepted
     for path in LAUNCHERS:
         body = _steps(path)[-1]["run"]
         for flag in re.findall(r"(?<![\w-])--[a-z0-9-]+", body):

@@ -33,9 +33,10 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -80,6 +81,50 @@ def effective_floor_seconds(reason: str, override: int | None = None) -> int:
     return max(base, int(RESUME_BACKOFF_SECONDS))
 
 
+# The leg that just finished is the only actor that can wait for nothing: the paid work is over, and
+# a successor dispatched inside the supervisor's window is refused and does not re-arm. So the wait
+# happens HERE, in the last step, instead of being pushed onto cron (hours away) or onto a leg that
+# will decline. This is the other half of `0e8cb71`: refusing to dispatch early was right, and it also
+# meant never dispatching - a `paused` lineage whose leg ended 3 s ago was left to the schedule.
+SLEEP = time.sleep
+DEFAULT_SLEEP_CAP = 1800
+
+
+def _floor_state(report: object, newest_run: object, now: datetime,
+                 min_interval_seconds: int | None = None) -> tuple[int, int] | None:
+    """(floor, age) for the waiting window, or None when the window is not what is being decided."""
+    if not isinstance(report, Mapping) or not report or not isinstance(newest_run, Mapping):
+        return None
+    if str(report.get("status") or "") != "paused":
+        return None
+    reason = str(report.get("pause_reason") or "")
+    resumable = report.get("resumable")
+    if not isinstance(resumable, bool):
+        resumable = reason in RESUMABLE_PAUSE_REASONS
+    if not resumable:
+        return None
+    started = _parse_timestamp(newest_run.get("updated_at")) or _parse_timestamp(newest_run.get("created_at"))
+    if started is None:
+        return None
+    return effective_floor_seconds(reason, min_interval_seconds), int((now - started).total_seconds())
+
+
+def handover_wait(report: object, newest_run: object, now: datetime, *,
+                  min_interval_seconds: int | None = None,
+                  sleep_cap: int | None = DEFAULT_SLEEP_CAP) -> int:
+    """Seconds this leg should sit before asking, or 0 when no wait could make a successor acceptable."""
+    state = _floor_state(report, newest_run, now, min_interval_seconds)
+    if state is None:
+        return 0
+    floor, age = state
+    wait = int(floor - age)
+    if wait <= 0:
+        return 0
+    if sleep_cap is not None and wait > int(sleep_cap):
+        return 0
+    return wait
+
+
 def decide_rearm(
     report,
     *,
@@ -93,6 +138,7 @@ def decide_rearm(
     marker_paths=(),
     stage_failed: bool = False,
     was_cancelled: bool = False,
+    sleep_cap: int | None = DEFAULT_SLEEP_CAP,
 ) -> tuple[bool, str]:
     """Return (dispatch?, reason). Pure: no network, no clock, no filesystem, so every branch
     is testable. Order matters: the stops a human would use are checked first, so a cancelled
@@ -143,9 +189,12 @@ def decide_rearm(
             if RESUME_BACKOFF_SECONDS >= cooldown_seconds_for(reason)
             else f"the cooldown for pause_reason={reason!r}"
         )
+        wait = int(floor - age)
+        capped = sleep_cap is not None and wait > int(sleep_cap)
         return False, (
             f"the most recent leg ended {age} s ago, below the {floor} s floor set by {governing}; "
             "a successor dispatched now would be refused with mode=none and would not re-arm"
+            + (f" - and sitting it out is off: a {wait} s wait exceeds --sleep-cap={sleep_cap}" if capped else "")
         )
     return True, f"pause_reason={reason!r} after a {age} s idle gap at chain_depth={chain_depth}"
 
@@ -227,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="path whose presence means the campaign stopped on purpose (repeatable)")
     parser.add_argument("--stage-failed", action="store_true", help="the state upload was refused as a regression")
     parser.add_argument("--cancelled", action="store_true", help="this leg was cancelled")
+    parser.add_argument("--sleep-cap", type=int, default=DEFAULT_SLEEP_CAP,
+                        help="longest wait this leg will sit out so a successor is accepted (0 disables waiting)")
     parser.add_argument("--dry-run", action="store_true", help="print the decision without dispatching")
     args = parser.parse_args(argv)
 
@@ -253,10 +304,12 @@ def main(argv: list[str] | None = None) -> int:
             runs = (body.get("workflow_runs") or []) if status == 200 else []
             newest_run = runs[0] if runs else None
 
+    now = datetime.now(timezone.utc)
     decision, reason = decide_rearm(
         report,
         newest_run=newest_run,
-        now=datetime.now(timezone.utc),
+        now=now,
+        sleep_cap=args.sleep_cap,
         min_interval_seconds=args.min_interval_seconds,
         workflow_state=(str(workflow["state"]) if workflow else None),
         token_present=bool(token),
@@ -267,7 +320,33 @@ def main(argv: list[str] | None = None) -> int:
         was_cancelled=args.cancelled,
     )
     if not decision:
+        # The refusal may be purely temporal, in which case the fix is to wait, not to hand the
+        # campaign back to a schedule that delivered three ticks today.
+        wait = handover_wait(report, newest_run, now, min_interval_seconds=args.min_interval_seconds,
+                             sleep_cap=args.sleep_cap)
+        if wait:
+            print(f"campaign re-arm: a successor would be refused for another {wait} s, so this leg "
+                  f"is sitting it out before dispatching", flush=True)
+            SLEEP(wait + 1)
+            decision, reason = decide_rearm(
+                report,
+                newest_run=newest_run,
+                now=now + timedelta(seconds=wait + 1),
+                sleep_cap=args.sleep_cap,
+                min_interval_seconds=args.min_interval_seconds,
+                workflow_state=(str(workflow["state"]) if workflow else None),
+                token_present=bool(token),
+                chain_depth=args.chain_depth,
+                max_chain_depth=args.max_chain_depth,
+                marker_paths=args.markers,
+                stage_failed=args.stage_failed,
+                was_cancelled=args.cancelled,
+            )
+    if not decision:
+        # A decline is a decision, and it must not live only in a log nobody opens: like the refused-tick
+        # announcement, this reaches the Checks UI and the jobs API.
         print(f"campaign re-arm skipped: {reason}")
+        print(f"::warning::campaign re-arm declined: {reason}")
         return 0
     if args.dry_run:
         print(f"campaign re-arm would dispatch: {reason} (dry run)")
