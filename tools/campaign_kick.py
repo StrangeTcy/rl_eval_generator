@@ -90,6 +90,7 @@ def decide(
     token_present: bool,
     api_state: str | None = None,
     busy: bool = False,
+    token_note: str = "",
 ) -> tuple[bool, str]:
     """Return (dispatch?, reason). Pure: no clock beyond the freshness already applied, no network."""
     if kick is None:
@@ -97,7 +98,7 @@ def decide(
     if event != "push":
         return False, f"a {event or 'non-push'} event cannot kick a leg; only a push reaches CI"
     if not token_present:
-        return False, "no GITHUB_TOKEN in this job, so the dispatch could not be authorized"
+        return False, (token_note or "no GITHUB_TOKEN in this job") + ", so the dispatch could not be authorized"
     want_ref = str(kick.get("branch") or "")
     if want_ref and ref != f"refs/heads/{want_ref}":
         return False, f"this push is on {ref!r}, the kick is written for branch {want_ref!r}"
@@ -129,6 +130,49 @@ def _request(url: str, token: str, *, body: bytes | None = None, method: str = "
         return exc.code, {"error": exc.read().decode("utf-8", "replace")[:300]}
     except (urllib.error.URLError, OSError, ValueError) as exc:
         return 0, {"error": f"{type(exc).__name__}: {exc}"}
+
+
+def _oidc_exchange(url: str, request_token: str) -> tuple[int, Any]:
+    """One GET against the runner's own OIDC endpoint. Fails to (0, reason) on anything."""
+    request = urllib.request.Request(url + "&audience=api.github.com", method="GET")
+    request.add_header("Authorization", f"Bearer {request_token}")
+    request.add_header("Accept", "application/json;api-version=3.0-preview")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            raw = response.read()
+            return response.status, (json.loads(raw) if raw else {})
+    except urllib.error.HTTPError as exc:
+        return exc.code, {"error": exc.read().decode("utf-8", "replace")[:200]}
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return 0, {"error": f"{type(exc).__name__}: {exc}"}
+
+
+def job_credential() -> tuple[str, str]:
+    """Return (token, how it was obtained or why there is none).
+
+    The environment first, because that is where a workflow that means to act puts a secret. When it is
+    empty - which is ci.yml's `pytest` step, measured at 15:53 UTC as "no GITHUB_TOKEN in this job" - the
+    only remaining way for repository code to get a credential *during* a job is the runner's own OIDC
+    endpoint: a job granted `id-token: write` is given ACTIONS_ID_TOKEN_REQUEST_URL and a request token, and
+    what comes back carries that job's permissions. Asking for it is not a privilege escalation, it is the
+    same token the job would have had if the workflow had exported it, and it is refused the same way.
+    """
+    for name in ("GITHUB_TOKEN", "GH_TOKEN"):
+        value = os.environ.get(name) or ""
+        if value:
+            return value, f"env:{name}"
+    url = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL") or ""
+    request_token = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN") or ""
+    if not (url and request_token):
+        return "", ("no GITHUB_TOKEN in this job, and no ACTIONS_ID_TOKEN_REQUEST_URL either, so there is "
+                    "nothing to trade for one")
+    status, body = _oidc_exchange(url, request_token)
+    if status != 200:
+        return "", f"the runner refused the token exchange (HTTP {status}): {str(body.get('error') or body)[:160]}"
+    value = str(body.get("value") or "")
+    if not value:
+        return "", "the runner answered the token exchange with no token"
+    return value, "runner-oidc"
 
 
 def find_workflow(api: str, repo: str, token: str, name: str) -> tuple[dict | None, str]:
@@ -175,7 +219,7 @@ def maybe_kick_from_ci(root: Path) -> str:
         kick = read_kick(Path(root))
         if kick is None:
             return ""
-        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+        token, how = job_credential()
         repo = os.environ.get("GITHUB_REPOSITORY") or str(kick.get("repo") or "")
         api = (os.environ.get("GITHUB_API_URL") or "https://api.github.com").rstrip("/")
         go, reason = decide(
@@ -183,6 +227,7 @@ def maybe_kick_from_ci(root: Path) -> str:
             event=os.environ.get("GITHUB_EVENT_NAME"),
             ref=os.environ.get("GITHUB_REF"),
             token_present=bool(token and repo),
+            token_note="" if token else how,
         )
         if not go:
             return f"skipped: {reason}"
@@ -204,7 +249,7 @@ def maybe_kick_from_ci(root: Path) -> str:
                 kick_inputs(kick),
             )
             notes.append(("dispatched: " if ok else "refused: ") + detail)
-        return "; ".join(notes)
+        return "; ".join(notes) + (f" [credential: {how}]" if how != "env:GITHUB_TOKEN" else "")
     except Exception as exc:  # noqa: BLE001 - a kick must never be able to break the job that carries it
         return f"skipped: kick check raised {type(exc).__name__}: {exc}"
 

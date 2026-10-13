@@ -1,0 +1,11 @@
+{
+  "workflow": [
+    "Mercury pairwise campaign",
+    "Reasoning-Atria pairwise campaign"
+  ],
+  "branch": "arena/595b91e0-rl-eval-generator",
+  "dispatch_ref": "main",
+  "committed_at": "2026-10-13T18:43:07+00:00",
+  "expires_at": "2026-10-13T19:33:07+00:00",
+  "reason": "Mercury idle since 17:37 (365/416 banked, resumable, state artifact uploaded) because its leg's re-arm copy crashes on import; no tick since 17:08. This push asks the CI job that validates it for a credential by any route it has and dispatches one resume of each."
+}

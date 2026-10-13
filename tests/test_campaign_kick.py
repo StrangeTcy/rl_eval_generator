@@ -267,3 +267,109 @@ def test_the_workflow_that_would_run_this_stays_narrow() -> None:
     assert "tools/campaign_kick.py" in run[0]["run"], run[0]
     assert run[0]["env"]["GITHUB_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}", run[0]
     assert "schedule" not in trigger and "schedule" not in doc["jobs"]["kick"], "a self-scheduling kick is a loop"
+
+
+def _no_ci_env(monkeypatch) -> None:
+    for name in ("GITHUB_TOKEN", "GH_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    monkeypatch.setenv("GITHUB_REF", f"refs/heads/{BRANCH}")
+    monkeypatch.setenv("GITHUB_REF_NAME", BRANCH)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "StrangeTcy/rl_eval_generator")
+
+
+def test_the_job_is_asked_for_a_credential_before_it_is_blamed(tmp_path: Path, monkeypatch) -> None:
+    """Two doors, both tried, and the line says which ones failed.
+
+    ci.yml exports no secret, so `env` is empty - and the runner's own OIDC endpoint is the one remaining
+    way to hold a token during a job. Whether that door exists is a property of the workflow's `id-token`
+    permission, which is not this branch's to set, so the answer is asked for rather than assumed.
+    """
+    _kick(tmp_path)
+    calls = _wire(monkeypatch, statuses={})
+    _no_ci_env(monkeypatch)
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert "ACTIONS_ID_TOKEN_REQUEST_URL" in note, note
+    assert "could not be authorized" in note, note
+    assert calls == [], "no credential means no request, not a request that fails"
+
+    # The door exists here: the exchange returns a token and the kick uses it.
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://runner.example/oidc?foo=bar")
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "runner-request-token")
+    seen: list[str] = []
+
+    def fake_exchange(url: str, request_token: str):
+        seen.append(url)
+        seen.append(request_token)
+        return 200, {"value": "job-jwt"}
+
+    monkeypatch.setattr(campaign_kick, "_oidc_exchange", fake_exchange)
+    token, how = campaign_kick.job_credential()
+    assert (token, how) == ("job-jwt", "runner-oidc"), (token, how)
+    assert seen == ["https://runner.example/oidc?foo=bar", "runner-request-token"], seen
+
+
+
+    calls = _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 1, "name": "Mercury pairwise campaign", "state": "active"}]}),
+        "status=queued": (200, {"total_count": 0}),
+        "status=in_progress": (200, {"total_count": 0}),
+        "dispatches": (204, {}),
+    })
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert note.startswith("dispatched:"), note
+    assert "[credential: runner-oidc]" in note, note
+    posts = [c for c in calls if c[0] == "POST"]
+    assert len(posts) == 1 and "/dispatches" in posts[0][1], posts
+
+
+def test_the_exchange_asks_the_api_audience_of_the_job_that_owns_it(monkeypatch) -> None:
+    """The runner hands out one token per audience; asking for the API's is the whole request.
+
+    Asserted against the URL and headers actually built, because a token minted for `jwt.actions.githubusercontent
+    .com` authenticates nothing at api.github.com and would read as a permission problem instead.
+    """
+    captured: dict[str, str] = {}
+
+    class Response:
+        status = 200
+
+        def read(self) -> bytes:
+            return b'{"value": "job-jwt"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> bool:
+            return False
+
+    def fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["auth"] = request.get_header("Authorization") or ""
+        captured["accept"] = request.get_header("Accept") or ""
+        return Response()
+
+    monkeypatch.setattr(campaign_kick.urllib.request, "urlopen", fake_urlopen)
+    status, body = campaign_kick._oidc_exchange("https://token.actions/r/oidc?svc=abc", "runner-token")
+    assert (status, body) == (200, {"value": "job-jwt"}), (status, body)
+    assert captured["url"].endswith("?svc=abc&audience=api.github.com"), captured
+    assert captured["auth"] == "Bearer runner-token", captured
+    assert "application/json" in captured["accept"], captured
+
+
+def test_a_refused_exchange_and_a_tokenless_exchange_are_both_reported(monkeypatch) -> None:
+    _no_ci_env(monkeypatch)
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://runner.example/oidc?x=1")
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "rt")
+    monkeypatch.setattr(campaign_kick, "_oidc_exchange", lambda u, t: (403, {"error": "Permissions missing"}))
+    token, how = campaign_kick.job_credential()
+    assert token == "" and "refused the token exchange" in how and "403" in how, how
+
+    monkeypatch.setattr(campaign_kick, "_oidc_exchange", lambda u, t: (200, {}))
+    token, how = campaign_kick.job_credential()
+    assert token == "" and "no token" in how, how
+
+    # An explicit secret in the environment wins and is named, so the record says where the credential came from.
+    monkeypatch.setenv("GITHUB_TOKEN", "seeded")
+    assert campaign_kick.job_credential() == ("seeded", "env:GITHUB_TOKEN")
