@@ -61,7 +61,15 @@ try:  # noqa: E402  (same repo-root sys.path trick as above)
 except ImportError:  # pragma: no cover - only on a checkout predating the content digest
     gate_context = None
 # Explicitly not inherited; named so an operator can see the boundary was drawn.
-NOT_INHERITED = ("suite_checkpoint.json", "campaign_intent.json", "wrapper_failed.json")
+# `state_contract_stop.json` counts consecutive legs that the carried state was refused at, *per code
+# commit* - inheriting it from another campaign would make an inherited count escalate a fresh campaign's
+# first refusal to an operator gate, which is exactly the trap that froze Mercury at 190 / 416.
+NOT_INHERITED = (
+    "suite_checkpoint.json",
+    "campaign_intent.json",
+    "wrapper_failed.json",
+    "state_contract_stop.json",
+)
 
 
 REVISION_SHA = re.compile(r"^[0-9a-f]{40}$")

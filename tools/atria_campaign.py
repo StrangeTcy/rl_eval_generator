@@ -1124,6 +1124,79 @@ def _reset_fresh_campaign_output(output: Path) -> None:
         (output / "campaign_ref.txt").write_text(pinned_ref + "\n", encoding="utf-8")
 
 
+# Errors raised by `run_suite._load_checkpoint` about the state it was handed: deterministic, identical
+# on every retry, and unreachable by any acknowledgement a human can type into the dispatch form.
+STATE_CONTRACT_REFUSALS = (
+    "checkpoint metadata mismatch",
+    "manifest case count changed",
+    "gate coverage is incomplete",
+)
+
+
+def _state_contract_stop(output: Path, detail: str) -> bool:
+    """Record a state-contract refusal; return True when the caller must still mark the campaign terminal.
+
+    `wrapper_failed.json` means "a person has to acknowledge before anything spends again", and the
+    launcher lets an acknowledgement clear exactly one class of it - a harness crash. A refusal raised
+    against the carried state is not that class: it is the campaign's own immutability contract, and it
+    repeats byte-identically on every leg. Writing the marker for it is what wedged Mercury - runs 24,
+    25, 27, 28 and 29 each inherited a marker whose only cause was the refusal before it, so the campaign
+    spent its ledger frozen at 190 / 416 while each attempt added another gate that no input could pass.
+
+    So the first such stop is recorded in its own file and leaves the state resumable by a plain dispatch;
+    the second consecutive one that refuses the same detail *from the same commit* marks the campaign
+    terminal, because that means the fix did not take, and a person is the only one who can tell why.
+    """
+    if not any(needle in detail for needle in STATE_CONTRACT_REFUSALS):
+        return True
+    path = output / "state_contract_stop.json"
+    # Identity of the code that refused, so the counter means "nothing changed between attempts" and
+    # not "this campaign once saw this string". A rebase that lands the fix moves the commit, which
+    # resets the count by itself; two legs refusing the same detail from the same commit is the case a
+    # person has to look at, because the fix did not take.
+    try:
+        from tools.gate_context import head as _head  # local import: diagnostics only
+
+        this_commit = _head() or ""
+    except Exception:  # noqa: BLE001 - an unreadable HEAD must not swallow the refusal
+        this_commit = ""
+    repeats = 0
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            str(previous.get("detail") or "") == str(detail)
+            and str(previous.get("at_commit") or "") == this_commit
+        ):
+            repeats = int(previous.get("count") or 0)
+    except (OSError, ValueError):
+        repeats = 0
+    try:
+        write_json(
+            path,
+            {
+                "pause_reason": "state_contract_stop",
+                "detail": redact_text(detail),
+                "count": repeats + 1,
+                "at_commit": this_commit,
+                "recorded_at": _utc_now(),
+            },
+        )
+    except OSError:
+        return True
+    if repeats:
+        print(
+            f"state-contract refusal repeated ({repeats + 1} consecutive legs on the same detail); "
+            "marking the campaign terminal for an operator"
+        )
+        return True
+    print(
+        f"state-contract refusal recorded in {path.name}; no operator gate written, because an "
+        "acknowledgement cannot change what the code refuses - fix the code or the state and a plain "
+        "dispatch resumes from the last banked row"
+    )
+    return False
+
+
 def _mark_terminal(output: Path, reason: str, detail: str) -> None:
     """Record a non-resumable end so the supervisor stops instead of
     restarting a deterministically failing wrapper forever.  The marker is
@@ -2137,6 +2210,28 @@ def main(argv: list[str] | None = None) -> int:
             provider_calls = None
         try:
             output.mkdir(parents=True, exist_ok=True)
+            if not _state_contract_stop(output, detail):
+                # The leg still fails, so the run is red and the chain stands down: this is a refusal to
+                # release a gate, not permission to keep trying. What it must not do is inherit.
+                write_json(
+                    output
+                    / "campaign_report.json",
+                    _failure_report(
+                        {
+                            "schema_version": 1,
+                            "event": "covering_campaign",
+                            "status": "blocked",
+                            "pause_reason": "state_contract_stop",
+                            "resumable": False,
+                            "provider_calls": provider_calls,
+                            "detail": detail,
+                            "diagnostics": diagnostics,
+                            "updated_at": _utc_now(),
+                        }
+                    ),
+                )
+                print(f"{profile.get('provider', 'covering campaign')} refused the carried state: {detail}")
+                return 2
             write_json(output / "wrapper_failed.json", {
                 "pause_reason": pause_reason,
                 "detail": detail,

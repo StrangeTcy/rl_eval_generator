@@ -364,3 +364,38 @@ def test_more_groups_than_fit_are_counted_rather_than_dropped() -> None:
 
     assert "30 blocked exact-instance oracle row(s), 30 group(s):" in formatted
     assert "+5 further group(s) covering 5 row(s)" in formatted
+
+
+def test_a_state_contract_refusal_does_not_write_the_gate_it_cannot_pass(tmp_path: Path) -> None:
+    """Five Mercury legs inherited a marker whose only cause was the leg before it.
+
+    The marker means "an operator must acknowledge", and the acknowledgement the launcher accepts covers
+    a harness crash - never a contract refusal, which repeats byte-identically. So the first one is
+    recorded and leaves the state reachable by a plain dispatch; a second, at the same commit, with the
+    same detail, is a fix that did not take and re-arms the gate.
+    """
+    detail = (
+        "checkpoint metadata mismatch for manifest_commit: "
+        "'0ddcd396b45f46b9fbbba7d477b34221a3724ef2' != '5cb4205ae3f69c72809e4834e52006b3406fb3a7'"
+    )
+    assert atria_campaign._state_contract_stop(tmp_path, detail) is False
+    assert (tmp_path / "state_contract_stop.json").is_file()
+    assert not (tmp_path / "wrapper_failed.json").exists()
+
+    # A genuine crash still gates, unchanged.
+    assert atria_campaign._state_contract_stop(tmp_path, "TypeError: unsupported operand") is True
+
+    # Same detail, same code: the second leg escalates. (The commit identity is what makes this a
+    # "nothing changed" test rather than a "this string exists somewhere in history" test.)
+    first = json.loads((tmp_path / "state_contract_stop.json").read_text(encoding="utf-8"))
+    recorded = {**first, "at_commit": "0" * 40, "detail": detail, "count": 1}
+    (tmp_path / "state_contract_stop.json").write_text(json.dumps(recorded), encoding="utf-8")
+    assert atria_campaign._state_contract_stop(tmp_path, detail) is False
+    after = json.loads((tmp_path / "state_contract_stop.json").read_text(encoding="utf-8"))
+    assert after["count"] == 1, after  # a different commit resets the counter
+
+    # Same detail, same commit, twice in a row: gate an operator.
+    same = {**after, "at_commit": after["at_commit"], "count": 1}
+    (tmp_path / "state_contract_stop.json").write_text(json.dumps(same), encoding="utf-8")
+    assert atria_campaign._state_contract_stop(tmp_path, detail) is True
+    assert json.loads((tmp_path / "state_contract_stop.json").read_text(encoding="utf-8"))["count"] == 2
