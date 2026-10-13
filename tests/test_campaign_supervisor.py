@@ -220,3 +220,59 @@ def test_missing_state_fails_closed_and_branch_name_dispatch_resumes_pinned(tmp_
     assert decision["execution_mode"] == "paid"
     assert decision["ref"] == REF
     assert "pinned to checkpoint commit" in decision["reason"]
+
+
+LEDGER = "0ddcd396b45f46b9fbbba7d477b34221a3724ef2"
+STAMPED = "5cb4205ae3f69c72809e4834e52006b3406fb3a7"
+CONTRACT_DETAIL = (
+    "checkpoint metadata mismatch for manifest_commit: "
+    f"'{LEDGER}' != '{STAMPED}'"
+)
+
+
+def _gated(tmp_path: Path, *, name: str, detail: str, ledger: str, stamped: str | None) -> str:
+    """Stage a state whose only obstacle is a recorded terminal marker, and return the reason.
+
+    Each call gets its own directory: the verdict reads every staged file it can find, and one test
+    asserting several artifacts would otherwise be reading the previous assertion's manifest.
+    """
+    state = tmp_path / name
+    state.mkdir(parents=True, exist_ok=True)
+    _state(state, provider="mercury")
+    _write_json(state / "wrapper_failed.json", {"pause_reason": "wrapper_exception", "detail": detail})
+    _write_json(state / "suite_checkpoint.json", {"run": {"manifest_commit": ledger}, "results": []})
+    if stamped is not None:
+        _write_json(state / "suite_manifest.json", {"repository": {"commit": stamped}})
+    return decide_tick(state, expected_provider="mercury")["reason"]
+
+
+def test_an_operator_gate_its_code_cannot_reproduce_says_so(tmp_path: Path) -> None:
+    """Runs 27 and 29 died on a marker whose cause was a stamp mismatch, and the reason line said nothing
+    about whether that mismatch could still happen. It is computable from the staged files, so it is now
+    computed here - the answer belongs on the run page, not in somebody's recollection of the code."""
+    reason = _gated(tmp_path, name="agreed", detail=CONTRACT_DETAIL, ledger=STAMPED, stamped=STAMPED)
+    assert "cannot recur here" in reason, reason
+    assert "`clear_wrapper_stop` alone is sufficient" in reason, reason
+    assert reason.startswith("operator stop: wrapper_exception")  # the refusal itself never softens
+
+
+def test_a_self_contradictory_artifact_is_described_by_its_ancestry(tmp_path: Path) -> None:
+    # 0ddcd39 is an ancestor of 5cb4205 in this repository - measured with the same git command the
+    # helper runs - so a leg started on that code carries the ledger with the move recorded.
+    reason = _gated(tmp_path, name="ff", detail=CONTRACT_DETAIL, ledger=LEDGER, stamped=STAMPED)
+    assert "fast-forward of one lineage" in reason, reason
+    assert "`rebase_onto_ref` is only needed to run newer code" in reason, reason
+
+    # A rewind is not a fast-forward, and the gate is then about the state, not the form.
+    back = _gated(tmp_path, name="rewind", detail=CONTRACT_DETAIL, ledger=STAMPED, stamped=LEDGER)
+    assert "the gate stands on the state" in back, back
+
+
+def test_a_real_crash_gate_is_left_unexplained(tmp_path: Path) -> None:
+    reason = _gated(tmp_path, name="crash", detail="TypeError: unsupported operand",
+                   ledger=LEDGER, stamped=STAMPED)
+    assert reason == "operator stop: wrapper_exception (wrapper recorded a terminal failure)", reason
+    # A marker whose file cannot be read alongside is reported as unreadable, never as cleared.
+    missing = _gated(tmp_path, name="unreadable", detail=CONTRACT_DETAIL, ledger=LEDGER, stamped=None)
+    assert "not both readable" in missing, missing
+

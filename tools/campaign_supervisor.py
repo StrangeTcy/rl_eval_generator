@@ -55,6 +55,75 @@ def _read_json(path: str) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+# The deterministic refusals `tools/run_suite._load_checkpoint` raises against the state it was handed.
+# A marker naming one of them is a *configuration* stop, not a verdict about the campaign, and it is the
+# only class worth second-guessing here: the operator cannot acknowledge it away, and a leg that dies on
+# it re-uploads the marker, which is how Mercury spent five legs at 190 / 416 (runs 24, 25, 27, 28, 29).
+STATE_CONTRACT_MARKERS = (
+    "checkpoint metadata mismatch",
+    "manifest case count changed",
+    "gate coverage is incomplete",
+)
+
+
+def _is_ancestor(older: str, newer: str) -> bool:
+    """Reachability test for two shas, answered by the checkout this file was fetched from.
+
+    Duplicated from `tools/run_suite.py` on purpose: the launcher fetches *this file alone* and executes
+    it provider-free (`gh api contents/tools/campaign_supervisor.py?ref=...`), so an import from the
+    package would not resolve on a runner. Fails closed on any git trouble, including a shallow clone.
+    """
+    import subprocess
+
+    def usable(value: str) -> bool:
+        return 7 <= len(value) <= 40 and all(char in "0123456789abcdef" for char in value)
+
+    if not (usable(older) and usable(newer)):
+        return False
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for value in (older, newer):
+        if subprocess.run(["git", "-C", root, "cat-file", "-e", f"{value}^{{commit}}"],
+                          capture_output=True, text=True).returncode != 0:
+            return False
+    return subprocess.run(["git", "-C", root, "merge-base", "--is-ancestor", older, newer],
+                          capture_output=True, text=True).returncode == 0
+
+
+def _stale_operator_gate(root: str, marker: dict[str, Any]) -> str:
+    """A sentence about whether this code could still produce the recorded refusal. Empty if unknown.
+
+    The refusal is re-derived from the staged files rather than trusted from a chat log: the two stamps
+    the marker names are read back out of `suite_checkpoint.json` and `suite_manifest.json`, and the
+    verdict is one of three things the operator can act on without taking anyone's word for it.
+    """
+    detail = " ".join(str(marker.get("detail") or "").split())
+    if not any(needle in detail for needle in STATE_CONTRACT_MARKERS):
+        return ""
+    checkpoint = _read_json(os.path.join(root, "suite_checkpoint.json")) or {}
+    manifest = _read_json(os.path.join(root, "suite_manifest.json")) or {}
+    ledger = str(((checkpoint.get("run") or {}).get("manifest_commit")) or "")
+    stamped = str(((manifest.get("repository") or {}).get("commit")) or "")
+    if not ledger or not stamped:
+        return "state-contract gate: the stamps it names are not both readable from the artifact"
+    if ledger == stamped:
+        return (
+            f"the recorded cause cannot recur here: the artifact's own stamps now agree ({ledger[:7]}), "
+            "so only the acknowledgement is missing - `clear_wrapper_stop` alone is sufficient and "
+            "`rebase_onto_ref` is not needed"
+        )
+    if _is_ancestor(ledger, stamped):
+        return (
+            f"the artifact still disagrees with itself (checkpoint {ledger[:7]}, manifest {stamped[:7]}) "
+            "but that is a fast-forward of one lineage, which this code carries with the move recorded; "
+            "so `clear_wrapper_stop` alone resumes it, and `rebase_onto_ref` is only needed to run newer "
+            "code than the pinned ref of this decision"
+        )
+    return (
+        f"the gate stands on the state, not on the acknowledgement: checkpoint {ledger[:7]} is not an "
+        f"ancestor of manifest {stamped[:7]}, so no leg resumes until the artifact itself is repaired"
+    )
+
+
 def _decision(
     *, mode: str, execution_mode: str, ref: str, reason: str
 ) -> dict[str, str]:
@@ -209,11 +278,16 @@ def decide_tick(
     marker = _read_json(os.path.join(root, "wrapper_failed.json"))
     if marker is not None:
         reason = str(marker.get("pause_reason") or "unknown")
+        # The decision stays a refusal - a scheduled tick must not talk itself past a terminal marker,
+        # and this function has no idea who is reading it - but the *reason* now says what the code
+        # could verify, so the answer comes off the run page instead of from somebody's guess.
+        note = _stale_operator_gate(root, marker)
         return _decision(
             mode="none",
             execution_mode="",
             ref="",
-            reason=f"operator stop: {reason} (wrapper recorded a terminal failure)",
+            reason="operator stop: " + reason + " (wrapper recorded a terminal failure)"
+            + ((" - " + note) if note else ""),
         )
 
     report = _read_json(os.path.join(root, "campaign_report.json")) or {}
