@@ -18,6 +18,8 @@ and its array expansions are exactly where that happened before.
 from __future__ import annotations
 
 import json
+import os
+import base64
 import subprocess
 import sys
 from pathlib import Path
@@ -65,6 +67,73 @@ def test_an_explicit_rebase_records_what_moved_instead_of_pretending_it_did_not(
     again = _intent(tmp_path, sha=SHA_B, allow_gate_context_rebase=True)
     assert again["rebased_from_gate_context_sha"] == SHA_A
     assert again["gate_context_sha"] == SHA_B
+
+
+def _preflight(tmp_path: Path, *, target_run_suite: str, carried: str = "0ddcd39",
+               target_commit: str = "5cb4205") -> tuple[int, str, str]:
+    """Run the launcher's real rebase pre-flight as bash, against a fake `gh`.
+
+    The block is read out of `handoff/mercury-pairwise-campaign.yml` itself, so the test cannot drift
+    from what ships. `target_run_suite` is what the fake API returns for the target ref's `run_suite`.
+    """
+    text = (ROOT / "handoff/mercury-pairwise-campaign.yml").read_text(encoding="utf-8")
+    body = text[
+        text.index("CARRIED_COMMIT=$(jq -r"): text.index('if [ ! -s "$STATE_STAGE/campaign_intent.json" ]')
+    ]
+    body = body.replace("${{ github.repository }}", "octo/repo")
+    body = body.replace("${{ inputs.rebase_onto_ref }}", "main")
+    payload = base64.b64encode(target_run_suite.encode("utf-8")).decode("ascii")
+    # `gh api --jq .content` hands the launcher the bare base64 body, which is what `base64 -d` eats.
+    (tmp_path / "contents.txt").write_text(payload, encoding="utf-8")
+    (tmp_path / "sha.txt").write_text(target_commit, encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = "\n".join([
+        "#!/bin/sh",
+        'case "$2" in',
+        f"""  *"/contents/"*) cat "{tmp_path}/contents.txt" ;;""",
+        f"""  *) cat "{tmp_path}/sha.txt" ;;""",
+        "esac",
+    ]) + "\n"
+    (bin_dir / "gh").write_text(script, encoding="utf-8")
+    (bin_dir / "gh").chmod(0o755)
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / "suite_checkpoint.json").write_text(
+        json.dumps({"run": {"manifest_commit": carried}}), encoding="utf-8"
+    )
+    (stage / "campaign_intent.json").write_text("{}", encoding="utf-8")
+    out = tmp_path / "out.txt"
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "STATE_STAGE": str(stage),
+           "GITHUB_OUTPUT": str(out), "REBASE": "main"}
+    proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True, cwd=tmp_path, env=env)
+    mode = out.read_text(encoding="utf-8") if out.is_file() else ""
+    return proc.returncode, mode, proc.stdout + proc.stderr
+
+
+def test_a_target_that_honours_the_move_is_not_blocked(tmp_path: Path) -> None:
+    """The pre-flight exists to stop a doomed rebase, so it must yield when the target can handle it.
+
+    With the waiver merged, refusing anyway would leave a ledger frozen with no path out except a fresh
+    dispatch - the outcome the pre-flight was written to avoid, so it checks the target's own code.
+    """
+    code, mode, log = _preflight(tmp_path, target_run_suite="def f(allow_manifest_commit_rebase=x): pass")
+    # Falling through is the success case: the pre-flight only ever says "stop", the step that follows
+    # decides resume vs fresh from the carried files.
+    assert code == 0, log
+    assert "mode=none" not in mode, mode
+    assert "reason=" not in mode, mode
+
+
+def test_a_target_without_the_waiver_is_named_before_the_leg_is_billed(tmp_path: Path) -> None:
+    """And when the target would still refuse, the operator learns it before the first episode."""
+    code, mode, log = _preflight(tmp_path, target_run_suite="print(1)")
+    # The step does not fail the leg; it answers `mode=none` and the announce step prints the reason,
+    # so the campaign never spends a T1 on a plan that cannot run.
+    assert code == 0, log
+    assert "mode=none" in mode, mode
+    assert "run_suite.py:368" in mode and "checkpoint is pinned to 0ddcd39" in mode, mode
+    assert "rebase_onto_ref empty" in mode, mode
 
 
 def test_a_rebase_refuses_a_schedule_event(tmp_path: Path, monkeypatch) -> None:

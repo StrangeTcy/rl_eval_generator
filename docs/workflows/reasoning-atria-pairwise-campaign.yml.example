@@ -122,18 +122,26 @@ jobs:
             mkdir -p "$STATE_STAGE"
             gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/reasoning_atria_state.zip"
             unzip -q "$RUNNER_TEMP/reasoning_atria_state.zip" -d "$STATE_STAGE"
-            # A rebase cannot move an episode ledger. `tools/run_suite.py:294` lists `manifest_commit`
-            # among the fields a carried checkpoint may not change, and there is no waiver for it -
-            # `--rebase-intent` covers `gate_context_sha` only (tools/atria_campaign.py:244) - so a rebase
-            # onto any other commit raises inside the controller about 3 minutes in, exits 2, and writes
-            # `wrapper_failed.json`, which then takes an operator acknowledgement to clear. Mercury runs 22
-            # and 24 died exactly that way, both after being told to rebase, with 190 / 416 unchanged. The
-            # commits are compared here instead, where the answer costs one API call.
+            # A rebase may move a ledger's code, but only with a controller that is allowed to say so:
+            # `manifest_commit` is immutable in a resumed checkpoint (tools/run_suite.py:368) unless the leg
+            # was started by a human with `--rebase-intent`, which records the move in the checkpoint rather
+            # than hiding it. Mercury runs 22, 24 and 25 died ~2.5 minutes in on exactly that refusal - and
+            # a crashed leg still uploads its state, so the artifact was left with a manifest stamped at the
+            # new commit and a checkpoint stamped at the old one, which no click can untangle. The commits
+            # are therefore compared here, where the answer costs one API call, and the plan is refused only
+            # when the target cannot honour the move - blocking it then would leave a fresh dispatch (which
+            # discards the ledger) as the only way onto fixed code, which is the trap this pre-flight is for.
             CARRIED_COMMIT=$(jq -r '.run.manifest_commit // empty' "$STATE_STAGE/suite_checkpoint.json" 2>/dev/null || true)
             TARGET_COMMIT=$(gh api "repos/${{ github.repository }}/commits/$REBASE" --jq '.sha' 2>/dev/null || true)
-            if [ -n "$CARRIED_COMMIT" ] && [ -n "$TARGET_COMMIT" ] && [ "$CARRIED_COMMIT" != "$TARGET_COMMIT" ]; then
+            # ...and the comparison is waiver-aware, so it never blocks the path that works: a target
+            # whose run_suite accepts a recorded `manifest_commit` move (added for exactly this wedge)
+            # carries the ledger on, and anything older than that still refuses here rather than 3
+            # minutes and one terminal marker later.
+            if [ -n "$CARRIED_COMMIT" ] && [ -n "$TARGET_COMMIT" ] && [ "$CARRIED_COMMIT" != "$TARGET_COMMIT" ] \
+               && ! gh api "repos/${{ github.repository }}/contents/tools/run_suite.py?ref=$REBASE" \
+                    --jq '.content' 2>/dev/null | base64 -d 2>/dev/null | grep -q allow_manifest_commit_rebase; then
               echo "mode=none" >> "$GITHUB_OUTPUT"
-              echo "reason=a rebase cannot carry this ledger: its checkpoint is pinned to ${CARRIED_COMMIT:0:7} and manifest_commit is immutable in a resumed checkpoint (tools/run_suite.py:294); dispatch with rebase_onto_ref empty to resume on that commit, which is the code that banked the rows" >> "$GITHUB_OUTPUT"
+              echo "reason=a rebase cannot carry this ledger: its checkpoint is pinned to ${CARRIED_COMMIT:0:7}, and the code at $REBASE still treats manifest_commit as immutable (tools/run_suite.py:368); merge the --rebase-intent waiver, or dispatch with rebase_onto_ref empty to resume on the commit that banked the rows" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             if [ ! -s "$STATE_STAGE/campaign_intent.json" ]; then

@@ -364,7 +364,10 @@ def test_a_doomed_rebase_is_refused_before_it_costs_a_leg_and_a_terminal_marker(
         assert '"mode=none"' in preflight and preflight.index('"mode=none"') < preflight.index("exit 0"), path.name
         assert "rebase_onto_ref empty" in preflight, f"{path.name}: the refusal must name the fix"
         assert "campaign_intent.json" not in preflight, f"{path.name}: refuse before reading the intent"
-        assert "run_suite.py:294" in preflight, f"{path.name}: cite the rule the rebase collides with"
+        assert "run_suite.py:368" in preflight, f"{path.name}: cite the rule the rebase collides with"
+        # The refusal has to yield to a target that can honour the move, or it blocks the way out.
+        assert "contents/tools/run_suite.py?ref=$REBASE" in preflight, path.name
+        assert preflight.index("grep -q allow_manifest_commit_rebase") < preflight.index('"mode=none"'), path.name
 
 
 def test_the_rearm_refuses_to_execute_a_copy_that_does_not_compile() -> None:

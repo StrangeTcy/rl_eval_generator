@@ -241,7 +241,7 @@ def _record_campaign_intent(
         comparable = {key: existing.get(key) for key in expected}
         if comparable != expected:
             drifted = sorted(key for key in expected if comparable.get(key) != expected[key])
-            if allow_gate_context_rebase and drifted == ["gate_context_sha"]:
+            if allow_gate_context_rebase and set(drifted) <= {"gate_context_sha", "manifest_commit"}:
                 # An explicit operator rebase: the grading code moved and nothing else did. The
                 # digest exists to stop a campaign resuming against a verdict produced by other
                 # rules, and that is precisely the reason a *fix* to the reference or the checks
@@ -264,6 +264,12 @@ def _record_campaign_intent(
                     "rebased_at": _utc_now(),
                     "rebased_by": os.environ.get("GITHUB_WORKFLOW") or "manual",
                 }
+                if "manifest_commit" in drifted:
+                    # Both halves of the move are recorded, because the pair is what a reader needs: the
+                    # rows banked before this dispatch were produced by `rebased_from_manifest_commit`,
+                    # and the grading digest - the thing that actually binds a verdict - is listed beside
+                    # it. A rebase may move the commit and never the rules.
+                    value["rebased_from_manifest_commit"] = existing.get("manifest_commit")
                 write_json(path, value)
                 return value
             raise ValueError(
@@ -1791,6 +1797,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         scheduler_kwargs: dict[str, Any] = {
             "output_dir": output,
+            # One authority, two consumers. `--rebase-intent` is what lets a *manual* dispatch continue a
+            # campaign on different code; run_suite needs the same fact to move `manifest_commit` in the
+            # checkpoint, otherwise the intent is re-pinned (below) and the ledger is refused, which is a
+            # leg that dies in ~2 minutes and leaves a terminal marker. A scheduled tick cannot set it.
+            "allow_manifest_commit_rebase": bool(args.rebase_intent),
             "provider": str(profile["provider"]),
             "model": str(profile["model"]),
             "api_key_env": str(profile["api_key_env"]),

@@ -154,7 +154,8 @@ def _checkpoint_file(tmp_path: Path, metadata: dict) -> Path:
     return path
 
 
-def _load(tmp_path: Path, previous: dict, current: dict, *, authorized_by=None):
+def _load(tmp_path: Path, previous: dict, current: dict, *, authorized_by=None, rebase=False):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     path = _checkpoint_file(tmp_path, previous)
     manifest = {"case_count": 1, "cases": []}
     return run_suite._load_checkpoint(
@@ -162,7 +163,59 @@ def _load(tmp_path: Path, previous: dict, current: dict, *, authorized_by=None):
         manifest=manifest,
         metadata=current,
         ceiling_authorization=authorized_by,
+        allow_manifest_commit_rebase=rebase,
     )
+
+
+def test_a_rebase_moves_the_commit_and_records_the_move_beside_the_rows(tmp_path: Path) -> None:
+    """`manifest_commit` is the one field a manual rebase may change, and only with the flag set.
+
+    Measured cost of it not being movable: the Mercury ledger was written under 0ddcd39, a rebase
+    re-pinned the intent to a newer commit, and every leg after that died ~2.5 minutes in on
+    `checkpoint metadata mismatch for manifest_commit` (runs 24 and 25, 2026-10-13) - while the only
+    other way onto new code, a fresh dispatch, discards the 190 banked episodes and re-bills T1.
+    """
+    previous = {"provider": "mercury", "manifest_commit": "0ddcd39"}
+    current = {**previous, "manifest_commit": "bf8ca43"}
+    with pytest.raises(ValueError, match="checkpoint metadata mismatch for manifest_commit"):
+        _load(tmp_path / "strict", previous, current)
+
+    checkpoint = _load(tmp_path / "rebase", previous, current, rebase=True)
+    assert checkpoint is not None
+    moves = checkpoint["manifest_commit_moves"]
+    assert len(moves) == 1, moves
+    assert moves[0]["from"] == "0ddcd39"
+    assert moves[0]["to"] == "bf8ca43"
+    assert moves[0]["authorized_by"] == "rebase-intent"
+    assert checkpoint["run"]["manifest_commit"] == "bf8ca43"
+
+    # Every other field still refuses, rebase or not: the waiver is about where the code came from,
+    # never about what the run is allowed to be.
+    for field, value in (("provider", "atria"), ("model", "other-1"), ("api_base", "https://x/v1"),
+                         ("max_steps", 99), ("secrets", "extra"), ("wire_api", "responses")):
+        with pytest.raises(ValueError, match=f"checkpoint metadata mismatch for {field}"):
+            _load(tmp_path / f"refuse-{field}", previous, {**previous, field: value}, rebase=True)
+
+    # A second rebase appends rather than overwrites, so the lineage's whole code history stays readable.
+    moved_file = tmp_path / "rebase" / "suite_checkpoint.json"
+    moved = json.loads(moved_file.read_text(encoding="utf-8")) if moved_file.is_file() else None
+    carried = {
+        "run": {**previous, "manifest_commit": "bf8ca43"},
+        "manifest_commit_moves": [{"from": "0ddcd39", "to": "bf8ca43", "authorized_by": "rebase-intent"}],
+        "results": [],
+        "manifest_case_count": 1,
+    }
+    twice_dir = tmp_path / "twice"
+    twice_dir.mkdir(parents=True, exist_ok=True)
+    (twice_dir / "suite_checkpoint.json").write_text(json.dumps(carried), encoding="utf-8")
+    again = run_suite._load_checkpoint(
+        twice_dir / "suite_checkpoint.json",
+        manifest={"case_count": 1, "cases": []},
+        metadata={**previous, "manifest_commit": "c0ffee1"},
+        allow_manifest_commit_rebase=True,
+    )
+    assert again["run"]["manifest_commit"] == "c0ffee1"
+    assert [move["from"] for move in again["manifest_commit_moves"]] == ["0ddcd39", "bf8ca43"]
 
 
 def test_a_ceiling_raise_without_authorisation_still_refuses(tmp_path: Path) -> None:

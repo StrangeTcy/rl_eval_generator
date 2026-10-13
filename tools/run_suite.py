@@ -286,6 +286,7 @@ def _load_checkpoint(
     manifest: dict[str, Any],
     metadata: dict[str, Any],
     ceiling_authorization: str | None = None,
+    allow_manifest_commit_rebase: bool = False,
 ) -> dict[str, Any]:
     if path.is_file():
         checkpoint = _read_json(path)
@@ -330,6 +331,38 @@ def _load_checkpoint(
                 if field in CEILING_FIELDS:
                     # Checked by _ceiling_raises, which refuses an unauthorised
                     # change and a reduction; reaching here means it was allowed.
+                    continue
+                if field == "manifest_commit" and allow_manifest_commit_rebase:
+                    origin = previous.get(field)
+                    # What binds a banked verdict is the grading-code digest, and
+                    # that is checked on its own terms: rows are reused only while
+                    # `gate_context_sha` is identical (see the carried-row and
+                    # partial-gate comparisons in this file), so a row graded by
+                    # other code is re-graded rather than trusted. The commit alone
+                    # therefore carries no scientific weight - `tools/inherit_
+                    # campaign_state.py` says so in its own docstring ("a commit-only
+                    # difference no longer blocks the carry") - and before this
+                    # waiver the only way to run a fix against an existing ledger was
+                    # a fresh dispatch, which discards the ledger. Reachable only
+                    # from `--rebase-intent`, which only a manual dispatch sets.
+                    checkpoint["manifest_commit_moves"] = [
+                        *(checkpoint.get("manifest_commit_moves") or []),
+                        {
+                            "from": origin,
+                            "to": metadata.get(field),
+                            "authorized_by": "rebase-intent",
+                            "at": _utc_now(),
+                        },
+                    ]
+                    # `previous` IS `checkpoint["run"]` for the caller, so the recorded origin has
+                    # to be read out before the write, and the write has to come after it: reading
+                    # it afterwards reported `bf8ca43 -> bf843`-style nonsense in the first draft.
+                    checkpoint["run"][field] = metadata.get(field)
+                    print(
+                        "manifest_commit rebased: "
+                        f"{origin} -> {metadata.get(field)}; gate rows whose grading context differs "
+                        "will be re-graded, not inherited"
+                    )
                     continue
                 raise ValueError(
                     f"checkpoint metadata mismatch for {field}: "
@@ -590,6 +623,7 @@ def run_suite(
     unreferenced_compile_only: bool = False,
     gate_context_sha: str | None = None,
     ceiling_authorization: str | None = None,
+    allow_manifest_commit_rebase: bool = False,
     stop_after_gates: bool = False,
     gate_wall_seconds: float | None = None,
 ) -> dict[str, Any]:
@@ -965,6 +999,7 @@ def run_suite(
         manifest=manifest,
         metadata=metadata,
         ceiling_authorization=str(ceiling_authorization) if ceiling_authorization else None,
+        allow_manifest_commit_rebase=bool(allow_manifest_commit_rebase),
     )
     checkpoint["run"].update(metadata)
     if gate_record is not None:
