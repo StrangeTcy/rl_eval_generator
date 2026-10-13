@@ -10,6 +10,7 @@ artefact, and reading them is cheaper than booting them.
 """
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import subprocess
@@ -24,8 +25,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import campaign_rearm  # noqa: E402
 from tools.campaign_rearm import (  # noqa: E402
     BUSY_RUN_STATUSES,
+    other_legs,
     cooldown_seconds_for,
     decide_rearm,
     successor_inputs,
@@ -475,3 +478,33 @@ def test_a_human_click_starts_the_leg_instead_of_counting_down(tmp_path: Path) -
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_a_leg_arming_its_successor_is_not_an_other_leg() -> None:
+    """The busy check has to ignore the leg doing the checking, or the chain can never self-continue.
+
+    `runs?per_page=1` handed `decide_rearm` the *current* run - `in_progress`, because no step runs after
+    its own job - so the answer was always "a leg is already in_progress", a leg that declines never arms
+    the next one, and "it resumes automatically" meant "until a human files the next leg". Mercury run 28
+    (38335486606) reached the tool at step 16 and still ended `campaign re-arm declined`.
+    """
+    self_run = {"id": 7, "status": "in_progress", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    busy = _decide(newest_run=self_run)
+    assert busy[0] is False and "already in_progress" in busy[1], busy
+
+    # Left out, the decision is taken on the previous leg - idle 3 h, which clears the floor.
+    siblings = other_legs([self_run, IDLE_LONG_AGO], "7")
+    assert siblings == [IDLE_LONG_AGO], siblings
+    assert _decide(newest_run=siblings[0])[0] is True
+
+    # A genuinely busy sibling still refuses: this exempts one run id, not the guard.
+    queued_sibling = {"id": 8, "status": "queued", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    assert _decide(newest_run=other_legs([self_run, queued_sibling], "7")[0])[0] is False
+
+    # With no run id to exclude - a local call - the list is untouched, strictness unchanged.
+    assert other_legs([self_run], "") == [self_run]
+
+    # And the shipped CLI really consults it, rather than this being a test of an unused helper.
+    source = inspect.getsource(campaign_rearm.main)
+    assert "args.exclude_run" in source and "per_page=20" in source, source
+    assert "--exclude-run" in source or "exclude-run" in inspect.getsource(campaign_rearm)
