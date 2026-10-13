@@ -585,3 +585,30 @@ def test_the_tool_survives_being_run_from_the_temp_directory_the_launcher_uses(t
 
     assert in_tree.RESUME_BACKOFF_SECONDS == supervisor.RESUME_BACKOFF_SECONDS
     assert in_tree.RESUMABLE_PAUSE_REASONS == supervisor.RESUMABLE_PAUSE_REASONS
+
+
+def test_a_pause_the_retry_ledger_meters_is_left_to_the_schedule() -> None:
+    """The one reason this tool must not hurry, with the measurement that says so.
+
+    `infrastructure_error` is a case failure counted against run_suite's bounded per-case attempt ledger.
+    Mercury spent 1/10 in the 17:37 report and 2/10 in the 19:15 report - 365/416 in both, 3m20s of work
+    between them - so a resumed leg consumes an attempt on the same failing case and produces no row. Ten
+    of those and the pause becomes `infrastructure_error_retries_exhausted`, which nothing an automated
+    continuation may do resumes. Chaining on that reason trades a wait that could help for a countdown to a
+    stop only an operator field can lift, at roughly one entry per 23 minutes.
+    """
+    from tools.campaign_rearm import handover_wait
+
+    ledger = {"status": "paused", "pause_reason": "infrastructure_error", "resumable": True}
+    refused, reason = _decide(ledger)
+    assert refused is False and "attempt ledger" in reason, reason
+
+    # No wait either: sitting out 20 minutes in a finished job to arrive at the same refusal is waste.
+    assert handover_wait(ledger, IDLE_LONG_AGO, NOW) == 0
+    just_ended = {"status": "completed", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    assert handover_wait(ledger, just_ended, NOW) == 0
+
+    # The neighbouring reasons are untouched, because they bill the ledger nothing.
+    for reason_ok in ("max_wall_seconds", "provider_error", "docker_unavailable", "wrapper_transient_error"):
+        passed, why = _decide({"status": "paused", "pause_reason": reason_ok, "resumable": True})
+        assert passed is True, (reason_ok, why)

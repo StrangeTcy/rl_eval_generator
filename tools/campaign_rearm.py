@@ -107,6 +107,18 @@ def _parse_timestamp(value: Any) -> datetime | None:
 DEFAULT_COOLDOWN_SECONDS = 600
 IMMEDIATE_HANDOVER_REASONS = {"max_wall_seconds"}
 
+# A pause whose *next leg costs something the campaign cannot get back*. `infrastructure_error` means the
+# arena controller or judge failed on one specific case, and run_suite meters that per case with a bounded
+# attempt ledger - 10 automatic retries, after which the reason becomes
+# `infrastructure_error_retries_exhausted`, which nothing but an operator resumes. Every leg that reaches
+# that case spends one entry whether or not it produces a row: measured on Mercury today, 1/10 in the
+# 17:37 report and 2/10 in the 19:15 report, with 365/416 unchanged and 3m20s of work in between. A
+# self-armed successor therefore does not recover a stalled campaign; it consumes the patience the stall
+# was granted, one entry every ~23 minutes, and ends the lineage in under three hours. For this reason the
+# re-arm stands down and leaves the wait to the scheduled tick, whose hours are the interval the ledger was
+# sized for.
+LEDGER_GOVERNING_REASONS = {"infrastructure_error"}
+
 
 def cooldown_seconds_for(reason: str) -> int:
     """The *self-imposed* floor: how long the group sits idle before a successor is asked for.
@@ -162,6 +174,9 @@ def handover_wait(report: object, newest_run: object, now: datetime, *,
     state = _floor_state(report, newest_run, now, min_interval_seconds)
     if state is None:
         return 0
+    reason = str(report.get("pause_reason") or "")
+    if reason in LEDGER_GOVERNING_REASONS:
+        return 0
     floor, age = state
     wait = int(floor - age)
     if wait <= 0:
@@ -208,6 +223,12 @@ def decide_rearm(
         resumable = reason in RESUMABLE_PAUSE_REASONS
     if not resumable:
         return False, f"pause_reason={reason!r} is not resumable; a successor leg would refuse this state"
+    if reason in LEDGER_GOVERNING_REASONS:
+        return False, (
+            f"pause_reason={reason!r} is metered by the campaign's per-case attempt ledger, which the next "
+            "leg would consume on the same failing case without producing the row; the scheduled tick is "
+            "the wait that can actually help here"
+        )
     if chain_depth >= max_chain_depth:
         return False, (
             f"chain_depth={chain_depth} reached the cap of {max_chain_depth}; cron remains the only "
