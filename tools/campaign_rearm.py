@@ -39,12 +39,38 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# The launcher never executes this file from a checkout. It fetches the copy that matches its own workflow
+# file to `$RUNNER_TEMP/campaign_rearm.py` and runs *that* (and when the fetch is empty it `cp`s the
+# checkout's copy to the same place), so the directory the file sits in has no `tools` package in it and a
+# bare package import is a traceback before `main` is reached:
+#
+#     File "campaign_rearm.py", line 44, in <module>
+#       from tools.campaign_supervisor import (
+#     ModuleNotFoundError: No module named 'tools'
+#
+# Reproduced at 17:52 UTC from the copy at 32a350d - which is the copy Mercury's legs actually run - and it
+# is the whole of `campaign re-arm declined: the tool exited non-zero`, the one decline message that never
+# explained itself. A step wrapped in `|| { echo ...; }` cannot tell a crash from a decision, so the crash
+# was indistinguishable from a refusal for every campaign in this repository, whatever else got fixed.
+for _root in {os.getcwd(), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}:
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
 
-from tools.campaign_supervisor import (  # noqa: E402
-    RESUMABLE_PAUSE_REASONS,
-    RESUME_BACKOFF_SECONDS,
-)
+try:  # inside a tree, the supervisor stays the single source of truth
+    from tools.campaign_supervisor import (  # noqa: E402
+        RESUMABLE_PAUSE_REASONS,
+        RESUME_BACKOFF_SECONDS,
+    )
+except ImportError:  # the runner's $RUNNER_TEMP, and nothing else - so the values are inlined verbatim
+    RESUME_BACKOFF_SECONDS = 1200
+    RESUMABLE_PAUSE_REASONS = {
+        "provider_error",
+        "max_wall_seconds",
+        "provider_infrastructure_error_compatibility",
+        "infrastructure_error",
+        "docker_unavailable",
+        "wrapper_transient_error",
+    }
 
 BUSY_RUN_STATUSES = {"queued", "in_progress", "requested", "waiting", "pending"}
 

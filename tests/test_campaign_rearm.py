@@ -551,3 +551,37 @@ def test_an_empty_run_list_is_idle_and_not_blindness() -> None:
     source = inspect.getsource(campaign_rearm.main)
     assert source.count("run_list_readable=run_list_readable") == 2, source
     assert "run_list_readable = status == 200" in source, source
+
+
+def test_the_tool_survives_being_run_from_the_temp_directory_the_launcher_uses(tmp_path: Path) -> None:
+    """The regression that stranded every campaign, asserted the way the launcher actually calls it.
+
+    Step 16 fetches (or copies) this file to `$RUNNER_TEMP/campaign_rearm.py` and runs it *from there*, so
+    the import that resolves inside a checkout does not resolve at all - and because the step is wrapped in
+    `|| { echo "campaign re-arm declined: the tool exited non-zero"; }`, the crash was reported as a
+    decision for every campaign that ever chained. The copy is placed in a directory with no `tools`
+    package and no PYTHONPATH, run from that directory, and must exit 0 while still reading its report.
+    """
+    import os
+    import shutil
+
+    work = tmp_path / "runner_temp"
+    work.mkdir()
+    script = work / "campaign_rearm.py"
+    shutil.copyfile(ROOT / "tools" / "campaign_rearm.py", script)
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "GITHUB_TOKEN", "GH_TOKEN")}
+    done = subprocess.run(
+        [sys.executable, str(script), "--report", str(tmp_path / "absent.json"), "--dry-run"],
+        cwd=str(work), capture_output=True, text=True, env=env,
+    )
+    assert done.returncode == 0, (done.returncode, done.stderr[-800:])
+    assert "ModuleNotFoundError" not in done.stderr, done.stderr
+    assert "campaign re-arm skipped: report unreadable" in done.stdout, done.stdout
+
+    # The fallback constants are not allowed to drift from the module they stand in for.
+    sys.path.insert(0, str(ROOT))
+    from tools import campaign_rearm as in_tree
+    from tools import campaign_supervisor as supervisor
+
+    assert in_tree.RESUME_BACKOFF_SECONDS == supervisor.RESUME_BACKOFF_SECONDS
+    assert in_tree.RESUMABLE_PAUSE_REASONS == supervisor.RESUMABLE_PAUSE_REASONS

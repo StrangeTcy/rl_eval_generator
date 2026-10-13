@@ -71,7 +71,11 @@ STATE_CONTRACT_MARKERS = (
 # with `fetch-depth: 1` and an assertion about two named commits of this branch is then a claim about the
 # clone, not about the rule. That is exactly how tests/test_campaign_supervisor.py went red in CI and green
 # on a desk (16:0x UTC, 2026-10-13).
-GIT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Prefer the job's checkout: the launcher fetches this file alone into `$RUNNER_TEMP` and runs it there,
+# where `__file__` arithmetic resolves to the runner's home and every `git` probe fails closed - which is
+# correct behaviour for a commit the checkout cannot see and wrong behaviour for one it can. The
+# workspace is the checkout the leg is measuring, so it answers first when GitHub says it exists.
+GIT_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _is_ancestor(older: str, newer: str) -> bool:

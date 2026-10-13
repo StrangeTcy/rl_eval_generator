@@ -317,3 +317,21 @@ def test_a_real_crash_gate_is_left_unexplained(tmp_path: Path) -> None:
     missing = _gated(tmp_path, name="unreadable", detail=CONTRACT_DETAIL, ledger=LEDGER, stamped=None)
     assert "not both readable" in missing, missing
 
+
+
+def test_the_ancestry_helper_asks_the_jobs_checkout_and_not_its_own_location() -> None:
+    """The launcher fetches this file alone into `$RUNNER_TEMP` and runs it there.
+
+    `__file__` arithmetic then resolves to the runner's home directory, where no `.git` exists, so every
+    reachability probe answers False - a fail-closed answer about the *file's location*, presented as a
+    verdict about the campaign's commits. `GITHUB_WORKSPACE` is the checkout the leg was measured against,
+    so it wins when GitHub sets it; and a helper that cannot ask git still refuses, which is the half of
+    the behaviour that must not be "fixed" into an assumption.
+    """
+    import inspect
+
+    from tools import campaign_supervisor
+
+    source = inspect.getsource(campaign_supervisor)
+    assert 'GIT_ROOT = os.environ.get("GITHUB_WORKSPACE") or' in source, source
+    assert campaign_supervisor._is_ancestor("deadbeef", "cafebabe") is False
