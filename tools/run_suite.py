@@ -229,7 +229,122 @@ def _is_zero_score(result: dict[str, Any]) -> bool:
     return result.get("status") == "scored" and isinstance(score, (int, float)) and float(score) == 0.0
 
 
-def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+# Fields whose only purpose is to bound spend, and which an operator may therefore
+# raise between legs. Everything else in `immutable` describes the measurement and a
+# change there is a different campaign, not a bigger budget.
+CEILING_FIELDS = ("max_api_calls", "max_tokens_total", "max_http_attempts")
+
+
+def _ceiling_raises(
+    previous: dict[str, Any],
+    metadata: dict[str, Any],
+    *,
+    authorized_by: str | None,
+) -> list[dict[str, Any]]:
+    """Compare the ceiling fields, allowing only an authorised raise.
+
+    A campaign stopped by its ceiling writes ``pause_reason: max_tokens_total``, and
+    the supervisor refuses to resume that on purpose - it never raises ceilings. The
+    consequence was a dead end: the ceiling lives in ``experiments/*.yaml``, the
+    running campaign is pinned to the commit that read it, so raising the number
+    requires a commit the pinned campaign never sees, while a fresh dispatch to pick
+    up the commit discards the accumulated state. This makes the operator's intent
+    legible to the resume path: the value may grow, named and dated, and nothing else
+    may differ. Lowering it, or changing a measurement field, still refuses.
+    """
+    raises: list[dict[str, Any]] = []
+    for field in CEILING_FIELDS:
+        before, after = previous.get(field), metadata.get(field)
+        if before is None or after is None or after == before:
+            continue
+        if after < before:
+            raise ValueError(
+                f"checkpoint refuses to lower {field} mid-campaign: {before!r} -> "
+                f"{after!r}; spend already recorded against the larger budget"
+            )
+        if not authorized_by:
+            raise ValueError(
+                f"{field} was raised from {before!r} to {after!r}; a resume needs the "
+                "operator's explicit authorisation (--raise-ceiling <handle>) so the "
+                "budget change is recorded beside the rows it buys"
+            )
+        raises.append(
+            {
+                "field": field,
+                "from": before,
+                "to": after,
+                "authorized_by": str(authorized_by),
+                "at": _utc_now(),
+            }
+        )
+    return raises
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _commit_ancestor(older: Any, newer: Any) -> bool:
+    """True only when both objects are commits in this checkout and `older` is reachable from `newer`.
+
+    A resumed ledger and a re-pinned code ref are two commits, and the question that decides whether
+    carrying the ledger forward is safe is not "are they different" - it is "is the ledger's commit an
+    ancestor of the code being run". An ancestor means a fast-forward: no forked history, no commit in
+    the ledger that this tree does not also contain, so the rows already banked were produced by code
+    that this leg's code includes. Anything else - a sibling branch, a rewritten lineage, an object
+    this checkout cannot even see - answers False and the refusal stands. Fail-closed on purpose: a
+    leg that cannot ask git is a leg that does not move the stamp.
+    """
+    def sha(value: Any) -> str:
+        text = str(value or "")
+        if len(text) < 7 or len(text) > 40 or any(char not in "0123456789abcdef" for char in text):
+            return ""
+        return text
+
+    old_sha, new_sha = sha(older), sha(newer)
+    if not old_sha or not new_sha:
+        return False
+    for value in (old_sha, new_sha):
+        probe = subprocess.run(
+            ["git", "-C", str(_REPO_ROOT), "cat-file", "-e", f"{value}^{{commit}}"],
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode != 0:
+            return False
+    check = subprocess.run(
+        ["git", "-C", str(_REPO_ROOT), "merge-base", "--is-ancestor", old_sha, new_sha],
+        capture_output=True,
+        text=True,
+    )
+    return check.returncode == 0
+
+
+def _without_secrets(block: dict[str, Any]) -> dict[str, Any]:
+    """A printable copy of a run block: endpoint identifiers are diagnostics, credentials are not.
+
+    The test is the key name, not its value, so anything named like a secret stays out of the Actions
+    log even when the block is otherwise being dumped for an operator to read.
+    """
+    printable = {}
+    for key, value in block.items():
+        lowered = str(key).lower()
+        if isinstance(value, str) and any(
+            token in lowered for token in ("api_key", "access_token", "bearer", "password")
+        ):
+            printable[key] = "<redacted>"
+        else:
+            printable[key] = value
+    return printable
+
+
+def _load_checkpoint(
+    path: Path,
+    *,
+    manifest: dict[str, Any],
+    metadata: dict[str, Any],
+    ceiling_authorization: str | None = None,
+    allow_manifest_commit_rebase: bool = False,
+) -> dict[str, Any]:
     if path.is_file():
         checkpoint = _read_json(path)
         previous = checkpoint.get("run", {})
@@ -255,6 +370,7 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
             "reasoning_effort",
             "wire_api",
         )
+        blocked: list[str] = []
         for field in immutable:
             if field == "max_http_attempts" and previous.get(field) is None:
                 # A preflight checkpoint may intentionally leave the live
@@ -270,12 +386,83 @@ def _load_checkpoint(path: Path, *, manifest: dict[str, Any], metadata: dict[str
                 # their old default was Chat Completions.
                 continue
             if previous.get(field) != metadata.get(field):
-                raise ValueError(
-                    f"checkpoint metadata mismatch for {field}: "
-                    f"{previous.get(field)!r} != {metadata.get(field)!r}"
-                )
+                if field in CEILING_FIELDS:
+                    # Checked by _ceiling_raises, which refuses an unauthorised
+                    # change and a reduction; reaching here means it was allowed.
+                    continue
+                authorized = allow_manifest_commit_rebase
+                if field == "manifest_commit" and not authorized:
+                    # A hand-started leg whose code is a descendant of the ledger's own commit needs
+                    # no extra flag to be trusted with the move; the ancestry is the authority, and
+                    # `--rebase-intent` exists for the case where a launcher cannot say it. Measured
+                    # reason this matters: run 28 (38335486606, 02:08:46Z, 2m29s) reached the
+                    # controller without the flag, refused this pair, and wrote a fourth marker - a
+                    # dispatch that selects a ref but not the acknowledgement cannot tell the two
+                    # apart from the run page, which is how the loop kept turning.
+                    authorized = (
+                        os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+                        and _commit_ancestor(previous.get(field), metadata.get(field))
+                    )
+                if field == "manifest_commit" and authorized:
+                    origin = previous.get(field)
+                    # What binds a banked verdict is the grading-code digest, and
+                    # that is checked on its own terms: rows are reused only while
+                    # `gate_context_sha` is identical (see the carried-row and
+                    # partial-gate comparisons in this file), so a row graded by
+                    # other code is re-graded rather than trusted. The commit alone
+                    # therefore carries no scientific weight - `tools/inherit_
+                    # campaign_state.py` says so in its own docstring ("a commit-only
+                    # difference no longer blocks the carry") - and before this
+                    # waiver the only way to run a fix against an existing ledger was
+                    # a fresh dispatch, which discards the ledger. Reachable only
+                    # from `--rebase-intent`, which only a manual dispatch sets.
+                    checkpoint["manifest_commit_moves"] = [
+                        *(checkpoint.get("manifest_commit_moves") or []),
+                        {
+                            "from": origin,
+                            "to": metadata.get(field),
+                            "authorized_by": (
+                                "rebase-intent" if allow_manifest_commit_rebase else "manual-ancestry"
+                            ),
+                            "at": _utc_now(),
+                        },
+                    ]
+                    # `previous` IS `checkpoint["run"]` for the caller, so the recorded origin has
+                    # to be read out before the write, and the write has to come after it: reading
+                    # it afterwards reported `bf8ca43 -> bf843`-style nonsense in the first draft.
+                    checkpoint["run"][field] = metadata.get(field)
+                    print(
+                        "manifest_commit rebased: "
+                        f"{origin} -> {metadata.get(field)}; gate rows whose grading context differs "
+                        "will be re-graded, not inherited"
+                    )
+                    continue
+                blocked.append(field)
+        if blocked:
+            # Report every difference at once. Refusing on the first one is what cost three Mercury
+            # legs (runs 22, 24, 25) ~2.5 minutes and a re-dispatch each, to learn one field per
+            # try, and it is why the operator had to keep re-running the same click. The two blocks
+            # are printed beside the complaint so the next answer comes from the log, not from a
+            # state artifact neither of us can download.
+            detail = ", ".join(
+                f"{field}={previous.get(field)!r} != {metadata.get(field)!r}" for field in blocked
+            )
+            raise ValueError(
+                f"checkpoint metadata mismatch for {', '.join(blocked)}: {detail}\n"
+                f"  carried by the ledger: {_without_secrets(previous)}\n"
+                f"  computed by this leg:  {_without_secrets(metadata)}"
+            )
         if checkpoint.get("manifest_case_count") != manifest.get("case_count"):
             raise ValueError("manifest case count changed; use a new checkpoint")
+        raises = _ceiling_raises(previous, metadata, authorized_by=ceiling_authorization)
+        if raises:
+            recorded = checkpoint.get("ceiling_raises")
+            checkpoint["ceiling_raises"] = [*(recorded if isinstance(recorded, list) else []), *raises]
+            for entry in raises:
+                print(
+                    f"ceiling raised: {entry['field']} {entry['from']} -> {entry['to']} "
+                    f"authorised by {entry['authorized_by']} at {entry['at']}"
+                )
         return checkpoint
     return {
         "schema_version": 1,
@@ -519,6 +706,8 @@ def run_suite(
     provider_outage_backoff_seconds: float = 60.0,
     unreferenced_compile_only: bool = False,
     gate_context_sha: str | None = None,
+    ceiling_authorization: str | None = None,
+    allow_manifest_commit_rebase: bool = False,
     stop_after_gates: bool = False,
     gate_wall_seconds: float | None = None,
 ) -> dict[str, Any]:
@@ -845,13 +1034,13 @@ def run_suite(
     selection = manifest.get("selection", {})
     matrix = selection.get("matrix") if isinstance(selection, dict) else None
     if (
-        matrix in {"all", "covering"}
+        matrix in {"all", "covering", "pairwise"}
         and not dry_run
         and max_tokens_total is None
         and max_output_tokens is None
     ):
         raise ValueError(
-            "all-matrix or covering-matrix execution requires --dry-run or an "
+            "all-, covering-, or pairwise-matrix execution requires --dry-run or an "
             "explicit --max-tokens-total/--max-output-tokens ceiling"
         )
     case_budget_calls, case_budget_tokens = _estimated_case_budget(
@@ -889,7 +1078,13 @@ def run_suite(
             "instance_coverage_complete": oracle_report.get("instance_coverage_complete") if oracle_report else None,
         },
     }
-    checkpoint = _load_checkpoint(checkpoint_path, manifest=manifest, metadata=metadata)
+    checkpoint = _load_checkpoint(
+        checkpoint_path,
+        manifest=manifest,
+        metadata=metadata,
+        ceiling_authorization=str(ceiling_authorization) if ceiling_authorization else None,
+        allow_manifest_commit_rebase=bool(allow_manifest_commit_rebase),
+    )
     checkpoint["run"].update(metadata)
     if gate_record is not None:
         checkpoint["instance_gate"] = gate_record

@@ -62,6 +62,12 @@ from tools.run_suite import (  # noqa: E402
 )
 from tools.suite_inventory import _load_yaml, build_manifest  # noqa: E402
 
+# Ceiling keys a dispatcher may set with --limit. They bound spend and nothing else:
+# the measurement contract (provider, model, endpoint, wire surface, reasoning effort,
+# case manifest, gate context) stays exactly as pinned, so a budget change can never
+# move a verdict.
+CEILINGS = ("max_api_calls", "max_tokens_total", "max_http_attempts")
+
 RESUMABLE_PAUSE_REASONS = {
     "provider_error",
     "max_wall_seconds",
@@ -89,22 +95,70 @@ CAMPAIGN_TARGETS: dict[str, dict[str, Any]] = {
 }
 
 
+def _apply_limit_overrides(
+    profile: Mapping[str, Any], args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> dict[str, Any]:
+    """Merge ``--limit KEY=INTEGER`` over the profile ceilings, with provenance.
+
+    The profile stays the record and the file the campaign is pinned to; this exists
+    so an operator can unblock a budget-stopped campaign from the dispatcher instead
+    of committing a number the pinned code will never read. Every accepted override is
+    printed, and the ones that let a resume past a ceiling it stopped at are written to
+    ``suite_checkpoint.json`` as ``ceiling_raises`` with the authorising handle - so the
+    rows bought above the original ceiling are attributable to a named decision, not to
+    the run.
+    """
+    limits = dict(profile["limits"])
+    for spec in args.limit_overrides or []:
+        key, sep, raw = str(spec).partition("=")
+        key = key.strip()
+        if not sep or key not in CEILINGS:
+            parser.error(
+                f"--limit expects KEY=INTEGER with KEY in {', '.join(CEILINGS)}; got {spec!r}"
+            )
+        try:
+            value = int(raw.strip())
+        except ValueError:
+            parser.error(f"--limit {key} needs an integer, got {raw.strip()!r}")
+        if value < 1:
+            parser.error(f"--limit {key} must be positive")
+        previous = limits.get(key)
+        limits[key] = value
+        print(
+            f"ceiling override: {key} {'unset' if previous is None else previous} -> {value}"
+            + (
+                f" (resume authorised by {args.ceiling_authorization})"
+                if args.ceiling_authorization
+                else ""
+            )
+        )
+    return limits
+
+
 def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
-def _gate_context_sha() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return result.stdout.strip() or None
+def _gate_context_sha() -> str:
+    """Identity of the code that *produces* gate verdicts, not of the repository HEAD.
+
+    ``run_suite`` banks exact-instance gate rows across runner jobs and only reuses
+    them under an unchanged gate context. The context used to be ``git rev-parse
+    HEAD``, so any commit -- a handoff note, a launcher comment -- threw away every
+    row and the gate restarted from zero; with cron editing the repository between
+    legs, the campaign could never finish gating and died at the same blocked-row
+    message each tick. What a row actually claims is "this grading code produced this
+    verdict on this instance", so the context is now the digest of the
+    verdict-relevant file set (tools/gate_context.py): unrelated commits keep the
+    work, and any change to a generator, an environment template, or the gate
+    invalidates it.
+
+    No fallback to a revision hash on a missing input: an incomplete context would
+    silently re-gate hours of work, so tools.gate_context raises instead.
+    """
+    from tools.gate_context import compute as _verdict_context
+
+    return _verdict_context()
 
 
 def _manifest_cases_sha256(manifest: Mapping[str, Any]) -> str:
@@ -141,6 +195,7 @@ def _record_campaign_intent(
     execution_mode: str,
     gate_context_sha: str | None,
     profile: Mapping[str, Any] | None = None,
+    allow_gate_context_rebase: bool = False,
 ) -> dict[str, Any]:
     """Persist the only continuation authority a scheduled run may trust.
 
@@ -185,9 +240,42 @@ def _record_campaign_intent(
     if isinstance(existing, dict):
         comparable = {key: existing.get(key) for key in expected}
         if comparable != expected:
+            drifted = sorted(key for key in expected if comparable.get(key) != expected[key])
+            if allow_gate_context_rebase and set(drifted) <= {"gate_context_sha", "manifest_commit"}:
+                # An explicit operator rebase: the grading code moved and nothing else did. The
+                # digest exists to stop a campaign resuming against a verdict produced by other
+                # rules, and that is precisely the reason a *fix* to the reference or the checks
+                # used to require a fresh dispatch - which discards the paid T1 result, the banked
+                # gate rows and the ceiling counters, and then re-bills T1. Here the lineage keeps
+                # its ledger and records what moved, so the rows written after this point are
+                # attributable to the new context without pretending they were always comparable.
+                # Only a manual dispatch can reach this branch, and only for this one field:
+                # provider, model, endpoint, effort, mode and manifest identity still refuse, and a
+                # scheduled tick never gets to decide that its own code context may change.
+                if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
+                    raise ValueError(
+                        "campaign intent drifted in gate context but this is not an explicit "
+                        f"workflow_dispatch; refusing to re-pin {drifted} from a {os.environ.get('GITHUB_EVENT_NAME') or 'bare'} run"
+                    )
+                value = {
+                    **existing,
+                    **expected,
+                    "rebased_from_gate_context_sha": existing.get("gate_context_sha"),
+                    "rebased_at": _utc_now(),
+                    "rebased_by": os.environ.get("GITHUB_WORKFLOW") or "manual",
+                }
+                if "manifest_commit" in drifted:
+                    # Both halves of the move are recorded, because the pair is what a reader needs: the
+                    # rows banked before this dispatch were produced by `rebased_from_manifest_commit`,
+                    # and the grading digest - the thing that actually binds a verdict - is listed beside
+                    # it. A rebase may move the commit and never the rules.
+                    value["rebased_from_manifest_commit"] = existing.get("manifest_commit")
+                write_json(path, value)
+                return value
             raise ValueError(
                 "campaign intent differs from the restored state; refuse to "
                 "continue with a changed provider, model, mode, manifest, or code context"
+                f" (changed: {', '.join(drifted)})"
             )
         return existing
     value = {**expected, "recorded_at": _utc_now()}
@@ -291,10 +379,27 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
     if profile.get("stream", False) is not False:
         raise ValueError("covering campaigns require stream: false")
     matrix = profile.get("matrix") or {}
-    if not isinstance(matrix, Mapping) or matrix.get("mode") != "covering":
-        raise ValueError("campaign profile must declare matrix.mode: covering")
+    # "covering" is strength-1 (one axis moves at a time); "pairwise" is the
+    # strength-2 covering array plus the uniform difficulty ladder.  Both are
+    # paid-campaign sized; the manifest is still built from one mode string, so
+    # switching modes changes every case_id and therefore invalidates any
+    # in-flight resume - flip it between campaigns, never during one.
+    if not isinstance(matrix, Mapping) or matrix.get("mode") not in {"covering", "pairwise"}:
+        raise ValueError("campaign profile must declare matrix.mode: covering or pairwise")
     if matrix.get("seeds") != [0]:
         raise ValueError("campaign profile must declare matrix.seeds: [0]")
+    if not isinstance(matrix.get("interventions", False), bool):
+        raise ValueError("matrix.interventions must be a boolean")
+    twin_mode = matrix.get("twin_verification")
+    if twin_mode is not None and str(twin_mode) not in {"strict", "advisory", "bill_verified_only", "off"}:
+        raise ValueError(
+            "matrix.twin_verification must be strict, advisory, bill_verified_only or off"
+        )
+    if matrix_interventions_of(profile) and str(twin_mode or "advisory") == "off":
+        raise ValueError(
+            "a campaign that bills intervention cases cannot disable twin verification: "
+            "an unverified twin is indistinguishable from an inert overlay"
+        )
     resilience = profile.get("resilience") or {}
     if not isinstance(resilience, Mapping):
         raise ValueError("resilience must be a mapping")
@@ -328,7 +433,12 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
         raise ValueError("rate_limit.min_interval_seconds must be > 0")
 
     research = profile.get("research_context")
-    if profile.get("name") in {"mercury_covering_campaign", "reasoning_atria_covering_campaign"}:
+    if profile.get("name") in {
+        "mercury_covering_campaign",
+        "reasoning_atria_covering_campaign",
+        "mercury_pairwise_campaign",
+        "reasoning_atria_pairwise_campaign",
+    }:
         if not isinstance(research, Mapping):
             raise ValueError("epistemic-process-control campaigns require research_context")
         _validate_research_context(
@@ -460,6 +570,61 @@ def _optional_credentials(profile: Mapping[str, Any]) -> Any | None:
     return creds if creds.api_key else None
 
 
+# Flags the controller tolerates but does not act on, because the launcher YAML and
+# the controller are versioned apart: GitHub reads the workflow file from the default
+# branch while the job checks out the campaign's pinned ``ref``. So a flag that moves
+# between tools mid-campaign reaches whichever side is stale, and exit-2'ing on it
+# would burn a paid tick for a wording difference. Tolerance is only acceptable if it
+# is named, which is what _record_ignored_launcher_flags is for.
+COMPATIBILITY_FLAGS = {"--allow-cross-revision-t1": "allow_cross_revision_t1"}
+
+
+def _record_ignored_launcher_flags(manifest: dict, args: Any) -> None:
+    """Name every compatibility flag this invocation was handed and did not act on."""
+    ignored = sorted(
+        flag for flag, attr in COMPATIBILITY_FLAGS.items() if getattr(args, attr, False)
+    )
+    if not ignored:
+        return
+    manifest.setdefault("campaign", {})["ignored_launcher_arguments"] = ignored
+    print(
+        "compatibility flags accepted and NOT acted on by the controller: "
+        + ", ".join(ignored)
+        + " (they belong to tools/inherit_campaign_state.py)"
+    )
+
+
+def matrix_mode_of(profile: dict) -> str:
+    """The matrix mode a campaign profile asks for, defaulting to the historical value."""
+    matrix = (profile or {}).get("matrix") or {}
+    mode = matrix.get("mode") if isinstance(matrix, Mapping) else None
+    return str(mode or "covering")
+
+
+def matrix_interventions_of(profile: Mapping[str, Any]) -> bool:
+    """Whether the campaign bills intervention-carrying vectors at all."""
+    matrix = (profile or {}).get("matrix") or {}
+    return bool(matrix.get("interventions")) if isinstance(matrix, Mapping) else False
+
+
+def twin_verification_of(profile: Mapping[str, Any]) -> str:
+    """How hard to insist that a billed intervention twin actually moved bytes.
+
+    Default is ``advisory`` when interventions are on, because the checker
+    refuses to normalize the generated ``ENV_NAME`` instance label and so every
+    twin currently comes back ``unverified`` - a real limitation of the check, not
+    of the overlay. ``strict`` is the mode a campaign should move to once that
+    normalization is fixed: it refuses to bill an invariance claim whose twin was
+    never verified, which is the failure ``envs/interventions.yaml`` exists to
+    prevent. ``off`` is only meaningful with no interventions.
+    """
+    matrix = (profile or {}).get("matrix") or {}
+    mode = matrix.get("twin_verification") if isinstance(matrix, Mapping) else None
+    if mode is not None:
+        return str(mode)
+    return "advisory" if matrix_interventions_of(profile) else "off"
+
+
 def _compatibility_check(
     profile: Mapping[str, Any], credentials: Any, output: Path
 ) -> dict[str, Any]:
@@ -512,6 +677,9 @@ def _compatibility_check(
                 request_extra=profile.get("request_extra") or None,
             )
         else:
+            # Chat Completions takes ``max_tokens`` only; ProviderClient.complete()
+            # has no ``max_output_tokens`` parameter and raises TypeError if one is
+            # passed. The Responses-API sibling takes the opposite name.
             completion = client.complete(
                 model=str(profile["model"]),
                 messages=messages,
@@ -723,22 +891,143 @@ def _campaign_failure_diagnostics(output: Path) -> dict[str, Any]:
     }
 
 
+# How a blocked gate row maps onto the vocabulary the profiles already use for reviewed omissions.
+# The name is the diagnosis, so a campaign log can be acted on without re-deriving it.
+# Upper bound on the diagnostics block, in characters. Sized so a group listing with each
+# group's observed grade and judge notes still fits; the tail is the paste-ready omission
+# stanza, which is the part an operator should be suspicious of reading in isolation.
+DIAGNOSTIC_CHAR_LIMIT = 12000
+
+_BLOCKED_ROW_CALIBRATION_CLASS = {
+    "reference_did_not_grade_as_expected": "reference_does_not_solve_its_own_instance",
+    "plausible_wrong_did_not_grade_as_expected": "negative_control_is_not_a_negative_control",
+    "transcription_did_not_fail_as_expected": "hardcoded_output_control_does_not_hold",
+    "oracle_error": "reference_not_configured_for_this_vector",
+    "blocked": "reference_not_run_for_this_environment",
+}
+
+
+def _axis_signature(case_id: str) -> str:
+    """The non-easy axis levels of a case id, so a failure set can be described by its shape.
+
+    Ids are ``env__axis=level_axis=level...__seed-0``, with an optional intervention segment before
+    the seed; a vector the generator emits as a plain CSV list has no ``=`` to split on, so it is
+    named whole rather than guessed at.
+    """
+    parts = str(case_id).split("__")
+    if len(parts) < 3:
+        return "unrecognised case id"
+    vector = parts[1]
+    if "=" not in vector:
+        return f"vector {vector}" if vector else "unvectorled"
+    # Axis names contain underscores, so the pairs are re-joined rather than split on them: a token
+    # without `=` belongs to the name of the pair that follows it (`symptom` + `mask=hard`).
+    levels: list[str] = []
+    pending = ""
+    for token in vector.split("_"):
+        if "=" not in token:
+            pending = f"{pending}_{token}" if pending else token
+            continue
+        name, _, value = token.partition("=")
+        levels.append(f"{pending}_{name}={value}" if pending else f"{name}={value}")
+        pending = ""
+    hard = sorted(level for level in levels if not level.endswith("=easy"))
+    return ", ".join(hard) if hard else "all axes easy"
+
+
+def _gate_failure_groups(failures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse blocked rows into reason x axis-signature groups, largest first."""
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in failures:
+        reason = str(row.get("error") or row.get("reason") or row.get("status") or "failed")
+        case_id = str(row.get("case_id") or "unknown case")
+        key = (reason, _axis_signature(case_id))
+        entry = grouped.setdefault(
+            key, {"reason": key[0], "axes": key[1], "count": 0, "case_ids": [], "observed": None}
+        )
+        entry["count"] += 1
+        entry["case_ids"].append(case_id)
+        if entry["observed"] is None and isinstance(row.get("observed"), dict):
+            # One example per group is enough to read the shape; the rows all carry their
+            # own copy in instance_oracles.json.
+            entry["observed"] = row["observed"]
+    return sorted(grouped.values(), key=lambda item: (-item["count"], item["reason"], item["axes"]))
+
+
 def _format_failure_diagnostics(diagnostics: Mapping[str, Any]) -> str:
-    details: list[str] = []
+    """Summarise blocked gate rows by cause and axis levels, never by the first twenty ids.
+
+    The listing this replaces printed at most twenty rows per category, and the caller then cut the
+    string at 6000 characters, so a campaign that blocked on forty-odd rows described itself with a
+    truncated sample and every reading of that sample was a guess about the rest - which is how a
+    fix shipped for 14 rows while 35 more of the same class went unmentioned. Groups are bounded, so
+    the summary survives the same cut: how many rows, for which reason, on which axis levels, with
+    ids and a paste-ready omission stanza for as many as fit.
+
+    It is a summary of what the gate recorded, not a diagnosis of the instances: the groups name the
+    axis levels the blocked rows share, which is where to look, not what is wrong.
+    """
+    newline = chr(10)
+    sections: list[str] = []
     for key, label in (
         ("generation_preflight_failed_cases", "generation"),
         ("exact_instance_failed_cases", "exact-instance oracle"),
         ("partial_exact_instance_failed_cases", "partial exact-instance oracle"),
     ):
-        failures = diagnostics.get(key) or []
-        for row in failures[:20]:
-            case_id = row.get("case_id") or "unknown case"
-            reason = row.get("error") or row.get("reason") or row.get("status")
-            details.append(f"{label}: {case_id} ({reason or 'failed'})")
-    if not details:
+        failures = [row for row in (diagnostics.get(key) or []) if isinstance(row, dict)]
+        if not failures:
+            continue
+        groups = _gate_failure_groups(failures)
+        lines = [f"{len(failures)} blocked {label} row(s), {len(groups)} group(s):"]
+        for group in groups[:25]:
+            shown = group["case_ids"][:2]
+            rest = group["count"] - len(shown)
+            example = ", ".join(shown) + (f" (+{rest} more)" if rest else "")
+            lines.append(f"  {group['reason']} x{group['count']} on {group['axes']} - {example}")
+            observed = group.get("observed")
+            if isinstance(observed, dict):
+                detail = " ".join(
+                    f"{name}={observed[name]}"
+                    for name in ("variant", "done", "verdict", "score", "raw_accuracy", "failure_mode")
+                    if observed.get(name) is not None
+                )
+                failed = ",".join(observed.get("failed_checks") or []) or "none"
+                notes = "; ".join(observed.get("notes") or [])
+                lines.append(f"      saw: {detail} checks_failing={failed}")
+                if notes:
+                    lines.append(f"      judge notes: {notes[:300]}")
+                tail = str(observed.get("stderr_tail") or "").strip().replace(newline, " | ")
+                if tail:
+                    lines.append(f"      stderr: {tail[-300:]}")
+        if len(groups) > 25:
+            omitted = sum(group["count"] for group in groups[25:])
+            lines.append(f"  +{len(groups) - 25} further group(s) covering {omitted} row(s):"
+                         " see instance_oracles.json")
+        sections.append(newline.join(lines))
+    omissions = [
+        row
+        for row in (diagnostics.get("exact_instance_failed_cases") or [])
+        if isinstance(row, dict) and str(row.get("reason") or "") in _BLOCKED_ROW_CALIBRATION_CLASS
+    ]
+    if omissions:
+        lines = ["  to omit them, add under manual_gate_blocked_exclusions.cases:"]
+        for row in omissions[:12]:
+            lines.append(f"    - case_id: {row.get('case_id')}")
+            lines.append(f"      calibration_class: {_BLOCKED_ROW_CALIBRATION_CLASS[str(row.get('reason'))]}")
+        if len(omissions) > 12:
+            lines.append(f"    # +{len(omissions) - 12} more of the same; instance_oracles.json holds all of them")
+        sections.append(newline.join(lines))
+    if not sections:
         return ""
-    suffix = " Provider-free diagnostics: " + "; ".join(details)
-    return suffix[:6000]
+    # A cap that cuts silently is how a 49-row failure set got read as 14 rows once: the counts
+    # and groups are assembled first, and if the tail has to go, the text says how much of it did.
+    text = " Provider-free diagnostics:" + newline + newline.join(sections) + newline
+    if len(text) <= DIAGNOSTIC_CHAR_LIMIT:
+        return text
+    kept = text[:DIAGNOSTIC_CHAR_LIMIT]
+    dropped = len(text.splitlines()) - len(kept.splitlines())
+    return kept + f"  [... cut at {DIAGNOSTIC_CHAR_LIMIT} chars, {dropped} further line(s); " \
+                  f"instance_oracles.json and campaign_report.json hold every row]{newline}"
 
 
 def _recorded_episode_count(output: Path) -> int:
@@ -835,6 +1124,79 @@ def _reset_fresh_campaign_output(output: Path) -> None:
         (output / "campaign_ref.txt").write_text(pinned_ref + "\n", encoding="utf-8")
 
 
+# Errors raised by `run_suite._load_checkpoint` about the state it was handed: deterministic, identical
+# on every retry, and unreachable by any acknowledgement a human can type into the dispatch form.
+STATE_CONTRACT_REFUSALS = (
+    "checkpoint metadata mismatch",
+    "manifest case count changed",
+    "gate coverage is incomplete",
+)
+
+
+def _state_contract_stop(output: Path, detail: str) -> bool:
+    """Record a state-contract refusal; return True when the caller must still mark the campaign terminal.
+
+    `wrapper_failed.json` means "a person has to acknowledge before anything spends again", and the
+    launcher lets an acknowledgement clear exactly one class of it - a harness crash. A refusal raised
+    against the carried state is not that class: it is the campaign's own immutability contract, and it
+    repeats byte-identically on every leg. Writing the marker for it is what wedged Mercury - runs 24,
+    25, 27, 28 and 29 each inherited a marker whose only cause was the refusal before it, so the campaign
+    spent its ledger frozen at 190 / 416 while each attempt added another gate that no input could pass.
+
+    So the first such stop is recorded in its own file and leaves the state resumable by a plain dispatch;
+    the second consecutive one that refuses the same detail *from the same commit* marks the campaign
+    terminal, because that means the fix did not take, and a person is the only one who can tell why.
+    """
+    if not any(needle in detail for needle in STATE_CONTRACT_REFUSALS):
+        return True
+    path = output / "state_contract_stop.json"
+    # Identity of the code that refused, so the counter means "nothing changed between attempts" and
+    # not "this campaign once saw this string". A rebase that lands the fix moves the commit, which
+    # resets the count by itself; two legs refusing the same detail from the same commit is the case a
+    # person has to look at, because the fix did not take.
+    try:
+        from tools.gate_context import head as _head  # local import: diagnostics only
+
+        this_commit = _head() or ""
+    except Exception:  # noqa: BLE001 - an unreadable HEAD must not swallow the refusal
+        this_commit = ""
+    repeats = 0
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            str(previous.get("detail") or "") == str(detail)
+            and str(previous.get("at_commit") or "") == this_commit
+        ):
+            repeats = int(previous.get("count") or 0)
+    except (OSError, ValueError):
+        repeats = 0
+    try:
+        write_json(
+            path,
+            {
+                "pause_reason": "state_contract_stop",
+                "detail": redact_text(detail),
+                "count": repeats + 1,
+                "at_commit": this_commit,
+                "recorded_at": _utc_now(),
+            },
+        )
+    except OSError:
+        return True
+    if repeats:
+        print(
+            f"state-contract refusal repeated ({repeats + 1} consecutive legs on the same detail); "
+            "marking the campaign terminal for an operator"
+        )
+        return True
+    print(
+        f"state-contract refusal recorded in {path.name}; no operator gate written, because an "
+        "acknowledgement cannot change what the code refuses - fix the code or the state and a plain "
+        "dispatch resumes from the last banked row"
+    )
+    return False
+
+
 def _mark_terminal(output: Path, reason: str, detail: str) -> None:
     """Record a non-resumable end so the supervisor stops instead of
     restarting a deterministically failing wrapper forever.  The marker is
@@ -899,11 +1261,35 @@ def _apply_gate_blocked_exclusions(manifest: dict, profile: Mapping[str, Any]) -
 
     original_cases = list(manifest.get("cases") or [])
     by_id = {str(case.get("case_id")): case for case in original_cases}
-    unknown = sorted(set(excluded_ids) - set(by_id))
+    # An id this manifest simply does not enumerate is not profile drift: a
+    # reviewed omission for an ungenerated vector has nothing to omit.  Pairwise
+    # and covering share no guarantee that both produce the same single-axis
+    # spikes, so the strict check stays where it can catch a real typo - an id
+    # whose environment is not in this manifest at all - and the harmless
+    # mismatch is recorded rather than silently dropped.
+    manifest_envs = {str(case.get("environment")) for case in original_cases}
+    absent: list[str] = []
+    unknown: list[str] = []
+    for case_id in sorted(set(excluded_ids) - set(by_id)):
+        # _case_id() joins as "{environment}__{vector}__seed-{n}".
+        if case_id.split("__", 1)[0] in manifest_envs:
+            absent.append(case_id)
+        else:
+            unknown.append(case_id)
     if unknown:
         raise ValueError(f"manual gate-blocked exclusions are absent from manifest: {unknown}")
-    omitted = [by_id[case_id] for case_id in excluded_ids]
-    excluded = set(excluded_ids)
+    if absent:
+        manifest["manual_gate_blocked_exclusions_not_enumerated"] = {
+            "case_ids": absent,
+            "count": len(absent),
+            "matrix": str((manifest.get("selection") or {}).get("matrix")),
+            "reason": (
+                "these reviewed gate-blocked instances are not generated by this matrix mode, "
+                "so there is nothing to omit; this is not a bypass of the exact-instance gate"
+            ),
+        }
+    omitted = [by_id[case_id] for case_id in excluded_ids if case_id in by_id]
+    excluded = set(excluded_ids) & set(by_id)
     manifest["cases"] = [
         case for case in original_cases if str(case.get("case_id")) not in excluded
     ]
@@ -933,8 +1319,10 @@ def _apply_gate_blocked_exclusions(manifest: dict, profile: Mapping[str, Any]) -
     omitted_levels = sorted(required - served)
 
     manifest["known_gate_blocked_omissions"] = {
-        "omitted_case_ids": excluded_ids,
-        "omitted_case_count": len(excluded_ids),
+        "omitted_case_ids": sorted(excluded),
+        "omitted_case_count": len(excluded),
+        "reviewed_case_ids": excluded_ids,
+        "not_enumerated_by_matrix_count": len(absent),
         "reason": configured.get("reason", "known_gate_blocked_calibration_failures"),
         "disposition": "omitted_before_provider_access",
         "provider_calls_before_omission": 0,
@@ -1229,6 +1617,37 @@ def main(argv: list[str] | None = None) -> int:
             "compatibility probes, or provider requests"
         ),
     )
+    parser.add_argument(
+        "--allow-cross-revision-t1", action="store_true",
+        help="accepted and ignored here; it belongs to tools/inherit_campaign_state.py",
+    )
+    parser.add_argument(
+        "--rebase-intent", action="store_true",
+        help=(
+            "operator authorization to keep this campaign's ledger while its grading-code digest "
+            "moves: accepted only when gate_context_sha is the sole field that changed, only on an "
+            "explicit workflow_dispatch, and it rewrites the intent with the prior digest recorded "
+            "as rebased_from_gate_context_sha. A provider, model, endpoint, effort, execution mode, "
+            "manifest or profile difference is still refused. Without this flag the campaign refuses "
+            "to resume at a new code context, which is what previously forced a fresh dispatch and a "
+            "second paid T1."
+        ),
+    )
+    parser.add_argument(
+        "--limit", dest="limit_overrides", action="append", default=[], metavar="KEY=INTEGER",
+        help=(
+            "set one spend ceiling for this invocation instead of editing the profile "
+            f"({', '.join(CEILINGS)}); a resumed campaign accepts a raise only with "
+            "--raise-ceiling, and a reduction is always refused"
+        ),
+    )
+    parser.add_argument(
+        "--raise-ceiling", dest="ceiling_authorization", default=None, metavar="OPERATOR",
+        help=(
+            "the handle that authorised raising a ceiling above the value the campaign "
+            "stopped at; recorded in suite_checkpoint.json beside the rows it buys"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.gates_only and args.allow_provider:
         parser.error("--gates-only and --allow-provider are mutually exclusive")
@@ -1259,7 +1678,7 @@ def main(argv: list[str] | None = None) -> int:
         if profile.get("provider") == "custom" and profile.get("name") in {"rehearsal", "rehearsal_autonomous"}:
             return _run_rehearsal_mode(profile, output, args, started)
 
-        limits = profile["limits"]
+        limits = _apply_limit_overrides(profile, args, parser)
         resilience = profile["resilience"]
         job_seconds = _effective_campaign_job_seconds(
             int(profile["campaign_job_seconds"]), args.job_seconds
@@ -1267,12 +1686,83 @@ def main(argv: list[str] | None = None) -> int:
         patience = float(resilience["provider_outage_patience_seconds"])
         backoff = float(resilience["provider_outage_backoff_seconds"])
 
-        manifest = build_manifest(root=ROOT, matrix="covering", seeds=[0])
+        manifest = build_manifest(
+            root=ROOT,
+            matrix=str(matrix_mode_of(profile)),
+            seeds=[0],
+            expand_interventions=matrix_interventions_of(profile),
+        )
         _apply_gate_blocked_exclusions(manifest, profile)
         target = CAMPAIGN_TARGETS[str(profile["provider"])]
         manifest["campaign"] = _campaign_metadata(profile)
+        _record_ignored_launcher_flags(manifest, args)
         output.mkdir(parents=True, exist_ok=True)
         write_json(output / "pilot_manifest.json", manifest)
+
+        # Interventions assert a causal claim, so each billed twin must be
+        # generated and byte-compared before this process is allowed to spend a
+        # provider call. Provider-free by construction (tools/family.py).
+        twin_mode = twin_verification_of(profile)
+        if twin_mode != "off":
+            from tools.twin_preflight import verify_manifest_twins  # local: optional lane
+
+            try:
+                twins = verify_manifest_twins(
+                    manifest,
+                    root=ROOT,
+                    out_path=output / "twin_preflight.json",
+                    mode=twin_mode,
+                )
+            except ValueError as exc:
+                # strict mode: never bill an unverified invariance claim.
+                print(f"twin preflight refused the campaign: {exc}")
+                raise
+            manifest["twin_verification"] = {
+                key: twins.get(key)
+                for key in (
+                    "policy", "status", "group_count", "case_count",
+                    "unverified_case_count", "report_sha256",
+                )
+            }
+            if twin_mode == "bill_verified_only":
+                # An overlay whose twin did not verify cannot support an
+                # invariance claim either way: "the model did not move" and "the
+                # overlay did nothing" are the same bytes. Drop those cases and
+                # name them, rather than billing a row that would be read as
+                # evidence about the model. Base vectors always survive, so no
+                # axis level is lost and the covering-level accounting still holds.
+                drop = sorted(
+                    str(case_id)
+                    for case_id, record in (twins.get("cases") or {}).items()
+                    if record.get("twin_check") != "pass"
+                )
+                if drop:
+                    dropped = set(drop)
+                    manifest["cases"] = [
+                        case for case in manifest["cases"]
+                        if str(case.get("case_id")) not in dropped
+                    ]
+                    manifest["case_count"] = len(manifest["cases"])
+                manifest["intervention_twin_omissions"] = {
+                    "omitted_case_ids": drop,
+                    "omitted_case_count": len(drop),
+                    "reason": (
+                        "twin_check did not return pass, so the overlay's equivalence "
+                        "expectation is unproven for this instance"
+                    ),
+                    "disposition": "omitted_before_provider_access",
+                    "provider_calls_before_omission": 0,
+                }
+            write_json(output / "pilot_manifest.json", manifest)
+            print(
+                "twin preflight ["
+                + str(twins.get("policy"))
+                + "]: "
+                + str(twins.get("case_count"))
+                + " intervention cases, "
+                + str(twins.get("unverified_case_count"))
+                + " unverified"
+            )
         modality = inventory_selected_modalities(
             manifest,
             root=ROOT,
@@ -1376,9 +1866,15 @@ def main(argv: list[str] | None = None) -> int:
             execution_mode=execution_mode,
             gate_context_sha=gate_context_sha,
             profile=profile,
+            allow_gate_context_rebase=bool(args.rebase_intent),
         )
         scheduler_kwargs: dict[str, Any] = {
             "output_dir": output,
+            # One authority, two consumers. `--rebase-intent` is what lets a *manual* dispatch continue a
+            # campaign on different code; run_suite needs the same fact to move `manifest_commit` in the
+            # checkpoint, otherwise the intent is re-pinned (below) and the ledger is refused, which is a
+            # leg that dies in ~2 minutes and leaves a terminal marker. A scheduled tick cannot set it.
+            "allow_manifest_commit_rebase": bool(args.rebase_intent),
             "provider": str(profile["provider"]),
             "model": str(profile["model"]),
             "api_key_env": str(profile["api_key_env"]),
@@ -1409,6 +1905,7 @@ def main(argv: list[str] | None = None) -> int:
             "provider_outage_patience_seconds": patience,
             "provider_outage_backoff_seconds": backoff,
             "gate_context_sha": gate_context_sha,
+            "ceiling_authorization": args.ceiling_authorization,
             "keep_images": args.keep_images,
             "keep_workspace": args.keep_workspace,
         }
@@ -1713,6 +2210,28 @@ def main(argv: list[str] | None = None) -> int:
             provider_calls = None
         try:
             output.mkdir(parents=True, exist_ok=True)
+            if not _state_contract_stop(output, detail):
+                # The leg still fails, so the run is red and the chain stands down: this is a refusal to
+                # release a gate, not permission to keep trying. What it must not do is inherit.
+                write_json(
+                    output
+                    / "campaign_report.json",
+                    _failure_report(
+                        {
+                            "schema_version": 1,
+                            "event": "covering_campaign",
+                            "status": "blocked",
+                            "pause_reason": "state_contract_stop",
+                            "resumable": False,
+                            "provider_calls": provider_calls,
+                            "detail": detail,
+                            "diagnostics": diagnostics,
+                            "updated_at": _utc_now(),
+                        }
+                    ),
+                )
+                print(f"{profile.get('provider', 'covering campaign')} refused the carried state: {detail}")
+                return 2
             write_json(output / "wrapper_failed.json", {
                 "pause_reason": pause_reason,
                 "detail": detail,

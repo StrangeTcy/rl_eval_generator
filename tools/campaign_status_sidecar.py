@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -231,17 +232,42 @@ def _body(output: Path) -> str:
     phase = str(progress.get("phase") or "starting")
     current = progress.get("current_case") or run.get("active_case_id") or "—"
     status = str(report.get("status") or run.get("execution_state") or "in progress")
+    # `campaign_report.json` is written when a leg ENDS, so while a leg is running this line is the
+    # previous leg's verdict and the counters around it are live. Labelled with the report's own
+    # timestamp for a reason: an unlabeled `paused` under a running leg reads as "the campaign
+    # stopped", which is how a campaign that is mid-flight gets declared dead.
+    report_ts = str(report.get("updated_at") or "")
+    status_line = f"- **Campaign state:** `{status}`"
+    if report.get("status"):
+        status_line += (
+            f" (report from `{report_ts}`, the last leg that finished)" if report_ts
+            else " (untimed report from the last leg that finished; this leg may be running)"
+        )
     campaign_started_at = checkpoint.get("started_at") or state.get("campaign_started_at")
     lines = [
         f"## {_CAMPAIGN['body_label']} live status",
         "",
         f"- **Updated:** {progress.get('updated_at') or report.get('updated_at') or datetime.now(UTC).isoformat()}",
-        f"- **Campaign state:** `{status}`",
+        status_line,
         f"- **Campaign elapsed:** {_elapsed(campaign_started_at)}",
         f"- **Phase:** `{phase}`",
         f"- **Current case:** `{current}`",
         f"- **Current elapsed:** {_elapsed(progress.get('current_started_at'))}",
     ]
+    # Which code this leg actually ran, named in the report instead of inferred from a refusal. Four
+    # legs of this campaign died on a stamp mismatch and none of them could say whether the checkout
+    # was the one that waives it - the Actions log is not readable from the API that can read this
+    # comment - so the ambiguity itself cost the time.
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parents[1]), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except Exception:  # noqa: BLE001 - a status line must never be able to break a leg
+        head = ""
+    if head:
+        lines.append(f"- **Leg code:** `{head}` @ `{os.environ.get('GITHUB_REF_NAME', 'unknown')}`")
     t1_interrupted = _read_json(output / "t1_interrupted.json")
     if (
         t1_interrupted.get("status") == "interrupted"
@@ -250,6 +276,21 @@ def _body(output: Path) -> str:
         lines.append(
             "- **T1 status:** `interrupted; operator review required; no automatic replay`"
         )
+    wrapper = _read_json(output / "wrapper_failed.json")
+    if wrapper:
+        # The one thing a harness crash leaves that a human can actually use is the detail it recorded,
+        # and it lives only in the artifact: `Campaign state: blocked` is not an explanation, and the
+        # Actions log of a leg is not readable from the API the way a comment is. So put it in the
+        # comment. Reporting only - the marker still means "stop for an operator".
+        lines.append(
+            "- **Wrapper failure:** `{}` at `{}`".format(
+                wrapper.get("pause_reason") or "unrecorded",
+                wrapper.get("recorded_at") or "unknown time",
+            )
+        )
+        detail = " ".join(str(wrapper.get("detail") or "").split())[:400]
+        if detail:
+            lines.append(f"  - {detail}")
     if progress.get("progress_kind") == "t1_same_fact_presentation":
         completed = progress.get("t1_api_calls_completed")
         total = progress.get("t1_api_calls_total")
@@ -271,6 +312,16 @@ def _body(output: Path) -> str:
             rows = partial.get("rows")
             completed = len(rows) if isinstance(rows, dict) else 0
         total = progress.get("gate_total")
+        if not isinstance(total, int):
+            # Once the phase has moved to `episodes`, the progress file no longer carries the
+            # denominator and this line reads `189 / ?` - which nobody can tell apart from a
+            # completed wall. The wall size is durable: run_suite records `gated_case_count` as
+            # len(gated_cases) in the checkpoint's instance_gate, and the leg report copies it.
+            gate = checkpoint.get("instance_gate") if isinstance(checkpoint, dict) else None
+            if isinstance(gate, dict):
+                total = gate.get("gated_case_count")
+            if not isinstance(total, int) and isinstance(report, dict):
+                total = report.get("gated_case_count")
         lines.append(f"- **Gate checkpointed:** `{completed} / {total if isinstance(total, int) else '?'}`")
         if isinstance(total, int):
             bar = _progress_bar(completed, total)

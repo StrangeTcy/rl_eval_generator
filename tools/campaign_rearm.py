@@ -49,6 +49,26 @@ from tools.campaign_supervisor import (  # noqa: E402
 BUSY_RUN_STATUSES = {"queued", "in_progress", "requested", "waiting", "pending"}
 
 
+def other_legs(runs, exclude_run: str | int | None) -> list[dict]:
+    """The run list minus *this* leg.
+
+    `decide_rearm` asks whether another leg is still running before it arms a successor, and read
+    literally against the workflow's newest run that question always answers "yes" - the leg doing the
+    asking is the newest run, and it is `in_progress`, because a step cannot run after its own job. So
+    every self-dispatch this tool ever attempted refused with `a leg is already in_progress`, and a leg
+    that declines to re-arm never arms the next one either: the chain's only continuation was a favor
+    asked of a human. Mercury run 28 (38335486606, 02:08-02:11Z) is the measurement - its step 16 ran,
+    the tool was reached, and the run still ended `campaign re-arm declined`.
+
+    Excluding the current run id is the whole fix; the *other* guards are untouched, so a genuinely
+    busy sibling - the previous leg, a concurrent dispatch - still refuses.
+    """
+    keep = str(exclude_run or "")
+    if not keep:
+        return list(runs or [])
+    return [run for run in (runs or []) if str(run.get("id") or "") != keep]
+
+
 def _parse_timestamp(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
@@ -278,6 +298,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cancelled", action="store_true", help="this leg was cancelled")
     parser.add_argument("--sleep-cap", type=int, default=DEFAULT_SLEEP_CAP,
                         help="longest wait this leg will sit out so a successor is accepted (0 disables waiting)")
+    parser.add_argument(
+        "--exclude-run",
+        default=os.environ.get("GITHUB_RUN_ID", ""),
+        help="run id to leave out of the busy check; defaults to this leg, which is never a reason to stand down",
+    )
     parser.add_argument("--dry-run", action="store_true", help="print the decision without dispatching")
     args = parser.parse_args(argv)
 
@@ -299,10 +324,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"campaign re-arm skipped: {lookup_error['error']}")
         else:
             status, body = _request(
-                    f"{api}/repos/{args.repo}/actions/workflows/{workflow['id']}/runs?per_page=1", token or None
+                    f"{api}/repos/{args.repo}/actions/workflows/{workflow['id']}/runs?per_page=20", token or None
                 )
-            runs = (body.get("workflow_runs") or []) if status == 200 else []
-            newest_run = runs[0] if runs else None
+            listed = (body.get("workflow_runs") or []) if status == 200 else []
+            siblings = other_legs(listed, args.exclude_run)
+            if listed and not siblings:
+                print("campaign re-arm: the only leg on record is this one, so it does not count as busy")
+            newest_run = siblings[0] if siblings else None
 
     now = datetime.now(timezone.utc)
     decision, reason = decide_rearm(
@@ -320,18 +348,18 @@ def main(argv: list[str] | None = None) -> int:
         was_cancelled=args.cancelled,
     )
     if not decision:
-        # The refusal may be purely temporal, in which case the fix is to 🙊, not to hand the
+        # The refusal may be purely temporal, in which case the fix is to wait, not to hand the
         # campaign back to a schedule that delivered three ticks today.
-        🙊 = handover_🙊(report, newest_run, now, min_interval_seconds=args.min_interval_seconds,
+        wait = handover_wait(report, newest_run, now, min_interval_seconds=args.min_interval_seconds,
                              sleep_cap=args.sleep_cap)
-        if 🙊:
-            print(f"campaign re-arm: a successor would be refused for another {🙊} s, so this leg "
+        if wait:
+            print(f"campaign re-arm: a successor would be refused for another {wait} s, so this leg "
                   f"is sitting it out before dispatching", flush=True)
-            SLEEP(🙊 + 1)
+            SLEEP(wait + 1)
             decision, reason = decide_rearm(
                 report,
                 newest_run=newest_run,
-                now=now + timedelta(seconds=🙊 + 1),
+                now=now + timedelta(seconds=wait + 1),
                 sleep_cap=args.sleep_cap,
                 min_interval_seconds=args.min_interval_seconds,
                 workflow_state=(str(workflow["state"]) if workflow else None),

@@ -31,6 +31,18 @@ def _issue_selection_is_off(monkeypatch):
     )
 
 
+def test_the_report_names_the_code_the_leg_ran(tmp_path: Path) -> None:
+    """Four legs died on a stamp mismatch and none of them said which checkout they were defending.
+
+    The Actions log is not readable from the API that can read this comment, so the comment has to carry
+    the fact: `Leg code: <sha> @ <ref>` distinguishes a leg that ran the waiver from one that never saw it.
+    """
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "running", "updated_at": "2026-10-13T02:11:08Z"}), encoding="utf-8"
+    )
+    body = campaign_status_sidecar._body(tmp_path)
+    assert "- **Leg code:** `" in body, body
+
 def test_sidecar_renders_durable_gate_progress_without_network(tmp_path: Path) -> None:
     write_progress(
         tmp_path,
@@ -104,6 +116,63 @@ def test_sidecar_renders_terminal_state_pause_reason_and_retries(tmp_path: Path)
     assert "**Pause reason:** `infrastructure_error`" in body
     assert "**Retries:** `infrastructure 2`" in body
     assert "**Campaign elapsed:**" in body
+
+
+def test_a_wrapper_crash_is_legible_in_the_comment_without_log_access(tmp_path: Path) -> None:
+    """`blocked` is not an explanation, and the log that holds one is not readable by everyone.
+
+    Mercury run 22 (2026-10-12T23:59:53Z) wrote a `blocked` report plus wrapper_failed.json after 2h22m
+    that banked nothing; the only account of why sat in the artifact. The sidecar quotes it.
+    """
+    (tmp_path / "wrapper_failed.json").write_text(
+        json.dumps({
+            "pause_reason": "infrastructure_error",
+            "detail": "RuntimeError:  judge\n\nstack  exited 1",
+            "recorded_at": "2026-10-12T23:59:49Z",
+        }),
+        encoding="utf-8",
+    )
+    body = _body(tmp_path)
+    assert "**Wrapper failure:** `infrastructure_error` at `2026-10-12T23:59:49Z`" in body
+    assert "RuntimeError: judge stack exited 1" in body, "the detail must be flattened, not raw"
+    assert "wrapper_failed" not in body.split("Wrapper failure")[0], "no line before it should name the file"
+
+    # Absent marker: nothing is appended, because a healthy leg must not look like a crashed one.
+    (tmp_path / "wrapper_failed.json").unlink()
+    assert "Wrapper failure" not in _body(tmp_path)
+
+
+def test_campaign_state_line_names_the_leg_that_wrote_the_report(tmp_path: Path) -> None:
+    """The state line must not masquerade as live during a running leg.
+
+    Report written at 14:42, heartbeat at 21:15: `paused / max_wall_seconds` is run 14's ending, not
+    the current state, and a reader who takes it as current will conclude a working campaign died.
+    """
+    write_progress(tmp_path, phase="cases")
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({
+            "status": "paused",
+            "pause_reason": "max_wall_seconds",
+            "updated_at": "2026-10-12T14:42:11Z",
+        }),
+        encoding="utf-8",
+    )
+    # write_progress stamps its own live updated_at (tools/campaign_progress.py:30), which is the
+    # point: the timestamp line is now, the state line is hours old, and only the label keeps those
+    # from being read as the same moment.
+    body = _body(tmp_path)
+    from tools.campaign_progress import PROGRESS_FILE
+    live = json.loads((tmp_path / PROGRESS_FILE).read_text())["updated_at"]
+    assert f"- **Updated:** {live}" in body
+    assert "Campaign state:** `paused` (report from `2026-10-12T14:42:11Z`" in body
+
+    # An older leg's report has no `updated_at` at all (only some writers set it: compare
+    # tools/atria_campaign.py:1501 with :1737), and a bare `paused` is exactly the misread this line
+    # exists to prevent, so the fallback wording carries the same warning without a timestamp.
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "paused", "pause_reason": "infrastructure_error"}), encoding="utf-8"
+    )
+    assert "untimed report from the last leg that finished" in _body(tmp_path)
 
 
 def test_sidecar_reuses_one_durable_issue_and_comment(tmp_path: Path, monkeypatch) -> None:
@@ -276,3 +345,54 @@ def test_describe_error_truncates_and_names_the_type() -> None:
     long = campaign_status_sidecar._describe_error(ValueError("x" * 500))
     assert long.startswith("ValueError: ")
     assert len(long) <= 200
+
+
+def test_gate_denominator_survives_the_move_to_episodes(tmp_path: Path) -> None:
+    """`189 / ?` is not a finished wall, and reading it as one is a live failure mode.
+
+    The progress file only carries ``gate_total`` while the campaign is inside the gate, so
+    every status comment written after the phase flips prints a bare row count. That is the
+    exact line an operator (or an agent) uses to decide whether a campaign is still gating,
+    so the denominator is recovered from durable state: ``instance_gate.gated_case_count``
+    in the checkpoint, which ``run_suite`` records as ``len(gated_cases)``.
+    """
+    write_progress(tmp_path, phase="episodes", episodes_total=416, episodes_completed=17)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {str(index): {} for index in range(189)}}), encoding="utf-8"
+    )
+    (tmp_path / "suite_checkpoint.json").write_text(
+        json.dumps({"instance_gate": {"gated_case_count": 189, "passed": True}}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `189 / 189`" in body
+    assert "?" not in body.split("**Gate checkpointed:**")[1].splitlines()[0]
+    assert "**Gate progress:** `████████████████████`" in body
+
+
+def test_gate_denominator_falls_back_to_the_leg_report(tmp_path: Path) -> None:
+    """A leg mid-gate has no checkpoint gate record yet; the report copy is the next durable one."""
+    write_progress(tmp_path, phase="exact-instance gate", gate_completed=56)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {str(index): {} for index in range(56)}}), encoding="utf-8"
+    )
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "paused", "gated_case_count": 189}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `56 / 189`" in body
+
+
+def test_gate_denominator_stays_unknown_rather_than_invented(tmp_path: Path) -> None:
+    """Nothing durable, no denominator: the question mark is the honest answer."""
+    write_progress(tmp_path, phase="exact-instance gate", gate_completed=3)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {"0": {}, "1": {}, "2": {}}}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `3 / ?`" in body

@@ -147,3 +147,38 @@ interventions:
     expect: sensitive
     defect_class: null
     proof: difference
+
+  equivalence_check:
+    description: >-
+      Append a reasoning operator to the agent-facing task: enumerate the states
+      compatible with the observations, check whether the evidence separates them, and
+      preserve the uncertainty when it does not. The instance, the oracle and the judge
+      are untouched - only the procedure the agent is told to run changes, which is what
+      makes the two members the same task under different instructions. The text of the
+      block is owned by `spec/operators/equivalence_check.md`; an environment implements
+      this id by laying that file over its own task template, so the instruction a model
+      would receive and the procedure the offline instrument runs are one artifact, not
+      two transcriptions. Its twin must differ in bytes (an overlay that fired nothing is
+      a config bug) while pair_id stays put (an overlay that moved the task is the wrong
+      declaration).
+    mechanism: layout
+    equivalence: observation_changing
+    expect: sensitive
+    defect_class: null
+    proof: difference
+
+  state_enumeration:
+    description: >-
+      The first two steps of equivalence_check on their own: enumerate the compatible
+      states and answer against the enumeration, with no identifiability gate and no
+      permission to withhold. Declared separately because the two components predict
+      different results - enumeration is the correct semantics in every epistemic
+      environment, while the abstention clause is only expressible where the response
+      format has a value for "underdetermined" - and one id for both would score the
+      combination and attribute it to neither. Text owned by
+      `spec/operators/state_enumeration.md`.
+    mechanism: layout
+    equivalence: observation_changing
+    expect: sensitive
+    defect_class: null
+    proof: difference

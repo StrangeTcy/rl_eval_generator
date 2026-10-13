@@ -55,6 +55,75 @@ def _read_json(path: str) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+# The deterministic refusals `tools/run_suite._load_checkpoint` raises against the state it was handed.
+# A marker naming one of them is a *configuration* stop, not a verdict about the campaign, and it is the
+# only class worth second-guessing here: the operator cannot acknowledge it away, and a leg that dies on
+# it re-uploads the marker, which is how Mercury spent five legs at 190 / 416 (runs 24, 25, 27, 28, 29).
+STATE_CONTRACT_MARKERS = (
+    "checkpoint metadata mismatch",
+    "manifest case count changed",
+    "gate coverage is incomplete",
+)
+
+
+def _is_ancestor(older: str, newer: str) -> bool:
+    """Reachability test for two shas, answered by the checkout this file was fetched from.
+
+    Duplicated from `tools/run_suite.py` on purpose: the launcher fetches *this file alone* and executes
+    it provider-free (`gh api contents/tools/campaign_supervisor.py?ref=...`), so an import from the
+    package would not resolve on a runner. Fails closed on any git trouble, including a shallow clone.
+    """
+    import subprocess
+
+    def usable(value: str) -> bool:
+        return 7 <= len(value) <= 40 and all(char in "0123456789abcdef" for char in value)
+
+    if not (usable(older) and usable(newer)):
+        return False
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for value in (older, newer):
+        if subprocess.run(["git", "-C", root, "cat-file", "-e", f"{value}^{{commit}}"],
+                          capture_output=True, text=True).returncode != 0:
+            return False
+    return subprocess.run(["git", "-C", root, "merge-base", "--is-ancestor", older, newer],
+                          capture_output=True, text=True).returncode == 0
+
+
+def _stale_operator_gate(root: str, marker: dict[str, Any]) -> str:
+    """A sentence about whether this code could still produce the recorded refusal. Empty if unknown.
+
+    The refusal is re-derived from the staged files rather than trusted from a chat log: the two stamps
+    the marker names are read back out of `suite_checkpoint.json` and `suite_manifest.json`, and the
+    verdict is one of three things the operator can act on without taking anyone's word for it.
+    """
+    detail = " ".join(str(marker.get("detail") or "").split())
+    if not any(needle in detail for needle in STATE_CONTRACT_MARKERS):
+        return ""
+    checkpoint = _read_json(os.path.join(root, "suite_checkpoint.json")) or {}
+    manifest = _read_json(os.path.join(root, "suite_manifest.json")) or {}
+    ledger = str(((checkpoint.get("run") or {}).get("manifest_commit")) or "")
+    stamped = str(((manifest.get("repository") or {}).get("commit")) or "")
+    if not ledger or not stamped:
+        return "state-contract gate: the stamps it names are not both readable from the artifact"
+    if ledger == stamped:
+        return (
+            f"the recorded cause cannot recur here: the artifact's own stamps now agree ({ledger[:7]}), "
+            "so only the acknowledgement is missing - `clear_wrapper_stop` alone is sufficient and "
+            "`rebase_onto_ref` is not needed"
+        )
+    if _is_ancestor(ledger, stamped):
+        return (
+            f"the artifact still disagrees with itself (checkpoint {ledger[:7]}, manifest {stamped[:7]}) "
+            "but that is a fast-forward of one lineage, which this code carries with the move recorded; "
+            "so `clear_wrapper_stop` alone resumes it, and `rebase_onto_ref` is only needed to run newer "
+            "code than the pinned ref of this decision"
+        )
+    return (
+        f"the gate stands on the state, not on the acknowledgement: checkpoint {ledger[:7]} is not an "
+        f"ancestor of manifest {stamped[:7]}, so no leg resumes until the artifact itself is repaired"
+    )
+
+
 def _decision(
     *, mode: str, execution_mode: str, ref: str, reason: str
 ) -> dict[str, str]:
@@ -79,8 +148,66 @@ def _is_backoff_active(checkpoint: dict[str, Any]) -> str | None:
     return None
 
 
+# Pause reasons that mean "the operator's money ran out", not "the measurement is
+# invalid". They are terminal for the cron loop by default - see
+# CEILING_FIELDS in tools/run_suite.py - and a dispatched ceiling override that
+# actually exceeds the value the campaign stopped at is the only thing that lifts them.
+CEILING_PAUSE_REASONS = ("max_api_calls", "max_tokens_total", "max_http_attempts")
+
+
+def _normalised_override(limits_override: object) -> dict[str, int]:
+    """Accept ``{"max_api_calls": 300}`` or ``["max_api_calls=300"]``.
+
+    The launcher builds this from workflow inputs, where everything arrives as a
+    string; anything unparseable is dropped rather than guessed, because a ceiling the
+    supervisor cannot read cannot be compared against the recorded one.
+    """
+    parsed: dict[str, int] = {}
+    if isinstance(limits_override, dict):
+        items = list(limits_override.items())
+    elif isinstance(limits_override, (list, tuple, set)):
+        items = []
+        for entry in limits_override or ():
+            key, _, raw = str(entry).partition("=")
+            items.append((key.strip(), raw.strip()))
+    else:
+        items = []
+    for key, raw in items:
+        if str(key) not in CEILING_PAUSE_REASONS:
+            continue
+        try:
+            parsed[str(key)] = int(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+    return parsed
+
+
+def _ceiling_was_raised(
+    pause_reason: str,
+    limits_override: object,
+    checkpoint: dict[str, Any],
+) -> str | None:
+    """Return a reason when this tick is authorised to bill past a spent ceiling."""
+    if pause_reason not in CEILING_PAUSE_REASONS:
+        return None
+    override = _normalised_override(limits_override).get(pause_reason)
+    if override is None:
+        return None
+    recorded = (checkpoint.get("run") or {}).get(pause_reason)
+    if not isinstance(recorded, int):
+        # Nothing to compare against: refusing is the honest answer, because the
+        # alternative is resuming on the assumption that the ceiling still has room.
+        return None
+    if override <= recorded:
+        return None
+    return f"{pause_reason} raised by dispatcher {recorded} -> {override}"
+
+
 def decide_tick(
-    state_dir: str | os.PathLike[str], *, expected_provider: str = "atria"
+    state_dir: str | os.PathLike[str],
+    *,
+    expected_provider: str = "atria",
+    limits_override: object = None,
 ) -> dict[str, str]:
     """Decide whether a scheduled tick may continue staged campaign state.
 
@@ -151,11 +278,16 @@ def decide_tick(
     marker = _read_json(os.path.join(root, "wrapper_failed.json"))
     if marker is not None:
         reason = str(marker.get("pause_reason") or "unknown")
+        # The decision stays a refusal - a scheduled tick must not talk itself past a terminal marker,
+        # and this function has no idea who is reading it - but the *reason* now says what the code
+        # could verify, so the answer comes off the run page instead of from somebody's guess.
+        note = _stale_operator_gate(root, marker)
         return _decision(
             mode="none",
             execution_mode="",
             ref="",
-            reason=f"operator stop: {reason} (wrapper recorded a terminal failure)",
+            reason="operator stop: " + reason + " (wrapper recorded a terminal failure)"
+            + ((" - " + note) if note else ""),
         )
 
     report = _read_json(os.path.join(root, "campaign_report.json")) or {}
@@ -212,12 +344,17 @@ def decide_tick(
         )
 
     pause_reason = str(checkpoint.get("pause_reason") or "")
-    if pause_reason not in RESUMABLE_PAUSE_REASONS:
+    ceiling_resume = _ceiling_was_raised(pause_reason, limits_override, checkpoint)
+    if pause_reason not in RESUMABLE_PAUSE_REASONS and not ceiling_resume:
         return _decision(
             mode="none",
             execution_mode="",
             ref="",
-            reason=f"operator pause: {pause_reason} (supervisor never raises ceilings)",
+            reason=(
+                f"operator pause: {pause_reason} (supervisor never raises ceilings; "
+                f"dispatch {pause_reason}=<a number above the spent value> to authorise "
+                "more spend against this campaign)"
+            ),
         )
     backoff_reason = _is_backoff_active(checkpoint)
     if backoff_reason:
@@ -239,6 +376,8 @@ def decide_tick(
     checkpoint_ref = str(((checkpoint.get("run") or {}).get("manifest_commit")) or "")
     resume_ref = checkpoint_ref or recorded_ref
     reason = f"resuming after {pause_reason}"
+    if ceiling_resume:
+        reason = f"resuming after {pause_reason}: {ceiling_resume}"
     if checkpoint_ref and checkpoint_ref != recorded_ref:
         reason = (
             f"resuming after {pause_reason} pinned to checkpoint commit "

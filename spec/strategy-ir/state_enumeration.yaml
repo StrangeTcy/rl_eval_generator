@@ -1,0 +1,118 @@
+# Companion card, same field list as documented in
+# research_protocol/strategy_ir.md section 2. This is the half of the proposed operator that
+# survived measurement: it is declared as its own strategy because the experiment showed the
+# two halves move different outcomes, and a card that bundles them would let a gain in one be
+# reported as support for the other.
+
+---
+strategy_id: state_enumeration
+version: 1
+name: Enumerate the compatible states and answer against the whole enumeration
+family: search
+status: under_test
+
+scope:
+  problem_classes:
+    - >-
+      inference over a hidden state when the task supplies enough structure to enumerate the
+      states an observation permits
+    - >-
+      nested-knowledge and pooled-observation classification, where the enumeration *is* the
+      recursive semantics being tested
+  preconditions:
+    - >-
+      the candidate space is finite and reconstructible from the information given to the
+      answerer
+    - >-
+      the grader distinguishes an answer computed over the enumeration from one produced by
+      reading the narrative
+
+trigger:
+  structural_conditions:
+    - >-
+      a plausible single-state answer exists that does not survive checking against every
+      compatible state
+    - the task states a model, a prior, or a likelihood structure sufficient to enumerate
+  diagnostic_questions:
+    - what is the complete set of states the observations allow?
+    - which candidate answers hold in every one of them, and which only in the most familiar?
+    - what would make the enumeration incomplete - and is that a gap in the space or in the reasoner?
+  exclusion_conditions:
+    - >-
+      no tractable enumeration exists, in which case this card does not apply and a
+      soundness-limited approximation must be labeled as such
+
+transformation:
+  input_representation: the hidden-state question as posed
+  operation: >-
+    Build the full set of states compatible with the observations, evaluate the candidate answer
+    against every state in it, and report the answer the enumeration supports - without inferring
+    an unobserved distinction and without discarding a state because it is less familiar.
+  output_representation: an answer justified by a completed enumeration rather than by a narrative
+
+expected_effect:
+  measurable_prediction: >-
+    Exact accuracy rises to the reachable ceiling on items whose answer is determined by the
+    public information, and the rise does not depend on any permission to withhold an answer.
+  outcome_measure: >-
+    strict_correct accuracy and mean score per stratum on matched instances, with the exact
+    paired tests fixed before the run (McNemar, Wilcoxon, Newcombe interval).
+
+obligations:
+  - >-
+    record search space, coverage, randomization and seeds, budget and stopping rule - here the
+    space is the environment's own state set, coverage is complete, seeds are 3/4/5, one pass,
+    no budget
+  - the enumeration uses only information the answerer is given
+  - >-
+    states dropped from the space are listed with the observation that drops them, so an
+    incomplete enumeration cannot masquerade as a proof
+
+failure_modes:
+  - >-
+    the space is enumerated over the wrong variable - what the answerer hides versus what the
+    task hides - and the enumeration is then inert rather than wrong
+  - >-
+    a complete enumeration over a mis-specified model returns the confidently wrong answer, and
+    nothing in the procedure detects that
+  - >-
+    in environments where the answer is already determined by the prompt, gains measured there
+    test the reasoner's arithmetic, not the strategy's necessity
+
+validation:
+  discriminating_tests:
+    - >-
+      control against this arm only, no gate present: identifiable accuracy 0.042 to 1.000 on
+      epistemic_games (n=96, exact McNemar p=4e-28), 0.556 to 1.000 on epistemic_nested_knowledge
+      (n=36, p=3e-5), 0.833 to 1.000 on epistemic_fragmented_observation (n=24, p=0.125)
+    - >-
+      the same arm on non-identifiable items, where enumeration alone leaves over-commit at
+      0.500 - the number that keeps this card from claiming the gate's effect
+  baseline: >-
+    the shipped heuristics for each environment, on identical instances; for a model run, the
+    existing task instructions
+  falsification_condition: >-
+    a stratum where the enumeration arm does not reach the reference procedure's accuracy, or
+    where its gain disappears once the answer format is held fixed - which would mean the gain
+    came from format compliance rather than from enumeration.
+
+exemplars:
+  - >-
+    epistemic_fragmented_observation: reading the facts at the named scenario instead of the
+    pooled certificate is wrong on 4 of 24 items by construction; the enumeration is exactly
+    the intersection over the joint information cell
+counterexamples: []
+related_strategy_ids:
+  - observational_equivalence_check
+
+provenance:
+  origin: agent-proposed
+  source_refs:
+    - spec/operators/state_enumeration.md
+    - experiments/operator_study/REPORT.md
+    - envs/epistemic_fragmented_observation/files/core.py
+    - envs/epistemic_nested_knowledge/files/core.py
+  episode_refs:
+    - experiments/operator_study/raw_results.jsonl
+    - experiments/operator_study/summary.json
+  review_status: unreviewed

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import copy
+import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 from arena.episode import EpisodeOptions, _complete_with_wire_api  # noqa: E402
 from tools.atria_campaign import (  # noqa: E402
+    _compatibility_check,
     _effective_campaign_job_seconds,
     _load_yaml,
     _validate_campaign_profile,
@@ -175,12 +180,12 @@ def test_full_campaign_profiles_pin_provider_wire_and_separate_t1_contract() -> 
     assert mercury["api_key_env"] == "INCEPTION_API_KEY"
     assert mercury["wire_api"] == "chat_completions"
     assert mercury["reasoning_effort"] == "high"
-    assert mercury["campaign_job_seconds"] == 6000
+    assert mercury["campaign_job_seconds"] == 19_800
 
     assert reasoning_atria["provider"] == "atria"
     assert reasoning_atria["wire_api"] == "responses"
     assert reasoning_atria["reasoning_effort"] == "high"
-    assert reasoning_atria["campaign_job_seconds"] == 6000
+    assert reasoning_atria["campaign_job_seconds"] == 19_800
     assert "temperature" not in reasoning_atria
     assert "top_p" not in reasoning_atria
 
@@ -199,6 +204,21 @@ def test_invocation_wall_budget_can_only_reduce_the_profile_ceiling() -> None:
         _effective_campaign_job_seconds(6000, 6001)
     with pytest.raises(ValueError, match="at least 600"):
         _effective_campaign_job_seconds(6000, 599)
+    # The reasoning campaigns now advertise a 19,800-second ceiling, and the
+    # clamp is what stops a resume from ever being handed a wall budget that
+    # cannot fit one atomic gate row (6,480 seconds worst case).
+    assert _effective_campaign_job_seconds(19_800, None) == 19_800
+    assert _effective_campaign_job_seconds(19_800, 19_740) == 19_740
+    # Worst case inside a live step: a full 70-minute T1 probe, the one-minute
+    # cleanup reserve, then the controller's 900-second state-upload reserve.
+    # What is left for the gate must still fit one atomic gate row.
+    assert 19_800 - 4_200 - 60 - 900 >= 6_480
+    # The same arithmetic under the old ceiling is what refused to start a row.
+    assert 6_000 - 4_200 - 60 - 900 < 6_480
+    with pytest.raises(ValueError, match="must not exceed"):
+        _effective_campaign_job_seconds(19_800, 19_801)
+    with pytest.raises(ValueError, match="at least 600"):
+        _effective_campaign_job_seconds(19_800, 599)
 
 
 def test_campaign_profile_validation_rejects_cross_wire_reasoning_and_wrong_secret() -> None:
@@ -330,19 +350,24 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
 
     assert mercury["name"] == "Mercury covering campaign"
     assert atria["name"] == "Reasoning-Atria covering campaign"
-    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "115"
-    assert atria["jobs"]["campaign"]["timeout-minutes"] == "115"
+    # Both reasoning campaigns must be able to finish one 108-minute atomic
+    # gate row after a worst-case 70-minute T1 probe.
+    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "350"
+    assert atria["jobs"]["campaign"]["timeout-minutes"] == "350"
     mercury_run_step = next(step for step in mercury["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
     atria_run_step = next(step for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
-    assert mercury_run_step["timeout-minutes"] == "100"
-    assert atria_run_step["timeout-minutes"] == "100"
+    assert mercury_run_step["timeout-minutes"] == "330"
+    assert atria_run_step["timeout-minutes"] == "330"
     mercury_run = mercury_run_step["run"]
     atria_run = atria_run_step["run"]
     assert "--label \"Mercury covering campaign\"" in mercury_run
     assert "experiments/mercury_covering_status_issue.txt" in mercury_run
     assert "set -euo pipefail" in mercury_run
     assert "4200s" in mercury_run
-    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in mercury_run
+    assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in mercury_run
+    mercury_profile = load_profile(ROOT / "experiments/mercury_covering_campaign.yaml")
+    assert int(mercury_run_step["timeout-minutes"]) * 60 == mercury_profile["campaign_job_seconds"]
+    assert mercury_profile["campaign_job_seconds"] - 4200 - 60 >= 6480
     assert "--job-seconds" in mercury_run
     assert '"$OUT/t1_interrupted.json"' in mercury_run
     mercury_restore = next(
@@ -357,7 +382,10 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
     assert "experiments/reasoning_atria_covering_status_issue.txt" in atria_run
     assert "set -euo pipefail" in atria_run
     assert "4200s" in atria_run
-    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in atria_run
+    assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in atria_run
+    atria_profile = load_profile(ROOT / "experiments/reasoning_atria_covering_campaign.yaml")
+    assert int(atria_run_step["timeout-minutes"]) * 60 == atria_profile["campaign_job_seconds"]
+    assert atria_profile["campaign_job_seconds"] - 4200 - 60 >= 6480
     assert "--job-seconds" in atria_run
     assert '"$OUT/t1_interrupted.json"' in atria_run
     atria_restore = next(
@@ -373,8 +401,521 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
         step["run"] for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Decide")
     )
     assert mercury["concurrency"]["group"] != atria["concurrency"]["group"]
+    for workflow in (mercury, atria):
+        inputs = workflow["on"]["workflow_dispatch"]["inputs"]
+        assert inputs["resume_previous"] == {
+            "description": "Resume the latest campaign-state artifact instead of starting fresh",
+            "required": "true",
+            "type": "boolean",
+            "default": "true",
+        }
+        decide = next(
+            step["run"] for step in workflow["jobs"]["campaign"]["steps"]
+            if step.get("name", "").startswith("Decide")
+        )
+        assert 'inputs.resume_previous' in decide
+        assert '!= "true"' in decide
+        assert "explicit fresh manual dispatch" in decide
 
     mercury_t1 = _workflow_example("docs/workflows/mercury-t1-campaign.yml.example")
     atria_t1 = _workflow_example("docs/workflows/reasoning-atria-t1-campaign.yml.example")
     assert mercury_t1["on"]["workflow_dispatch"]["inputs"]["ref"]["default"] == "main"
     assert atria_t1["on"]["workflow_dispatch"]["inputs"]["ref"]["default"] == "main"
+
+
+def _workflow_pair(workflow_name: str) -> tuple[dict, dict]:
+    """Return the live Actions workflow and its documented manual copy."""
+    deployed = yaml.load(
+        (ROOT / ".github" / "workflows" / f"{workflow_name}.yml").read_text(encoding="utf-8"),
+        Loader=yaml.BaseLoader,
+    )
+    return deployed, _workflow_example(f"docs/workflows/{workflow_name}.yml.example")
+
+
+def _uploadable_workflow_pair(workflow_name: str) -> tuple[dict, dict]:
+    """The launcher pair this repository can actually keep in step.
+
+    ``handoff/<name>.yml`` is the file the operator uploads to
+    ``.github/workflows/<name>.yml``, and ``docs/workflows/<name>.yml.example`` is its
+    documented twin; both are ordinary paths, so both are committable from here. The live
+    path is not compared, because it cannot be written from here: GitHub rejects any App push
+    that creates or updates a file under ``.github/workflows/`` unless the installation holds
+    the ``workflows`` permission, measured in this session as
+    ``remote rejected ... (refusing to allow a GitHub App to create or update workflow
+    '.github/workflows/mercury-covering-campaign.yml' without `workflows` permission)``.
+    A pin that only a human upload can satisfy is not a guard on a branch - it is a red badge
+    that hides the one drift that is still preventable in-repo, which is exactly the failure
+    this file was written to catch. So: compare the two files the repository owns, and leave
+    the upload itself the visible manual step the launcher header already declares.
+    """
+    uploaded = yaml.load(
+        (ROOT / "handoff" / f"{workflow_name}.yml").read_text(encoding="utf-8"),
+        Loader=yaml.BaseLoader,
+    )
+    return uploaded, _workflow_example(f"docs/workflows/{workflow_name}.yml.example")
+
+
+def _fresh_dispatch_guard(decide_run: str) -> str:
+    """Slice out just the fresh-versus-resume guard of a Decide step."""
+    lines = decide_run.splitlines()
+    start = next(
+        index
+        for index, line in enumerate(lines)
+        if line.strip().startswith('if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]')
+    )
+    end = next(index for index in range(start, len(lines)) if lines[index].strip() == "exit 0")
+    return "\n".join([*lines[start : end + 1], "fi"])
+
+
+@pytest.mark.parametrize(
+    ("workflow_name", "campaign_label", "profile_path"),
+    [
+        (
+            "mercury-covering-campaign",
+            "Mercury",
+            "experiments/mercury_covering_campaign.yaml",
+        ),
+        (
+            "reasoning-atria-covering-campaign",
+            "Reasoning-Atria",
+            "experiments/reasoning_atria_covering_campaign.yaml",
+        ),
+    ],
+)
+def test_deployed_and_documented_covering_workflows_share_the_wall_budget(
+    workflow_name: str, campaign_label: str, profile_path: str
+) -> None:
+    """The live workflow and its manual-copy example must never drift apart.
+
+    A previous session left the two halves of this pair disagreeing: one side
+    carried the 350/330-minute budgets while the other still carried 115/100.
+    The budgets exist because one worst-case atomic gate row needs 6,480
+    seconds, which the old effective ~6,000-second controller budget could
+    never start (it refused with "5000s remaining, 6480s required"). Half of
+    an upgrade is a silent downgrade on the other file's campaign path.
+
+    The pair compared is ``handoff/`` against ``docs/workflows/`` - see
+    ``_uploadable_workflow_pair`` - because the live ``.github/workflows`` copy is not
+    writable from a session credential, and comparing against it made this test pass in a
+    dirty working tree and fail in every clean checkout.
+    """
+    deployed, documented = _uploadable_workflow_pair(workflow_name)
+    assert deployed == documented
+    profile = load_profile(ROOT / profile_path)
+
+    for workflow in (deployed, documented):
+        assert workflow["jobs"]["campaign"]["timeout-minutes"] == "350"
+        run_step = next(
+            step
+            for step in workflow["jobs"]["campaign"]["steps"]
+            if step.get("name", "").startswith("Run T1")
+        )
+        run = run_step["run"]
+        assert int(run_step["timeout-minutes"]) == 330
+        assert int(run_step["timeout-minutes"]) * 60 == profile["campaign_job_seconds"]
+        assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in run
+        # The profile clamp survives the larger ceiling, so a late tick can
+        # never be handed more wall time than the profile advertises.
+        assert 'if [ "$CAMPAIGN_SECONDS" -gt "$MAX_CAMPAIGN_SECONDS" ]; then' in run
+        assert "CAMPAIGN_SECONDS=$MAX_CAMPAIGN_SECONDS" in run
+        assert f'{campaign_label} campaign budget: elapsed=${{ELAPSED_SECONDS}}s' in run
+        assert "profile_max=${MAX_CAMPAIGN_SECONDS}s effective=${CAMPAIGN_SECONDS}s" in run
+        inputs = workflow["on"]["workflow_dispatch"]["inputs"]
+        assert inputs["resume_previous"] == {
+            "description": "Resume the latest campaign-state artifact instead of starting fresh",
+            "required": "true",
+            "type": "boolean",
+            "default": "true",
+        }
+
+
+@pytest.mark.parametrize(
+    "workflow_name",
+    ["mercury-covering-campaign", "reasoning-atria-covering-campaign"],
+)
+@pytest.mark.parametrize(
+    ("event_name", "resume_previous", "expects_fresh"),
+    [
+        ("workflow_dispatch", "true", False),
+        ("workflow_dispatch", "false", True),
+        ("schedule", "", False),
+        ("schedule", "true", False),
+        ("push", "", False),
+    ],
+)
+def test_resume_checkbox_is_decided_by_the_real_guard_script(
+    tmp_path: Path,
+    workflow_name: str,
+    event_name: str,
+    resume_previous: str,
+    expects_fresh: bool,
+) -> None:
+    """Execute the Decide guard instead of grepping it.
+
+    Only an explicit manual dispatch with the checkbox unchecked may start a new
+    lineage. A checked dispatch and every scheduled tick must fall through to
+    the latest-artifact supervisor path, which is what restores an already
+    completed T1 (and its gate rows) rather than paying for it a second time.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - ubuntu runners always ship bash
+        pytest.skip("bash is required to exercise the Decide guard")
+    _deployed, documented = _workflow_pair(workflow_name)
+    decide = next(
+        step["run"]
+        for step in documented["jobs"]["campaign"]["steps"]
+        if step.get("name", "").startswith("Decide")
+    )
+    assert "inputs.resume_previous" in decide  # the slice really is the checkbox branch
+    guard = (
+        _fresh_dispatch_guard(decide)
+        .replace('"${{ inputs.resume_previous }}"', '"$RESUME_PREVIOUS"')
+        .replace("${{ inputs.ref }}", "PINNED-REF")
+        .replace("${{ inputs.execution_mode }}", "paid")
+    )
+    assert '"$RESUME_PREVIOUS"' in guard
+    output = tmp_path / "github_output"
+    output.write_text("", encoding="utf-8")
+    script = "set -euo pipefail\n" + guard + '\necho "fell-through-to-resume" >> "$GITHUB_OUTPUT"\n'
+    completed = subprocess.run(
+        [bash, "-c", script],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "GITHUB_EVENT_NAME": event_name,
+            "GITHUB_OUTPUT": str(output),
+            "RESUME_PREVIOUS": resume_previous,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    recorded = output.read_text(encoding="utf-8")
+    if expects_fresh:
+        assert "mode=fresh" in recorded
+        assert "reason=explicit fresh manual dispatch" in recorded
+        # A fresh dispatch may never claim the resume path's marker.
+        assert "fell-through-to-resume" not in recorded
+    else:
+        assert "mode=fresh" not in recorded
+        assert "fell-through-to-resume" in recorded
+
+
+class _ProbeOpener:
+    """Answer the probe with canned provider bodies, offline.
+
+    The real ``ProviderClient`` still builds the request, so its keyword-only
+    signatures are enforced and the recorded payload shows the field name that
+    actually goes on the wire.
+    """
+
+    def __init__(self) -> None:
+        self.payloads: list[dict] = []
+
+    def __call__(self, req, timeout=None):  # noqa: ANN001, ANN204
+        payload = json.loads(req.data.decode("utf-8"))
+        self.payloads.append(payload)
+        if str(req.full_url).endswith("/responses"):
+            body = {
+                "id": "resp_probe",
+                "model": payload["model"],
+                "status": "completed",
+                "output": [
+                    {"type": "reasoning", "summary": [{"text": "thinking" * 40}]},
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "READY"}],
+                    },
+                ],
+                "usage": {"input_tokens": 11, "output_tokens": 8_150},
+            }
+        else:
+            body = {
+                "model": payload["model"],
+                "choices": [
+                    {"message": {"role": "assistant", "content": "READY"}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 8_150},
+            }
+        return _ProbeResponse(body)
+
+
+class _ProbeResponse:
+    def __init__(self, body: dict) -> None:
+        self._body = json.dumps(body).encode("utf-8")
+        self.status = 200
+        self.headers: dict[str, str] = {}
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> "_ProbeResponse":
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+
+@pytest.mark.parametrize(
+    ("profile_path", "wire_api", "size_key"),
+    [
+        ("experiments/mercury_covering_campaign.yaml", "chat_completions", "max_completion_tokens"),
+        ("experiments/reasoning_atria_covering_campaign.yaml", "responses", "max_output_tokens"),
+    ],
+)
+def test_compatibility_probe_sends_profile_token_ceiling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, profile_path: str, wire_api: str, size_key: str
+) -> None:
+    """The READY probe must request the profile ceiling under the right keyword.
+
+    Two separate live failures are pinned here. A hard-coded 128-token probe was
+    swallowed whole by Mercury's hidden reasoning (``finish_reason: length``, no
+    visible text), so the ceiling must come from ``limits.max_tokens``. And the
+    two wire surfaces name the size field differently while both methods are
+    keyword-only, so passing ``max_output_tokens`` to ``complete()`` is not a
+    no-op: it raises TypeError before any request is sent.
+    """
+    import arena.providers as providers
+
+    profile = load_profile(ROOT / profile_path)
+    assert str(profile["wire_api"]) == wire_api
+    ceiling = int(profile["limits"]["max_tokens"])
+    assert ceiling == 8_192
+
+    opener = _ProbeOpener()
+
+    class _ProbedClient(providers.ProviderClient):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            kwargs["opener"] = opener
+            kwargs["sleep"] = lambda _seconds: None
+            super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("tools.atria_campaign.ProviderClient", _ProbedClient)
+    credentials = SimpleNamespace(api_key="compat-probe-key", api_base=profile["api_base"])
+
+    result = _compatibility_check(profile, credentials, tmp_path)
+
+    assert result["status"] == "passed", result
+    assert result["effective_request"]["wire_api"] == wire_api
+    assert result["effective_request"]["max_output_tokens"] == ceiling
+    assert result["effective_request"]["max_output_tokens"] != 128
+    payload = opener.payloads[0]
+    assert payload[size_key] == ceiling
+    # Exactly one completion-size field per wire: the sibling names must never
+    # leak into the other endpoint's request body.
+    foreign_size_keys = {"max_tokens", "max_output_tokens", "max_completion_tokens"} - {size_key}
+    assert foreign_size_keys.isdisjoint(payload)
+    if wire_api == "responses":
+        assert payload["reasoning"] == {"effort": "high"}
+    else:
+        assert payload["reasoning_effort"] == "high"
+    assert json.loads((tmp_path / "compatibility.json").read_text(encoding="utf-8"))
+    assert "compat-probe-key" not in (tmp_path / "compatibility.json").read_text(encoding="utf-8")
+
+
+def test_provider_client_token_keywords_are_wire_specific() -> None:
+    """Guard the exact TypeError that killed the first manual Mercury attempt."""
+    import inspect
+
+    import arena.providers as providers
+
+    chat = inspect.signature(providers.ProviderClient.complete).parameters
+    responses = inspect.signature(providers.ProviderClient.complete_responses).parameters
+    assert "max_tokens" in chat
+    assert "max_output_tokens" not in chat
+    assert "max_output_tokens" in responses
+    assert responses["max_output_tokens"].kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_the_pairwise_launchers_carry_an_operator_ceiling_override() -> None:
+    """A budget stop has to be liftable from the dispatcher, or it is a dead end.
+
+    The ceiling lives in ``experiments/*.yaml`` and a running campaign is pinned to the
+    commit that read it, so editing the profile reaches neither the campaign nor its
+    accumulated state. The launcher therefore exposes the numbers as inputs, refuses the
+    leg when the pinned code cannot parse them, and hands the supervisor the override so a
+    pause is lifted only by a value above the one the campaign stopped at. All four copies
+    must agree; a launcher that bills ``--limit`` without the refusal guard would silently
+    ignore an operator's authorisation.
+    """
+    for rel in (
+        "handoff/mercury-pairwise-campaign.yml",
+        "handoff/reasoning-atria-pairwise-campaign.yml",
+        "docs/workflows/mercury-pairwise-campaign.yml.example",
+        "docs/workflows/reasoning-atria-pairwise-campaign.yml.example",
+    ):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        for token in (
+            "max_tokens_total_override:",
+            "max_api_calls_override:",
+            'LIMIT_ARGS+=("max_tokens_total=',
+            "LIMIT_ARGS+=(--raise-ceiling",
+            'grep -q "def _apply_limit_overrides"',
+            '"limits_override" in inspect.signature(module.decide_tick).parameters',
+            '"${LIMIT_ARGS[@]}"',
+        ):
+            assert token in text, f"{rel}: missing {token!r}"
+        # The override must reach only the paid branch: gates_only bills nothing, and a
+        # ceiling flag there would be decoration that reads like authorisation.
+        paid = text[text.index('if [ "$EXECUTION_MODE" = "paid" ]; then\n            .venv/bin/python tools/atria_campaign.py'):]
+        assert '"${LIMIT_ARGS[@]}"' in paid[:900], f"{rel}: override is not on the campaign command"
+        assert "LIMIT_ARGS" not in text[
+            text.index("--out \"$OUT\" --gates-only"):text.index("--out \"$OUT\" --gates-only") + 200
+        ], f"{rel}: gates_only branch must not carry a spend override"
+
+
+def test_the_paid_launcher_refuses_to_replay_an_interrupted_t1_phase() -> None:
+    """T1's interruption marker has to cost the next leg something, or it is a comment in a file.
+
+    The cleanup trap writes ``t1_interrupted.json`` promising ``operator_review_required_no_replay``,
+    while the T1 block guarded only on the absence of the *result*. So a leg interrupted during T1
+    replayed the whole probe on the next tick - paid calls, up to the 4200-second ceiling - and kept
+    replaying it every tick until the phase happened to finish. Refusing is the difference between a
+    policy and a log line. It must sit inside the paid branch, so a ``gates_only`` dispatch is never
+    blocked by a stale marker, and ahead of the probe, so the replay cannot start first.
+
+    The covering launchers are deliberately not asserted here: their deployed copies are held in
+    parity by ``test_deployed_and_documented_covering_workflows_share_the_wall_budget``, and the
+    deployed path is copied by hand, so the change reaches them as a pair, not from this branch.
+    """
+    for relative in (
+        "docs/workflows/mercury-pairwise-campaign.yml.example",
+        "docs/workflows/reasoning-atria-pairwise-campaign.yml.example",
+    ):
+        steps = _workflow_example(relative)["jobs"]["campaign"]["steps"]
+        step = next(item for item in steps if str(item.get("name", "")).startswith("Run T1"))
+        lines = step["run"].splitlines()
+        refusal = next(i for i, line in enumerate(lines) if "refusing to replay" in line)
+        paid = next(i for i, line in enumerate(lines) if '"$EXECUTION_MODE"' in line)
+        probe = next(i for i, line in enumerate(lines) if "4200s" in line)
+        assert paid < refusal < probe, relative
+        assert "exit 1" in "\n".join(lines[refusal:refusal + 6]), relative
+
+
+def _limit_block(text: str, *, start_marker: str, end_marker: str) -> str:
+    lines = text.splitlines()
+    try:
+        first = next(i for i, line in enumerate(lines) if start_marker in line)
+    except StopIteration:
+        raise AssertionError(f"no block starting with {start_marker!r}")
+    body = []
+    for line in lines[first:]:
+        body.append(line)
+        if end_marker in line:
+            break
+    else:
+        raise AssertionError(f"block {start_marker!r} never reached {end_marker!r}")
+    return "\n".join(body)
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "handoff/mercury-pairwise-campaign.yml",
+        "handoff/reasoning-atria-pairwise-campaign.yml",
+        "docs/workflows/mercury-pairwise-campaign.yml.example",
+        "docs/workflows/reasoning-atria-pairwise-campaign.yml.example",
+    ],
+)
+def test_the_ceiling_arguments_are_built_and_expanded_in_the_same_step(rel: str) -> None:
+    """A shell variable does not cross a step boundary, and an empty array is unbound.
+
+    The first version of this plumbing built ``LIMIT_ARGS`` in the mode-decision step and
+    expanded it in the campaign step. Every leg then died on ``LIMIT_ARGS: unbound
+    variable`` - reported from the runner as line 69 of the temp script - because the
+    second step never declared it. Each step that touches the array must declare it, and
+    the expansion must be the nounset-safe form, which is also what an empty array needs
+    on a scheduled tick where the inputs are blank.
+    """
+    import subprocess
+    import yaml as _yaml
+
+    text = (ROOT / rel).read_text(encoding="utf-8")
+    doc = _yaml.safe_load(text)
+    job = doc["jobs"][next(iter(doc["jobs"]))]
+    touched = [s for s in job["steps"] if "LIMIT_ARGS" in (s.get("run") or "")]
+    assert touched, f"{rel}: no step builds the ceiling arguments at all"
+    for step in touched:
+        body = step["run"]
+        assert "LIMIT_ARGS=()" in body, (
+            f"{rel} step {step.get('name')!r} expands LIMIT_ARGS without declaring it; "
+            "steps are separate shells"
+        )
+        assert '${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}' in body, (
+            f"{rel} step {step.get('name')!r}: a bare ${{LIMIT_ARGS[@]}} aborts under "
+            "set -u whenever both override inputs are empty, i.e. on every scheduled tick"
+        )
+    # GitHub expressions must keep their double braces: a single-brace ${ inputs.x } is
+    # passed through to bash verbatim and dies as a bad substitution.
+    assert "${ inputs." not in text and "${ github." not in text, (
+        f"{rel}: a Python format-string ate one brace pair from a GitHub expression"
+    )
+
+
+def test_the_built_arguments_actually_expand_under_nounset() -> None:
+    """Run the campaign step's own lines, with blank inputs and with filled ones.
+
+    That step is where a leg died with "LIMIT_ARGS: unbound variable", so this executes
+    exactly those bytes: the block is lifted out of the step that bills, the GitHub
+    expressions are replaced the way the runner replaces them, and the printed array is
+    what the campaign command receives.
+    """
+    import re
+    import subprocess
+    import yaml as _yaml
+
+    rel = "handoff/mercury-pairwise-campaign.yml"
+    doc = _yaml.safe_load((ROOT / rel).read_text(encoding="utf-8"))
+    job = doc["jobs"][next(iter(doc["jobs"]))]
+    step = next(
+        s for s in job["steps"]
+        if str(s.get("name", "")).startswith("Run T1 and pairwise campaign")
+    )
+    block = _limit_block(step["run"], start_marker="LIMIT_ARGS=()", end_marker="--raise-ceiling")
+    if not block.rstrip().endswith("fi"):
+        block += chr(10) + "          fi"  # the extractor stops on the last line it was told to find
+    newline = chr(10)
+    trailer = newline + 'printf "%s\\n" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}' + newline
+
+    def render(source: str, **values: str) -> str:
+        def value(match: "re.Match[str]") -> str:
+            # Exactly what the runner does: textual replacement, quotes and all coming
+            # from the step's own source. An empty input therefore yields -n "" and the
+            # branch is skipped, rather than the literal two-character string.
+            return values.get(match.group(1).replace(".", "_"), "")
+
+        return re.sub(r"\$\{\{\s*(inputs\.[a-z_.]+|github\.actor)\s*\}\}", value, source)
+
+    def run(source: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", "-c", "set -euo pipefail" + newline + source + trailer],
+            capture_output=True, text=True,
+        )
+
+    blank = run(render(block))
+    assert blank.returncode == 0, (
+        "a scheduled tick with both override boxes empty must not abort: " + blank.stderr
+    )
+    assert blank.stdout.strip() == "", blank.stdout
+
+    filled = run(render(
+        block,
+        inputs_max_tokens_total_override="160000000",
+        inputs_max_api_calls_override="30000",
+        github_actor="tester",
+    ))
+    assert filled.returncode == 0, filled.stderr
+    assert filled.stdout.split() == [
+        "--limit", "max_tokens_total=160000000",
+        "--limit", "max_api_calls=30000",
+        "--raise-ceiling", "tester",
+    ], filled.stdout
+
+    partial = run(render(block, inputs_max_api_calls_override="30000", github_actor="op"))
+    assert partial.returncode == 0, partial.stderr
+    assert partial.stdout.split() == [
+        "--limit", "max_api_calls=30000", "--raise-ceiling", "op",
+    ], partial.stdout

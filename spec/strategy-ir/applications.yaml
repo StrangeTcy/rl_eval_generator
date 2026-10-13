@@ -1,0 +1,188 @@
+# Strategy IR application records, per research_protocol/strategy_ir.md section 3: each
+# application of a card is recorded separately from the card, so the trace
+# problem state --[strategy/version + trigger evidence]--> transformed state --[measurement]-->
+# stays inspectable and a strategy is never graded on the strength of its prose.
+#
+# These are the applications actually made by `tools/equivalence_check_study.py`: the answer
+# sources are deterministic procedures on matched generated instances, so `outcome` reports
+# what the procedure achieved in that environment, and every record is unreviewed.
+
+schema_note: application records per strategy_ir.md section 3
+applications:
+  - application_id: oec-v1-games-nonident
+    problem_state_ref: spec/observational-equivalence-check.yaml#eg_nonident_baseline
+    strategy_ref:
+      strategy_id: observational_equivalence_check
+      version: 1
+    trigger_evidence:
+      - >-
+        48 instances where both worlds assign positive probability to the observed action and
+        agree on its likelihood
+      - >-
+        control answers asserted a separating verdict on all 48 (claims_a_separation_rate
+        1.000, overcommit_rate 0.500)
+    selection_rationale: >-
+      The item class the card is about: observationally identical states, an answer format with a
+      value for underdetermination, and a non-uniform prior so that the mirror error is visible.
+    input_state_ref: experiments/operator_study/raw_results.jsonl?arm=control&stratum=non_identifiable
+    transformation_record: spec/operators/equivalence_check.md
+    output_state_ref: experiments/operator_study/raw_results.jsonl?arm=equivalence_check&stratum=non_identifiable
+    obligation_checks:
+      - >-
+        twin_check passed and pair_id preserved for all 27 generated twins, so the instance,
+        oracle and scoring are unchanged
+      - >-
+        enumeration used only the behavior tables the agent is handed
+      - >-
+        failed - the prior was discarded on 24 of 48 items, which is the recorded counterexample
+    outcome: reduced
+    measurement_refs:
+      - experiments/operator_study/summary.json#epistemic_games.non_identifiable
+    review_status: unreviewed
+
+  - application_id: oec-v2-games-nonident
+    problem_state_ref: spec/observational-equivalence-check.yaml#eg_nonident_baseline
+    strategy_ref:
+      strategy_id: observational_equivalence_check
+      version: 2
+    trigger_evidence:
+      - same 48 items, re-answered under the scoped wording
+    selection_rationale: >-
+      The only difference is the binding of the fourth step, so this application isolates the
+      over-interpretation rather than the enumeration.
+    input_state_ref: experiments/operator_study/raw_results.jsonl?arm=control&stratum=non_identifiable
+    transformation_record: spec/operators/equivalence_check_revised.md
+    output_state_ref: experiments/operator_study/raw_results.jsonl?arm=equivalence_check_revised&stratum=non_identifiable
+    obligation_checks:
+      - separation claim removed (0.000), over-commit 0.000, under-commit 0.000
+      - accuracy 1.000 with identical identifiable-stratum results
+    outcome: solved
+    measurement_refs:
+      - experiments/operator_study/summary.json#epistemic_games.non_identifiable
+    review_status: unreviewed
+
+  - application_id: oec-v1-games-literal
+    problem_state_ref: spec/observational-equivalence-check.yaml#eg_ident_baseline
+    strategy_ref:
+      strategy_id: observational_equivalence_check
+      version: 1
+    trigger_evidence:
+      - the same clause, in the environment whose format already has the value it asks for
+    selection_rationale: >-
+      To separate "the clause is wrong" from "the clause is unavailable": if literal obedience is
+      free here and fatal elsewhere, the cost belongs to the format.
+    input_state_ref: experiments/operator_study/raw_results.jsonl?arm=equivalence_check
+    transformation_record: literal reading of step 4, answer withheld
+    output_state_ref: experiments/operator_study/raw_results.jsonl?arm=equivalence_check_literal
+    obligation_checks:
+      - >-
+        no change in either stratum of epistemic_games (accuracy 1.000 and 0.500, format invalid
+        0.00), because indistinguishable is a legal answer there
+    outcome: no_effect
+    measurement_refs:
+      - experiments/operator_study/summary.json#epistemic_games
+    review_status: unreviewed
+
+  - application_id: oec-v1-nested-knowledge
+    problem_state_ref: spec/observational-equivalence-check.yaml#nk_baseline
+    strategy_ref:
+      strategy_id: observational_equivalence_check
+      version: 1
+    trigger_evidence:
+      - >-
+        the card's precondition "the format contains a value for underdetermined" is false -
+        the answer is a boolean, and the prompt names the scenario, so non-identifiable n=0
+    selection_rationale: >-
+      The transfer test the research question demands, run against the trigger conditions rather
+      than against a hopeful aggregate.
+    input_state_ref: experiments/operator_study/raw_results.jsonl?env=epistemic_nested_knowledge&arm=control
+    transformation_record: spec/operators/equivalence_check.md
+    output_state_ref: experiments/operator_study/raw_results.jsonl?env=epistemic_nested_knowledge&arm=equivalence_check_literal
+    obligation_checks:
+      - exclusion condition recorded and then obeyed anyway, which is what makes the cost measurable
+      - format_invalid_rate 0.00 to 1.00; accuracy 0.556 to 0.000; exact McNemar p<0.0001
+    outcome: invalid_transform
+    measurement_refs:
+      - experiments/operator_study/summary.json#epistemic_nested_knowledge.identifiable
+    review_status: unreviewed
+
+  - application_id: oec-v1-fragmented-observation
+    problem_state_ref: spec/observational-equivalence-check.yaml#fo_baseline
+    strategy_ref:
+      strategy_id: observational_equivalence_check
+      version: 1
+    trigger_evidence:
+      - same format condition as the nested-knowledge application, on the pooled-certificate family
+    selection_rationale: replication of the exclusion in a second modal environment
+    input_state_ref: experiments/operator_study/raw_results.jsonl?env=epistemic_fragmented_observation&arm=control
+    transformation_record: spec/operators/equivalence_check.md
+    output_state_ref: experiments/operator_study/raw_results.jsonl?env=epistemic_fragmented_observation&arm=equivalence_check_literal
+    obligation_checks:
+      - accuracy 0.833 to 0.000, format_invalid_rate 1.00
+    outcome: invalid_transform
+    measurement_refs:
+      - experiments/operator_study/summary.json#epistemic_fragmented_observation.identifiable
+    review_status: unreviewed
+
+  - application_id: enum-games
+    problem_state_ref: spec/observational-equivalence-check.yaml#eg_ident_baseline
+    strategy_ref:
+      strategy_id: state_enumeration
+      version: 1
+    trigger_evidence:
+      - >-
+        control answers miss the graded posterior on 92 of 96 identifiable items while the state
+        space is fully reconstructible from the published behavior tables
+    selection_rationale: the component the card claims is sufficient for accuracy
+    input_state_ref: experiments/operator_study/raw_results.jsonl?arm=control&stratum=identifiable
+    transformation_record: spec/operators/state_enumeration.md
+    output_state_ref: experiments/operator_study/raw_results.jsonl?arm=state_enumeration&stratum=identifiable
+    obligation_checks:
+      - coverage complete, one pass, seeds 3/4/5 recorded
+      - >-
+        on non-identifiable items over-commit stays 0.500, so this card claims no part of the
+        gate's effect
+    outcome: reduced
+    measurement_refs:
+      - experiments/operator_study/summary.json#epistemic_games.identifiable
+    review_status: unreviewed
+
+  - application_id: enum-nested-knowledge
+    problem_state_ref: spec/observational-equivalence-check.yaml#nk_baseline
+    strategy_ref:
+      strategy_id: state_enumeration
+      version: 1
+    trigger_evidence:
+      - >-
+        the designed failure of this family is answering the factual layer, which is precisely
+        evaluating against one state instead of the cell
+    selection_rationale: transfer of the enumeration component to a different epistemic environment
+    input_state_ref: experiments/operator_study/raw_results.jsonl?env=epistemic_nested_knowledge&arm=control
+    transformation_record: spec/operators/state_enumeration.md
+    output_state_ref: experiments/operator_study/raw_results.jsonl?env=epistemic_nested_knowledge&arm=state_enumeration
+    obligation_checks:
+      - accuracy 0.556 to 1.000 on 36 matched items, exact McNemar p=3e-5
+    outcome: reduced
+    measurement_refs:
+      - experiments/operator_study/summary.json#epistemic_nested_knowledge.identifiable
+    review_status: unreviewed
+
+  - application_id: enum-fragmented-observation
+    problem_state_ref: spec/observational-equivalence-check.yaml#fo_baseline
+    strategy_ref:
+      strategy_id: state_enumeration
+      version: 1
+    trigger_evidence:
+      - 4 of 24 items answered from the facts rather than the joint cell
+    selection_rationale: second transfer environment, smaller grid
+    input_state_ref: experiments/operator_study/raw_results.jsonl?env=epistemic_fragmented_observation&arm=control
+    transformation_record: spec/operators/state_enumeration.md
+    output_state_ref: experiments/operator_study/raw_results.jsonl?env=epistemic_fragmented_observation&arm=state_enumeration
+    obligation_checks:
+      - >-
+        direction agrees and the interval crosses zero (Newcombe 95% [-0.0037, 0.3585], p=0.125
+        on 24 pairs), so the outcome is not recorded as established
+    outcome: inconclusive
+    measurement_refs:
+      - experiments/operator_study/summary.json#epistemic_fragmented_observation.identifiable
+    review_status: unreviewed
