@@ -15,7 +15,18 @@ campaigns still sat idle, for exactly two reasons:
 
 A push is the one event this workspace *can* produce, and CI already executes repository code
 (``pytest -q``). So CI asks, and only under a written, expiring, single-purpose instruction committed to
-the branch: ``campaign_kick.json``. The dispatch it sends carries ``resume_previous`` and nothing else -
+the branch: ``campaign_kick.json``. Two measurements closed both ends of that plan on 2026-10-13, and the
+tool stays because either one can be reversed from the repository's settings without touching this code:
+
+* the ``tests`` job in ci.yml is handed no credential at all - run 343 annotated "campaign kick: skipped:
+  no GITHUB_TOKEN in this job" - so repository code executed by CI has nothing to dispatch *with*; and
+* the workflow that would grant one cannot be added: pushing ``.github/workflows/campaign-kick.yml``
+  (push of 5939fba, 16:01 UTC) was refused with "refusing to allow a GitHub App to create or update
+  workflow ... without `workflows` permission".
+
+So the trigger is held at tools/campaign_kick_workflow.yml, tested for width, and uninstalled. A kick is
+an act, not a state: a committed ``campaign_kick.json`` expires, and deleting it is what "nothing pending"
+is supposed to look like. The dispatch it sends carries ``resume_previous`` and nothing else -
 never ``rebase_onto_ref``, never ``clear_wrapper_stop``, never an execution mode or a ceiling - so a
 kicked leg can only continue what the campaign's own carried intent already authorizes. Every check fails
 closed: no file, stale file, wrong event, wrong branch, unreadable API, disabled workflow, a leg already
