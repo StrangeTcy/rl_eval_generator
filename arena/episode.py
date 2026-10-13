@@ -432,7 +432,23 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     oracle_dir.mkdir(parents=True, exist_ok=True)
     oracle_path = oracle_dir / f"{uuid.uuid4().hex}.json"
     oracle_path.write_text(json.dumps(oracle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    if oracle["status"] != "passed":
+    # A campaign may deliberately run environments that have no behavioral
+    # reference (run_suite labels every such row judge_guarantee=compile_only).
+    # Only that one blocked reason is tolerated, and only when the controller
+    # opted in through the environment; every other gate failure still stops
+    # the episode before provider access, and direct runs stay strict.
+    #
+    # Without this, the refusal is indistinguishable from a harness fault: the
+    # episode dies before its first provider call, the suite records
+    # "arena controller did not return a scored result", the campaign pauses on
+    # an infrastructure_error, and every resumed leg re-attempts the same
+    # compile-only case and dies the same way.
+    compile_only_episode = (
+        oracle["status"] != "passed"
+        and oracle.get("reason") == "reference_not_configured"
+        and os.environ.get("ARENA_ALLOW_COMPILE_ONLY") == "1"
+    )
+    if oracle["status"] != "passed" and not compile_only_episode:
         raise ValueError(
             "Exact-instance judge oracle failed before provider access; "
             f"inspect {oracle_path} ({oracle.get('reason')})"
@@ -453,7 +469,9 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
     attempt_id = run_id
     case_id = options.case_id or options.episode_id or f"direct:{run_id}"
     judge_guarantee = options.judge_guarantee or (
-        "behavioral_reference" if oracle.get("status") == "passed" else None
+        "behavioral_reference"
+        if oracle.get("status") == "passed"
+        else "compile_only" if compile_only_episode else None
     )
     episode_id = validate_episode_id(options.episode_id or f"arena_{run_id.replace('-', '_')}")
     artifacts = RunArtifacts(Path(options.out), run_id, secret=api_key)
@@ -517,10 +535,14 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
 
         # This is the actual reset the agent will see. The earlier oracle
         # generation is not sufficient unless its judge/workspace bytes match.
-        verify_reset_matches_oracle(
-            oracle, episode_dir, options.env, options.difficulty, options.seed,
-            interventions,
-        )
+        # A compile-only episode has no fingerprinted reference to match, so
+        # there is nothing to verify against; the row carries the compile-only
+        # guarantee instead of a reference-validated one.
+        if not compile_only_episode:
+            verify_reset_matches_oracle(
+                oracle, episode_dir, options.env, options.difficulty, options.seed,
+                interventions,
+            )
         agent_info = reset_info.get("agent_image") if isinstance(reset_info.get("agent_image"), dict) else {}
         judge_info = reset_info.get("judge_image") if isinstance(reset_info.get("judge_image"), dict) else {}
         artifacts.update_manifest(

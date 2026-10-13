@@ -1171,6 +1171,19 @@ def run_suite(
             episode_timeout_seconds = min(
                 float(EPISODE_EXECUTION_TIMEOUT_SECONDS), remaining_wall_seconds
             )
+        episode_env = os.environ.copy()
+        if unreferenced_compile_only and str(case.get("environment", "")) not in referenced_envs:
+            # Campaign mode runs environments without a behavioral reference
+            # (labeled judge_guarantee=compile_only on the result row). The
+            # episode entry point re-runs the exact-instance gate and would
+            # otherwise refuse them as reference_not_configured every time,
+            # which reads as an infrastructure failure rather than as the
+            # declared compile-only mode.
+            episode_env["ARENA_ALLOW_COMPILE_ONLY"] = "1"
+        else:
+            # Never let an operator's ambient setting leak into a case that is
+            # supposed to be reference-gated: the opt-in is per episode.
+            episode_env.pop("ARENA_ALLOW_COMPILE_ONLY", None)
         try:
             with telemetry.heartbeat(
                 interval_seconds=60,
@@ -1182,7 +1195,7 @@ def run_suite(
                 process = subprocess.run(
                     command,
                     cwd=ROOT,
-                    env=os.environ.copy(),
+                    env=episode_env,
                     capture_output=True,
                     text=True,
                     timeout=episode_timeout_seconds,
