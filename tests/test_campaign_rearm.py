@@ -935,3 +935,44 @@ def test_an_accepted_dispatch_is_confirmed_by_a_run_existing_not_by_a_status_cod
     source = inspect.getsource(campaign_rearm.main)
     assert "confirm_successor" in source and "::error::campaign re-arm" in source, source
     assert "--verify-seconds" in source
+
+
+def test_a_ledger_stand_down_is_lifted_when_the_cron_it_defers_to_is_not_arriving(capsys) -> None:
+    """Run 44 paused at 18:17Z and stood down for a scheduled tick last seen five hours earlier.
+
+    Three of this tool's rules are survivable only because cron is assumed to arrive: the ledger
+    stand-down, the refused-tick skip, and the decline that reads `the scheduled tick is the wait that
+    can actually help here`. Both workflows declare `cron: "13,43 * * * *"`, and on 2026-10-14
+    Mercury's scheduled legs were created 06:42:34Z, 12:27:22Z and 17:37:07Z - 5h45m and 5h10m apart -
+    with Atria's at 06:10:45Z, 11:52:07Z and 17:07:10Z. The fallback is not there, so a leg that waits
+    for it is a leg that never continues.
+    """
+    def iso(offset: timedelta) -> str:
+        return (NOW - offset).isoformat().replace("+00:00", "Z")
+
+    ledger = {"status": "paused", "pause_reason": "infrastructure_error", "resumable": True}
+    fresh_tick = {"id": 45, "event": "schedule", "status": "completed",
+                  "created_at": iso(timedelta(minutes=20)), "updated_at": iso(timedelta(minutes=20))}
+    stale_tick = {"id": 44, "event": "schedule", "status": "completed",
+                  "created_at": iso(timedelta(hours=5, minutes=10)),
+                  "updated_at": iso(timedelta(hours=5, minutes=10))}
+
+    # Cron alive: the rule is unchanged, stand down and let the tick do the waiting.
+    held, why = _decide(ledger, newest_schedule_run=fresh_tick, run_list_readable=True)
+    assert held is False and "attempt ledger" in why, why
+
+    # Cron silent for two intervals: arm on the ordinary floor, and say which measurement lifted it.
+    armed, why = _decide(ledger, newest_schedule_run=stale_tick, run_list_readable=True)
+    assert armed is True, why
+    printed = capsys.readouterr().out
+    assert "the ledger stand-down is lifted" in printed and "18600 s ago" in printed, printed
+
+    # No scheduled sibling on a readable list is the same conclusion; an unreadable list is not.
+    assert _decide(ledger, newest_schedule_run=None, run_list_readable=True)[0] is True
+    assert _decide(ledger, newest_schedule_run=stale_tick)[0] is False
+
+    # And the wait becomes available, which is what turns "arm it 20 minutes from now" into a real plan.
+    from tools.campaign_rearm import handover_wait
+    just_ended = {"status": "completed", "updated_at": iso(timedelta(seconds=100))}
+    assert handover_wait(ledger, just_ended, NOW) == 0
+    assert handover_wait(ledger, just_ended, NOW, ledger_governs=True) == 1100
