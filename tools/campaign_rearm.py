@@ -190,6 +190,22 @@ def handover_wait(report: object, newest_run: object, now: datetime, *,
     return wait
 
 
+def is_unstarted_scheduled_run(run) -> bool:
+    """True for a `schedule` run GitHub has queued but never given a runner.
+
+    `run_started_at` is set the moment a job begins, and a `queued` run with no start time is a slot
+    reservation, not activity. Anything already `in_progress` is excluded by the status set, so this
+    can never read a live leg as a placeholder.
+    """
+    if not isinstance(run, Mapping):
+        return False
+    if str(run.get("event") or "") != "schedule":
+        return False
+    if str(run.get("status") or "") not in {"queued", "requested", "pending"}:
+        return False
+    return not (run.get("run_started_at") or run.get("started_at"))
+
+
 def decide_rearm(
     report,
     *,
@@ -254,10 +270,27 @@ def decide_rearm(
         # made a second run of a campaign require a human, which is the whole thing being fixed.
         return True, f"pause_reason={reason!r} with no other leg on record at chain_depth={chain_depth}"
     run_status = str(newest_run.get("status") or "")
-    if run_status in BUSY_RUN_STATUSES:
+    # A *queued* scheduled tick is not a leg that will continue the campaign. It carries no operator
+    # inputs, so it can neither lift a marker nor raise a ceiling, and both workflows have been dying at
+    # exactly this seam: Atria #27's re-arm declined at 18:09:34 because run 28 was queued; that queued
+    # tick took the runner 6 s later, refused with exit 2 at 18:11:11 and wrote the marker that has
+    # stopped every leg since. Mercury #43 and #40 declined the same way, at 18:14:34 and 07:39:20, for
+    # a queued run that was in fact going to arrive. A run GitHub has not started cannot be "the leg
+    # currently committing to the lineage", which is what this guard exists to detect, and the group
+    # serialises whatever is dispatched anyway - so declining here buys nothing and can cost the chain.
+    # The idle floor below still governs it, deliberately: dispatching inside `decide_tick`'s backoff
+    # window produces a refused successor that does not re-arm, and a placeholder is no reason to skip
+    # that wait - the exemption is about *busyness*, never about timing.
+    placeholder = is_unstarted_scheduled_run(newest_run)
+    if run_status in BUSY_RUN_STATUSES and not placeholder:
         return False, f"a leg is already {run_status}; the concurrency group would only queue another"
     started = _parse_timestamp(newest_run.get("updated_at")) or _parse_timestamp(newest_run.get("created_at"))
     if started is None:
+        if placeholder:
+            return True, (
+                f"pause_reason={reason!r}; the workflow's newest other leg is queued scheduled run "
+                f"{newest_run.get('id')}, which has never started, so this leg arms its own successor"
+            )
         return False, "the most recent leg carries no readable timestamp"
     floor = effective_floor_seconds(reason, min_interval_seconds)
     age = int((now - started).total_seconds())
@@ -273,6 +306,13 @@ def decide_rearm(
             f"the most recent leg ended {age} s ago, below the {floor} s floor set by {governing}; "
             "a successor dispatched now would be refused with mode=none and would not re-arm"
             + (f" - and sitting it out is off: a {wait} s wait exceeds --sleep-cap={sleep_cap}" if capped else "")
+        )
+    if placeholder:
+        return True, (
+            f"pause_reason={reason!r}; the only other leg on the workflow's list is queued scheduled "
+            f"run {newest_run.get('id')}, which has not started and carries no operator inputs, so this "
+            f"leg arms its own successor instead of trusting it (idle {age} s, floor {floor} s, "
+            f"chain_depth={chain_depth})"
         )
     return True, f"pause_reason={reason!r} after a {age} s idle gap at chain_depth={chain_depth}"
 
@@ -299,12 +339,48 @@ def _marker_decline(path: str) -> str:
     if not isinstance(recorded, Mapping):
         return f"terminal marker {name} is present but holds no record, so the campaign stopped on purpose"
     reason = str(recorded.get("pause_reason") or "unrecorded")
-    detail = " ".join(str(recorded.get("detail") or "").split())[:240]
+    # 240 characters is what hid the answer twice. Both Atria refusals of 2026-10-14 (run 25 at
+    # 06:13Z, run 28 at 18:11Z) ended on `campaign intent differs from the restored state`, whose
+    # message names the drifted field in a trailing `(changed: ...)` - and both annotations stop at
+    # "...provider, model, mode, manifest, or code ", inside the sentence, before the part that says
+    # which of those five moved. The campaign's own log line holds it, the state artifact holds it,
+    # and neither is readable from outside a runner; this annotation is the only channel, so the
+    # channel has to be wide enough to carry the diagnosis.
+    detail = " ".join(str(recorded.get("detail") or "").split())[:1200]
+    notes = " ".join(_state_diagnostics(path))
     return (
         f"terminal marker {name} is present (pause_reason={reason}"
         + (f"; {detail}" if detail else "")
         + "), so the campaign stopped on purpose"
+        + ((" | " + notes) if notes else "")
     )
+
+
+def _state_diagnostics(marker_path: str) -> list[str]:
+    """What the campaign recorded beside the marker, in the order a reader needs it.
+
+    A refusal that names the field it refused on writes it into the state directory (`tools/atria_
+    campaign.py`, `campaign_intent_refusal.json`) and a refusal the campaign has already seen once
+    writes `state_contract_stop.json` with a repeat count. Both files sit next to the marker, both
+    are small, and neither is load-bearing - so reading them is wrapped in the same fail-open rule as
+    everything else in this step: an unreadable diagnostic never changes the decision.
+    """
+    out: list[str] = []
+    here = os.path.dirname(os.path.abspath(marker_path))
+    for name in ("campaign_intent_refusal.json", "state_contract_stop.json"):
+        try:
+            with open(os.path.join(here, name), encoding="utf-8") as handle:
+                record = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(record, Mapping):
+            continue
+        picked = {key: record[key] for key in
+                  ("changed", "count", "event", "expected", "recorded") if key in record}
+        if picked:
+            flat = " ".join(f"{k}={v}" for k, v in picked.items())
+            out.append(f"{name}: {' '.join(flat.split())[:600]}")
+    return out
 
 
 
@@ -358,9 +434,22 @@ def successor_inputs(ref: str, chain_depth: int, rebase_ref: str = "") -> dict[s
 
 
 def dispatch_next_leg(api: str, repo: str, token: str | None, workflow_id: Any, ref: str,
-                      chain_depth: int = 0, rebase_ref: str = "") -> tuple[bool, str]:
+                      chain_depth: int = 0, rebase_ref: str = "",
+                      workflow_ref: str = "") -> tuple[bool, str]:
+    """Ask GitHub for the successor leg. The payload needs BOTH refs, and they are not the same thing.
+
+    ``inputs.ref`` is what the leg checks out and runs - the campaign's pin. The top-level ``ref`` is
+    which copy of the *workflow file* GitHub runs, and the create-a-workflow-dispatch endpoint requires
+    it; it is not one of the ``inputs``. It stays deliberately unrecorded here for as long as the tool
+    never reached this call - 58 legs of the two pairwise workflows, every one of them declining before
+    the dispatch (measured 2026-10-14 across all 28 Atria and 30 Mercury runs: no run of either was
+    ever created by the workflow's own token) - and a required field is not something to discover on the
+    leg that first gets here. So it is taken from the ref this leg itself runs on (``main`` for a cron
+    tick and for a hand dispatch alike), which keeps the successor's operations on the newest workflow
+    file while its measurement stays on the pin.
+    """
     inputs = successor_inputs(ref, chain_depth, rebase_ref)
-    payload = json.dumps({"inputs": inputs}).encode("utf-8")
+    payload = json.dumps({"ref": workflow_ref or "main", "inputs": inputs}).encode("utf-8")
     status, body = _request(
         f"{api}/repos/{repo}/actions/workflows/{workflow_id}/dispatches",
         token,
@@ -649,6 +738,9 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("GITHUB_RUN_ID", ""),
         help="run id to leave out of the busy check; defaults to this leg, which is never a reason to stand down",
     )
+    parser.add_argument("--workflow-ref", default=os.environ.get("GITHUB_REF_NAME", "") or "main",
+                        help="the ref whose workflow file the successor runs; required by the "
+                             "dispatch endpoint and distinct from --ref, which is the code pin")
     parser.add_argument("--dry-run", action="store_true", help="print the decision without dispatching")
     parser.add_argument("--run-id", default=os.environ.get("GITHUB_RUN_ID", ""),
                         help="this leg's run id; the newest state artifact must belong to it")
@@ -763,9 +855,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"campaign re-arm would dispatch: {reason} (dry run)")
         return 0
     ok, detail = dispatch_next_leg(api, args.repo, token or None, workflow["id"], args.ref,
-                                   args.chain_depth, rebase_ref)
+                                   args.chain_depth, rebase_ref,
+                                   workflow_ref=args.workflow_ref)
     line = f"campaign re-arm {reason} -> {detail}"
-    print(f"::notice::{line}" if ok else f"warning: {line}")
+    # A refused dispatch used to print as the literal text `warning: ...`, which is not a workflow
+    # command, so it reached no annotation and no log anyone reads: the chain would have died
+    # silently at the one step whose whole job is to keep it alive. Both outcomes are announced.
+    print(f"::notice::{line}" if ok else f"::warning::{line}")
     return 0
 
 
