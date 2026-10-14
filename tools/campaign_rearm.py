@@ -729,6 +729,121 @@ def plan_landing(api: str, repo: str, token: str | None, pin: str, cwd: str,
 
 
 
+def recorded_manifest_commit(state_dir: str) -> str:
+    """The commit the *next* leg will be told to run, as the checkpoint records it.
+
+    A resume leg does not read `campaign_ref.txt`; `campaign_supervisor.decide_tick` answers with
+    `run.manifest_commit` from `suite_checkpoint.json`, and the launcher checks that out. A leg that
+    runs newer code than the checkpoint names only re-authors that field when the campaign is
+    re-based, so today's rollback was silent and total: Mercury run 43 ran `6a24e77` and banked 75
+    gate rows, its checkpoint kept saying `ffcdc78`, and run 44 therefore resumed `ffcdc78` - without
+    the per-case closure rule, four attempts from a pause nothing may resume.
+    """
+    try:
+        with open(os.path.join(state_dir, "suite_checkpoint.json"), encoding="utf-8") as handle:
+            checkpoint = json.load(handle)
+    except (OSError, ValueError):
+        return ""
+    run = checkpoint.get("run") if isinstance(checkpoint, Mapping) else None
+    return str((run or {}).get("manifest_commit") or "")
+
+
+def leg_head_sha(cwd: str, state_dir: str) -> str:
+    """The commit this leg actually ran: what it wrote into its own state, else its checkout."""
+    for candidate in (os.path.join(state_dir, "campaign_ref.txt"),):
+        try:
+            with open(candidate, encoding="utf-8") as handle:
+                sha = handle.read().strip()
+            if sha:
+                return sha
+        except OSError:
+            pass
+    code, out = _run(["git", "-C", cwd, "rev-parse", "HEAD"])
+    return out.strip() if code == 0 else ""
+
+
+def fast_forward(api: str, repo: str, token: str | None, recorded: str, head: str) -> tuple[bool, str]:
+    """Is `head` a descendant of `recorded`? A repair may only ever fast-forward the lineage."""
+    if not (api and repo and token and recorded and head):
+        return False, "no API endpoint, repository, credential or one of the two commits"
+    status, body = _request(
+        f"{api}/repos/{repo}/compare/{urllib.parse.quote(recorded, safe='')}...{urllib.parse.quote(head, safe='')}",
+        token)
+    if status != 200 or not isinstance(body, dict):
+        return False, f"compare returned HTTP {status}"
+    state = str(body.get("status") or "")
+    if state != "ahead":
+        return False, f"`{head[:7]}` is {state or 'not ahead'} of `{recorded[:7]}`, and a diverged pair is a merge"
+    return True, ""
+
+
+def pin_repair_verdict(*, recorded: str, head: str, rec_ctx: dict | None, head_ctx: dict | None,
+                       fast_forward_ok: bool, marker_present: bool, t1_incomplete: bool,
+                       carries_waiver: bool = True) -> dict[str, Any]:
+    """Whether re-pinning the successor at `head` repairs the lineage at zero grading cost.
+
+    `rebase_onto_ref` is the one launcher path that writes `run.manifest_commit`, and it is free
+    exactly when the two trees agree on every verdict-producing file - the same test `plan_landing`
+    applies to the upstream tip, applied here to the pair the lineage is actually split across.
+    Withheld for a terminal marker, an interrupted T1 or a tree whose `gate_context.py` cannot list a
+    declared input: an unavailable check never buys a repair.
+    """
+    if not recorded or not head:
+        return {"repair": False, "why": "no recorded commit or no leg sha to repair with", "differing": []}
+    if recorded == head:
+        return {"repair": False, "why": "the pin is already sticky", "differing": []}
+    if marker_present or t1_incomplete:
+        return {"repair": False, "why": "a terminal marker or an interrupted T1 is in the carried state",
+                "differing": []}
+    if not carries_waiver:
+        return {"repair": False, "why": "the carried code cannot accept a re-authored intent",
+                "differing": []}
+    if not fast_forward_ok:
+        return {"repair": False, "why": "the two commits are not a fast-forward", "differing": []}
+    if rec_ctx is None or head_ctx is None:
+        return {"repair": False, "why": "a verdict inventory could not be read at one of the two commits",
+                "differing": []}
+    differing = sorted(k for k in set(rec_ctx) | set(head_ctx) if rec_ctx.get(k) != head_ctx.get(k))
+    if differing:
+        return {"repair": False, "why": "verdict files differ, so a re-pin re-grades the gate",
+                "differing": differing}
+    return {"repair": True, "why": "no verdict-producing file differs between the two commits",
+            "differing": []}
+
+
+def plan_pin_repair(api: str, repo: str, token: str | None, cwd: str, state_dir: str) -> dict[str, Any]:
+    """Measure the pin the successor would revert to, and whether it can be repaired for free."""
+    state = state_dir or os.getcwd()
+    recorded = recorded_manifest_commit(state)
+    head = leg_head_sha(cwd, state)
+    marker_present = os.path.exists(os.path.join(state, "wrapper_failed.json"))
+    t1_incomplete = (os.path.exists(os.path.join(state, "t1_started.json"))
+                     and not os.path.exists(os.path.join(state, "t1_same_fact_presentation.json")))
+    if not recorded or not head or recorded == head:
+        return pin_repair_verdict(recorded=recorded, head=head, rec_ctx=None, head_ctx=None,
+                                  fast_forward_ok=False, marker_present=marker_present,
+                                  t1_incomplete=t1_incomplete)
+    head_ctx, why_head = grading_context(cwd)
+    with tempfile.TemporaryDirectory(prefix="campaign-pin-") as work:
+        ok, detail = fetch_tree(cwd, recorded, work)
+        rec_ctx, why_rec = grading_context(work) if ok else (None, detail)
+    ff, why_ff = fast_forward(api, repo, token, recorded, head)
+    try:
+        carried = open(os.path.join(cwd, "tools", "run_suite.py"), encoding="utf-8").read()
+    except OSError:
+        carried = ""
+    verdict = pin_repair_verdict(recorded=recorded, head=head, rec_ctx=rec_ctx, head_ctx=head_ctx,
+                                 fast_forward_ok=ff, marker_present=marker_present,
+                                 t1_incomplete=t1_incomplete,
+                                 carries_waiver="allow_manifest_commit_rebase" in carried)
+    # Never report a repair as free on the strength of a comparison that did not run.
+    if verdict["repair"] and (why_head or why_rec or why_ff):
+        verdict = {"repair": False, "why": why_rec or why_ff or why_head, "differing": []}
+    verdict["recorded"] = recorded
+    verdict["head"] = head
+    return verdict
+
+
 def _newest_state_owner_for(args: Any, api: str, token: str | None) -> tuple[tuple[str, str, str], Any]:
     """`newest_state_owner` bound to the arguments this step was invoked with, with the workflow id
     resolved by name (the launcher passes a display name, never a file path)."""
@@ -952,6 +1067,30 @@ def main(argv: list[str] | None = None) -> int:
               f"file(s){more}; dispatch rebase_onto_ref yourself if that is the trade you want")
     elif landing["verdict"] not in ("none",):
         print(f"campaign re-arm: no landing checked ({landing['why']}); the successor runs this leg's pin")
+    if not rebase_ref:
+        # The pin this leg actually ran has to reach the successor, or the lineage walks back to the
+        # commit the checkpoint names and every fix carried by the leg is unlanded without a word.
+        repair = plan_pin_repair(api, args.repo, token or None, os.getcwd(),
+                                 os.path.dirname(os.path.abspath(args.report)))
+        if repair.get("repair"):
+            rebase_ref = str(repair["head"])
+            print(f"campaign re-arm: the successor is re-pinned at {rebase_ref[:7]} to repair the pin - "
+                  f"this leg ran {rebase_ref[:7]} while its checkpoint still recorded "
+                  f"{str(repair.get('recorded') or '')[:7]}, and no verdict file differs between them, "
+                  "so no banked row is re-graded")
+            print(f"::notice::campaign re-arm repaired the pin at {rebase_ref[:7]}: the checkpoint named "
+                  f"{str(repair.get('recorded') or '')[:7]}, the leg ran {rebase_ref[:7]}, "
+                  "zero verdict files differ, so the successor keeps this leg's code for free")
+        elif repair.get("recorded") and repair.get("head"):
+            names = ", ".join(repair["differing"][:6])
+            more = f" (+{len(repair['differing']) - 6} more)" if len(repair["differing"]) > 6 else ""
+            print(f"campaign re-arm: the successor will revert the pin from {str(repair['head'])[:7]} to "
+                  f"{str(repair['recorded'])[:7]} ({repair['why']}"
+                  + (f"; differing: {names}{more}" if repair["differing"] else "") + ")")
+            if repair["differing"]:
+                print(f"::warning::campaign pin will revert to {str(repair['recorded'])[:7]} on the next "
+                      f"leg: {len(repair['differing'])} verdict file(s) differ from the {repair['head'][:7]} "
+                      f"this leg ran{more}; a rebase dispatch there re-grades the exact-instance gate")
     if args.dry_run:
         print(f"campaign re-arm would dispatch: {reason} (dry run)")
         return 0
