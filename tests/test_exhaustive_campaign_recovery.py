@@ -250,7 +250,10 @@ def test_independent_episode_timeout_is_a_bounded_infrastructure_retry(
     assert row["http_attempts"] is None
     assert row["http_attempts_upper_bound_reserved"] == 1
     assert checkpoint["http_attempts_total"] == 0
-    assert checkpoint["http_attempts_unknown_upper_bound_total"] == 1
+    # Two now, not one: the leg no longer stops at the first unscored case, so case-001 was reached
+    # and its timeout is also an unbounded attempt. The second failure in one leg is the systemic
+    # condition that still ends it, and that is why this leg pauses.
+    assert checkpoint["http_attempts_unknown_upper_bound_total"] == 2
 
 
 def test_container_failure_is_automatically_retried_then_stops_at_its_bound(
@@ -281,10 +284,109 @@ def test_container_failure_is_automatically_retried_then_stops_at_its_bound(
         (output / "suite_checkpoint.json").write_text(json.dumps(checkpoint), encoding="utf-8")
         assert decide_tick(output)["mode"] == "resume"
 
+    # The bound closes *the case*; it does not end the campaign. Every case fails identically here,
+    # which is also the systemic condition, so the leg stops on its second failure - but no leg any
+    # more reaches a non-resumable `infrastructure_error_retries_exhausted` that strands 51 unrun
+    # cases behind one poisoned one.
     checkpoint = run_suite.run_suite(manifest, **_kwargs(output))
-    assert checkpoint["pause_reason"] == "infrastructure_error_retries_exhausted"
-    assert (
-        checkpoint["infrastructure_retries"]["case-000"]
-        == run_suite.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1
+    assert checkpoint["pause_reason"] == "infrastructure_error"
+    assert checkpoint["infrastructure_retries"]["case-000"] == (
+        run_suite.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1
     )
-    assert decide_tick(output)["mode"] == "none"
+    assert checkpoint["results"][0]["status"] == "infrastructure_unscored"
+    assert checkpoint["results"][0]["unscored_after_attempts"] == (
+        run_suite.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1
+    )
+    assert "did not return a scored result" in str(checkpoint["results"][0]["error"])
+    assert checkpoint["unscored_cases"]["case-000"]["attempts"] == (
+        run_suite.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1
+    )
+    # The intentional 20-minute infrastructure backoff would otherwise make `decide_tick` answer
+    # `none` for a leg that simply finished a second ago, which is a fixture clock, not a policy.
+    checkpoint["updated_at"] = "2020-01-01T00:00:00Z"
+    (output / "suite_checkpoint.json").write_text(json.dumps(checkpoint), encoding="utf-8")
+    assert decide_tick(output)["mode"] == "resume"
+    persisted = json.loads((output / "suite_checkpoint.json").read_text(encoding="utf-8"))
+    assert persisted["results"][0]["status"] == "infrastructure_unscored"
+    coverage = json.loads((output / "coverage.json").read_text(encoding="utf-8"))
+    # Two here, because every case in this proof fails its judge identically and both had run out.
+    # Counted as unscored, never as a score: the row is a harness outcome with a reason, not a zero,
+    # and the cases that were never reached are still `infrastructure_error` - pending, not closed.
+    assert coverage["counts"].get("infrastructure_unscored") == 2
+    assert coverage["counts"].get("infrastructure_error") == 2
+    assert coverage["counts"].get("scored", 0) == 0
+
+
+def test_one_poisoned_case_cannot_hold_the_rest_of_the_plan_hostage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A case that fails its judge while every other case scores is no longer a stop sign.
+
+    Measured on 2026-10-13: Mercury run 35 paused at 365/416 on
+    `epistemic_silence__observation=message_protocol=pair_prior=skewed_scenario=expedition__seed-0`,
+    whose arena judge returned `not_submitted`, and the ten-attempt per-case bound turned that one
+    case into `infrastructure_error_retries_exhausted` - non-resumable, with 51 cases never
+    attempted. The plan here is six cases, one of which always fails its judge: the campaign spends
+    its ten attempts, closes that case as explicitly unscored, and completes the other five.
+    """
+    manifest = _manifest()
+    plan = 6
+    manifest["cases"] = manifest["cases"][:plan]
+    manifest["case_count"] = plan
+    monkeypatch.setenv("ATRIA_API_KEY", "non-secret-test-value")
+    _install_provider_free_gate_stubs(monkeypatch)
+    poisoned = manifest["cases"][0]["case_id"]
+    scored = json.dumps(
+        {
+            "final": {"verdict": "PASS", "score": 1.0, "failure_mode": "pass"},
+            "http_attempts": 1,
+            "run_dir": "deterministic-test-episode",
+        }
+    )
+
+    def episode(command, **_kwargs):
+        # The real command line carries `--case-id`, so exactly one case dies in the judge.
+        joined = " ".join(str(part) for part in command)
+        if poisoned in joined:
+            return SimpleNamespace(returncode=1, stdout="", stderr="container died")
+        return SimpleNamespace(returncode=0, stdout=scored, stderr="")
+
+    output = tmp_path / "one-poisoned-case"
+    monkeypatch.setattr(run_suite.subprocess, "run", episode)
+    run_suite.run_suite(manifest, stop_after_gates=True, **_kwargs(output))
+    (output / "campaign_ref.txt").write_text(REF + "\n", encoding="utf-8")
+    (output / "campaign_intent.json").write_text(
+        json.dumps({"provider": "atria", "execution_mode": "paid"}), encoding="utf-8"
+    )
+    kwargs = _kwargs(output)
+
+    for attempt in range(1, run_suite.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1):
+        checkpoint = run_suite.run_suite(manifest, **kwargs)
+        assert checkpoint["pause_reason"] == "infrastructure_error", attempt
+        assert len(checkpoint["results"]) == plan, attempt  # the other five are already banked
+        assert checkpoint["infrastructure_retries"][poisoned] == attempt
+        checkpoint["updated_at"] = "2020-01-01T00:00:00Z"
+        (output / "suite_checkpoint.json").write_text(json.dumps(checkpoint), encoding="utf-8")
+        assert decide_tick(output)["mode"] == "resume", attempt
+
+    final = run_suite.run_suite(manifest, **kwargs)
+    rows = {row["case_id"]: row for row in final["results"]}
+    assert len(rows) == plan
+    assert rows[poisoned]["status"] == "infrastructure_unscored"
+    assert rows[poisoned]["unscored_after_attempts"] == (
+        run_suite.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1
+    )
+    assert sum(row["status"] == "scored" for row in rows.values()) == plan - 1
+    assert final.get("paused") is not True  # nothing is left to retry, so the campaign completes
+    assert final.get("pause_reason") != "infrastructure_error_retries_exhausted"
+    coverage = json.loads((output / "coverage.json").read_text(encoding="utf-8"))
+    assert coverage["counts"].get("infrastructure_unscored") == 1
+    assert coverage["counts"].get("scored") == plan - 1
+
+    # A closed case stays closed: another leg neither re-bills it nor hands it a score.
+    again = run_suite.run_suite(manifest, **kwargs)
+    again_rows = {row["case_id"]: row for row in again["results"]}
+    assert again_rows[poisoned]["status"] == "infrastructure_unscored"
+    assert again["infrastructure_retries"][poisoned] == (
+        run_suite.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES + 1
+    )

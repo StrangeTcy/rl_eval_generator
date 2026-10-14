@@ -197,6 +197,7 @@ def _infrastructure_detail(checkpoint: dict[str, Any]) -> list[str]:
     if not pending:
         return []
     errors: dict[str, str] = {}
+    closed: set[str] = set()
     results = checkpoint.get("results")
     if isinstance(results, list):
         for row in results:
@@ -206,14 +207,22 @@ def _infrastructure_detail(checkpoint: dict[str, Any]) -> list[str]:
             error = row.get("error")
             if isinstance(case_id, str) and isinstance(error, str) and error:
                 errors[case_id] = error[:160]
+            if isinstance(case_id, str) and row.get("status") == "infrastructure_unscored":
+                closed.add(case_id)
     lines = ["- **Infrastructure retries by case:**"]
     for case_id, count in pending[:5]:
         remaining = MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES - count
-        budget = (
-            f"{remaining} automatic retr{'y' if remaining == 1 else 'ies'} left"
-            if remaining > 0
-            else "budget exhausted, stops for an operator"
-        )
+        if case_id in closed:
+            # `tools/run_suite.py` closes a case whose bound ran out as unscored and carries on with
+            # the rest of the plan, so the live status must not send the reader to an operator who has
+            # nothing to authorise: the row is the record, and the campaign is still running.
+            budget = "bound reached; row recorded as unscored and the plan continued past it"
+        else:
+            budget = (
+                f"{remaining} automatic retr{'y' if remaining == 1 else 'ies'} left"
+                if remaining > 0
+                else "budget exhausted, stops for an operator"
+            )
         detail = f" — {errors[case_id]}" if case_id in errors else ""
         lines.append(f"  - `{case_id}`: {count}/{MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES} ({budget}){detail}")
     if len(pending) > 5:

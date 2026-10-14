@@ -272,6 +272,27 @@ def test_body_flags_an_exhausted_infrastructure_budget(tmp_path: Path) -> None:
     assert "budget exhausted, stops for an operator" in campaign_status_sidecar._body(tmp_path)
 
 
+def test_a_case_closed_as_unscored_is_reported_as_closed_not_as_an_operator_gate(tmp_path: Path) -> None:
+    """`tools/run_suite.py` closes a case whose automatic bound ran out as `infrastructure_unscored`
+    and continues with the plan, so the live status must not send the reader to an operator who has
+    nothing left to authorise. The old wording is kept for a row that has not been closed."""
+    bound = campaign_status_sidecar.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES
+    _write_checkpoint(
+        tmp_path,
+        {
+            "paused": False,
+            "infrastructure_retries": {"glyph/easy/0": bound + 1, "weird_machine/hard/0": bound + 1},
+            "results": [
+                {"case_id": "glyph/easy/0", "status": "infrastructure_unscored", "error": "arena controller or judge failed before producing a valid score"},
+                {"case_id": "weird_machine/hard/0", "status": "infrastructure_error", "error": "episode subprocess exceeded its independent timeout"},
+            ],
+        },
+    )
+    body = campaign_status_sidecar._body(tmp_path)
+    assert "row recorded as unscored and the plan continued past it" in body
+    assert "budget exhausted, stops for an operator" in body  # the unclosed case still says so
+
+
 def test_body_omits_the_section_without_infrastructure_retries(tmp_path: Path) -> None:
     _write_checkpoint(tmp_path, {"paused": False, "infrastructure_retries": {}})
 
