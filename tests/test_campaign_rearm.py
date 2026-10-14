@@ -877,3 +877,61 @@ def test_a_decline_carries_the_whole_refusal_not_its_first_sentence(tmp_path: Pa
     # and a missing or corrupt diagnostic never changes anything
     (tmp_path / "campaign_intent_refusal.json").write_text("{", encoding="utf-8")
     assert campaign_rearm._marker_decline(str(marker)).startswith(line[:40])
+
+
+def test_an_accepted_dispatch_is_confirmed_by_a_run_existing_not_by_a_status_code() -> None:
+    """204 means GitHub took the request; it does not mean a successor was created.
+
+    That gap is how the chain stayed dead for 58 legs: every decline was annotated, so the step looked
+    healthy, and the one branch that never ran - the dispatch itself - would have printed a plain
+    `warning:` line no tool turns into an annotation. The endpoint returns no run id, so the proof has
+    to come from the workflow's own run list, and an unreadable list must say `not verified`, never
+    `no successor`.
+    """
+    calls = {"n": 0}
+
+    def fake(url, token, *, data=None, method=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return 200, {"workflow_runs": [{"id": 100, "event": "schedule", "status": "completed"}]}
+        return 200, {"workflow_runs": [{"id": 132, "event": "workflow_dispatch", "status": "queued",
+                                        "run_number": 45, "head_sha": "c" * 40}]}
+
+    original = campaign_rearm._request
+    campaign_rearm._request = fake
+    try:
+        run, proof = campaign_rearm.confirm_successor("https://api", "o/r", "t", 7, "100",
+                                                      attempts=4, delay=0, sleep=lambda _s: None)
+    finally:
+        campaign_rearm._request = original
+    assert run is not None and run["id"] == 132, proof
+    assert "#45 is queued" in proof and calls["n"] == 2, (proof, calls)
+
+    # Nothing newer, after the full window: the chain is NOT armed, and that is said out loud.
+    def nothing(url, token, *, data=None, method=None):
+        return 200, {"workflow_runs": [{"id": 100, "event": "workflow_dispatch", "status": "queued"}]}
+
+    campaign_rearm._request = nothing
+    try:
+        run, proof = campaign_rearm.confirm_successor("https://api", "o/r", "t", 7, "100",
+                                                       attempts=2, delay=0, sleep=lambda _s: None)
+    finally:
+        campaign_rearm._request = original
+    assert run is None and "chain is NOT armed" in proof, proof
+
+    # Unreachable API and a leg with no id are both `not verified`, never a verdict.
+    for ours, url_status in (("100", 0), ("100", 403), ("", 200)):
+        def broken(url, token, *, data=None, method=None, st=url_status):
+            return st, {"message": "boom"}
+        campaign_rearm._request = broken
+        try:
+            run, proof = campaign_rearm.confirm_successor("https://api", "o/r", "t", 7, ours,
+                                                           attempts=1, delay=0, sleep=lambda _s: None)
+        finally:
+            campaign_rearm._request = original
+        assert run is None and proof.startswith("not verified"), (ours, url_status, proof)
+
+    # And the shipped CLI consults it, with the announcement that reaches the Checks UI.
+    source = inspect.getsource(campaign_rearm.main)
+    assert "confirm_successor" in source and "::error::campaign re-arm" in source, source
+    assert "--verify-seconds" in source

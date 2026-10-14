@@ -474,6 +474,48 @@ def dispatch_next_leg(api: str, repo: str, token: str | None, workflow_id: Any, 
 # re-arm does it; when it changes a verdict, the landing stays an operator's decision and the leg
 # says so, with the count.
 
+def confirm_successor(api: str, repo: str, token: str | None, workflow_id: Any, our_run: str,
+                      *, attempts: int = 6, delay: int = 10, sleep=SLEEP) -> tuple[dict | None, str]:
+    """Look for the run this leg just asked for, instead of trusting the accepted dispatch.
+
+    A 204 means GitHub took the request, not that a run exists: a payload that validates can still
+    produce nothing, and that is exactly how the chain stayed dead for 58 legs while every step around
+    it looked healthy. The endpoint's own response carries no run id, so the only proof is the
+    workflow's run list gaining a run that is not this one. Fail-open in both directions - an
+    unreachable API says \"not verified\", never \"no successor\" - and the answer is printed either
+    way, because the claim \"it resumes automatically\" is worth one API call and nothing else.
+    """
+    if not our_run:
+        return None, "not verified: this leg has no run id to compare against"
+    last: list = []
+    for attempt in range(max(1, int(attempts))):
+        status, body = _request(
+            f"{api}/repos/{repo}/actions/workflows/{workflow_id}/runs?per_page=10", token
+        )
+        if status != 200:
+            return None, f"not verified: the run list answered HTTP {status}"
+        last = (body.get("workflow_runs") or []) if isinstance(body, dict) else []
+        try:
+            mine = int(our_run)
+        except (TypeError, ValueError):
+            return None, "not verified: this leg's run id is not a number"
+        for run in last:
+            if not isinstance(run, Mapping):
+                continue
+            try:
+                newer = int(run.get("id") or 0) > mine
+            except (TypeError, ValueError):
+                continue
+            if newer and str(run.get("event") or "") == "workflow_dispatch":
+                return run, f"successor run #{run.get('run_number')} is {run.get('status')}"
+        if attempt + 1 < max(1, int(attempts)):
+            sleep(int(delay))
+    return None, (
+        f"dispatched and no run newer than {our_run} appeared on this workflow's list after "
+        f"{int(attempts) * int(delay)} s, so the chain is NOT armed; cron remains the fallback"
+    )
+
+
 def _run(argv: list[str], cwd: str | None = None, timeout: int = 180) -> tuple[int, str]:
     """`git`/`python` without a shell, and never an exception: a failed check is information."""
     try:
@@ -741,6 +783,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workflow-ref", default=os.environ.get("GITHUB_REF_NAME", "") or "main",
                         help="the ref whose workflow file the successor runs; required by the "
                              "dispatch endpoint and distinct from --ref, which is the code pin")
+    parser.add_argument("--verify-seconds", type=int, default=60,
+                        help="how long to look for the successor run after an accepted dispatch")
     parser.add_argument("--dry-run", action="store_true", help="print the decision without dispatching")
     parser.add_argument("--run-id", default=os.environ.get("GITHUB_RUN_ID", ""),
                         help="this leg's run id; the newest state artifact must belong to it")
@@ -862,6 +906,17 @@ def main(argv: list[str] | None = None) -> int:
     # command, so it reached no annotation and no log anyone reads: the chain would have died
     # silently at the one step whose whole job is to keep it alive. Both outcomes are announced.
     print(f"::notice::{line}" if ok else f"::warning::{line}")
+    if ok:
+        successor, proof = confirm_successor(api, args.repo, token or None, workflow["id"],
+                                             args.run_id, delay=args.verify_seconds // 6 or 10)
+        if successor is not None:
+            print(f"::notice::campaign re-arm confirmed: {proof} (id {successor.get('id')}, "
+                  f"pinned at {str(successor.get('head_sha') or '')[:7]})")
+        elif proof.startswith("not verified"):
+            print(f"campaign re-arm: {proof}")
+        else:
+            print(f"::error::campaign re-arm {proof}")
+            return 0
     return 0
 
 
