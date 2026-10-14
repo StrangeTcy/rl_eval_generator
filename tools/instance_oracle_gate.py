@@ -23,6 +23,7 @@ import contextlib
 import hashlib
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -73,25 +74,242 @@ def _rope(workspace: Path, *, wrong: bool) -> None:
         _replace(workspace, "rope.py", "return torch.cat((-x2, x1), dim=-1)",
                  "return torch.stack((-x[..., 1::2], x[..., 0::2]), dim=-1).flatten(-2)")
     _replace(workspace, "attention.py", "offset = 0", "offset = cache.position_offset()")
+    # Both cache needles are generated text, not fixed text: rope's `symptom_mask` axis writes
+    # `return 0` plus a no-op append step at easy/medium and `return self.tokens_seen` plus a real
+    # increment at hard (envs/rope/config.yaml:148-160).  At hard the instance already reports the
+    # offset the reference would introduce, so saying "expected exactly one occurrence of 'return 0'"
+    # describes the symptom and hides the diagnosis.  Fail closed, and name the axis.
+    cache_source = (workspace / "cache.py").read_text(encoding="utf-8")
+    masked = cache_source.count("return 0")
+    stepping = cache_source.count("self.tokens_seen = self.tokens_seen")
+    if masked != 1 or stepping != 1:
+        raise ValueError(
+            "cache.py: the reference restores the cache offset by rewriting the masked "
+            f"`return 0` and no-op append step, and this instance has {masked} and {stepping} of "
+            "them; a vector whose symptom is not masked already carries the fix, so the pristine "
+            "instance cannot be certified by it (symptom_mask=hard)"
+        )
     _replace(workspace, "cache.py", "return 0", "return self.tokens_seen")
     _replace(workspace, "cache.py", "self.tokens_seen = self.tokens_seen",
              "self.tokens_seen += int(chunk_len)")
 
 
+# The line moco's temperature bug has to be applied to.  `l_pos`/`l_neg` are literal in
+# envs/moco/files/model.py, so unlike the module name, the queue attribute and the class name
+# they survive every renaming axis and the `terminology` intervention.
+_MOCO_LOGITS_LINE = re.compile(r"logits = torch\.cat\(\[l_pos, l_neg\], dim=1\)")
+
+
 def _moco(workspace: Path, *, wrong: bool) -> None:
-    _replace(workspace, "moco_model.py", "logits = torch.cat([l_pos, l_neg], dim=1)",
-             "logits = torch.cat([l_pos, l_neg], dim=1) / 1.0" if wrong
-             else "logits = torch.cat([l_pos, l_neg], dim=1) / self.tau")
+    """Divide the logits by the temperature, in whichever file this instance keeps them.
+
+    The temperature fix is one line, so the reference used to open ``moco_model.py`` by name and
+    ``_replace`` that single line.  But that filename is itself axis output: ``naming`` writes
+    ``contrastive.py`` at ``medium`` and ``engine.py`` at ``hard``
+    (envs/moco/config.yaml:11-26), and the ``terminology`` intervention renames the file again
+    (envs/moco/config.yaml:208-222).  Every vector that renamed it produced
+    ``FileNotFoundError`` from inside the gate, which the campaign records as ``oracle_error`` -
+    a defect in the reference, not in the instance, and one that cost a full tick to read.
+
+    So the file is located by the line the reference edits: exactly one occurrence anywhere in
+    the workspace, or the vector is refused rather than guessed at.  ``queue_ops.py`` stays a
+    literal - it carries no placeholders (envs/moco/files/queue_ops.py) and so cannot be renamed.
+    """
+    scale = " / 1.0" if wrong else " / self.tau"
+    matches = []
+    for path in sorted(workspace.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        matches.extend((path, source, match) for match in _MOCO_LOGITS_LINE.finditer(source))
+    if len(matches) != 1:
+        raise ValueError(
+            "expected exactly one moco logits concatenation in the workspace, found "
+            f"{len(matches)}; reference is not configured for this vector"
+        )
+    path, source, match = matches[0]
+    path.write_text(source[: match.end()] + scale + source[match.end() :], encoding="utf-8")
     _replace(workspace, "queue_ops.py", "queue[:, start:start + n] = keys.T",
              "queue[:, (torch.arange(n) + start) % k] = keys.T")
 
 
+_OPTIMIZER_ASSIGNMENT = re.compile(
+    r"^(?P<indent>[ \t]*)optimizer = optim\.\w+\([^\n]*?\)\s*(?:#[^\n]*)?$", re.MULTILINE
+)
+
+
+# ``envs/glyph/config.yaml`` renders ``%%EVAL_IMG_SIZE%%`` to 64 at every level of ``symptom_mask``,
+# while ``%%IMG_SIZE%%`` is 64 at easy/medium and 32 at hard.  The constant is pinned against those
+# values by tests/test_glyph_reference_traps.py, so a generator that moves the evaluation canvas
+# fails a test instead of silently shrinking the reference's repair.
+_GLYPH_EVAL_IMG_SIZE = 64
+_GLYPH_TRAIN_IMG_SIZE = re.compile(r"^IMG_SIZE = (\d+)$", re.MULTILINE)
+_GLYPH_INVERT_BUG = re.compile(r"^([ \t]*)self\.p_invert = 0\.1 \+ 1\.0$", re.MULTILINE)
+
+
+def _glyph_augmentation(workspace: Path, *, wrong: bool) -> None:
+    """Remove the one augmentation defect that is not a red herring.
+
+    ``red_herring=hard`` writes ``BuggyAugmentation`` into dataset.py with
+    ``self.p_invert = 0.1 + 1.0`` (envs/glyph/config.yaml:96-112).  Its ``__call__`` guards the
+    inversion with ``if random.random() < self.p_invert``, and that comparison is true for every
+    draw, so *every* training image is inverted while the judge builds its evaluation set from a
+    plain ``ToTensor``/``Normalize`` pipeline (envs/glyph/files/judge.py:24-31): the reference was
+    training on the negative of the distribution it was scored on.  That is the signature of five
+    of the twelve blocked gate rows - raw_accuracy 0.059 to 0.200 with ``anti_gaming_passed=false``,
+    and ``judge.py:93-99`` derives ``optimization_progressed`` from that very check (predictions
+    covering fewer than seven classes), which is why the note read ``optimizer_pathology_unfixed``
+    although the optimizer was already fixed.  The env's own docstring calls it "a subtle but
+    irrelevant off-by-one bug"; at hard it is neither, and no number of epochs repairs it.
+
+    Correcting the probability to its stated intent is the minimal edit, and it leaves the random
+    stream untouched - the draw still happens, so every glyph lands at the same position and only
+    the inversion changes.  At easy and medium there is nothing to repair and no-op is the right
+    answer for a reference (unlike the optimizer axis, where a no-op would certify a pristine
+    instance).  A ``BuggyAugmentation`` whose inversion site this pattern cannot read is refused:
+    a reference that certifies a training distribution nobody has inspected is not a reference.
+    """
+    if wrong:
+        return
+    path = workspace / "dataset.py"
+    source = path.read_text(encoding="utf-8")
+    matches = list(_GLYPH_INVERT_BUG.finditer(source))
+    if not matches:
+        if "class BuggyAugmentation" in source:
+            raise ValueError(
+                "dataset.py: BuggyAugmentation inverts training images through an assertion this "
+                "reference cannot read; refusing to certify a training distribution it has not neutralized"
+            )
+        return
+    if len(matches) != 1:
+        raise ValueError(
+            f"dataset.py: expected one unconditional-inversion site, found {len(matches)}; "
+            "reference is not configured for this vector"
+        )
+    matched = matches[0]
+    path.write_text(
+        source[: matched.start()] + matched.group(1) + "self.p_invert = 0.1" + source[matched.end():],
+        encoding="utf-8",
+    )
+
+
+def _glyph_training_resolution(workspace: Path, *, wrong: bool) -> None:
+    """Train on the canvas the judge evaluates on, when the vector draws them at different sizes.
+
+    ``symptom_mask=hard`` is two traps, and the reference only used to defuse one of them.  The
+    architecture half is the ``SpatialPool`` crop, which the classifier splice below does remove -
+    and the gate rows prove it, because those vectors report ``spatial_invariance_learned=true``.
+    The other half is in the data: ``%%IMG_SIZE%%`` drops to 32 while ``%%EVAL_IMG_SIZE%%`` stays
+    64, and ``generate_glyph`` draws shapes at absolute pixel sizes (5-10 px, 12 px margins,
+    envs/glyph/files/dataset.py:45-60), so the same class occupies a different fraction of the
+    canvas in the two pipelines.  The judge measures exactly that: accuracy on a 64x64 set
+    (envs/glyph/files/judge.py:24-31) against ``pass_threshold 0.85``, which a model fitted on
+    32x32 glyphs does not reach - it reported 0.271 with invariance and anti-gaming both green and
+    the note ``overfit_spatial_layout``, which ``judge.py:110-113`` emits only for a model that
+    learned a stable mapping and still generalizes poorly.  Two more rows collapsed to
+    ``optimization_progressed=false`` on the same axis.
+
+    The repair is applied in train.py rather than in dataset.py on purpose.  ``visible_tests.py``
+    asserts on ``IMG_SIZE`` and feeds the model ``torch.randn(4, 1, IMG_SIZE, IMG_SIZE)``; those
+    tests run in their own process against the file the agent sees, so leaving dataset.py at 32
+    keeps the agent-visible signal identical while ``generate_glyph`` - which reads the module
+    global at call time - hands training and internal evaluation the aligned canvas.  An
+    ``IMG_SIZE`` line this pattern does not recognize is refused rather than guessed at.
+    """
+    if wrong:
+        return
+    source = (workspace / "dataset.py").read_text(encoding="utf-8")
+    matches = list(_GLYPH_TRAIN_IMG_SIZE.finditer(source))
+    if len(matches) != 1:
+        raise ValueError(
+            "dataset.py: expected exactly one IMG_SIZE assignment, found "
+            f"{len(matches)}; reference is not configured for this vector"
+        )
+    if int(matches[0].group(1)) >= _GLYPH_EVAL_IMG_SIZE:
+        return
+    block = (
+        "\n# The judge scores 64x64 glyphs (see the env config's evaluation canvas); shapes are\n"
+        "# drawn at absolute pixel sizes, so training on a smaller canvas is training on a\n"
+        "# different distribution.  Align them here instead of in dataset.py, which the visible\n"
+        "# tests read.\n"
+        "import dataset as _glyph_dataset\n"
+        f"_glyph_dataset.IMG_SIZE = {_GLYPH_EVAL_IMG_SIZE}\n"
+    )
+    _replace(workspace, "train.py", "BATCH_SIZE = 64\n", "BATCH_SIZE = 64\n" + block)
+
+
+def _glyph_optimizer(workspace: Path, *, wrong: bool) -> None:
+    """Point training at the reference optimizer whatever this vector's axis emitted.
+
+    glyph's ``optimizer`` axis selects the line: ``easy`` writes SGD at lr=1e-5 with a trailing
+    comment, ``medium`` SGD at lr=1e-4, ``hard`` AdamW at lr=1e-3 with weight decay. The reference
+    matched only the ``easy`` spelling by exact text, so two thirds of glyph vectors could not be
+    gated at all: the needle was absent, ``_replace`` raised, and the campaign blocked on
+    ``oracle_error`` for every one of them with the honest-but-useless diagnosis "reference is not
+    configured for this vector" - the reference existed per environment, not per vector.
+
+    Matching the assignment instead keeps the patch a real intervention at every axis value and
+    still fails closed. No match or an ambiguous one means the generator has changed shape and the
+    reference must be re-read, not guessed. And for the *reference* variant, a patch that would
+    leave the file unchanged is refused: certifying a program that already carries the answer
+    proves nothing about the agent. (The plausible-wrong variant may coincide with the pristine
+    line - a negative control that matches the untouched instance fails, which is the outcome the
+    gate requires.)
+    """
+    target = ("optimizer = optim.SGD(model.parameters(), lr=1e-4)" if wrong
+              else "optimizer = optim.Adam(model.parameters(), lr=1e-3)")
+    path = workspace / "train.py"
+    source = path.read_text(encoding="utf-8")
+    matches = list(_OPTIMIZER_ASSIGNMENT.finditer(source))
+    if len(matches) != 1:
+        raise ValueError(
+            "train.py: expected exactly one optimizer assignment, found "
+            f"{len(matches)}; reference is not configured for this vector"
+        )
+    matched = matches[0]
+    replacement = matched.group("indent") + target
+    if not wrong and matched.group(0) == replacement:
+        raise ValueError(
+            "train.py: the pristine instance already carries the reference optimizer; "
+            "this vector cannot be certified by it"
+        )
+    path.write_text(source[: matched.start()] + replacement + source[matched.end() :], encoding="utf-8")
+
+
 def _glyph(workspace: Path, *, wrong: bool) -> None:
+    """Capacity, a permutation-invariant head, and a path into the classifier that keeps both.
+
+    The rewrite is a classifier splice, and two of glyph's own axis values sit *upstream* of the
+    classifier where a splice cannot reach them. ``architecture=hard`` routes features through
+    SpatialEncoderBlock, whose forward is ``x.view(x.size(0), -1)`` (envs/glyph/config.yaml:40-54),
+    so a classifier that pools is handed 2-D and dies in ``F.adaptive_avg_pool2d``; and
+    ``symptom_mask=hard`` keeps the coordinate trap out of the classifier entirely, calling
+    ``x = SpatialPool(size=4)(x)`` in ``forward`` instead (envs/glyph/config.yaml:227-242), which
+    crops the feature map to 4x4 - the whole map at the 32x32 training resolution, one quadrant of
+    it at the 64x64 evaluation resolution. Splicing the classifier around either one is what the
+    gate rows reported: a training crash, or a head that pools a tensor the encoder had already
+    flattened.
+
+    So both calls are taken out of ``forward`` as part of the splice. Neither holds parameters, so
+    the checkpoint the judge loads is the same set of tensors, and removing them removes the trap
+    rather than hiding it. A call into the classifier that this reference does not recognize is
+    refused: pooling a head it cannot read would certify a program nobody has reasoned about.
+
+    ``architecture=hard`` is *not* what blocked the twelve gate rows, and an earlier version of
+    this docstring said it was.  Two vectors with ``architecture=hard, optimizer=hard`` graded
+    1.0 as they stand (``hard,hard,easy,easy,medium,medium`` and ``hard,hard,medium,medium,easy,easy``),
+    so the encoder call the splice removes was never the blocker; the axis that matters is whether
+    the vector injects a defect the splice cannot reach, upstream of the classifier, in the data
+    pipeline.  Those are ``red_herring=hard`` and ``symptom_mask=hard``, handled by
+    ``_glyph_augmentation`` and ``_glyph_training_resolution`` respectively.  Across all twelve
+    glyph vectors in that run, every blocked row has one or the other and every passing row has
+    neither, which is what the two helpers below exist for.
+    """
     _replace(workspace, "model.py", "nn.MaxPool2d(2),\n        )",
              "nn.MaxPool2d(2),\n            nn.Conv2d(64, 128, kernel_size=3, padding=1),\n"
              "            nn.ReLU(),\n        )")
     model = workspace / "model.py"
     source = model.read_text(encoding="utf-8")
+    for trap in ("        x = SpatialPool(size=4)(x)\n", "        x = self.encoder(x)\n"):
+        source = source.replace(trap, "")
     start = source.index("self.classifier = nn.Sequential(")
     end = source.index("\n\n    def forward", start)
     classifier = (
@@ -103,10 +321,17 @@ def _glyph(workspace: Path, *, wrong: bool) -> None:
         "            nn.Linear(128, num_classes)\n"
         "        )"
     )
-    model.write_text(source[:start] + classifier + source[end:], encoding="utf-8")
-    _replace(workspace, "train.py", "optimizer = optim.SGD(model.parameters(), lr=1e-5)",
-             "optimizer = optim.SGD(model.parameters(), lr=1e-4)" if wrong
-             else "optimizer = optim.Adam(model.parameters(), lr=1e-3)")
+    source = source[:start] + classifier + source[end:]
+    downstream = source[source.index("\n\n    def forward", start):]
+    if "SpatialPool(" in downstream or "self.encoder(" in downstream:
+        raise ValueError(
+            "model.py: a spatial crop or pre-flattening encoder still leads into the classifier, "
+            "so the pooled head would not certify this vector; reference is not configured for it"
+        )
+    model.write_text(source, encoding="utf-8")
+    _glyph_optimizer(workspace, wrong=wrong)
+    _glyph_augmentation(workspace, wrong=wrong)
+    _glyph_training_resolution(workspace, wrong=wrong)
     if not wrong:
         _replace(workspace, "train.py", "EPOCHS = 10", "EPOCHS = 18\ntorch.manual_seed(0)")
 
@@ -512,6 +737,26 @@ def validate_case(
                 result["variants"].append(row)
                 if not row["accepted"]:
                     result["reason"] = f"{label}_did_not_grade_as_expected"
+                    # The reason alone cannot distinguish an under-trained reference from a
+                    # reference whose patched program no longer computes what it is supposed
+                    # to, and those two call for opposite edits (more epochs versus a better
+                    # splice). Persist what the judge actually returned, so the campaign log
+                    # and instance_oracles.json can be acted on without rerunning the row.
+                    result["observed"] = {
+                        "variant": label,
+                        "done": bool(row.get("done")),
+                        "verdict": row.get("verdict"),
+                        "score": row.get("score"),
+                        "raw_accuracy": row.get("raw_accuracy"),
+                        "failure_mode": row.get("failure_mode"),
+                        "failed_checks": sorted(
+                            name for name, value in (row.get("checks") or {}).items()
+                            if value is False
+                        ),
+                        "notes": [str(note)[:200] for note in (row.get("notes") or [])][-3:],
+                        "elapsed_seconds": row.get("elapsed_seconds"),
+                        "stderr_tail": str(row.get("stderr_tail") or "")[-400:],
+                    }
                     break
             else:
                 result["status"] = "passed"
