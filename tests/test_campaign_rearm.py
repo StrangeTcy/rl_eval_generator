@@ -723,3 +723,59 @@ def test_the_verdict_inventory_is_read_from_the_tree_it_is_asked_about(tmp_path)
     assert why == "" and files == {"envs/glyph.yaml": "10"}
     missing, why = grading_context(str(tmp_path / "nowhere"))
     assert missing is None and "gate_context" in why
+
+
+def test_a_leg_never_arms_a_successor_on_a_lineage_another_leg_committed_last() -> None:
+    """Two legs on one lineage commit state in some order, and the *later* commit wins the name of
+    "latest artifact" regardless of which one has the fresher ledger. Measured on 2026-10-14: run 39
+    banked `189 / 189` gate rows at 03:51:33Z, run 41 committed at 07:57:37Z carrying `126 / 189` and
+    the pre-rebase pin, so the campaign moved backwards in both its gate and its code. Chaining onto
+    that is how a campaign loses work it already finished, so the leg that is not the tip declines."""
+    from tools.campaign_rearm import fork_verdict
+
+    ours = fork_verdict("38523801371", "38523801371", "2026-10-14T07:57:37Z")
+    assert ours["forked"] is False and "this leg owns" in ours["why"]
+
+    forked = fork_verdict("38523801371", "38510366006", "2026-10-14T07:39:18Z")
+    assert forked["forked"] is True
+    assert "38510366006" in forked["why"] and "38523801371" in forked["why"]
+    assert "126" not in forked["why"]  # it names the fact, not an interpretation of it
+
+    # A check that could not run must not be read as a fork: that would end the chain on a network
+    # blip, which is the opposite of the fail-open this tool is built to be.
+    for absent in (("", ""), ("", None), (None, "")):
+        assert fork_verdict("1", absent[0], absent[1])["forked"] is False
+    assert fork_verdict("", "38510366006", "x")["forked"] is False
+
+
+def test_the_state_artifact_reader_recognises_only_this_workflows_lineage(monkeypatch) -> None:
+    """`-state-` is shared by the covering campaigns on purpose, so ownership is settled by the run's
+    workflow id rather than by a filename prefix that two lineages both satisfy."""
+    from tools import campaign_rearm
+
+    # Run ids are long, and the reader relies on that to tell `-state-<run>` apart from anything a
+    # human might name by hand; these are the real shape.
+    artifacts = {
+        "artifacts": [
+            {"name": "mercury-pairwise-state-1111111111", "updated_at": "2026-10-14T09:00:00Z"},
+            {"name": "reasoning-atria-covering-state-2222222222", "updated_at": "2026-10-14T10:00:00Z"},
+            {"name": "mercury-pairwise-state-3333333333", "updated_at": "2026-10-14T11:00:00Z"},
+        ]
+    }
+    runs = {"1111111111": {"workflow": {"id": 77}}, "2222222222": {"workflow": {"id": 88}},
+            "3333333333": {"workflow": {"id": 88}}}
+
+    def fake_request(url, token, *, data=None, method=None):
+        if "/actions/artifacts" in url:
+            return 200, artifacts
+        for rid, body in runs.items():
+            if url.endswith(f"/actions/runs/{rid}"):
+                return 200, body
+        return 404, {"message": "nope"}
+
+    monkeypatch.setattr(campaign_rearm, "_request", fake_request)
+    owner, at, why = campaign_rearm.newest_state_owner("https://api", "o/r", "t", 77, "999")
+    assert (owner, at, why) == ("1111111111", "2026-10-14T09:00:00Z", "")
+    # And when this leg already owns it, the search stops there without resolving foreign runs.
+    owner, _at, _why = campaign_rearm.newest_state_owner("https://api", "o/r", "t", 77, "3333333333")
+    assert owner == "3333333333"

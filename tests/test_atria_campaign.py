@@ -399,3 +399,32 @@ def test_a_state_contract_refusal_does_not_write_the_gate_it_cannot_pass(tmp_pat
     (tmp_path / "state_contract_stop.json").write_text(json.dumps(same), encoding="utf-8")
     assert atria_campaign._state_contract_stop(tmp_path, detail) is True
     assert json.loads((tmp_path / "state_contract_stop.json").read_text(encoding="utf-8"))["count"] == 2
+
+
+def test_an_inherited_terminal_marker_is_cleared_before_the_leg_can_refuse_anything(tmp_path) -> None:
+    """A leg that dies on the way to the campaign must not re-publish the stop it came to clear.
+
+    That was the whole of Atria's second death: the marker's cause had already been fixed in code, but
+    every leg exited early enough to leave the fossil in place, so the next leg refused it and left it
+    there again. The clear is therefore the first act of the leg, and the assertion below is on order
+    rather than behaviour, because that is the property that broke.
+    """
+    import json as _json
+    from tools.atria_campaign import _clear_inherited_terminal_marker
+
+    out = tmp_path / "campaign"
+    out.mkdir()
+    (out / "wrapper_failed.json").write_text(
+        _json.dumps({"pause_reason": "wrapper_exception", "detail": "a stale refusal"}), encoding="utf-8"
+    )
+    (out / "suite_checkpoint.json").write_text("{}", encoding="utf-8")
+    assert _clear_inherited_terminal_marker(out) is True
+    assert not (out / "wrapper_failed.json").exists()
+    assert (out / "suite_checkpoint.json").exists()  # only the marker, never the ledger
+    # Nothing to clear, and a directory that does not exist yet, are both non-events.
+    assert _clear_inherited_terminal_marker(out) is True
+    assert _clear_inherited_terminal_marker(tmp_path / "absent") is True
+
+    source = (Path(__file__).resolve().parents[1] / "tools" / "atria_campaign.py").read_text(encoding="utf-8")
+    body = source[source.index("    args = parser.parse_args(argv)"):source.index("        profile = _load_yaml(args.profile)")]
+    assert "_clear_inherited_terminal_marker(output)" in body, body[-500:]

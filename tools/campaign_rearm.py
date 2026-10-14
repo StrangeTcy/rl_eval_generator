@@ -547,6 +547,82 @@ def plan_landing(api: str, repo: str, token: str | None, pin: str, cwd: str,
                            t1_incomplete=t1_incomplete, unavailable=why)
 
 
+
+def _newest_state_owner_for(args: Any, api: str, token: str | None) -> tuple[tuple[str, str, str], Any]:
+    """`newest_state_owner` bound to the arguments this step was invoked with, with the workflow id
+    resolved by name (the launcher passes a display name, never a file path)."""
+    workflow, _ = find_workflow(api, args.repo, token, args.workflow)
+    if workflow is None:
+        return ("", "", "the workflow could not be resolved by name"), None
+    owner, at, why = newest_state_owner(api, args.repo, token, workflow["id"], args.run_id)
+    return (owner, at, why), workflow
+
+
+def fork_verdict(our_run: str, newest_owner: str, newest_at: str) -> dict[str, Any]:
+    """Was the newest committed state written by *this* leg?
+
+    `Upload ... campaign state` runs just before this step, so in the normal case the newest
+    state artifact belongs to this run and there is nothing to say. If it belongs to a different
+    run of the same workflow, two legs were on one lineage and the other one committed state while
+    this one ran: the checkpoint on `main` is no longer the one this leg produced, and a successor
+    armed here would resume a state that has already been overwritten - which is how Mercury lost a
+    finished gate on 2026-10-14 (run 39 banked `189 / 189` at 03:51:33Z, run 41 committed at
+    07:57:37Z carrying `126 / 189` and the pre-rebase pin, so `Leg code` went backwards from
+    `3b0cd0a` to `ffcdc78`). Chaining is declined and named; the scheduled tick reads whichever state
+    is newest, and a human gets a sentence to act on instead of a silently diverging ledger.
+    """
+    if not our_run or not newest_owner:
+        return {"forked": False, "why": "not checked"}
+    if newest_owner == str(our_run):
+        return {"forked": False, "why": "this leg owns the newest state"}
+    return {
+        "forked": True,
+        "why": (
+            f"the newest state artifact for this workflow belongs to run {newest_owner}, not this leg "
+            f"({our_run}); it was committed at {newest_at or 'an unknown time'}, so another leg wrote "
+            "state while this one ran and this leg's ledger is not the tip"
+        ),
+    }
+
+
+def newest_state_owner(api: str, repo: str, token: str | None, workflow_id: Any,
+                       our_run: str, *, state_marker: str = "-state-") -> tuple[str, str, str]:
+    """The run id behind the newest state artifact that belongs to *this* workflow, if it can be read.
+
+    Only up to five candidates are resolved through `/actions/runs/{id}`, because an artifact name is
+    the only place the run id is recorded and the covering campaigns upload same-shaped names on
+    purpose; their artifacts must not be mistaken for a fork of this lineage.
+    """
+    if not (api and repo and token):
+        return "", "", "no API endpoint, repository or credential"
+    status, body = _request(f"{api}/repos/{repo}/actions/artifacts?per_page=100", token)
+    if status != 200 or not isinstance(body, dict):
+        return "", "", f"artifact list returned HTTP {status}"
+    candidates: list[tuple[str, str]] = []
+    for entry in body.get("artifacts") or []:
+        name = str(entry.get("name") or "")
+        if state_marker not in name or entry.get("expired"):
+            continue
+        digits = ""
+        for char in reversed(name):
+            if char.isdigit():
+                digits = char + digits
+            else:
+                break
+        if len(digits) >= 6:
+            candidates.append((str(entry.get("updated_at") or ""), digits))
+    if not candidates:
+        return "", "", "no state artifacts were listed"
+    candidates.sort()
+    for _at, owner in reversed(candidates[-5:]):
+        if owner == str(our_run):
+            return owner, _at, ""
+        rstatus, run = _request(f"{api}/actions/runs/{owner}", token)
+        if rstatus == 200 and isinstance(run, dict) and str(((run.get("workflow") or {}).get("id"))) == str(workflow_id):
+            return owner, _at, ""
+    return "", "", "no state artifact from this workflow could be attributed to a run"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--report", required=True, help="path to the leg's campaign_report.json")
@@ -574,6 +650,8 @@ def main(argv: list[str] | None = None) -> int:
         help="run id to leave out of the busy check; defaults to this leg, which is never a reason to stand down",
     )
     parser.add_argument("--dry-run", action="store_true", help="print the decision without dispatching")
+    parser.add_argument("--run-id", default=os.environ.get("GITHUB_RUN_ID", ""),
+                        help="this leg's run id; the newest state artifact must belong to it")
     args = parser.parse_args(argv)
 
     api = args.api_url.rstrip("/")
@@ -652,6 +730,12 @@ def main(argv: list[str] | None = None) -> int:
         # announcement, this reaches the Checks UI and the jobs API.
         print(f"campaign re-arm skipped: {reason}")
         print(f"::warning::campaign re-arm declined: {reason}")
+        return 0
+    (tip_owner, tip_at, _tip_why), _workflow_for_tip = _newest_state_owner_for(args, api, token)
+    fork = fork_verdict(args.run_id, tip_owner, tip_at)
+    if fork["forked"]:
+        print(f"campaign re-arm skipped: {fork['why']}")
+        print(f"::warning::campaign re-arm declined: {fork['why']}")
         return 0
     landing = plan_landing(api, args.repo, token or None, args.ref, os.getcwd(),
                            state_dir=os.path.dirname(os.path.abspath(args.report)))

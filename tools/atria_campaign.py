@@ -1218,6 +1218,33 @@ def _state_contract_stop(output: Path, detail: str) -> bool:
     return False
 
 
+def _clear_inherited_terminal_marker(output: Path) -> bool:
+    """Drop a `wrapper_failed.json` an earlier leg left behind, before this leg can refuse anything.
+
+    The position is the whole point. The clear used to sit after the profile load, the validation and
+    the reset decision, so a leg that died on the way there - Atria run 25 at 2026-10-14T06:13:08Z,
+    exit 2 in 2m27s - re-published the very marker it had come to clear, and run 26 then refused that
+    state with `operator stop: wrapper_exception` and died before the same line. Each leg inherits the
+    fossil, refuses it, re-uploads it: an unbounded cycle in which the recorded cause has already been
+    fixed twice over in code and nobody can see that, because the marker says what the *first* leg
+    thought.
+
+    A marker written by this leg is untouched, because every writer of one runs after this call. The
+    operator's lever for lifting a legitimate stop stays exactly where it was - a dispatch input, not
+    a silent clear.
+    """
+    try:
+        # No `mkdir` here: this call deliberately runs before `_should_reset_output`, and creating the
+        # directory would show that decision an existing-but-empty output to consider, which is how a
+        # fresh dispatch is refused. `missing_ok=True` also covers an output directory that is not
+        # there yet - a FileNotFoundError is exactly what "no inherited marker" means.
+        (output / "wrapper_failed.json").unlink(missing_ok=True)
+    except OSError:
+        return False
+    return True
+
+
+
 def _mark_terminal(output: Path, reason: str, detail: str) -> None:
     """Record a non-resumable end so the supervisor stops instead of
     restarting a deterministically failing wrapper forever.  The marker is
@@ -1676,6 +1703,7 @@ def main(argv: list[str] | None = None) -> int:
     output = args.out
     profile: dict[str, Any] = {}
     manifest: dict[str, Any] = {}
+    _clear_inherited_terminal_marker(output)
     try:
         started = time.monotonic()
         profile = _load_yaml(args.profile)
@@ -1690,11 +1718,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             output.mkdir(parents=True, exist_ok=True)
 
-        # A terminal-failure marker from a previous dispatch is cleared at
-        # the start of every run: one automatic restart is allowed, a repeat
-        # failure rewrites it and the supervisor stands down for an operator.
+        # `marker` is this leg's own terminal record; the inherited one was already cleared above,
+        # before any refusal on this path could re-publish it.
         marker = output / "wrapper_failed.json"
-        marker.unlink(missing_ok=True)
 
         # Rehearsal mode: custom provider, no real API calls
         if profile.get("provider") == "custom" and profile.get("name") in {"rehearsal", "rehearsal_autonomous"}:
