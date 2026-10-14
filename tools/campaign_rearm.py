@@ -173,13 +173,14 @@ def _floor_state(report: object, newest_run: object, now: datetime,
 
 def handover_wait(report: object, newest_run: object, now: datetime, *,
                   min_interval_seconds: int | None = None,
-                  sleep_cap: int | None = DEFAULT_SLEEP_CAP) -> int:
+                  sleep_cap: int | None = DEFAULT_SLEEP_CAP,
+                  ledger_governs: bool = False) -> int:
     """Seconds this leg should sit before asking, or 0 when no wait could make a successor acceptable."""
     state = _floor_state(report, newest_run, now, min_interval_seconds)
     if state is None:
         return 0
     reason = str(report.get("pause_reason") or "")
-    if reason in LEDGER_GOVERNING_REASONS:
+    if reason in LEDGER_GOVERNING_REASONS and not ledger_governs:
         return 0
     floor, age = state
     wait = int(floor - age)
@@ -188,6 +189,46 @@ def handover_wait(report: object, newest_run: object, now: datetime, *,
     if sleep_cap is not None and wait > int(sleep_cap):
         return 0
     return wait
+
+
+DEFAULT_CRON_INTERVAL_SECONDS = 1800
+
+
+def cron_delivery_gap(newest_schedule_run, now: datetime) -> int | None:
+    """Seconds since the most recent *other* scheduled run of this workflow was created, or None."""
+    if not isinstance(newest_schedule_run, Mapping):
+        return None
+    at = _parse_timestamp(newest_schedule_run.get("created_at")) or _parse_timestamp(
+        newest_schedule_run.get("updated_at"))
+    if at is None:
+        return None
+    return max(0, int((now - at).total_seconds()))
+
+
+def cron_is_not_delivering(newest_schedule_run, now: datetime, *, readable: bool,
+                           interval: int = DEFAULT_CRON_INTERVAL_SECONDS,
+                           tolerance: int = 2) -> bool:
+    """Whether the fallback this tool would otherwise defer to has stopped arriving.
+
+    Both pairwise workflows declare `schedule: - cron: "13,43 * * * *"`, and that is what three of the
+    four stand-down rules lean on: a refused handover is survivable if a tick shows up in half an hour.
+    Measured on the runs list on 2026-10-14, it does not. Mercury's scheduled legs were created
+    06:42:34Z, 12:27:22Z and 17:37:07Z - 5h45m and 5h10m apart, against a 30-minute declaration;
+    Atria's at 06:10:45Z, 11:52:07Z and 17:07:10Z, the same shape. The repository already documents
+    this ("after run 36791154490 ended at 04:35 UTC nothing ran for 2+ hours"), and the campaign
+    died on it twice today: run 44 paused at 18:17 with a ledger reason and stood down *for a cron
+    that had not run in five hours*.
+
+    So an absent or stale scheduled sibling is read as "nothing is coming", and a leg with a pause the
+    ledger meters arms its own successor on the ordinary floor instead. An unreadable run list never
+    escalates: the absence of evidence about cron is not evidence of absence.
+    """
+    if not readable:
+        return False
+    gap = cron_delivery_gap(newest_schedule_run, now)
+    if gap is None:
+        return not isinstance(newest_schedule_run, Mapping)
+    return gap >= int(interval) * int(tolerance)
 
 
 def is_unstarted_scheduled_run(run) -> bool:
@@ -221,6 +262,7 @@ def decide_rearm(
     was_cancelled: bool = False,
     sleep_cap: int | None = DEFAULT_SLEEP_CAP,
     run_list_readable: bool = False,
+    newest_schedule_run: object = None,
 ) -> tuple[bool, str]:
     """Return (dispatch?, reason). Pure: no network, no clock, no filesystem, so every branch
     is testable. Order matters: the stops a human would use are checked first, so a cancelled
@@ -244,10 +286,18 @@ def decide_rearm(
     if not resumable:
         return False, f"pause_reason={reason!r} is not resumable; a successor leg would refuse this state"
     if reason in LEDGER_GOVERNING_REASONS:
-        return False, (
-            f"pause_reason={reason!r} is metered by the campaign's per-case attempt ledger, which the next "
-            "leg would consume on the same failing case without producing the row; the scheduled tick is "
-            "the wait that can actually help here"
+        if not cron_is_not_delivering(newest_schedule_run, now, readable=run_list_readable):
+            return False, (
+                f"pause_reason={reason!r} is metered by the campaign's per-case attempt ledger, which the "
+                "next leg would consume on the same failing case without producing the row; the scheduled "
+                "tick is the wait that can actually help here"
+            )
+        gap = cron_delivery_gap(newest_schedule_run, now)
+        print(
+            "campaign re-arm: the ledger stand-down is lifted, because the tick it defers to has not "
+            f"arrived - this workflow's newest scheduled sibling run was created "
+            + (f"{gap} s ago, against a {DEFAULT_CRON_INTERVAL_SECONDS} s cron"
+               if gap is not None else "not at all")
         )
     if chain_depth >= max_chain_depth:
         return False, (
@@ -801,6 +851,7 @@ def main(argv: list[str] | None = None) -> int:
         report = None
 
     newest_run: Mapping[str, Any] | None = None
+    newest_schedule_run: Mapping[str, Any] | None = None
     workflow: dict | None = None
     # Three states, and the difference between the last two is what this file exists to get right: the
     # list was never asked for (nothing to conclude), it was asked for and failed (refuse to dispatch
@@ -820,6 +871,8 @@ def main(argv: list[str] | None = None) -> int:
             if listed and not siblings:
                 print("campaign re-arm: the only leg on record is this one, so it does not count as busy")
             newest_run = siblings[0] if siblings else None
+            newest_schedule_run = next(
+                (run for run in siblings if str(run.get("event") or "") == "schedule"), None)
 
     now = datetime.now(timezone.utc)
     decision, reason = decide_rearm(
@@ -836,12 +889,15 @@ def main(argv: list[str] | None = None) -> int:
         stage_failed=args.stage_failed,
         was_cancelled=args.cancelled,
         run_list_readable=run_list_readable,
+        newest_schedule_run=newest_schedule_run,
     )
     if not decision:
         # The refusal may be purely temporal, in which case the fix is to wait, not to hand the
         # campaign back to a schedule that delivered three ticks today.
         wait = handover_wait(report, newest_run, now, min_interval_seconds=args.min_interval_seconds,
-                             sleep_cap=args.sleep_cap)
+                             sleep_cap=args.sleep_cap,
+                             ledger_governs=cron_is_not_delivering(
+                                 newest_schedule_run, now, readable=run_list_readable))
         if wait:
             print(f"campaign re-arm: a successor would be refused for another {wait} s, so this leg "
                   f"is sitting it out before dispatching", flush=True)
@@ -860,6 +916,7 @@ def main(argv: list[str] | None = None) -> int:
                 stage_failed=args.stage_failed,
                 was_cancelled=args.cancelled,
                 run_list_readable=run_list_readable,
+                newest_schedule_run=newest_schedule_run,
             )
     if not decision:
         # A decline is a decision, and it must not live only in a log nobody opens: like the refused-tick
