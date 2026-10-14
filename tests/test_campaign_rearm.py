@@ -100,6 +100,29 @@ def test_the_three_stops_a_human_uses_are_checked_before_anything_else() -> None
     assert not ok and "stopped on purpose" in reason
 
 
+
+def test_a_terminal_marker_decline_names_the_stop_it_is_honouring(tmp_path) -> None:
+    """The marker is the campaign's only written account of why it stood down, and the state artifact
+    that normally carries it is unopenable from outside a runner - so the re-arm's own line has to
+    carry it. A marker whose JSON cannot be read still stops the chain."""
+    import json as _json
+    from pathlib import Path as _P
+
+    written = tmp_path / "wrapper_failed.json"
+    written.write_text(_json.dumps({
+        "pause_reason": "wrapper_exception",
+        "detail": "campaign intent differs from the restored state (changed: gate_context_sha)",
+    }), encoding="utf-8")
+    ok, reason = _decide(marker_paths=[str(written)])
+    assert not ok
+    assert "stopped on purpose" in reason
+    assert "wrapper_exception" in reason and "gate_context_sha" in reason, reason
+
+    unreadable = tmp_path / "wrapper_failed.json"
+    unreadable.write_text("{not json", encoding="utf-8")
+    ok, reason = _decide(marker_paths=[str(unreadable)])
+    assert not ok and "unreadable" in reason and "stopped on purpose" in reason, reason
+
 def test_only_a_resumable_pause_rearms_and_the_legs_own_flag_wins() -> None:
     for report, needle in (({"status": "completed", "pause_reason": None}, "'completed'"),
                            ({"status": "paused", "pause_reason": "infrastructure_error_retries_exhausted", "resumable": False}, "not resumable"),

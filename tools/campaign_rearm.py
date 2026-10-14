@@ -211,7 +211,7 @@ def decide_rearm(
         return False, "the state upload was refused because the checkpoint regressed; never continue from a regressed state"
     for marker in marker_paths:
         if marker and os.path.exists(marker):
-            return False, f"terminal marker {os.path.basename(marker)} is present, so the campaign stopped on purpose"
+            return False, _marker_decline(marker)
     if not isinstance(report, Mapping) or not report:
         return False, "no campaign report was written, so there is nothing to prove a resumable pause"
     status = str(report.get("status") or "")
@@ -271,6 +271,37 @@ def decide_rearm(
             + (f" - and sitting it out is off: a {wait} s wait exceeds --sleep-cap={sleep_cap}" if capped else "")
         )
     return True, f"pause_reason={reason!r} after a {age} s idle gap at chain_depth={chain_depth}"
+
+
+def _marker_decline(path: str) -> str:
+    """Say what the terminal marker recorded, in the line the operator actually sees.
+
+    The marker's contents otherwise live only inside the campaign's own state artifact, and an
+    artifact's bytes are not readable from outside a runner: `archive_download_url` hands off to a
+    host a diagnosing environment cannot reach (measured 2026-10-13: HTTP 404 from this sandbox for
+    runs 38473650121 and 38473489396). So a decline that said only "stopped on purpose" left the
+    cause unreadable - Mercury run 37 and Atria run 22 both declined that way, while the actionable
+    fact, `wrapper_exception: campaign intent differs from the restored state (changed:
+    gate_context_sha)`, sat in a zip nobody could open. The marker is written by
+    `tools/atria_campaign.py` with `pause_reason` and a redacted `detail`, so both are quoted here
+    and the phrase the chain stands down on is kept in every branch, unreadable file included.
+    """
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            recorded = json.load(handle)
+    except (OSError, ValueError):
+        return f"terminal marker {name} is present but unreadable, so the campaign stopped on purpose"
+    if not isinstance(recorded, Mapping):
+        return f"terminal marker {name} is present but holds no record, so the campaign stopped on purpose"
+    reason = str(recorded.get("pause_reason") or "unrecorded")
+    detail = " ".join(str(recorded.get("detail") or "").split())[:240]
+    return (
+        f"terminal marker {name} is present (pause_reason={reason}"
+        + (f"; {detail}" if detail else "")
+        + "), so the campaign stopped on purpose"
+    )
+
 
 
 def _request(url: str, token: str | None, *, data: bytes | None = None, method: str | None = None) -> tuple[int, Any]:
