@@ -976,3 +976,55 @@ def test_a_ledger_stand_down_is_lifted_when_the_cron_it_defers_to_is_not_arrivin
     just_ended = {"status": "completed", "updated_at": iso(timedelta(seconds=100))}
     assert handover_wait(ledger, just_ended, NOW) == 0
     assert handover_wait(ledger, just_ended, NOW, ledger_governs=True) == 1100
+
+
+def test_a_leg_that_ran_newer_code_than_its_checkpoint_leaves_it_behind() -> None:
+    """The rollback that un-lands every fix: a resume leg takes its ref from the checkpoint, not the run.
+
+    Mercury run 43 ran `6a24e77` and banked 75 gate rows; its checkpoint still recorded `ffcdc78`, so
+    run 44 checked `ffcdc78` out and lost the per-case closure rule four attempts before a pause nothing
+    may resume. A repair is offered only for a fast-forward whose two trees agree on all 297
+    verdict-relevant files; anything else is announced, never paid for by this tool.
+    """
+    verdict = campaign_rearm.pin_repair_verdict
+    equal = {"tools/run_suite.py": "a", "envs/interventions.yaml": "b"}
+    out = verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                  fast_forward_ok=True, marker_present=False, t1_incomplete=False)
+    assert out["repair"] is True and out["differing"] == [], out
+
+    refused = verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal),
+                      head_ctx={**equal, "tools/run_suite.py": "z"}, fast_forward_ok=True,
+                      marker_present=False, t1_incomplete=False)
+    assert refused["repair"] is False and refused["differing"] == ["tools/run_suite.py"], refused
+
+    # Nothing to do, and nothing to say, when the pin already matches the leg.
+    assert verdict(recorded="2" * 40, head="2" * 40, rec_ctx=None, head_ctx=None, fast_forward_ok=False,
+                   marker_present=False, t1_incomplete=False)["why"] == "the pin is already sticky"
+    # And four separate reasons not to touch the pin, each its own answer.
+    assert verdict(recorded="", head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                   fast_forward_ok=True, marker_present=False, t1_incomplete=False)["why"] == \
+        "no recorded commit or no leg sha to repair with"
+    assert verdict(recorded="1" * 40, head="2" * 40, rec_ctx=None, head_ctx=None, fast_forward_ok=True,
+                   marker_present=False,
+                   t1_incomplete=False)["why"] == "a verdict inventory could not be read at one of the two commits"
+    assert verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                   fast_forward_ok=True, marker_present=True,
+                   t1_incomplete=False)["why"] == "a terminal marker or an interrupted T1 is in the carried state"
+    assert verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                   fast_forward_ok=True, marker_present=False, t1_incomplete=False,
+                   carries_waiver=False)["why"] == "the carried code cannot accept a re-authored intent"
+    assert verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                   fast_forward_ok=False, marker_present=False, t1_incomplete=False)["why"] == \
+        "the two commits are not a fast-forward"
+
+    # The reader of the checkpoint, and the CLI that acts on it.
+    import json as _json
+    from pathlib import Path as _P
+    state = _P("/tmp/pin-repair-state")
+    state.mkdir(exist_ok=True)
+    (state / "suite_checkpoint.json").write_text(_json.dumps({"run": {"manifest_commit": "f" * 40}}))
+    assert campaign_rearm.recorded_manifest_commit(str(state)) == "f" * 40
+    (state / "suite_checkpoint.json").write_text("{")
+    assert campaign_rearm.recorded_manifest_commit(str(state)) == ""
+    source = inspect.getsource(campaign_rearm.main)
+    assert "plan_pin_repair" in source and "campaign re-arm repaired the pin" in inspect.getsource(campaign_rearm)
