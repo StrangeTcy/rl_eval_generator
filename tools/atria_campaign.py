@@ -241,21 +241,41 @@ def _record_campaign_intent(
         comparable = {key: existing.get(key) for key in expected}
         if comparable != expected:
             drifted = sorted(key for key in expected if comparable.get(key) != expected[key])
-            if allow_gate_context_rebase and set(drifted) <= {"gate_context_sha", "manifest_commit"}:
-                # An explicit operator rebase: the grading code moved and nothing else did. The
-                # digest exists to stop a campaign resuming against a verdict produced by other
-                # rules, and that is precisely the reason a *fix* to the reference or the checks
-                # used to require a fresh dispatch - which discards the paid T1 result, the banked
-                # gate rows and the ceiling counters, and then re-bills T1. Here the lineage keeps
-                # its ledger and records what moved, so the rows written after this point are
-                # attributable to the new context without pretending they were always comparable.
-                # Only a manual dispatch can reach this branch, and only for this one field:
-                # provider, model, endpoint, effort, mode and manifest identity still refuse, and a
-                # scheduled tick never gets to decide that its own code context may change.
-                if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
-                    raise ValueError(
-                        "campaign intent drifted in gate context but this is not an explicit "
-                        f"workflow_dispatch; refusing to re-pin {drifted} from a {os.environ.get('GITHUB_EVENT_NAME') or 'bare'} run"
+            if set(drifted) <= {"gate_context_sha", "manifest_commit"}:
+                # The grading code moved and nothing else did. The digest exists to stop a campaign
+                # resuming against a verdict produced by other rules - and it still does, in the place
+                # where a verdict is actually reused: `run_suite` re-grades unless the stored row's
+                # `gate_context_sha` equals the current one (tools/run_suite.py:837, :855), and
+                # `tools/inherit_campaign_state.py:257` drops rows for the same reason. What this
+                # check adds is only whether the *leg* proceeds, so refusing here cannot protect a
+                # verdict; it can only halt the lineage.
+                #
+                # Halting was measured doing exactly that, twice, on 2026-10-13. A leg dispatched
+                # with `rebase_onto_ref` accepts the drift (the operator named it), re-authors this
+                # file with its own digest, and if it then dies mid-gate on `max_wall_seconds` it
+                # leaves the campaign pinned to the commit it started from - the successor it armed,
+                # and every scheduled tick after it, run the *old* digest, see a state authored by the
+                # new one, and refuse. Mercury run 37 (2026-10-13T23:17:26Z) and Atria run 22
+                # (21:52:09Z) each ended that way, each writing `wrapper_failed.json` with
+                # `pause_reason=wrapper_exception` for a drift that is not a crash and not a verdict,
+                # which put both campaigns behind an operator acknowledgement that a tick cannot give
+                # and a human must give again on every leg.
+                #
+                # So the drift is accepted for any leg that finds it, and the authority is recorded:
+                # an operator rebase says so, and a leg that merely inherits a state a rebase moved
+                # says that. Provider, model, endpoint, wire surface, effort, execution mode and
+                # manifest identity still refuse, from any event, unchanged.
+                authorized_by = (
+                    "operator rebase dispatch"
+                    if allow_gate_context_rebase
+                    else f"inherited: the carried state was authored in another grading context "
+                         f"({os.environ.get('GITHUB_EVENT_NAME') or 'bare'} run)"
+                )
+                if not allow_gate_context_rebase:
+                    print(
+                        "campaign intent re-pinned to this leg's grading context "
+                        f"(changed: {', '.join(drifted)}); banked gate rows are re-graded, not "
+                        "trusted, and the ledger, the paid T1 result and the ceiling counters carry"
                     )
                 value = {
                     **existing,
@@ -263,6 +283,7 @@ def _record_campaign_intent(
                     "rebased_from_gate_context_sha": existing.get("gate_context_sha"),
                     "rebased_at": _utc_now(),
                     "rebased_by": os.environ.get("GITHUB_WORKFLOW") or "manual",
+                    "rebase_authorized_by": authorized_by,
                 }
                 if "manifest_commit" in drifted:
                     # Both halves of the move are recorded, because the pair is what a reader needs: the
@@ -1625,12 +1646,13 @@ def main(argv: list[str] | None = None) -> int:
         "--rebase-intent", action="store_true",
         help=(
             "operator authorization to keep this campaign's ledger while its grading-code digest "
-            "moves: accepted only when gate_context_sha is the sole field that changed, only on an "
-            "explicit workflow_dispatch, and it rewrites the intent with the prior digest recorded "
-            "as rebased_from_gate_context_sha. A provider, model, endpoint, effort, execution mode, "
-            "manifest or profile difference is still refused. Without this flag the campaign refuses "
-            "to resume at a new code context, which is what previously forced a fresh dispatch and a "
-            "second paid T1."
+            "moves: accepted only when gate_context_sha is the sole field that changed, and it "
+            "rewrites the intent with the prior digest recorded as rebased_from_gate_context_sha. A "
+            "provider, model, endpoint, effort, execution mode, manifest or profile difference is "
+            "still refused. A leg without this flag that finds only the grading context has moved "
+            "carries the ledger too and records that the move was inherited rather than authorised - "
+            "the state can already have been re-authored by the rebase that preceded it, and halting "
+            "the successor for that stopped both campaigns on 2026-10-13."
         ),
     )
     parser.add_argument(
