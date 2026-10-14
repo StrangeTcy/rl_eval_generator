@@ -32,9 +32,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
+import tarfile
+import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
@@ -335,21 +339,27 @@ def find_workflow(api: str, repo: str, token: str | None, name: str) -> tuple[di
     return None, {"error": f"no workflow named {name!r} in {repo}"}
 
 
-def successor_inputs(ref: str, chain_depth: int) -> dict[str, Any]:
+def successor_inputs(ref: str, chain_depth: int, rebase_ref: str = "") -> dict[str, Any]:
     """Exactly the manual click, plus the counter the cap reads. Nothing else.
 
-    ``rebase_onto_ref`` is never set here, and no execution mode is passed, so a chained leg can
-    only resume what is already authorized to bill.
+    ``execution_mode`` is never passed, so a chained leg can only resume what is already authorized
+    to bill, and ``clear_wrapper_stop`` is never passed, so an operator gate stays an operator's.
+    ``rebase_ref`` is set only when the caller has *proved* the two trees agree on every
+    verdict-producing file, which is the one case where moving the pin cannot change a measurement:
+    see ``plan_landing``. It carries a full commit SHA rather than a branch name, so the successor
+    runs the tree that was checked, not whatever the branch says an hour later.
     """
     inputs: dict[str, Any] = {"resume_previous": True, "chain_depth": str(int(chain_depth) + 1)}
     if ref:
         inputs["ref"] = ref
+    if rebase_ref:
+        inputs["rebase_onto_ref"] = rebase_ref
     return inputs
 
 
 def dispatch_next_leg(api: str, repo: str, token: str | None, workflow_id: Any, ref: str,
-                      chain_depth: int = 0) -> tuple[bool, str]:
-    inputs = successor_inputs(ref, chain_depth)
+                      chain_depth: int = 0, rebase_ref: str = "") -> tuple[bool, str]:
+    inputs = successor_inputs(ref, chain_depth, rebase_ref)
     payload = json.dumps({"inputs": inputs}).encode("utf-8")
     status, body = _request(
         f"{api}/repos/{repo}/actions/workflows/{workflow_id}/dispatches",
@@ -360,6 +370,181 @@ def dispatch_next_leg(api: str, repo: str, token: str | None, workflow_id: Any, 
     if status in (200, 201, 202, 204):
         return True, f"dispatch accepted (HTTP {status}) with inputs {sorted(inputs)}"
     return False, f"dispatch refused (HTTP {status}): {str(body.get('message'))[:180]}"
+
+
+
+# --------------------------------------------------------------------- landing
+#
+# A campaign leg runs the code frozen in `campaign_ref.txt`, and that pin is the reason a fix has to
+# be carried to the campaign by hand: on 2026-10-14 Mercury was parked at `ffcdc78` while the branch
+# tip already held the rule that would have unblocked it, and the only lever the launcher offers is a
+# `rebase_onto_ref` dispatch, which re-grades the exact-instance gate because the grading context
+# changed with it. That cost is what makes the human in the loop, and it is only real when a
+# *verdict-producing* file differs. This block measures the difference instead of assuming it: when
+# the upstream tip changes nothing the gate depends on, re-pinning the successor is free and the
+# re-arm does it; when it changes a verdict, the landing stays an operator's decision and the leg
+# says so, with the count.
+
+def _run(argv: list[str], cwd: str | None = None, timeout: int = 180) -> tuple[int, str]:
+    """`git`/`python` without a shell, and never an exception: a failed check is information."""
+    try:
+        completed = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return 127, f"{type(exc).__name__}: {exc}"
+    return completed.returncode, ((completed.stdout or "") + (completed.stderr or "")).strip()
+
+
+def grading_context(tree: str) -> tuple[dict[str, str] | None, str]:
+    """The verdict-file digests of a working tree, asked of that tree's own `tools/gate_context.py`.
+
+    Calling the tree's copy rather than importing this one is the point: `ROOT` is derived from the
+    file's own location, so the digest of the tip is computed by the tip's rules, and a repository
+    that changes what it considers verdict-relevant changes this check with it. It raises if a
+    declared input is missing, so a partial tree reports itself as unavailable instead of as free.
+    """
+    script = os.path.join(tree, "tools", "gate_context.py")
+    if not os.path.isfile(script):
+        return None, f"no tools/gate_context.py under {tree}"
+    code, out = _run([sys.executable or "python3", script, "--json"], cwd=tree)
+    if code != 0:
+        return None, (out[:200] or "gate_context exited non-zero")
+    try:
+        files = json.loads(out).get("files")
+    except (ValueError, AttributeError):
+        return None, "gate_context --json did not parse"
+    if not isinstance(files, dict):
+        return None, "gate_context --json carried no file inventory"
+    return {str(k): str(v) for k, v in files.items()}, ""
+
+
+def fetch_tree(cwd: str, revision: str, destination: str) -> tuple[bool, str]:
+    """Materialise `revision` into `destination` from the checkout's own object store."""
+    code, out = _run(["git", "-C", cwd, "archive", "--format=tar", "-o",
+                      os.path.join(destination, "tip.tar"), revision])
+    if code != 0:
+        return False, f"git archive {revision[:12]}: {out[:180]}"
+    tar_path = os.path.join(destination, "tip.tar")
+    try:
+        with tarfile.open(tar_path) as archive:
+            # No `filter="data"`: that keyword is 3.12 and the runners install 3.11, where a
+            # TypeError here would read as "the landing check is unavailable" forever. The
+            # equivalent guard is explicit - refuse anything that would leave the directory.
+            root = os.path.realpath(destination)
+            for member in archive.getmembers():
+                target = os.path.realpath(os.path.join(destination, member.name))
+                if not target.startswith(root + os.sep) or member.issym() or member.islnk():
+                    return False, f"archive carried an unsafe member: {member.name[:80]}"
+            archive.extractall(destination)
+    except (OSError, tarfile.TarError) as exc:
+        return False, f"extract: {type(exc).__name__}: {exc}"
+    return True, ""
+
+
+def upstream_tip(api: str, repo: str, token: str | None, pin: str) -> tuple[dict | None, str]:
+    """The branch whose tip contains this leg's commit and is ahead of it, if any.
+
+    `status == "ahead"` is the ancestry authority the campaign already uses elsewhere: a branch that
+    has diverged is not a landing, it is a merge, and a merge is not this leg's business.
+    """
+    if not (api and repo and token and pin):
+        return None, "no API endpoint, repository, token or recorded pin"
+    status, body = _request(f"{api}/repos/{repo}/branches?per_page=100", token)
+    if status != 200:
+        return None, f"branch list returned HTTP {status}"
+    best: dict | None = None
+    entries = body.get("branches") if isinstance(body, dict) else body
+    for entry in entries or []:
+        name = str(entry.get("name") or "")
+        if not name or name == pin:
+            continue
+        cstatus, cmp = _request(
+            f"{api}/repos/{repo}/compare/{urllib.parse.quote(pin, safe='')}"
+            f"...{urllib.parse.quote(name, safe='')}", token)
+        if cstatus != 200 or not isinstance(cmp, dict) or str(cmp.get("status")) != "ahead":
+            continue
+        ahead_by = int(cmp.get("ahead_by") or 0)
+        if ahead_by < 1:
+            continue
+        sha = str(((cmp.get("merge_commit") or {}).get("sha"))
+                  or ((entry.get("commit") or {}).get("sha")) or "")
+        if not sha:
+            continue
+        if best is None or ahead_by > best["ahead_by"]:
+            best = {"branch": name, "sha": sha, "ahead_by": ahead_by}
+    if best is None:
+        return None, "no branch contains this leg's commit and is ahead of it"
+    return best, ""
+
+
+def landing_verdict(local: dict | None, tip: dict | None, *, upstream: dict | None,
+                    marker_present: bool, t1_incomplete: bool, carries_waiver: bool = True,
+                    unavailable: str = "") -> dict[str, Any]:
+    """Pure decision: what a re-pin to `upstream` would cost, and whether this leg may do it.
+
+    `free` means the two trees' verdict inventories are byte-identical, so no banked gate row can be
+    affected. Anything else is left alone: the withheld verdicts are the cases where the launcher's
+    own rebase pre-flight would answer `mode=none` and the successor would run an empty leg.
+    """
+    if marker_present or t1_incomplete:
+        why = ("a terminal marker is in this leg's state" if marker_present
+               else "T1 was interrupted before its report")
+        return {"verdict": "withheld", "why": f"the launcher would refuse a rebase because {why}"}
+    if not carries_waiver:
+        # `Decide fresh dispatch versus supervised resume` refuses a rebase onto a ref whose
+        # `tools/run_suite.py` does not carry the manifest-commit waiver, and an accepted-looking
+        # dispatch that lands in `mode=none` is a leg burned for nothing. Identical verdict
+        # inventories usually make this true by construction; it is checked because the failure it
+        # prevents is silent.
+        return {"verdict": "withheld", "why": "the pinned run_suite.py carries no manifest-commit waiver, so the launcher would refuse the rebase"}
+    if local is None or tip is None:
+        return {"verdict": "unavailable", "why": unavailable or "the grading context could not be read"}
+    if upstream is None:
+        return {"verdict": "none", "why": "nothing to land"}
+    differing = sorted(key for key in set(local) | set(tip) if local.get(key) != tip.get(key))
+    if not differing:
+        return {"verdict": "free", "sha": upstream["sha"], "branch": upstream["branch"],
+                "commits": upstream["ahead_by"], "differing": []}
+    return {"verdict": "costly", "sha": upstream["sha"], "branch": upstream["branch"],
+            "commits": upstream["ahead_by"], "differing": differing}
+
+
+def plan_landing(api: str, repo: str, token: str | None, pin: str, cwd: str,
+                 state_dir: str | None = None) -> dict[str, Any]:
+    """Ask the repository whether re-pinning the successor at the upstream tip is free.
+
+    Fail-open by construction: every path that cannot prove equality returns `unavailable`, which the
+    caller reads as "dispatch as before". A check that cannot run must never cost a campaign its
+    successor.
+    """
+    if not (api and repo and token and pin):
+        return {"verdict": "unavailable", "why": "no API endpoint, repository, credential or recorded pin"}
+    state = state_dir or os.getcwd()
+    marker_present = any(
+        os.path.exists(os.path.join(state, name)) for name in ("wrapper_failed.json",)
+    )
+    t1_incomplete = (os.path.exists(os.path.join(state, "t1_started.json"))
+                     and not os.path.exists(os.path.join(state, "t1_same_fact_presentation.json")))
+    local, why = grading_context(cwd)
+    if local is None:
+        return landing_verdict(None, None, upstream=None, marker_present=marker_present,
+                               t1_incomplete=t1_incomplete, unavailable=why)
+    try:
+        carried = open(os.path.join(cwd, "tools", "run_suite.py"), encoding="utf-8").read()
+    except OSError:
+        carried = ""
+    waiver = "allow_manifest_commit_rebase" in carried
+    upstream, why = upstream_tip(api, repo, token, pin)
+    if upstream is None:
+        return landing_verdict(local, None, upstream=None, marker_present=marker_present,
+                               t1_incomplete=t1_incomplete, unavailable=why)
+    with tempfile.TemporaryDirectory(prefix="campaign-landing-") as work:
+        ok, detail = fetch_tree(cwd, upstream["sha"], work)
+        if not ok:
+            return landing_verdict(local, None, upstream=None, marker_present=marker_present,
+                                   t1_incomplete=t1_incomplete, unavailable=detail)
+        tip, why = grading_context(work)
+    return landing_verdict(local, tip, upstream=upstream, marker_present=marker_present,
+                           t1_incomplete=t1_incomplete, unavailable=why)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -468,10 +653,33 @@ def main(argv: list[str] | None = None) -> int:
         print(f"campaign re-arm skipped: {reason}")
         print(f"::warning::campaign re-arm declined: {reason}")
         return 0
+    landing = plan_landing(api, args.repo, token or None, args.ref, os.getcwd(),
+                           state_dir=os.path.dirname(os.path.abspath(args.report)))
+    rebase_ref = ""
+    if landing["verdict"] == "free":
+        rebase_ref = str(landing["sha"])
+        print(f"campaign re-arm: the successor is re-pinned at {rebase_ref[:7]} "
+              f"({landing['branch']} is {landing['commits']} commit(s) ahead and no verdict-producing "
+              "file differs, so no banked gate row is re-graded)")
+        print(f"::notice::campaign re-arm re-pinned the successor at {rebase_ref[:7]} for free: "
+              f"{landing['commits']} commit(s) of campaign-control code, zero verdict files changed")
+    elif landing["verdict"] == "costly":
+        names = ", ".join(landing["differing"][:6])
+        more = f" (+{len(landing['differing']) - 6} more)" if len(landing["differing"]) > 6 else ""
+        print(f"campaign re-arm: {landing['branch']} is {landing['commits']} commit(s) ahead, but "
+              f"{len(landing['differing'])} verdict-producing file(s) differ ({names}{more}), so "
+              "re-pinning this campaign there re-grades the exact-instance gate. That landing is a "
+              "human dispatch, and this leg will not spend the campaign's banked rows on it")
+        print(f"::warning::campaign re-arm left the pin at {args.ref[:7] or 'this leg'}: a landing on "
+              f"{landing['branch']} would re-grade the gate over {len(landing['differing'])} verdict "
+              f"file(s){more}; dispatch rebase_onto_ref yourself if that is the trade you want")
+    elif landing["verdict"] not in ("none",):
+        print(f"campaign re-arm: no landing checked ({landing['why']}); the successor runs this leg's pin")
     if args.dry_run:
         print(f"campaign re-arm would dispatch: {reason} (dry run)")
         return 0
-    ok, detail = dispatch_next_leg(api, args.repo, token or None, workflow["id"], args.ref, args.chain_depth)
+    ok, detail = dispatch_next_leg(api, args.repo, token or None, workflow["id"], args.ref,
+                                   args.chain_depth, rebase_ref)
     line = f"campaign re-arm {reason} -> {detail}"
     print(f"::notice::{line}" if ok else f"warning: {line}")
     return 0

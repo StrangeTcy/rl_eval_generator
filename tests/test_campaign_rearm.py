@@ -635,3 +635,91 @@ def test_a_pause_the_retry_ledger_meters_is_left_to_the_schedule() -> None:
     for reason_ok in ("max_wall_seconds", "provider_error", "docker_unavailable", "wrapper_transient_error"):
         passed, why = _decide({"status": "paused", "pause_reason": reason_ok, "resumable": True})
         assert passed is True, (reason_ok, why)
+
+
+def test_the_landing_verdict_only_calls_a_re_pin_free_when_no_verdict_file_differs() -> None:
+    """A re-pin re-grades the gate whenever the grading context moves, so the re-arm may take that
+    decision itself only when the two trees' verdict inventories are identical. Everything else is
+    left to a human, and said out loud."""
+    from tools.campaign_rearm import landing_verdict
+
+    local = {"tools/run_suite.py": "a" * 64, "envs/glyph/config.yaml": "b" * 64}
+    same = dict(local)
+    moved = dict(local, **{"tools/run_suite.py": "c" * 64})
+    up = {"branch": "arena/x", "sha": "d" * 40, "ahead_by": 3}
+
+    free = landing_verdict(local, same, upstream=up, marker_present=False, t1_incomplete=False)
+    assert free["verdict"] == "free" and free["sha"] == up["sha"] and free["commits"] == 3
+
+    costly = landing_verdict(local, moved, upstream=up, marker_present=False, t1_incomplete=False)
+    assert costly["verdict"] == "costly"
+    assert costly["differing"] == ["tools/run_suite.py"]
+
+    # Nothing upstream, nothing to say.
+    assert landing_verdict(local, same, upstream=None, marker_present=False,
+                           t1_incomplete=False)["verdict"] == "none"
+    # A context this leg cannot read must never be read as "safe to move".
+    assert landing_verdict(None, None, upstream=up, marker_present=False,
+                           t1_incomplete=False)["verdict"] == "unavailable"
+    # Nor may it be called free when the launcher would refuse the rebase it enables.
+    refused = landing_verdict(local, same, upstream=up, marker_present=False, t1_incomplete=False,
+                              carries_waiver=False)
+    assert refused["verdict"] == "withheld" and "manifest-commit waiver" in refused["why"]
+
+
+def test_a_landing_is_withheld_when_the_launcher_would_refuse_the_rebase(tmp_path) -> None:
+    """`rebase_onto_ref` is refused outright when the carried state holds a terminal marker or an
+    interrupted T1. Auto-landing into either of those would turn a productive resume into an empty
+    leg that answers `mode=none`, so the check declines before it looks at the diff."""
+    from tools.campaign_rearm import landing_verdict, plan_landing
+
+    files = {"tools/run_suite.py": "a" * 64}
+    for flag in ("marker_present", "t1_incomplete"):
+        verdict = landing_verdict(files, dict(files), upstream={"branch": "b", "sha": "c" * 40,
+                                     "ahead_by": 1}, marker_present=flag == "marker_present",
+                                     t1_incomplete=flag == "t1_incomplete")
+        assert verdict["verdict"] == "withheld", flag
+        assert "refuse a rebase" in verdict["why"]
+    # And plan_landing itself refuses to ask when there is no credential to ask with: a leg that
+    # cannot check must cost nothing, not fail open into a guess.
+    assert plan_landing("https://example.invalid", "o/r", None, "deadbeef",
+                        str(tmp_path))["verdict"] == "unavailable"
+
+
+def test_the_successor_input_set_grows_only_the_field_that_was_proved_free() -> None:
+    from tools.campaign_rearm import successor_inputs
+
+    plain = successor_inputs("a" * 40, 3)
+    assert plain == {"resume_previous": True, "chain_depth": "4", "ref": "a" * 40}
+    landed = successor_inputs("a" * 40, 3, "b" * 40)
+    assert landed["rebase_onto_ref"] == "b" * 40
+    # The operator's levers stay the operator's: a self-dispatched successor never lifts a stop and
+    # never picks an execution mode.
+    for inputs in (plain, landed):
+        assert "clear_wrapper_stop" not in inputs and "execution_mode" not in inputs
+
+
+def test_the_verdict_inventory_is_read_from_the_tree_it_is_asked_about(tmp_path) -> None:
+    """`grading_context` runs *that tree's* gate_context.py, so a repository that widens what it
+    considers verdict-producing widens this check without a second list to keep in step."""
+    import subprocess
+    import sys as _sys
+
+    from tools.campaign_rearm import grading_context
+
+    tree = tmp_path / "repo"
+    (tree / "tools").mkdir(parents=True)
+    (tree / "envs").mkdir()
+    (tree / "tools" / "gate_context.py").write_text(
+        "import json, pathlib, sys\n"
+        "root = pathlib.Path(__file__).resolve().parents[1]\n"
+        "files = {str(p.relative_to(root)): str(p.stat().st_size) for p in sorted(root.rglob('*')) "
+        "if p.is_file() and p.parent.name != 'tools'}\n"
+        "print(json.dumps({'files': files}))\n",
+        encoding="utf-8",
+    )
+    (tree / "envs" / "glyph.yaml").write_text("x" * 10, encoding="utf-8")
+    files, why = grading_context(str(tree))
+    assert why == "" and files == {"envs/glyph.yaml": "10"}
+    missing, why = grading_context(str(tmp_path / "nowhere"))
+    assert missing is None and "gate_context" in why
