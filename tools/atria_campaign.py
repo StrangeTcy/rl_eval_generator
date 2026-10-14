@@ -293,6 +293,25 @@ def _record_campaign_intent(
                     value["rebased_from_manifest_commit"] = existing.get("manifest_commit")
                 write_json(path, value)
                 return value
+            # The keys that moved are the whole diagnosis, and until now they were only ever readable
+            # inside the leg that refused: the marker carries a `detail` that `redact_text` shortens,
+            # the artifact that holds the full exception is not downloadable from outside a runner
+            # (`archive_download_url` hands off to a host no diagnosing environment can reach), and the
+            # Atria 2026-10-14 pair of refusals was argued about for six hours with nobody able to say
+            # whether it was `execution_mode` or `case_manifest_sha256`. Record the pair, next to the
+            # intent that produced it, in the state directory that every leg uploads and the re-arm
+            # reads: key names verbatim, values through the same redaction the reports use.
+            try:
+                write_json(path.with_name("campaign_intent_refusal.json"), {
+                    "schema_version": 1,
+                    "changed": drifted,
+                    "expected": {key: redact_text(str(expected.get(key))) for key in drifted},
+                    "recorded": {key: redact_text(str(existing.get(key))) for key in drifted},
+                    "event": os.environ.get("GITHUB_EVENT_NAME") or "bare",
+                    "recorded_at": _utc_now(),
+                })
+            except OSError:
+                pass  # diagnostics never decide the refusal
             raise ValueError(
                 "campaign intent differs from the restored state; refuse to "
                 "continue with a changed provider, model, mode, manifest, or code context"
@@ -1151,6 +1170,15 @@ STATE_CONTRACT_REFUSALS = (
     "checkpoint metadata mismatch",
     "manifest case count changed",
     "gate coverage is incomplete",
+    # Measured twice on 2026-10-14: Atria run 25 (06:10:45Z, exit 2 in 2m27s) and run 28
+    # (18:10:06Z, exit 2 in 65s) each ended on `campaign intent differs from the restored state`, and
+    # each wrote `wrapper_failed.json` on the way out. The marker is the operator-only lever, so run 28
+    # left the lineage head at 126 / 189 banked rows behind an acknowledgement no scheduled tick can
+    # give - while the refusal itself is deterministic: the same keys, the same commit, the same answer
+    # every leg. An acknowledgement cannot change what this code refuses, which is the exact property
+    # the three needles above were admitted for. First occurrence stays resumable and is recorded; the
+    # second consecutive one from the same commit still marks the campaign terminal.
+    "campaign intent differs from the restored state",
 )
 
 

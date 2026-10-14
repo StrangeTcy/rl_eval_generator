@@ -779,3 +779,101 @@ def test_the_state_artifact_reader_recognises_only_this_workflows_lineage(monkey
     # And when this leg already owns it, the search stops there without resolving foreign runs.
     owner, _at, _why = campaign_rearm.newest_state_owner("https://api", "o/r", "t", 77, "3333333333")
     assert owner == "3333333333"
+
+
+def test_a_queued_scheduled_tick_is_not_the_leg_that_continues_the_campaign() -> None:
+    """The seam both campaigns died at on 2026-10-14: a placeholder read as activity.
+
+    Atria #27's re-arm declined at 18:09:34 with `a leg is already pending` because the 13/43 cron had
+    queued run 28 four seconds of wall time earlier. That queued tick took the runner 6 s later, refused
+    with exit 2 at 18:11:11 and wrote the marker that stopped every leg after it; the same decline is on
+    Mercury #43 (18:14:34) and #40 (07:39:20). A run with no start time is a slot reservation - the thing
+    the guard exists to catch is a leg *committing* to the lineage - and the concurrency group serialises
+    whatever is armed anyway, so declining here buys nothing and can cost the chain.
+    """
+    queued_cron = {
+        "id": 28, "event": "schedule", "status": "queued", "run_started_at": None,
+        "created_at": (NOW - timedelta(minutes=63)).isoformat().replace("+00:00", "Z"),
+        "updated_at": (NOW - timedelta(minutes=63)).isoformat().replace("+00:00", "Z"),
+    }
+    assert campaign_rearm.is_unstarted_scheduled_run(queued_cron) is True
+    armed, why = _decide(newest_run=queued_cron)
+    assert armed is True and "queued scheduled run 28" in why, why
+
+    # Started, and the placeholder is a real leg: refused, exactly as before.
+    assert campaign_rearm.is_unstarted_scheduled_run(dict(queued_cron, status="in_progress")) is False
+    assert _decide(newest_run=dict(queued_cron, status="in_progress"))[0] is False
+    # A queued *human* dispatch waiting for a slot is someone else's continuation, not a cron tick.
+    assert campaign_rearm.is_unstarted_scheduled_run(dict(queued_cron, event="workflow_dispatch")) is False
+    assert _decide(newest_run=dict(queued_cron, event="workflow_dispatch"))[0] is False
+    # A tick GitHub has stamped as started has begun, even if its status has not caught up.
+    started = dict(queued_cron, run_started_at=NOW.isoformat().replace("+00:00", "Z"))
+    assert campaign_rearm.is_unstarted_scheduled_run(started) is False
+
+    # The exemption is about busyness, not timing: a placeholder queued 20 s ago still sits behind the
+    # idle floor, because a successor dispatched inside decide_tick's backoff is refused and never re-arms.
+    just_queued = dict(queued_cron, created_at=(NOW - timedelta(seconds=20)).isoformat().replace("+00:00", "Z"),
+                       updated_at=(NOW - timedelta(seconds=20)).isoformat().replace("+00:00", "Z"))
+    held, why = _decide(newest_run=just_queued)
+    assert held is False and "idle gap" not in why and "floor" in why, why
+
+
+def test_the_successor_dispatch_sends_the_ref_the_endpoint_requires() -> None:
+    """`inputs.ref` is the code pin; the payload's own `ref` is which workflow file runs. Required.
+
+    No leg of either pairwise campaign has ever been created by a re-arm - all 58 runs of 2026-10-13/14
+    declined before reaching this call - so the payload shape was never exercised. The dispatch endpoint
+    requires a top-level `ref`, and a successor that answers 422 is a chain that never existed, printed as
+    the plain text `warning:` that GitHub does not turn into an annotation.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_request(url, token, *, data=None, method=None):
+        seen["url"] = url
+        seen["payload"] = json.loads((data or b"{}").decode("utf-8"))
+        return 204, {}
+
+    original = campaign_rearm._request
+    campaign_rearm._request = fake_request
+    try:
+        ok, detail = campaign_rearm.dispatch_next_leg(
+            "https://api.example", "o/r", "t", 42, "d" * 40, 3, "", "main"
+        )
+    finally:
+        campaign_rearm._request = original
+    assert ok is True, detail
+    assert seen["payload"]["ref"] == "main"
+    assert seen["payload"]["inputs"]["ref"] == "d" * 40
+    assert seen["payload"]["inputs"]["chain_depth"] == "4"
+    # and the flag exists, defaulting to the ref this leg itself runs on
+    assert "--workflow-ref" in inspect.getsource(campaign_rearm.main)
+
+
+def test_a_decline_carries_the_whole_refusal_not_its_first_sentence(tmp_path: Path) -> None:
+    """The `(changed: ...)` tail is the answer, and a 240-character cap kept cutting it off.
+
+    Both Atria refusals of 2026-10-14 (run 25 at 06:13Z, run 28 at 18:11Z) annotated as
+    `...provider, model, mode, manifest, or code ` - truncated mid-word, right before the part naming the
+    field. The marker, the campaign log and the state artifact all hold the full sentence; the annotation
+    is the only channel that reaches outside a runner, so the channel has to be wide enough.
+    """
+    detail = (
+        "campaign intent differs from the restored state; refuse to continue with a changed provider, "
+        "model, mode, manifest, or code context (changed: execution_mode)"
+    )
+    marker = tmp_path / "wrapper_failed.json"
+    marker.write_text(json.dumps({"pause_reason": "wrapper_exception", "detail": detail}), encoding="utf-8")
+    line = campaign_rearm._marker_decline(str(marker))
+    assert "changed: execution_mode" in line, line
+
+    # A refusal that recorded its own field list beside the marker is quoted too.
+    (tmp_path / "campaign_intent_refusal.json").write_text(
+        json.dumps({"changed": ["execution_mode"], "expected": {"execution_mode": "gates_only"},
+                    "recorded": {"execution_mode": "paid"}}),
+        encoding="utf-8",
+    )
+    quoted = campaign_rearm._marker_decline(str(marker))
+    assert "campaign_intent_refusal.json" in quoted and "gates_only" in quoted, quoted
+    # and a missing or corrupt diagnostic never changes anything
+    (tmp_path / "campaign_intent_refusal.json").write_text("{", encoding="utf-8")
+    assert campaign_rearm._marker_decline(str(marker)).startswith(line[:40])
