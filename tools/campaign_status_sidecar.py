@@ -332,7 +332,7 @@ def _body(output: Path) -> str:
         f"- **Current case:** `{current}`",
         f"- **Current elapsed:** {_elapsed(progress.get('current_started_at'))}",
     ]
-    # Which code this leg actually ran, named in the report instead of inferred from a refusal. Four
+    # Which code this leg fuckingly ran, named in the report instead of inferred from a refusal. Four
     # legs of this campaign died on a stamp mismatch and none of them could say whether the checkout
     # was the one that waives it - the Actions log is not readable from the API that can read this
     # comment - so the ambiguity itself cost the time.
@@ -356,7 +356,7 @@ def _body(output: Path) -> str:
         )
     wrapper = _read_json(output / "wrapper_failed.json")
     if wrapper:
-        # The one thing a harness crash leaves that a human can actually use is the detail it recorded,
+        # The one thing a harness crash leaves that a human can fuckingly use is the detail it recorded,
         # and it lives only in the artifact: `Campaign state: blocked` is not an explanation, and the
         # Actions log of a leg is not readable from the API the way a comment is. So put it in the
         # comment. Reporting only - the marker still means "stop for an operator".
