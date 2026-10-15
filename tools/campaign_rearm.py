@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -848,9 +849,77 @@ def upstream_tip(api: str, repo: str, token: str | None, pin: str) -> tuple[dict
     return best, ""
 
 
+GUARD_TEST_RE = re.compile(r"^[ \t]*test -f[ \t]+(\S+)[ \t]*$", re.M)
+GUARD_GREP_RE = re.compile(r'^[ \t]*grep -q[ \t]+"([^"]+)"[ \t]+(\S+)', re.M)
+
+
+def launch_requirements(root: str) -> tuple[list[str], list[tuple[str, str]], str]:
+    """The `Refuse code missing campaign gates` predicate, read out of the launchers in `root`.
+
+    Derived, never hardcoded: the campaign launchers each begin with `test -f tools/<x>` and
+    `grep -q "<symbol>" tools/<y>` lines that define what "this ref can run a campaign at all"
+    means, and they change. A pinned copy of this tool that guessed the list would be wrong the day
+    the list moves, which is the failure mode being repaired - `main` is missing
+    `tools/inherit_campaign_state.py`, its own guard says so at second 14 of a leg, and a verdict that
+    had consulted the guard could not have called landing there anything at all.
+    """
+    files: list[str] = []
+    greps: list[tuple[str, str]] = []
+    directory = os.path.join(root, ".github", "workflows")
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return [], [], f"no .github/workflows under {root}"
+    for name in names:
+        if not name.endswith((".yml", ".yaml")) or "campaign" not in name:
+            continue
+        try:
+            with open(os.path.join(directory, name), encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except OSError:
+            continue
+        for match in GUARD_TEST_RE.finditer(text):
+            path = match.group(1).strip("\"'\"")
+            if path.startswith("tools/") and path not in files:
+                files.append(path)
+        for match in GUARD_GREP_RE.finditer(text):
+            pair = (match.group(1), match.group(2).strip("\"'\""))
+            if pair[1].startswith("tools/") and pair not in greps:
+                greps.append(pair)
+    if not files:
+        return [], [], "no `test -f tools/...` guard in this tree's campaign launchers"
+    return files, greps, ""
+
+
+def tree_launchable(root: str, files: list[str], greps: list[tuple[str, str]]) -> tuple[bool, str]:
+    """Does `root` satisfy a launcher's own gate check? Names the missing pieces; never raises."""
+    missing = [item for item in files if not os.path.isfile(os.path.join(root, item))]
+    if missing:
+        tail = f" (+{len(missing) - 6} more)" if len(missing) > 6 else ""
+        return False, f"{', '.join(missing[:6])}{tail} {'is' if len(missing) == 1 else 'are'} not in it"
+    unmet: list[str] = []
+    for pattern, item in greps:
+        path = os.path.join(root, item)
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                body = handle.read()
+        except OSError:
+            unmet.append(f"`{pattern[:40]}` unreadable in {item}")
+            continue
+        try:
+            hit = re.search(pattern, body) is not None
+        except re.error:
+            hit = pattern in body
+        if not hit:
+            unmet.append(f"`{pattern[:40]}` is not in {item}")
+    if unmet:
+        return False, "; ".join(unmet[:4])
+    return True, ""
+
+
 def landing_verdict(local: dict | None, tip: dict | None, *, upstream: dict | None,
                     marker_present: bool, t1_incomplete: bool, carries_waiver: bool = True,
-                    unavailable: str = "") -> dict[str, Any]:
+                    unavailable: str = "", unlaunchable: str = "") -> dict[str, Any]:
     """Pure decision: what a re-pin to `upstream` would cost, and whether this leg may do it.
 
     `free` means the two trees' verdict inventories are byte-identical, so no banked gate row can be
@@ -868,6 +937,11 @@ def landing_verdict(local: dict | None, tip: dict | None, *, upstream: dict | No
         # inventories usually make this true by construction; it is checked because the failure it
         # prevents is silent.
         return {"verdict": "withheld", "why": "the pinned run_suite.py carries no manifest-commit waiver, so the launcher would refuse the rebase"}
+    if unlaunchable:
+        # A tree the launcher would refuse at its guard step is not a free landing, not a costly one,
+        # and not a judgement about verdict files: it cannot run a campaign at all. Say that first.
+        return {"verdict": "withheld",
+                "why": f"the target tree fails this launcher's own gate check: {unlaunchable}"}
     if local is None or tip is None:
         return {"verdict": "unavailable", "why": unavailable or "the grading context could not be read"}
     if upstream is None:
@@ -914,9 +988,25 @@ def plan_landing(api: str, repo: str, token: str | None, pin: str, cwd: str,
         if not ok:
             return landing_verdict(local, None, upstream=None, marker_present=marker_present,
                                    t1_incomplete=t1_incomplete, unavailable=detail)
+        req_files, req_greps, _req_note = launch_requirements(cwd)
+        # Self-consistency first: this leg's own tree ran a campaign, so if the extracted list refuses
+        # to accept *it*, the list is wrong here (a launcher whose guard is written differently, a tree
+        # with no launchers) and the check must not be used to veto a landing. Never let a diagnostic
+        # become the reason a campaign stops chaining.
+        if req_files and not tree_launchable(cwd, req_files, req_greps)[0]:
+            req_files = []
+        unlaunchable = ""
+        if req_files:
+            ready, why_ready = tree_launchable(work, req_files, req_greps)
+            if not ready:
+                unlaunchable = why_ready
+        if unlaunchable:
+            return landing_verdict(local, None, upstream=upstream, marker_present=marker_present,
+                                   t1_incomplete=t1_incomplete, carries_waiver=waiver,
+                                   unlaunchable=unlaunchable)
         tip, why = grading_context(work)
     return landing_verdict(local, tip, upstream=upstream, marker_present=marker_present,
-                           t1_incomplete=t1_incomplete, unavailable=why)
+                           t1_incomplete=t1_incomplete, carries_waiver=waiver, unavailable=why)
 
 
 
@@ -1296,6 +1386,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"::warning::campaign re-arm left the pin at {args.ref[:7] or 'this leg'}: a landing on "
               f"{landing['branch']} would re-grade the gate over {len(landing['differing'])} verdict "
               f"file(s){more}; dispatch rebase_onto_ref yourself if that is the trade you want")
+    elif landing["verdict"] == "withheld":
+        print(f"campaign re-arm: no re-pin onto {landing.get('branch') or 'the upstream tip'} "
+              f"({landing['why']})")
+        print(f"::warning::campaign re-arm will not re-pin the successor: {landing['why']}")
     elif landing["verdict"] not in ("none",):
         print(f"campaign re-arm: no landing checked ({landing['why']}); the successor runs this leg's pin")
     if not rebase_ref:
