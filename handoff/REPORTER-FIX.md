@@ -73,12 +73,29 @@ sidecar-touching tests green — 38 tests across
 `test_campaign_status_t1_progress.py`, `test_paid_campaign_safety.py`. So the test file
 does **not** have to travel with it.
 
-## 3. The one file
+## 3. The one file, and where it actually lives
 
-`handoff/paste/campaign_status_sidecar.py`
+**`handoff/` paths in this document do not exist on `main`.** Everything written this
+session sits on the Arena session branch `arena/70337724-rl-eval-generator` (commit
+`09d82c1`, pushed). `main` carries only `handoff/HANDOFF.md` and
+`handoff/handoff-combined.patch`. So read every `handoff/…` path below as "on that
+branch", or just use these links, which are pinned to the commit and cannot drift:
+
+| What | Link |
+|---|---|
+| The file to paste | https://raw.githubusercontent.com/StrangeTcy/rl_eval_generator/09d82c1eee1dca9f62390f577254f6972a90ed44/handoff/paste/campaign_status_sidecar.py |
+| The same file, readable | https://github.com/StrangeTcy/rl_eval_generator/blob/09d82c1eee1dca9f62390f577254f6972a90ed44/handoff/paste/campaign_status_sidecar.py |
+| This document | https://github.com/StrangeTcy/rl_eval_generator/blob/09d82c1eee1dca9f62390f577254f6972a90ed44/handoff/REPORTER-FIX.md |
+
+Copy from the **raw** link (Ctrl+A, Ctrl+C). On the readable `blob/` page, selecting all
+also selects the line-number gutter, and pasting that into the editor writes `1`, `2`,
+`3` … into the file — the "145 additions" check in §4 catches it, but copy raw and skip
+the problem. `Download raw file` from the blob toolbar saves it instead of copying.
+
+The payload:
 
 ```
-747 lines
+747 lines, 35038 bytes
 sha256 dfbd9eb110edcec66ac33f016ab587f063d68489675cfac9d2a8ce68cd040cb2
 ```
 
@@ -94,10 +111,10 @@ form, kept for a future session that does have a shell. They are not needed here
 
 ### 4.1 Reasoning-Atria (issue #20) — free, about four minutes
 
-1. Open the reporter **at Atria's pin**:
+1. Open the reporter **at Atria's pin** — this is the file being replaced:
    `https://github.com/StrangeTcy/rl_eval_generator/blob/3d6e743/tools/campaign_status_sidecar.py`
 2. Click the pencil (edit). In the editor: select all, delete, then paste the whole of
-   `handoff/paste/campaign_status_sidecar.py`.
+   the raw payload from §3 (Ctrl+A, Ctrl+C on the raw link).
 3. **Commit changes…** — because you are viewing a commit rather than a branch,
    GitHub's only offer is *Create a new branch for this commit and start a pull
    request*. Name it `reporting-fix-atria`, then Propose changes.
@@ -129,10 +146,16 @@ form, kept for a future session that does have a shell. They are not needed here
    provider answers the READY probe — that is the standing "leave it probing"
    decision, and this does not disturb it, cancel a leg, or touch the 170 banked rows.
 
+**Let this session verify the branch before you dispatch.** Creating the branch is the
+irreversible-looking step and it is also fully checkable: tell me the branch name (or
+its commit SHA) and I will price it with `campaign_rearm.py` and compare its file
+byte-for-byte against the payload hash in §3 — a `free` price means no banked gate row
+is re-graded. That is the check `git am` would have given you.
+
 No-paste alternative for steps 1–4: press `.` on the repo page to open github.dev,
-open commit `3d6e743`, create branch `reporting-fix-atria`, drag
-`campaign_status_sidecar.py` onto the `tools/` folder, commit from Source Control.
-Same tree, same price.
+open commit `3d6e743`, create branch `reporting-fix-atria`, then use **Download raw
+file** on the §3 raw link and drag the saved file onto the `tools/` folder, and commit
+from Source Control. Same tree, same price.
 
 ### 4.2 Mercury (issue #21) — same file, two destinations
 
