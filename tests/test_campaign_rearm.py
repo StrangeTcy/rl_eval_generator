@@ -132,9 +132,23 @@ def test_only_a_resumable_pause_rearms_and_the_legs_own_flag_wins() -> None:
 
 
 def test_a_busy_group_is_not_stacked_onto() -> None:
+    """A sibling with a runner is not stacked on; a sibling without one is not a sibling yet.
+
+    Every busy status used to block the handover, and that is the rule that killed both chains on
+    2026-10-14: Mercury run 45 stood down for a `queued` run 46 (8 s from its first step, which then
+    paused on infrastructure and re-armed late), Atria run 29 for a `queued` run 30 (13 s from its
+    first step, which then refused the carried state and ended the lineage). A `queued`/`requested`/
+    `pending` entry has reached no step at all, so it has not reached the one that refuses a state and
+    skips the re-arm - and the concurrency group serialises whatever is armed regardless.
+    """
+    with_runner = {"in_progress", "waiting"}
     for status in sorted(BUSY_RUN_STATUSES):
         ok, reason = _decide(newest_run={"status": status, "updated_at": IDLE_LONG_AGO["updated_at"]})
-        assert not ok and "already" in reason, (status, reason)
+        if status in with_runner:
+            assert not ok and "already" in reason, (status, reason)
+        else:
+            assert ok and "already" not in reason, (status, reason)
+    assert {"queued", "requested", "pending"} <= set(BUSY_RUN_STATUSES)
 
 
 def test_an_unreadable_run_list_or_a_dead_workflow_refuses() -> None:
@@ -513,6 +527,59 @@ def test_a_human_click_starts_the_leg_instead_of_counting_down(tmp_path: Path) -
             assert got["mode"] == "none" and "no readable execution mode" in got["reason"], (intent, got)
 
 
+def test_the_two_handovers_that_killed_both_chains_are_replayed_in_full() -> None:
+    """Tonight's arithmetic, row by row, under the shipped rules - the test that says "fixed", not "likely".
+
+    Every number here is read off the run metadata: Mercury run 45 ran 19:03:18-22:25:42 and exited on
+    the wall (7), run 46 ran 22:25:56-22:28:28 on `infrastructure_error` (8) and armed run 47 at
+    22:46:10, which refused 15 s later with `backoff: paused 1074s ago, retry in 125s`; run 48 (schedule,
+    23:55:41-23:57:39, exit 8) armed run 49 five seconds after its own pause, which refused with
+    `backoff: paused 38s ago, retry in 1161s`; and run 45 and Atria run 29 both declined at the seam
+    because a *queued* sibling was read as a leg.
+    """
+    from datetime import timedelta
+    from tools.campaign_rearm import RESUME_BACKOFF_SECONDS, handover_wait
+
+    def ago(seconds: int) -> str:
+        return (NOW - timedelta(seconds=seconds)).isoformat().replace("+00:00", "Z")
+
+    infra = {"status": "paused", "pause_reason": "infrastructure_error", "resumable": True}
+    wall = {"status": "paused", "pause_reason": "max_wall_seconds", "resumable": True}
+
+    # Run 46 arming run 47: the sibling finished 160 s ago, the state it must resume is 4 s old.
+    run45 = {"id": 45, "status": "completed", "updated_at": ago(160)}
+    wait_46 = handover_wait(infra, run45, NOW, ledger_governs=True, own_state_age=4)
+    assert wait_46 == RESUME_BACKOFF_SECONDS - 4, wait_46  # the caller sleeps wait+1 for the boundary
+    # The successor would then read a state the supervisor accepts, which is the whole point.
+    assert 4 + wait_46 + 1 >= RESUME_BACKOFF_SECONDS
+    # ...and the wait the old code ran with (the sibling clock only) is the one that lost run 47 by
+    # 125 s: 160 s of run-clock idleness was credited as if it were the checkpoint's age.
+    assert RESUME_BACKOFF_SECONDS - 160 < 1074
+
+    # Run 48 arming run 49: 5 s after its own pause, with the newest other run hours stale.
+    run47 = {"id": 47, "status": "completed", "updated_at": ago(4300)}
+    wait_48 = handover_wait(infra, run47, NOW, ledger_governs=True, own_state_age=5)
+    assert wait_48 == RESUME_BACKOFF_SECONDS - 5, wait_48
+    assert 5 + wait_48 + 1 >= RESUME_BACKOFF_SECONDS
+
+    # Run 45 and Atria run 29: a queued sibling does not block, so the wall-stop leg arms its own
+    # successor instead of trusting a leg it cannot see refuse.
+    ok, why = _decide(wall, newest_run={"id": 46, "event": "schedule", "status": "queued",
+                                        "run_started_at": None, "created_at": ago(5400),
+                                        "updated_at": ago(5400)},
+                      run_list_readable=True, newest_schedule_run={"id": 46, "event": "schedule",
+                                                                    "status": "queued",
+                                                                    "created_at": ago(5400),
+                                                                    "updated_at": ago(5400)},
+                      own_state_age=6)
+    assert ok is False and "written 6 s ago" in why, why
+    ok, why = _decide(wall, newest_run={"id": 46, "event": "schedule", "status": "queued",
+                                        "run_started_at": None, "created_at": ago(5400),
+                                        "updated_at": ago(5400)},
+                      run_list_readable=True, own_state_age=RESUME_BACKOFF_SECONDS + 1)
+    assert ok is True, why
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
@@ -840,15 +907,20 @@ def test_a_queued_scheduled_tick_is_not_the_leg_that_continues_the_campaign() ->
     # Busy but seconds from its first step is not a continuation guarantee, whatever triggered it:
     # Mercury run 45 declined at 22:25:48 for a sibling handed a runner 8 s later, Atria run 29 at
     # 22:28:12 for one started 13 s later, and both campaigns then died at that handover.
-    young = dict(queued_cron, status="in_progress", event="workflow_dispatch",
-                 run_started_at=_iso_minutesago(2))
-    assert campaign_rearm.sibling_will_arm_its_own_successor(young, NOW) is False
-    assert _decide(newest_run=young)[0] is True
+    # ...including a human dispatch that is only queued for a slot. It has no runner, so it has not
+    # reached the step that refuses a state; #45 and #29 died trusting exactly this kind of entry.
+    for young in (dict(queued_cron, event="workflow_dispatch"),
+                  dict(queued_cron, status="requested"),
+                  dict(queued_cron, status="in_progress", event="workflow_dispatch",
+                       run_started_at=_iso_minutesago(2))):
+        assert campaign_rearm.sibling_will_arm_its_own_successor(young, NOW) is False, young
+        assert _decide(newest_run=young)[0] is True, young
 
     # Underway for an hour by its own metadata, start stamp present or not: that leg reaches its
-    # re-arm step, and the guard is exactly as strong as it was before this exemption existed.
+    # re-arm step, and the guard is exactly as strong as it was before this exemption existed. A
+    # *queued* sibling is not one of these, however old its timestamps are - see below.
     for elder in (dict(queued_cron, status="in_progress"),
-                  dict(queued_cron, event="workflow_dispatch"),
+                  dict(queued_cron, status="waiting"),
                   dict(queued_cron, status="in_progress", run_started_at=_iso_minutesago(59))):
         assert campaign_rearm.sibling_will_arm_its_own_successor(elder, NOW) is True, elder
         assert _decide(newest_run=elder)[0] is False, elder
