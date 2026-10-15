@@ -26,9 +26,12 @@ envs = [
     ("sheaf_physical_constraints", "easy,hard"),
     ("recursive_gluing", "easy,easy,easy,easy"),
     ("recursive_gluing_discovery", "easy,easy,easy,easy,easy"),
+    ("recursive_maze_gluing", "easy,easy,easy,easy"),
+    ("recursive_distributed_gluing", "easy,easy,easy"),
+    ("recursive_epistemic_gluing", "easy,easy,easy,easy"),
 ]
 
-print("Testing generation and compilation of all 19 Category Theory environments...\n")
+print("Testing generation and compilation of all 22 Category Theory environments...\n")
 
 failed = False
 for env, diff in envs:
