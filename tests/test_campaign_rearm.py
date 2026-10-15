@@ -705,6 +705,145 @@ def test_a_tree_the_launcher_would_refuse_is_never_reported_as_a_free_landing(tm
     assert 'landing["verdict"] == "withheld"' in source and "::warning::campaign re-arm will not re-pin" in source
 
 
+def test_cadence_and_ledger_progress_are_measured_not_assumed(tmp_path, monkeypatch) -> None:
+    """The two numbers the stand-down was missing on 2026-10-15, priced against the real ones.
+
+    Mercury run 55 stood down at 05:03Z to a tick 26 minutes old, so the campaign gave away the rest of
+    its first leg that ever cleared the gate. Cadence is the gap between ticks; progress is the row count
+    the leg started with against the one it leaves. Both are cheap to read from where the step already is.
+    """
+    from tools import campaign_rearm as cr
+    runs = [
+        {"event": "schedule", "created_at": "2026-10-14T17:37:07Z"},
+        {"event": "schedule", "created_at": "2026-10-14T20:58:26Z"},
+        {"event": "schedule", "created_at": "2026-10-14T23:54:59Z"},
+        {"event": "schedule", "created_at": "2026-10-15T04:37:26Z"},
+        {"event": "workflow_dispatch", "created_at": "2026-10-15T04:52:48Z"},
+    ]
+    assert cr.cron_cadence_seconds(runs) == [16947, 10593, 12079]
+    assert cr.cron_cadence_seconds([]) == []
+    assert cr.cron_is_not_delivering(
+        runs[3], datetime(2026, 10, 15, 5, 0, tzinfo=timezone.utc), readable=True, schedule_runs=runs
+    ) is True
+    healthy = [{"event": "schedule", "created_at": "2026-10-14T17:37:07Z"},
+               {"event": "schedule", "created_at": "2026-10-14T17:57:07Z"},
+               {"event": "schedule", "created_at": "2026-10-14T18:17:07Z"},
+               {"event": "schedule", "created_at": "2026-10-14T18:37:07Z"}]
+    assert cr.cron_cadence_seconds(healthy) == [1200, 1200, 1200]
+
+    state = tmp_path / "state"
+    temp = tmp_path / "runner_temp"
+    state.mkdir()
+    (state / "suite_checkpoint.json").write_text(json.dumps({"results": [{}, {}, {}]}), encoding="utf-8")
+    assert cr.ledger_progress(str(state), str(temp)) is None  # no restored copy to compare with
+    staged = temp / "mercury_pairwise_state"
+    staged.mkdir(parents=True)
+    (staged / "suite_checkpoint.json").write_text(json.dumps({"results": [{}, {}]}), encoding="utf-8")
+    assert cr.ledger_progress(str(state), str(temp)) == (2, 3)
+    (staged / "suite_checkpoint.json").write_text(json.dumps({"results": [{}, {}, {}]}), encoding="utf-8")
+    assert cr.ledger_progress(str(state), str(temp)) == (3, 3)
+    monkeypatch.setenv("RUNNER_TEMP", str(temp))
+    assert cr.ledger_progress(str(state)) == (3, 3)
+
+    src = Path("tools/campaign_rearm.py").read_text(encoding="utf-8")
+    assert "progress = ledger_progress(state_dir)" in src and "schedule_runs=schedule_runs," in src
+    assert src.count("schedule_runs=schedule_runs") == 4  # both decide_rearm calls plus handover_wait
+
+
+def test_a_productive_leg_arms_when_it_is_run_the_way_the_launcher_runs_it(tmp_path: Path) -> None:
+    """The same conclusion through `main`, not only through the pure decision function.
+
+    The stand-down that cost Mercury run 55 its leg lived in a step that reads its report and its
+    `$RUNNER_TEMP` copy of the state, so that is the path this asserts on: an unreachable API (no run
+    list, no cron data) and a checkpoint that grew while the leg ran. A rule that can only fire when the
+    API is answering would have fired on none of the days this campaign stalled.
+    """
+    import os
+    import shutil
+    import subprocess
+
+    work = tmp_path / "leg"
+    work.mkdir()
+    staged = tmp_path / "runner_temp" / "mercury_pairwise_state"
+    staged.mkdir(parents=True)
+    script = work / "campaign_rearm.py"
+    shutil.copyfile(ROOT / "tools" / "campaign_rearm.py", script)
+    (work / "campaign_report.json").write_text(
+        json.dumps({"status": "paused", "pause_reason": "infrastructure_error", "resumable": True,
+                    "run_id": 55}), encoding="utf-8")
+    (work / "suite_checkpoint.json").write_text(json.dumps({"results": [{}, {}, {}]}), encoding="utf-8")
+    (staged / "suite_checkpoint.json").write_text(json.dumps({"results": [{}, {}]}), encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "GH_TOKEN")}
+    env["GITHUB_TOKEN"] = "fake"
+    env["RUNNER_TEMP"] = str(tmp_path / "runner_temp")
+    done = subprocess.run(
+        [sys.executable, str(script), "--report", str(work / "campaign_report.json"),
+         "--api-url", "http://127.0.0.1:9", "--repo", "StrangeTcy/rl_eval_generator",
+         "--workflow", "mercury-pairwise", "--dry-run", "--sleep-cap", "0"],
+        cwd=str(work), capture_output=True, text=True, env=env, timeout=120,
+    )
+    assert done.returncode == 0, done.stderr[-600:]
+    assert "the ledger stand-down is lifted because the ledger advanced" in done.stdout, done.stdout
+    assert "2 -> 3 rows in the checkpoint" in done.stdout, done.stdout
+
+
+def test_the_rebase_check_refuses_the_ref_the_launcher_would_refuse(tmp_path: Path) -> None:
+    """The one command that answers "can I type this ref", run before a leg is spent on finding out.
+
+    Both rebase dispatches of 2026-10-15 died at the launcher's `test -f tools/inherit_campaign_state.py`
+    11 and 10 seconds in (Mercury run 54, Atria run 34), because the ref I named has no such file - and
+    no number I could compute from the verdict inventory would have said so, since the inventory is
+    identical. This is the check that does, offline, in the second before the click.
+    """
+    import subprocess
+    def git(*args):
+        return subprocess.run(("git", "-c", "user.email=t@t", "-c", "user.name=t", *args),
+                              cwd=repo, capture_output=True, text=True)
+
+    repo = tmp_path / "repo"
+    (repo / ".github" / "workflows").mkdir(parents=True)
+    (repo / "tools").mkdir(parents=True)
+    (repo / ".github" / "workflows" / "x-pairwise-campaign.yml").write_text(
+        "on:\n  workflow_dispatch:\n      - name: Gate\n"
+        "        run: |\n          test -f tools/needed.py\n", encoding="utf-8")
+    (repo / "tools" / "gate_context.py").write_text(
+        "import json\nprint(json.dumps({\"files\": {\"tools/needed.py\": \"1\"}}))\n", encoding="utf-8")
+    (repo / "tools" / "run_suite.py").write_text("allow_manifest_commit_rebase\n", encoding="utf-8")
+    (repo / "tools" / "needed.py").write_text("x = 1\n", encoding="utf-8")
+    git("init", "-q", ".")
+    git("add", "-A")
+    git("commit", "-qm", "has it")
+    good = git("rev-parse", "HEAD").stdout.strip()
+    (repo / "tools" / "needed.py").unlink()
+    git("add", "-A")
+    git("commit", "-qm", "missing it")
+
+    refused = campaign_rearm.check_rebase_target("HEAD", str(repo), against=good)
+    assert refused["verdict"] == "refused", refused
+    assert "tools/needed.py" in refused["missing"], refused
+    assert refused["launchable"] is False
+
+    same = campaign_rearm.check_rebase_target(good, str(repo), against=good)
+    assert same["verdict"] == "free", same
+    assert same["differing"] == [], same
+
+    # An unknown ref says so instead of answering with a guess.
+    blind = campaign_rearm.check_rebase_target("no-such-ref", str(repo))
+    assert blind["verdict"] == "unavailable" and "not an object in this checkout" in blind["why"], blind
+
+    # The union rule is the load-bearing part: a tree with a laxer launcher must not be able to
+    # launder a target that the strict launcher would refuse. `main` is exactly that case - it has the
+    # pairwise launchers and not the file they require, while the campaign's own pin has neither.
+    files, greps, note = campaign_rearm.merge_requirements([str(repo / "tools"), str(repo)])
+    assert files == ["tools/needed.py"], (files, note)
+    assert note == "", note
+
+    # And the CLI carries it, annotated, with a non-zero exit for a refused target.
+    source = inspect.getsource(campaign_rearm.main)
+    assert "--check-rebase-target" in source and "check_rebase_target(" in source
+    assert "::warning::campaign rebase onto" in source, source
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
@@ -1200,15 +1339,48 @@ def test_a_ledger_stand_down_is_lifted_when_the_cron_it_defers_to_is_not_arrivin
                   "created_at": iso(timedelta(hours=5, minutes=10)),
                   "updated_at": iso(timedelta(hours=5, minutes=10))}
 
-    # Cron alive: the rule is unchanged, stand down and let the tick do the waiting.
-    held, why = _decide(ledger, newest_schedule_run=fresh_tick, run_list_readable=True)
+    # Cadence on schedule: stand down and let the tick do the waiting - but it has to be a cadence, not
+    # one run that happened to be created recently. Mercury run 55 was parked at 05:03Z on exactly that
+    # inference: a tick 26 minutes old, against a tick series 3 h 21 m / 2 h 56 m / 4 h 42 m apart.
+    on_time = [fresh_tick, dict(fresh_tick, id=46, created_at=iso(timedelta(minutes=50)),
+                                updated_at=iso(timedelta(minutes=50))),
+               dict(fresh_tick, id=47, created_at=iso(timedelta(minutes=80)),
+                    updated_at=iso(timedelta(minutes=80)))]
+    held, why = _decide(ledger, newest_schedule_run=fresh_tick, run_list_readable=True,
+                        schedule_runs=on_time)
     assert held is False and "attempt ledger" in why, why
 
-    # Cron silent for two intervals: arm on the ordinary floor, and say which measurement lifted it.
-    armed, why = _decide(ledger, newest_schedule_run=stale_tick, run_list_readable=True)
+    broken = [fresh_tick, stale_tick,
+              dict(stale_tick, id=43, created_at=iso(timedelta(hours=9)),
+                   updated_at=iso(timedelta(hours=9)))]
+    armed, why = _decide(ledger, newest_schedule_run=fresh_tick, run_list_readable=True,
+                         schedule_runs=broken)
     assert armed is True, why
     printed = capsys.readouterr().out
-    assert "the ledger stand-down is lifted" in printed and "18600 s ago" in printed, printed
+    assert "the ledger stand-down is lifted" in printed, printed
+    assert "not arriving on its declared interval" in printed and " s, against a 1800 s cron" in printed, printed
+
+    # A lone tick is not a cadence either: deferral needs a measured series, not an absence of one.
+    armed, why = _decide(ledger, newest_schedule_run=fresh_tick, run_list_readable=True,
+                         schedule_runs=[fresh_tick])
+    assert armed is True, why
+    capsys.readouterr()
+
+    # And a productive leg buys its attempt even when cron is behaving: the ledger moved.
+    armed, why = _decide(ledger, newest_schedule_run=fresh_tick, run_list_readable=True,
+                         schedule_runs=on_time, progress=(365, 366))
+    assert armed is True, why
+    printed = capsys.readouterr().out
+    assert "the ledger advanced" in printed and "365 -> 366 rows" in printed, printed
+
+    # A zero-progress leg under a healthy cadence still stands down; that is the spin the rule is for.
+    held, why = _decide(ledger, newest_schedule_run=fresh_tick, run_list_readable=True,
+                        schedule_runs=on_time, progress=(365, 365))
+    assert held is False and "365 -> 365 rows" in why, why
+
+    # Cron silent for two intervals: unchanged conclusion, and the decline names the measurement.
+    armed, why = _decide(ledger, newest_schedule_run=stale_tick, run_list_readable=True)
+    assert armed is True, why
 
     # No scheduled sibling on a readable list is the same conclusion; an unreadable list is not.
     assert _decide(ledger, newest_schedule_run=None, run_list_readable=True)[0] is True
