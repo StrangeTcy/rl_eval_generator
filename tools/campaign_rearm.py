@@ -387,6 +387,88 @@ def ledger_progress(state_dir: str, runner_temp: str = "") -> tuple[int, int] | 
     return None
 
 
+HANDOVER_FILE = "campaign_handover.json"
+
+
+def _load_sidecar():
+    """The status sidecar module, whether it is beside this file or in the checkout.
+
+    The launcher runs this step from `$RUNNER_TEMP/campaign_rearm.py`, where only this file was copied,
+    so the checkout's `tools/` is the other place to look. Returns None rather than raising: reporting
+    is never allowed to change what this step decides or how it exits.
+    """
+    import importlib.util
+    from pathlib import Path as _P
+
+    here = _P(__file__).resolve().parent
+    for candidate in (here / "campaign_status_sidecar.py",
+                      here.parent / "campaign_status_sidecar.py",
+                      _P(os.environ.get("GITHUB_WORKSPACE", "")) / "tools" / "campaign_status_sidecar.py"):
+        if not candidate.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("campaign_status_sidecar", str(candidate))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        except Exception as exc:  # noqa: BLE001 - fail open, but say so
+            print(f"campaign re-arm: the status sidecar at {candidate.name} could not be loaded "
+                  f"({type(exc).__name__}: {exc})")
+            return None
+    return None
+
+
+def record_handover(state_dir: str, decision: str, reason: str, *, waited: int = 0) -> None:
+    """Write this step's decision into the campaign's own state, then refresh the status comment.
+
+    The status sidecar is started inside the campaign step and killed when that step ends, so the
+    re-arm decision - the only thing that decides whether the campaign continues - reached the Actions
+    log, which is not readable from the API that can read the status comment. Mercury's Issue #21 went
+    silent at 19:27:12Z on 2026-10-15 for exactly that reason while its leg sat out a 1201 s handover
+    wait, and nothing on the Issue separated a sleeping chain from a dead one. The marker is durable and
+    belongs to the campaign state directory, so it is uploaded with the checkpoint and read by the next
+    leg's comment as well; `flush` puts the same text on the Issue now, using the comment identity the
+    state already carries so this cannot post into another campaign's Issue.
+    """
+    from pathlib import Path as _P
+
+    payload = {
+        "schema_version": 1,
+        "decision": decision,
+        "reason": " ".join(str(reason or "").split())[:400],
+        "waited_seconds": int(waited),
+        "written_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+    }
+    path = os.path.join(state_dir, HANDOVER_FILE)
+    try:
+        os.makedirs(state_dir, exist_ok=True)
+        with open(path + ".tmp", "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.replace(path + ".tmp", path)
+    except OSError as exc:
+        print(f"campaign re-arm: the handover marker was not written ({type(exc).__name__}: {exc})")
+        return
+    sidecar = _load_sidecar()
+    if sidecar is None:
+        print("campaign re-arm: no loadable campaign_status_sidecar.py, so the status comment keeps "
+              "whatever the campaign step last published")
+        return
+    flush = getattr(sidecar, "flush", None)
+    if flush is None:
+        # The two files come from different places on purpose - this step is fetched from the run's own
+        # commit, the sidecar from the campaign's pinned checkout - so an older pinned checkout simply
+        # has no `flush`. That is a note, never a crash: this step decides whether the campaign
+        # continues, and reporting must not be able to end it.
+        print("campaign re-arm: the pinned checkout's status sidecar has no flush entry point, so the "
+              "status comment keeps whatever the campaign step last published")
+        return
+    error = flush(_P(state_dir))
+    print("campaign re-arm: the status comment now carries this decision"
+          if error is None else f"campaign re-arm: the status comment was not refreshed ({error})")
+
+
 def decide_rearm(
     report,
     *,
@@ -1474,6 +1556,7 @@ def main(argv: list[str] | None = None) -> int:
     newest_run: Mapping[str, Any] | None = None
     newest_schedule_run: Mapping[str, Any] | None = None
     schedule_runs: list = []
+    slept = 0
     workflow: dict | None = None
     # Three states, and the difference between the last two is what this file exists to get right: the
     # list was never asked for (nothing to conclude), it was asked for and failed (refuse to dispatch
@@ -1535,6 +1618,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"campaign re-arm: a successor would be refused for another {wait} s, so this leg "
                   f"is sitting it out before dispatching", flush=True)
             SLEEP(wait + 1)
+            slept = max(slept, int(wait) + 1)
             moment_before_waiting = now
             age_before_waiting = own_state_age
             # Re-read the world the successor will land in: the state may have been rewritten by a
@@ -1593,12 +1677,14 @@ def main(argv: list[str] | None = None) -> int:
             reason = f"{reason} | {' | '.join(drift)}"
         print(f"campaign re-arm skipped: {reason}")
         print(f"::warning::campaign re-arm declined: {reason}")
+        record_handover(state_dir, "declined", reason, waited=slept)
         return 0
     (tip_owner, tip_at, _tip_why), _workflow_for_tip = _newest_state_owner_for(args, api, token)
     fork = fork_verdict(args.run_id, tip_owner, tip_at)
     if fork["forked"]:
         print(f"campaign re-arm skipped: {fork['why']}")
         print(f"::warning::campaign re-arm declined: {fork['why']}")
+        record_handover(state_dir, "declined", fork["why"], waited=slept)
         return 0
     landing = plan_landing(api, args.repo, token or None, args.ref, os.getcwd(),
                            state_dir=os.path.dirname(os.path.abspath(args.report)))
@@ -1652,6 +1738,7 @@ def main(argv: list[str] | None = None) -> int:
                       f"this leg ran{more}; a rebase dispatch there re-grades the exact-instance gate")
     if args.dry_run:
         print(f"campaign re-arm would dispatch: {reason} (dry run)")
+        record_handover(state_dir, "dry_run", reason, waited=slept)
         return 0
     ok, detail = dispatch_next_leg(api, args.repo, token or None, workflow["id"], args.ref,
                                    args.chain_depth, rebase_ref,
@@ -1661,6 +1748,8 @@ def main(argv: list[str] | None = None) -> int:
     # command, so it reached no annotation and no log anyone reads: the chain would have died
     # silently at the one step whose whole job is to keep it alive. Both outcomes are announced.
     print(f"::notice::{line}" if ok else f"::warning::{line}")
+    record_handover(state_dir, "armed" if ok else "dispatch_refused",
+                    detail if ok else line, waited=slept)
     if ok:
         successor, proof = confirm_successor(api, args.repo, token or None, workflow["id"],
                                              args.run_id, delay=args.verify_seconds // 6 or 10)
