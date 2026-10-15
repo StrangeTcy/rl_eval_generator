@@ -33,6 +33,9 @@ environments:
   sheaf_invariant_gluing: envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml
   sheaf_physical_constraints: envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml
 
+  # Recursive local-to-global gluing
+  recursive_gluing: envs/cat_theo/recursive_gluing/config.yaml
+
   # Epistemic reasoning games
   epistemic_games: envs/epistemic_games/config.yaml
   epistemic_announcements: envs/epistemic_announcements/config.yaml

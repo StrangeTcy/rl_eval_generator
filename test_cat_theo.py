@@ -23,10 +23,11 @@ envs = [
     ("gnn_message_passing", "easy,hard"),
     ("sheaf_schema_sync", "easy,hard"),
     ("sheaf_invariant_gluing", "easy,hard"),
-    ("sheaf_physical_constraints", "easy,hard")
+    ("sheaf_physical_constraints", "easy,hard"),
+    ("recursive_gluing", "easy,easy,easy,easy"),
 ]
 
-print("Testing generation and compilation of all 17 Category Theory environments...\n")
+print("Testing generation and compilation of all 18 Category Theory environments...\n")
 
 failed = False
 for env, diff in envs:
@@ -82,4 +83,4 @@ if failed:
     print("\n❌ One or more tests failed.")
     sys.exit(1)
 else:
-    print("\n🎉 All 17 environments generated and compiled successfully with ZERO syntax errors and unresolved placeholders!")
+    print("\nAll 18 environments generated and compiled successfully with ZERO syntax errors and unresolved placeholders!")
