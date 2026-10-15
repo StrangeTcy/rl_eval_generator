@@ -175,12 +175,12 @@ def test_full_campaign_profiles_pin_provider_wire_and_separate_t1_contract() -> 
     assert mercury["api_key_env"] == "INCEPTION_API_KEY"
     assert mercury["wire_api"] == "chat_completions"
     assert mercury["reasoning_effort"] == "high"
-    assert mercury["campaign_job_seconds"] == 6000
+    assert mercury["campaign_job_seconds"] == 19_800
 
     assert reasoning_atria["provider"] == "atria"
     assert reasoning_atria["wire_api"] == "responses"
     assert reasoning_atria["reasoning_effort"] == "high"
-    assert reasoning_atria["campaign_job_seconds"] == 6000
+    assert reasoning_atria["campaign_job_seconds"] == 19_800
     assert "temperature" not in reasoning_atria
     assert "top_p" not in reasoning_atria
 
@@ -330,19 +330,19 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
 
     assert mercury["name"] == "Mercury covering campaign"
     assert atria["name"] == "Reasoning-Atria covering campaign"
-    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "115"
-    assert atria["jobs"]["campaign"]["timeout-minutes"] == "115"
+    assert mercury["jobs"]["campaign"]["timeout-minutes"] == "350"
+    assert atria["jobs"]["campaign"]["timeout-minutes"] == "350"
     mercury_run_step = next(step for step in mercury["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
     atria_run_step = next(step for step in atria["jobs"]["campaign"]["steps"] if step.get("name", "").startswith("Run T1"))
-    assert mercury_run_step["timeout-minutes"] == "100"
-    assert atria_run_step["timeout-minutes"] == "100"
+    assert mercury_run_step["timeout-minutes"] == "330"
+    assert atria_run_step["timeout-minutes"] == "330"
     mercury_run = mercury_run_step["run"]
     atria_run = atria_run_step["run"]
     assert "--label \"Mercury covering campaign\"" in mercury_run
     assert "experiments/mercury_covering_status_issue.txt" in mercury_run
     assert "set -euo pipefail" in mercury_run
     assert "4200s" in mercury_run
-    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in mercury_run
+    assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in mercury_run
     assert "--job-seconds" in mercury_run
     assert '"$OUT/t1_interrupted.json"' in mercury_run
     mercury_restore = next(
@@ -357,7 +357,7 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
     assert "experiments/reasoning_atria_covering_status_issue.txt" in atria_run
     assert "set -euo pipefail" in atria_run
     assert "4200s" in atria_run
-    assert "CAMPAIGN_SECONDS=$((6000 - ELAPSED_SECONDS - 60))" in atria_run
+    assert "CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))" in atria_run
     assert "--job-seconds" in atria_run
     assert '"$OUT/t1_interrupted.json"' in atria_run
     atria_restore = next(
@@ -378,3 +378,67 @@ def test_manual_copy_workflows_keep_issue_identity_and_secrets_distinct() -> Non
     atria_t1 = _workflow_example("docs/workflows/reasoning-atria-t1-campaign.yml.example")
     assert mercury_t1["on"]["workflow_dispatch"]["inputs"]["ref"]["default"] == "main"
     assert atria_t1["on"]["workflow_dispatch"]["inputs"]["ref"]["default"] == "main"
+
+
+# The covering launchers, their hand-copyable examples, and the profiles whose
+# `campaign_job_seconds` the launcher passes down as `--job-seconds`.
+COVERING_LAUNCHERS = (
+    (
+        ".github/workflows/mercury-covering-campaign.yml",
+        "docs/workflows/mercury-covering-campaign.yml.example",
+        "experiments/mercury_covering_campaign.yaml",
+    ),
+    (
+        ".github/workflows/reasoning-atria-covering-campaign.yml",
+        "docs/workflows/reasoning-atria-covering-campaign.yml.example",
+        "experiments/reasoning_atria_covering_campaign.yaml",
+    ),
+)
+
+
+def test_the_wall_budget_is_one_number_in_the_launcher_its_example_and_its_profile() -> None:
+    """Three files carry the same wall budget, and they had drifted apart.
+
+    Measured on main 2026-10-15: the deployed covering launchers ran a 330-minute
+    live step inside a 350-minute job and handed the controller
+    `CAMPAIGN_SECONDS=$((19800 - ...))`, matching `campaign_job_seconds: 19800` in
+    both profiles - while the examples an operator copies still declared the
+    superseded 2-hour ceiling (100/115 minutes, 6000 s), and the test that pins
+    them asserted those stale numbers, so the disagreement was load-bearing in CI
+    and invisible everywhere else. A launcher copied from that example bounds the
+    controller at 100 minutes, which is below the 108 minutes one exact-instance
+    gate case needs, so the leg that has to gate it can never finish.
+
+    The invariant is the arithmetic the launcher itself performs, not a literal:
+    live-step minutes x 60 is the profile's ceiling, the job outlives the live
+    step, and what is left after a full 70-minute T1 probe still covers the
+    worst-case atomic gate row.
+    """
+    for deployed_path, example_path, profile_path in COVERING_LAUNCHERS:
+        profile = _load_yaml(ROOT / profile_path)
+        budget = int(profile["campaign_job_seconds"])
+        for path in (deployed_path, example_path):
+            workflow = _workflow_example(path)
+            job = workflow["jobs"]["campaign"]
+            live = next(
+                step for step in job["steps"] if str(step.get("name", "")).startswith("Run T1")
+            )
+            live_minutes = int(live["timeout-minutes"])
+            assert live_minutes * 60 == budget, (
+                f"{path}: a {live_minutes}-minute live step cannot run a profile pinned to "
+                f"campaign_job_seconds={budget}; the controller would be killed mid-case"
+            )
+            assert int(job["timeout-minutes"]) > live_minutes, (
+                f"{path}: the job must outlive its live step so the always() state upload runs"
+            )
+            # The launcher's own arithmetic, spelled the way its shell line spells it.
+            budget_line = "CAMPAIGN_SECONDS=$((" + str(budget) + " - ELAPSED_SECONDS - 60))"
+            assert budget_line in live["run"], (
+                f"{path}: the live step does not hand the controller the {budget} s budget"
+            )
+            # A full T1 probe is 4200 s, and one exact-instance gate row costs up to
+            # 108 minutes; a budget that cannot hold both strands the gate forever.
+            assert budget - 4200 - 60 >= 6480, (
+                f"{profile_path}: after T1 and the sidecar reserve, {budget - 4200 - 60} s "
+                "is left, below the 6480 s worst-case atomic gate row"
+            )
