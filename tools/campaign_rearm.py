@@ -853,6 +853,31 @@ GUARD_TEST_RE = re.compile(r"^[ \t]*test -f[ \t]+(\S+)[ \t]*$", re.M)
 GUARD_GREP_RE = re.compile(r'^[ \t]*grep -q[ \t]+"([^"]+)"[ \t]+(\S+)', re.M)
 
 
+def merge_requirements(roots: list[str]) -> tuple[list[str], list[tuple[str, str]], str]:
+    """The union of the guard each of these trees defines.
+
+    Which launcher runs a leg is decided by the ref of the *workflow file*, and the code the leg runs
+    comes from a different ref - `main` carries both pairwise launchers, the campaign's own pin
+    carries only the covering ones. Reading one side alone is what let me call `main` a free landing:
+    from a tree with no pairwise launcher the extracted list is the covering set of four files, which
+    `main` satisfies, while the launcher that would actually run the leg additionally demands
+    `tools/inherit_campaign_state.py`, which `main` does not have. A union is the only reading that is
+    never too lax.
+    """
+    files: list[str] = []
+    greps: list[tuple[str, str]] = []
+    notes: list[str] = []
+    for root in roots:
+        got_files, got_greps, note = launch_requirements(root)
+        if note:
+            notes.append(note)
+        files += [f for f in got_files if f not in files]
+        greps += [g for g in got_greps if g not in greps]
+    if not files:
+        return [], [], "; ".join(n for n in notes if n) or "no guard found"
+    return files, greps, ""
+
+
 def launch_requirements(root: str) -> tuple[list[str], list[tuple[str, str]], str]:
     """The `Refuse code missing campaign gates` predicate, read out of the launchers in `root`.
 
@@ -915,6 +940,88 @@ def tree_launchable(root: str, files: list[str], greps: list[tuple[str, str]]) -
     if unmet:
         return False, "; ".join(unmet[:4])
     return True, ""
+
+
+def check_rebase_target(target: str, cwd: str, launcher_root: str | None = None,
+                        against: str = "HEAD") -> dict[str, Any]:
+    """Would a `rebase_onto_ref: <target>` leg survive the launcher's own gate step? Answer before the click.
+
+    A human-typed ref reaches no check of mine: the guard step runs *after* the checkout, so the price of
+    a wrong ref is a dead leg - measured on 2026-10-15 as 11 s (Mercury 54) and 10 s (Atria 34), both
+    exit 1 at `Refuse code missing campaign gates` because `main` has no `tools/inherit_campaign_state.py`
+    (line 344 of both pairwise launchers). It also has no *price* answer: the same dispatch is what moves
+    the pin, so its grading cost is the question an operator is actually asking. This asks the guard's
+    question and the gate's question over one materialised tree, offline, in the second before anybody
+    commits to a leg.
+    """
+    out: dict[str, Any] = {"target": target, "verdict": "unavailable", "why": "", "missing": "",
+                          "differing": [], "notes": []}
+    launcher_root = launcher_root or cwd
+    code, sha = _run(["git", "-C", cwd, "rev-parse", "--verify", f"{target}^{{commit}}"])
+    if code != 0:
+        out["why"] = f"`{target[:40]}` is not an object in this checkout: {sha[:120]}"
+        out["notes"].append("fetch it first (git fetch origin <ref>) or pass a full sha")
+        return out
+    sha = sha.strip()
+    out["sha"] = sha
+    code, base = _run(["git", "-C", cwd, "rev-parse", "--verify", f"{against}^{{commit}}"])
+    base = base.strip() if code == 0 else ""
+    with tempfile.TemporaryDirectory(prefix="campaign-check-") as work:
+        ok, detail = fetch_tree(cwd, sha, work)
+        if not ok:
+            out["why"] = detail
+            return out
+        # Always materialise the comparison ref, even when it is the same commit as the target: a
+        # check that silently falls back to "whatever tree I am standing in" reports a no-op re-pin as
+        # a two-file one, which is the difference between advice and noise.
+        base_tree = None
+        if base:
+            base_tree = tempfile.mkdtemp(prefix="campaign-check-base-")
+            fetch_tree(cwd, base, base_tree)
+        files, greps, note = merge_requirements([launcher_root, work] + ([base_tree] if base_tree else []))
+        if not files:
+            out["why"] = f"no guard to read ({note}); the target was not checked"
+            return out
+        ready, why_ready = tree_launchable(work, files, greps)
+        out["launchable"] = ready
+        out["checks"] = {"files": len(files), "symbols": len(greps)}
+        local_ctx, local_why = (grading_context(base_tree) if base_tree
+                                else grading_context(launcher_root))
+        target_ctx, target_why = grading_context(work)
+        if not ready:
+            out["missing"] = why_ready
+            out["verdict"] = "refused"
+        elif target_ctx is None or local_ctx is None:
+            out["verdict"] = "unlaunchable-check-passed-price-unknown"
+            out["why"] = (f"a verdict inventory could not be read ({(target_why or local_why)[:120]}), "
+                          "so the re-grade price is unknown - not free")
+        else:
+            differing = sorted(k for k in set(local_ctx) | set(target_ctx)
+                               if local_ctx.get(k) != target_ctx.get(k))
+            out["differing"] = differing
+            out["digest_local"] = (local_ctx.get("__digest__") or "")
+            out["verdict"] = "free" if not differing else "costly"
+        try:
+            with open(os.path.join(work, "tools", "run_suite.py"), encoding="utf-8",
+                      errors="replace") as handle:
+                carried = handle.read()
+        except OSError:
+            carried = ""
+        if not carried:
+            out["notes"].append("no tools/run_suite.py in the target: `--rebase-intent` could not be accepted")
+            if out["verdict"] == "free":
+                out["verdict"] = "unlaunchable-check-passed-price-unknown"
+        elif "allow_manifest_commit_rebase" not in carried:
+            out["notes"].append("the target's run_suite.py carries no manifest-commit waiver, so the "
+                                "controller would refuse --rebase-intent from this ref")
+        out["notes"].append(f"guard: {len(files)} file(s) and {len(greps)} symbol check(s), union of "
+                            "the launchers in the launcher root, the target and the comparison ref")
+        if base_tree:
+            out["notes"].append(f"price measured against {base[:7] or against}, this campaign's pin")
+        if base_tree:
+            import shutil
+            shutil.rmtree(base_tree, ignore_errors=True)
+    return out
 
 
 def landing_verdict(local: dict | None, tip: dict | None, *, upstream: dict | None,
@@ -1202,7 +1309,17 @@ def newest_state_owner(api: str, repo: str, token: str | None, workflow_id: Any,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--report", required=True, help="path to the leg's campaign_report.json")
+    parser.add_argument("--report", default="", help="path to the leg's campaign_report.json")
+    parser.add_argument("--check-rebase-target", default="", dest="check_rebase_target",
+                        help="answer, without dispatching anything, whether a `rebase_onto_ref` value "
+                             "would survive the launcher's gate step and what it would cost in verdict "
+                             "files; the only mode that needs no token, no report and no network")
+    parser.add_argument("--check-rebase-against", default="HEAD", dest="check_rebase_against",
+                        help="ref the price of a rebase is measured against; default HEAD, pass the "
+                             "campaign's current pin (its checkpoint's run.manifest_commit) for the number "
+                             "a leg would actually pay")
+    parser.add_argument("--launcher-root", default="", dest="launcher_root",
+                        help="tree whose .github/workflows defines the gate check (default: this one)")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""), help="owner/name")
     parser.add_argument("--workflow", default=os.environ.get("GITHUB_WORKFLOW", ""), help="workflow display name")
     parser.add_argument("--api-url", default=os.environ.get("GITHUB_API_URL", "https://api.github.com"))
@@ -1238,6 +1355,33 @@ def main(argv: list[str] | None = None) -> int:
 
     api = args.api_url.rstrip("/")
     token = os.environ.get("GITHUB_TOKEN") or ""
+    if args.check_rebase_target:
+        check = check_rebase_target(args.check_rebase_target, os.getcwd(),
+                                    args.launcher_root or None, args.check_rebase_against)
+        head = (f"campaign rebase check: `{args.check_rebase_target[:40]}` -> {check['verdict']}"
+                + (f" at {check['sha'][:7]}" if check.get("sha") else ""))
+        print(head)
+        if check.get("missing"):
+            print(f"campaign rebase check: the launcher's gate step would refuse it: {check['missing']}")
+        if check["differing"]:
+            names = ", ".join(check["differing"][:6])
+            more = f" (+{len(check['differing']) - 6} more)" if len(check["differing"]) > 6 else ""
+            print(f"campaign rebase check: re-pinning there re-grades the exact-instance gate over "
+                  f"{len(check['differing'])} verdict file(s): {names}{more}")
+        elif check["verdict"] == "free":
+            print("campaign rebase check: no verdict-producing file differs, so no banked gate row is re-graded")
+        for note in check["notes"]:
+            print(f"campaign rebase check: {note}")
+        if check.get("why"):
+            print(f"campaign rebase check: {check['why']}")
+        if check["verdict"] == "refused":
+            print(f"::warning::campaign rebase onto {args.check_rebase_target[:40]} would be refused by "
+                  f"the launcher's own gate check: {check['missing']}")
+            return 1
+        return 0
+    if not args.report:
+        print("campaign re-arm skipped: no --report path and no --check-rebase-target, so nothing to decide")
+        return 0
     report: Mapping[str, Any] | None = None
     try:
         with open(args.report, "r", encoding="utf-8") as handle:

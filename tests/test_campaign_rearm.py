@@ -705,6 +705,63 @@ def test_a_tree_the_launcher_would_refuse_is_never_reported_as_a_free_landing(tm
     assert 'landing["verdict"] == "withheld"' in source and "::warning::campaign re-arm will not re-pin" in source
 
 
+def test_the_rebase_check_refuses_the_ref_the_launcher_would_refuse(tmp_path: Path) -> None:
+    """The one command that answers "can I type this ref", run before a leg is spent on finding out.
+
+    Both rebase dispatches of 2026-10-15 died at the launcher's `test -f tools/inherit_campaign_state.py`
+    11 and 10 seconds in (Mercury run 54, Atria run 34), because the ref I named has no such file - and
+    no number I could compute from the verdict inventory would have said so, since the inventory is
+    identical. This is the check that does, offline, in the second before the click.
+    """
+    import subprocess
+    def git(*args):
+        return subprocess.run(("git", "-c", "user.email=t@t", "-c", "user.name=t", *args),
+                              cwd=repo, capture_output=True, text=True)
+
+    repo = tmp_path / "repo"
+    (repo / ".github" / "workflows").mkdir(parents=True)
+    (repo / "tools").mkdir(parents=True)
+    (repo / ".github" / "workflows" / "x-pairwise-campaign.yml").write_text(
+        "on:\n  workflow_dispatch:\n      - name: Gate\n"
+        "        run: |\n          test -f tools/needed.py\n", encoding="utf-8")
+    (repo / "tools" / "gate_context.py").write_text(
+        "import json\nprint(json.dumps({\"files\": {\"tools/needed.py\": \"1\"}}))\n", encoding="utf-8")
+    (repo / "tools" / "run_suite.py").write_text("allow_manifest_commit_rebase\n", encoding="utf-8")
+    (repo / "tools" / "needed.py").write_text("x = 1\n", encoding="utf-8")
+    git("init", "-q", ".")
+    git("add", "-A")
+    git("commit", "-qm", "has it")
+    good = git("rev-parse", "HEAD").stdout.strip()
+    (repo / "tools" / "needed.py").unlink()
+    git("add", "-A")
+    git("commit", "-qm", "missing it")
+
+    refused = campaign_rearm.check_rebase_target("HEAD", str(repo), against=good)
+    assert refused["verdict"] == "refused", refused
+    assert "tools/needed.py" in refused["missing"], refused
+    assert refused["launchable"] is False
+
+    same = campaign_rearm.check_rebase_target(good, str(repo), against=good)
+    assert same["verdict"] == "free", same
+    assert same["differing"] == [], same
+
+    # An unknown ref says so instead of answering with a guess.
+    blind = campaign_rearm.check_rebase_target("no-such-ref", str(repo))
+    assert blind["verdict"] == "unavailable" and "not an object in this checkout" in blind["why"], blind
+
+    # The union rule is the load-bearing part: a tree with a laxer launcher must not be able to
+    # launder a target that the strict launcher would refuse. `main` is exactly that case - it has the
+    # pairwise launchers and not the file they require, while the campaign's own pin has neither.
+    files, greps, note = campaign_rearm.merge_requirements([str(repo / "tools"), str(repo)])
+    assert files == ["tools/needed.py"], (files, note)
+    assert note == "", note
+
+    # And the CLI carries it, annotated, with a non-zero exit for a refused target.
+    source = inspect.getsource(campaign_rearm.main)
+    assert "--check-rebase-target" in source and "check_rebase_target(" in source
+    assert "::warning::campaign rebase onto" in source, source
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
