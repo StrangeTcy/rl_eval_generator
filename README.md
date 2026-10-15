@@ -161,7 +161,7 @@ A specialized suite of 19 environments targeting compositional reasoning, algebr
 
 *   **Recursive local-to-global gluing:**
     18. `recursive_gluing`: Fully observed finite CSP control — repair a solver so recursively assembled local charts glue, or report a cyclic obstruction.
-    19. `recursive_gluing_discovery`: Same hidden networks with withheld overlap tables. Local cycles and sparse probes are public; the judge scores the hidden complete relations, so a generic CSP on the observations fails while discovering and reusing the self-similar transport succeeds.
+    19. `recursive_gluing_discovery`: Compact recursive constraint grammar (module types, productions, finite transports, depth). The certificate is a type-and-depth interface summary, not an assignment on the unfolded occurrence graph. v0 `recursive_gluing` remains the fully expanded CSP control.
 
 ### Latent Substrate & Weird Machine Environments (`envs/weird_machine/`)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Judge for recursive_gluing_discovery. Candidate sees public views only."""
+"""Judge for recursive_gluing_discovery. Independent compact oracle in network.py."""
 import json
 import os
 import sys
@@ -23,20 +23,21 @@ from judge_lib import (
 from network import (
     CHECK_NAMES,
     OracleBudgetExceeded,
-    build_grade_bundles,
-    cartesian_size,
-    complete_pair_count,
-    evaluate_against_complete,
-    listed_pair_count,
-    parse_solve_output,
+    build_grade_grammars,
+    compact_input_bytes,
+    public_grammar,
+    summary_cells,
+    unfolded_occurrences,
+    verify_certificate,
 )
 
 PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
 PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
 DEPTH = int("%%DEPTH%%")
-DOMAIN_SIZE = int("%%DOMAIN_SIZE%%")
+INTERFACE_SIZE = int("%%INTERFACE_SIZE%%")
 GLUING_REGIME = "%%GLUING_REGIME%%"
-TRANSPORT_FAMILY = "%%TRANSPORT_FAMILY%%"
+LABEL_MODE = "%%LABEL_MODE%%"
+AMBIGUITY = "%%AMBIGUITY%%"
 SEED = int("%%JUDGE_SEED%%")
 
 
@@ -46,15 +47,16 @@ def main() -> None:
     require_changed_files(result, {"solver.py"})
     workdir, _original_files = make_workdir(patched_dir)
 
-    items = build_grade_bundles(
+    items = build_grade_grammars(
         depth=DEPTH,
-        domain_size=DOMAIN_SIZE,
+        interface_size=INTERFACE_SIZE,
         regime=GLUING_REGIME,
-        family=TRANSPORT_FAMILY,
+        opacity=LABEL_MODE,
+        ambiguity=AMBIGUITY,
         seed=SEED,
     )
     named = dict(items)
-    payload = [{"name": name, "public": bundle["public"]} for name, bundle in items]
+    payload = [{"name": name, "grammar": public_grammar(grammar)} for name, grammar in items]
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as handle:
         handle.write(
@@ -71,8 +73,8 @@ outputs = []
 for item in payload:
     record = {{"name": item["name"]}}
     try:
-        record["first"] = solver.solve(copy.deepcopy(item["public"]))
-        record["second"] = solver.solve(copy.deepcopy(item["public"]))
+        record["first"] = solver.solve(copy.deepcopy(item["grammar"]))
+        record["second"] = solver.solve(copy.deepcopy(item["grammar"]))
     except Exception as exc:
         record["error"] = type(exc).__name__ + ": " + str(exc)
     outputs.append(record)
@@ -82,7 +84,7 @@ torch.save(outputs, "eval_outputs.pt")
 """
         )
 
-    judge_event(result, "hidden_eval", summary="running candidate on public views")
+    judge_event(result, "hidden_eval", summary="running candidate on compact grammars")
     proc = run([sys.executable, eval_script], workdir, 120, eval_env())
     if proc.returncode != 0:
         set_failure(result, "RUNTIME_ERROR", "Verification script failed:\n" + proc.stderr[-800:])
@@ -97,28 +99,19 @@ torch.save(outputs, "eval_outputs.pt")
     by_name = {row.get("name"): row for row in outputs if isinstance(row, dict)}
     checks = {name: False for name in CHECK_NAMES}
 
-    def _callable_for(row):
-        def _solve(_public):
-            if "error" in row:
-                raise RuntimeError(row["error"])
-            return row.get("first")
-
-        return _solve
-
     try:
-        for name, bundle in items:
+        for name, grammar in items:
             row = by_name.get(name, {})
             if "error" in row:
                 checks[name] = False
                 continue
-            checks[name] = evaluate_against_complete(
-                _callable_for(row), bundle["public"], bundle["complete"]
-            )
+            ok, _reason = verify_certificate(grammar, row.get("first"))
+            checks[name] = ok
     except OracleBudgetExceeded as exc:
         set_failure(
             result,
             "judge_runtime_error",
-            "Independent oracle exhausted its search budget; this is not treated as unsat. "
+            "Independent oracle exhausted its budget; this is not treated as unsat. "
             + str(exc),
         )
         emit(result)
@@ -128,8 +121,8 @@ torch.save(outputs, "eval_outputs.pt")
     try:
         first = configured_row.get("first")
         second = configured_row.get("second")
-        parsed, err = parse_solve_output(configured["complete"], first)
-        checks["deterministic"] = (first == second) and parsed is not None and not err
+        ok, _reason = verify_certificate(configured, first)
+        checks["deterministic"] = (first == second) and ok
     except Exception:
         checks["deterministic"] = False
 
@@ -140,13 +133,19 @@ torch.save(outputs, "eval_outputs.pt")
 
     set_metric(result, "passed_hidden_checks", passed)
     set_metric(result, "total_hidden_checks", len(CHECK_NAMES))
-    set_metric(result, "configured_cartesian_size", cartesian_size(configured["complete"]))
-    set_metric(result, "listed_pair_count", listed_pair_count(configured["public"]))
-    set_metric(result, "complete_pair_count", complete_pair_count(configured["complete"]))
-    set_metric(result, "gluing_regime", GLUING_REGIME)
-    set_metric(result, "transport_family", TRANSPORT_FAMILY)
+    set_metric(result, "compact_input_bytes", compact_input_bytes(configured))
+    set_metric(result, "unfolded_occurrences", unfolded_occurrences(DEPTH))
     set_metric(result, "recursive_depth", DEPTH)
-    set_metric(result, "domain_size", DOMAIN_SIZE)
+    set_metric(result, "interface_size", INTERFACE_SIZE)
+    set_metric(result, "gluing_regime", GLUING_REGIME)
+    set_metric(result, "label_mode", LABEL_MODE)
+    set_metric(result, "ambiguity", AMBIGUITY)
+    try:
+        from network import compact_summaries
+
+        set_metric(result, "summary_cells", summary_cells(compact_summaries(configured)))
+    except OracleBudgetExceeded:
+        set_metric(result, "summary_cells", -1)
 
     result["training_completed"] = True
     result["model_saved"] = True

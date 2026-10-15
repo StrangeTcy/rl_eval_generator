@@ -1,9 +1,9 @@
-"""Tests for recursive_gluing_discovery: v0's research sibling.
+"""Tests for recursive_gluing_discovery: compact grammar sibling of v0.
 
-v0 remains the fully-observed CSP control. These tests check that the
-public view withholds complete tables, that three offline solver arms
-separate generic search from latent-given and discovery solvers, and
-that each axis changes the intended property.
+v0 (`recursive_gluing`) remains the fully expanded CSP control. These tests
+check that the agent-facing instance is a recursive grammar, that the compact
+certificate matches an independent interface-summary oracle, that a shallow
+expanded CSP agrees, and that each axis changes the intended property.
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,7 @@ if str(ROOT) not in sys.path:
 FILES = ROOT / "envs" / "cat_theo" / "recursive_gluing_discovery" / "files"
 CONFIG = ROOT / "envs" / "cat_theo" / "recursive_gluing_discovery" / "config.yaml"
 NET_PATH = FILES / "network.py"
+V0_FILES = ROOT / "envs" / "cat_theo" / "recursive_gluing" / "files"
 
 
 def _load_network():
@@ -39,10 +41,10 @@ NET = _load_network()
 
 def _load_baseline():
     text = (FILES / "solver.py").read_text(encoding="utf-8")
-    text = text.replace("%%MODEL_CLASS%%", "ChartAssemblySolver")
+    text = text.replace("%%MODEL_CLASS%%", "GrammarInterfaceSolver")
     namespace: dict = {}
     exec(compile(text, "solver.py", "exec"), namespace)
-    return namespace["ChartAssemblySolver"]()
+    return namespace["GrammarInterfaceSolver"]()
 
 
 def _generate_env(name: str, difficulty: str, seed: int = 0) -> Path:
@@ -75,8 +77,14 @@ def test_config_layout_and_prompt_do_not_name_the_trick() -> None:
         "recursive_depth",
         "state_space",
         "gluing_regime",
-        "transport_family",
+        "label_opacity",
+        "structural_ambiguity",
     ]
+    assert config["axes"][0]["class"] == "task"
+    assert config["axes"][1]["class"] == "task"
+    assert config["axes"][2]["class"] == "task"
+    assert config["axes"][3]["class"] == "presentation"
+    assert config["axes"][4]["class"] == "task"
     assert config["layout"]["judge/network.py"] == "network.py"
     registry = yaml.safe_load((ROOT / "envs" / "registry.yaml").read_text(encoding="utf-8"))
     assert "recursive_gluing" in registry["environments"]
@@ -84,145 +92,279 @@ def test_config_layout_and_prompt_do_not_name_the_trick() -> None:
         "recursive_gluing_discovery/config.yaml"
     )
     prompt = (FILES / "prompt.md").read_text(encoding="utf-8").lower()
-    for banned in ("sheaf", "holonomy", "affine", "group action", "logarithm", "z/n"):
+    for banned in (
+        "sheaf",
+        "holonomy",
+        "affine",
+        "group action",
+        "logarithm",
+        "z/n",
+        "dynamic programming",
+        "canonical",
+        "transducer",
+    ):
         assert banned not in prompt
-    assert "%%" not in NET_PATH.read_text(encoding="utf-8")
+    source = NET_PATH.read_text(encoding="utf-8")
+    assert "%%" not in source
+    assert "experiment_arms" not in source
+    assert "experiment_arms" not in (FILES / "judge.py").read_text(encoding="utf-8")
 
 
-def test_public_view_withholds_complete_tables() -> None:
-    bundle = NET.generate_bundle(
-        depth=3, domain_size=7, regime=NET.CYCLIC_SAT, family=NET.AFFINE, seed=3
+def test_v0_control_is_still_an_expanded_csp() -> None:
+    v0 = (V0_FILES / "network.py").read_text(encoding="utf-8")
+    assert "generate_instance" in v0
+    assert "regions" in v0
+    disc = (FILES / "prompt.md").read_text(encoding="utf-8")
+    assert "productions" in disc
+    assert "realizable" in disc
+
+
+def test_input_is_compact_grammar_not_expanded_csp() -> None:
+    grammar = NET.generate_grammar(
+        depth=6,
+        interface_size=5,
+        regime=NET.CYCLIC_UNSAT,
+        opacity=NET.OPAQUE,
+        ambiguity=NET.CLEAN,
+        seed=3,
     )
-    public, complete = bundle["public"], bundle["complete"]
-    assert NET.has_unprobed_overlap(public)
-    assert NET.listed_pair_count(public) < NET.complete_pair_count(complete)
-    assert NET.cartesian_size(complete) > 1_000_000
-    assert "cycle" in next(iter(public["regions"].values()))
-    assert "cycle" not in next(iter(complete["regions"].values()))
-    assert public["copies"]
-    assert NET.max_name_depth(complete) == 3
-    assert NET.oracle_satisfiable(complete) is True
+    public = NET.public_grammar(grammar)
+    assert set(public) == {"root", "depth", "modules", "productions", "closing"}
+    assert "regions" not in public
+    assert "overlaps" not in public
+    assert public["depth"] == 6
+    assert "stem" in public["modules"]
+    assert "tip" in public["modules"]
+    assert public["modules"]["tip"]["kind"] == "leaf"
+    assert public["modules"]["stem"]["kind"] == "branch"
+    assert "deeper" in public["productions"]["stem"]
+    assert "depth_1" in public["productions"]["stem"]
+    assert NET.unfolded_occurrences(6) == 127
+    assert NET.compact_input_bytes(grammar) < 20_000
+    assert NET.unfolded_occurrences(12) == 8191
 
 
-def test_recursive_depth_and_family_and_regime_move_the_task() -> None:
-    shallow = NET.generate_bundle(
-        depth=1, domain_size=5, regime=NET.TREE, family=NET.TRANSLATION, seed=0
+def test_axes_move_the_task() -> None:
+    shallow = NET.generate_grammar(
+        depth=3, interface_size=5, regime=NET.TREE, opacity=NET.TRANSPARENT, ambiguity=NET.CLEAN, seed=0
     )
-    deep = NET.generate_bundle(
-        depth=3, domain_size=5, regime=NET.TREE, family=NET.TRANSLATION, seed=0
+    deep = NET.generate_grammar(
+        depth=12, interface_size=5, regime=NET.TREE, opacity=NET.TRANSPARENT, ambiguity=NET.CLEAN, seed=0
     )
-    assert NET.region_count(shallow["complete"]) == 3
-    assert NET.region_count(deep["complete"]) == 15
-    assert not NET.has_unprobed_overlap(shallow["public"])
-    sat = NET.generate_bundle(
-        depth=2, domain_size=5, regime=NET.CYCLIC_SAT, family=NET.TRANSLATION, seed=1
+    assert NET.unfolded_occurrences(3) == 15
+    assert NET.unfolded_occurrences(12) == 8191
+    assert NET.compact_input_bytes(deep) < 4 * NET.compact_input_bytes(shallow) + 200
+    small = NET.generate_grammar(
+        depth=3, interface_size=3, regime=NET.TREE, opacity=NET.TRANSPARENT, ambiguity=NET.CLEAN, seed=1
     )
-    unsat = NET.generate_bundle(
-        depth=2, domain_size=5, regime=NET.CYCLIC_UNSAT, family=NET.TRANSLATION, seed=1
+    large = NET.generate_grammar(
+        depth=3, interface_size=7, regime=NET.TREE, opacity=NET.TRANSPARENT, ambiguity=NET.CLEAN, seed=1
     )
-    assert NET.oracle_satisfiable(sat["complete"]) is True
-    assert NET.oracle_satisfiable(unsat["complete"]) is False
-    trans = NET.generate_bundle(
-        depth=2, domain_size=7, regime=NET.CYCLIC_SAT, family=NET.TRANSLATION, seed=4
+    assert len(small["modules"]["tip"]["pairs"]) == 3
+    assert len(large["modules"]["tip"]["pairs"]) == 7
+    sat = NET.generate_grammar(
+        depth=3, interface_size=5, regime=NET.CYCLIC_SAT, opacity=NET.TRANSPARENT, ambiguity=NET.CLEAN, seed=2
     )
-    aff = NET.generate_bundle(
-        depth=2, domain_size=7, regime=NET.CYCLIC_SAT, family=NET.AFFINE, seed=4
+    unsat = NET.generate_grammar(
+        depth=3, interface_size=5, regime=NET.CYCLIC_UNSAT, opacity=NET.TRANSPARENT, ambiguity=NET.CLEAN, seed=2
     )
-    assert NET.oracle_satisfiable(trans["complete"]) is True
-    assert NET.oracle_satisfiable(aff["complete"]) is True
-    # Affine instances are not the translation completion of their probes.
-    foil = NET.translation_only_discover(aff["public"])
-    parsed, _err = NET.parse_solve_output(aff["complete"], foil)
-    assert parsed is None or parsed["status"] != "sat" or not NET.validate_assignment(
-        aff["complete"], parsed.get("assignment", {})
-    )[0]
+    assert NET.grammar_satisfiable(sat) is True
+    assert NET.grammar_satisfiable(unsat) is False
+    assert NET.local_tables_nonempty(unsat)
+    opaque = NET.generate_grammar(
+        depth=3, interface_size=5, regime=NET.CYCLIC_SAT, opacity=NET.OPAQUE, ambiguity=NET.CLEAN, seed=4
+    )
+    assert set(opaque["modules"]["stem"]["ports_domain"]) != set(
+        opaque["modules"]["tip"]["ports_domain"]
+    )
+    assert NET.grammar_satisfiable(opaque) is True
+    clean = NET.generate_grammar(
+        depth=3, interface_size=5, regime=NET.CYCLIC_SAT, opacity=NET.TRANSPARENT, ambiguity=NET.CLEAN, seed=5
+    )
+    decoy = NET.generate_grammar(
+        depth=3, interface_size=5, regime=NET.CYCLIC_SAT, opacity=NET.TRANSPARENT, ambiguity=NET.DECOY, seed=5
+    )
+    assert "weed" not in clean["modules"]
+    assert "weed" in decoy["modules"]
+    assert decoy["productions"]["stem"]["depth_1"]["right"] == "weed"
+    assert NET.compact_summaries(clean) != NET.compact_summaries(decoy)
 
 
-def test_three_arms_separate_generic_from_discovery() -> None:
-    bundle = NET.generate_bundle(
-        depth=2, domain_size=7, regime=NET.CYCLIC_SAT, family=NET.AFFINE, seed=8
+def test_compact_oracle_agrees_with_shallow_expansion() -> None:
+    for depth in (1, 2, 3):
+        for regime in (NET.TREE, NET.CYCLIC_SAT, NET.CYCLIC_UNSAT):
+            for ambiguity in (NET.CLEAN, NET.DECOY):
+                grammar = NET.generate_grammar(
+                    depth=depth,
+                    interface_size=5,
+                    regime=regime,
+                    opacity=NET.OPAQUE,
+                    ambiguity=ambiguity,
+                    seed=10 + depth,
+                )
+                compact_sat = NET.grammar_satisfiable(grammar)
+                expanded_sat = NET.expanded_satisfiable(grammar)
+                assert compact_sat is expanded_sat, (depth, regime, ambiguity)
+                compact_root = NET.root_accepted_pairs(grammar, NET.compact_summaries(grammar))
+                expanded_root = NET.expanded_root_pairs(grammar)
+                assert compact_root == expanded_root, (depth, regime, ambiguity)
+
+
+def test_hard_depth_is_not_expanded() -> None:
+    grammar = NET.generate_grammar(
+        depth=12,
+        interface_size=5,
+        regime=NET.CYCLIC_UNSAT,
+        opacity=NET.OPAQUE,
+        ambiguity=NET.CLEAN,
+        seed=0,
     )
-    public, complete = bundle["public"], bundle["complete"]
-    assert NET.evaluate_against_complete(NET.arm_given_latent, complete, complete) is True
-    assert NET.evaluate_against_complete(NET.arm_discover, public, complete) is True
-    assert NET.evaluate_against_complete(NET.arm_generic_sparse, public, complete) is False
-    given = NET.arm_given_latent(complete)
-    discovered = NET.arm_discover(public)
-    assert given["status"] == discovered["status"] == "sat"
+    cert = NET.reference_certificate(grammar)
+    assert cert["status"] == "unsat"
+    assert NET.summary_cells(cert["realizable"]) < 200
+    with pytest.raises(NET.OracleBudgetExceeded):
+        NET.expand_grammar(grammar)
 
 
-def test_unsat_assembly_with_locally_fine_copies() -> None:
-    bundle = NET.generate_bundle(
-        depth=2, domain_size=5, regime=NET.CYCLIC_UNSAT, family=NET.TRANSLATION, seed=2
+def test_timeout_is_not_unsat() -> None:
+    grammar = NET.example_visible_grammar()
+    with pytest.raises(NET.OracleBudgetExceeded):
+        NET.compact_summaries(grammar, max_nodes=1)
+    assert NET.grammar_satisfiable(grammar) is True
+
+
+def test_baselines_separate_copy_from_compact() -> None:
+    visible = NET.example_visible_grammar()
+    assert NET.evaluate_solver(NET.arm_copy_leaf_upward, visible) is True
+    assert NET.evaluate_solver(NET.arm_compact, visible) is True
+    unsat = NET.generate_grammar(
+        depth=3,
+        interface_size=5,
+        regime=NET.CYCLIC_UNSAT,
+        opacity=NET.TRANSPARENT,
+        ambiguity=NET.CLEAN,
+        seed=8,
     )
-    complete = bundle["complete"]
-    assert NET.oracle_satisfiable(complete) is False
-    # Dropping skip/cycle edges (the assembly) leaves a satisfiable tree.
-    tree_only = {
-        "regions": complete["regions"],
-        "overlaps": [
-            ov
-            for ov in complete["overlaps"]
-            if ov["left"].count("/") + 1 == ov["right"].count("/")
-        ],
-    }
-    assert NET.oracle_satisfiable(tree_only) is True
-    assert NET.evaluate_against_complete(
-        NET.arm_discover, bundle["public"], complete
-    ) is True
-    assert NET.arm_discover(bundle["public"])["status"] == "unsat"
-
-
-def test_relabel_preserves_sat_and_withholding() -> None:
-    bundle = NET.generate_bundle(
-        depth=2, domain_size=5, regime=NET.CYCLIC_SAT, family=NET.TRANSLATION, seed=9
+    assert NET.evaluate_solver(NET.arm_compact, unsat) is True
+    assert NET.evaluate_solver(NET.arm_copy_leaf_upward, unsat) is False
+    assert NET.evaluate_solver(NET.arm_given_canonical, unsat) is True
+    opaque = NET.generate_grammar(
+        depth=3,
+        interface_size=5,
+        regime=NET.TREE,
+        opacity=NET.OPAQUE,
+        ambiguity=NET.CLEAN,
+        seed=8,
     )
-    relabeled = NET.relabel_bundle(bundle, seed=21)
-    assert NET.oracle_satisfiable(bundle["complete"]) is True
-    assert NET.oracle_satisfiable(relabeled["complete"]) is True
-    assert NET.has_unprobed_overlap(relabeled["public"])
-    assert NET.evaluate_against_complete(
-        NET.arm_discover, relabeled["public"], relabeled["complete"]
+    assert NET.evaluate_solver(NET.arm_compact, opaque) is True
+    assert NET.evaluate_solver(NET.arm_copy_leaf_upward, opaque) is False
+    decoy = NET.generate_grammar(
+        depth=3,
+        interface_size=5,
+        regime=NET.CYCLIC_SAT,
+        opacity=NET.TRANSPARENT,
+        ambiguity=NET.DECOY,
+        seed=8,
     )
+    assert NET.evaluate_solver(NET.arm_compact, decoy) is True
+    assert NET.evaluate_solver(NET.arm_copy_leaf_upward, decoy) is False
+    twist = NET.generate_grammar(
+        depth=3,
+        interface_size=5,
+        regime=NET.CYCLIC_SAT,
+        opacity=NET.TRANSPARENT,
+        ambiguity=NET.CLEAN,
+        seed=8,
+        mid_delta=1,
+    )
+    assert NET.evaluate_solver(NET.arm_compact, twist) is True
+    assert NET.evaluate_solver(NET.arm_copy_leaf_upward, twist) is False
+    shallow = NET.generate_grammar(
+        depth=3,
+        interface_size=5,
+        regime=NET.CYCLIC_UNSAT,
+        opacity=NET.OPAQUE,
+        ambiguity=NET.CLEAN,
+        seed=1,
+    )
+    assert NET.evaluate_solver(NET.arm_expanded, shallow) is True
 
 
-def test_grade_reference_vs_baseline_and_generic() -> None:
-    kwargs = dict(depth=2, domain_size=5, regime=NET.CYCLIC_UNSAT, family=NET.AFFINE, seed=6)
-    ref = NET.grade_solver(NET.arm_discover, **kwargs)
+def test_relabel_preserves_sat_and_changes_labels() -> None:
+    grammar = NET.generate_grammar(
+        depth=3,
+        interface_size=5,
+        regime=NET.CYCLIC_SAT,
+        opacity=NET.TRANSPARENT,
+        ambiguity=NET.CLEAN,
+        seed=9,
+    )
+    twin = NET.relabel_grammar(grammar, seed=21)
+    assert NET.grammar_satisfiable(grammar) is True
+    assert NET.grammar_satisfiable(twin) is True
+    assert grammar["modules"]["stem"]["ports_domain"] != twin["modules"]["stem"]["ports_domain"]
+    assert NET.evaluate_solver(NET.arm_compact, twin) is True
+    assert NET.evaluate_solver(NET.arm_copy_leaf_upward, twin) is False
+
+
+def test_grade_reference_vs_baseline() -> None:
+    kwargs = dict(
+        depth=3,
+        interface_size=5,
+        regime=NET.CYCLIC_UNSAT,
+        opacity=NET.OPAQUE,
+        ambiguity=NET.DECOY,
+        seed=6,
+    )
+    ref = NET.grade_solver(NET.arm_compact, **kwargs)
     assert all(ref.values()), ref
-    generic = NET.grade_solver(NET.arm_generic_sparse, **kwargs)
+    copy = NET.grade_solver(NET.arm_copy_leaf_upward, **kwargs)
     base = NET.grade_solver(_load_baseline().solve, **kwargs)
-    assert generic["local_visible"] is True
+    assert copy["local_visible"] is True
     assert base["local_visible"] is True
-    assert sum(generic.values()) < sum(ref.values())
+    assert copy["assembled_unsat"] is False
+    assert copy["decoy_heldout"] is False
+    assert copy["heldout_twist"] is False
+    assert sum(copy.values()) < sum(ref.values())
     assert sum(base.values()) < sum(ref.values())
 
 
 def test_oracle_independent_of_candidate() -> None:
     source = inspect.getsource(NET)
     assert "solver.py" not in source
-    assert "ChartAssemblySolver" not in source
-    bundle = NET.generate_bundle(
-        depth=1, domain_size=5, regime=NET.TREE, family=NET.TRANSLATION, seed=0
-    )
-    assert NET.oracle_satisfiable(bundle["complete"]) is True
+    assert "GrammarInterfaceSolver" not in source
+    grammar = NET.example_visible_grammar()
+    assert NET.grammar_satisfiable(grammar) is True
 
-    def always_unsat(_public):
-        return {"status": "unsat"}
+    def always_unsat(_grammar):
+        return {"status": "unsat", "realizable": {}}
 
-    assert NET.evaluate_against_complete(
-        always_unsat, bundle["public"], bundle["complete"]
-    ) is False
+    assert NET.evaluate_solver(always_unsat, grammar) is False
 
 
-def test_generation_cli(tmp_path: Path) -> None:
+def test_scaling_reports_exponential_unfolding() -> None:
+    rows = NET.measure_scaling(interface_size=5, regime=NET.CYCLIC_UNSAT, seed=0)
+    by_depth = {row["depth"]: row for row in rows}
+    assert by_depth[1]["occurrences"] == 3
+    assert by_depth[12]["occurrences"] == 8191
+    assert by_depth[12]["compact_bytes"] < 50_000
+    assert by_depth[12]["summary_cells"] < 200
+    assert by_depth[12]["expanded_ms"] is None
+    assert by_depth[3]["expanded_ms"] is not None
+    assert by_depth[12]["status"] == "unsat"
+    assert by_depth[1]["compact_ms"] < 1_000
+    assert by_depth[12]["compact_ms"] < 1_000
+
+
+def test_generation_cli() -> None:
     covering = [
-        "easy,easy,easy,easy",
-        "hard,easy,easy,easy",
-        "easy,hard,easy,easy",
-        "easy,easy,hard,easy",
-        "easy,easy,easy,hard",
-        "hard,hard,hard,hard",
+        "easy,easy,easy,easy,easy",
+        "hard,easy,easy,easy,easy",
+        "easy,hard,easy,easy,easy",
+        "easy,easy,hard,easy,easy",
+        "easy,easy,easy,hard,easy",
+        "easy,easy,easy,easy,hard",
+        "hard,hard,hard,hard,hard",
     ]
     created = []
     try:
@@ -244,13 +386,17 @@ def test_generation_cli(tmp_path: Path) -> None:
                 text=True,
             )
             assert compiled.returncode == 0, compiled.stderr
+            judge = (generated / "judge" / "judge.py").read_text(encoding="utf-8")
+            assert "GrammarInterfaceSolver" in judge
+            prompt = (generated / "agent" / "workspace" / "prompt.md").read_text(encoding="utf-8")
+            assert "productions" in prompt
     finally:
         for path in created:
             shutil.rmtree(path, ignore_errors=True)
 
 
 def test_visible_tests_pass_on_baseline() -> None:
-    generated = _generate_env("test_rgd_visible", "easy,easy,easy,easy", seed=1)
+    generated = _generate_env("test_rgd_visible", "easy,easy,easy,easy,easy", seed=1)
     try:
         workspace = generated / "agent" / "workspace"
         proc = subprocess.run(

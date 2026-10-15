@@ -1,63 +1,63 @@
 from solver import %%MODEL_CLASS%%
 
 
-def test_two_region_full_table():
-    instance = {
-        "regions": {
-            "cell_a": {"domain": ["p", "q"], "cycle": ["p", "q"]},
-            "cell_b": {"domain": ["r", "s"], "cycle": ["r", "s"]},
-        },
-        "overlaps": [
-            {"left": "cell_a", "right": "cell_b", "pairs": [["p", "r"], ["q", "s"]]},
-        ],
-        "copies": [],
-        "gadget": "cell_a",
-    }
-    out = %%MODEL_CLASS%%().solve(instance)
-    assert out["status"] == "sat"
-    assert out["assignment"]["cell_a"] == "p"
-    assert out["assignment"]["cell_b"] == "r"
+def _identity_tables(labels):
+    pairs = [[lab, lab] for lab in labels]
+    return {"enter": [list(p) for p in pairs], "mid": [list(p) for p in pairs], "leave": [list(p) for p in pairs]}
 
 
-def test_three_region_path():
-    instance = {
-        "regions": {
-            "cell_a": {"domain": ["p", "q"], "cycle": ["p", "q"]},
-            "cell_b": {"domain": ["r", "s"], "cycle": ["r", "s"]},
-            "cell_c": {"domain": ["t", "u"], "cycle": ["t", "u"]},
+def _depth1_tree():
+    labels = ["s0", "s1", "s2"]
+    pairs = [[lab, lab] for lab in labels]
+    wiring = _identity_tables(labels)
+    return {
+        "root": "stem",
+        "depth": 1,
+        "modules": {
+            "stem": {"kind": "branch", "ports": ["enter", "leave"], "ports_domain": list(labels)},
+            "tip": {
+                "kind": "leaf",
+                "ports": ["enter", "leave"],
+                "ports_domain": list(labels),
+                "pairs": pairs,
+            },
         },
-        "overlaps": [
-            {"left": "cell_a", "right": "cell_b", "pairs": [["p", "r"], ["q", "s"]]},
-            {"left": "cell_b", "right": "cell_c", "pairs": [["r", "t"], ["s", "u"]]},
-        ],
-        "copies": [],
-        "gadget": "cell_a",
+        "productions": {
+            "stem": {
+                "deeper": {"left": "stem", "right": "stem", "wiring": wiring},
+                "depth_1": {"left": "tip", "right": "tip", "wiring": wiring},
+            }
+        },
+        "closing": None,
     }
-    out = %%MODEL_CLASS%%().solve(instance)
+
+
+def test_depth1_identity_tree_is_sat():
+    grammar = _depth1_tree()
+    out = %%MODEL_CLASS%%().solve(grammar)
     assert out["status"] == "sat"
-    asg = out["assignment"]
-    assert [asg["cell_a"], asg["cell_b"]] in [["p", "r"], ["q", "s"]]
-    assert [asg["cell_b"], asg["cell_c"]] in [["r", "t"], ["s", "u"]]
+    assert [out["root_enter"], out["root_leave"]] in [["s0", "s0"], ["s1", "s1"], ["s2", "s2"]]
+    tip_pairs = out["realizable"]["tip"]["0"]
+    stem_pairs = out["realizable"]["stem"]["1"]
+    assert ["s0", "s0"] in [list(p) for p in tip_pairs]
+    assert ["s0", "s0"] in [list(p) for p in stem_pairs]
+
+
+def test_leaf_pairs_are_reported():
+    grammar = _depth1_tree()
+    out = %%MODEL_CLASS%%().solve(grammar)
+    reported = sorted(list(p) for p in out["realizable"]["tip"]["0"])
+    assert reported == [["s0", "s0"], ["s1", "s1"], ["s2", "s2"]]
 
 
 def test_deterministic():
-    instance = {
-        "regions": {
-            "cell_a": {"domain": ["p", "q"], "cycle": ["p", "q"]},
-            "cell_b": {"domain": ["r", "s"], "cycle": ["r", "s"]},
-        },
-        "overlaps": [
-            {"left": "cell_a", "right": "cell_b", "pairs": [["p", "r"], ["q", "s"]]},
-        ],
-        "copies": [],
-        "gadget": "cell_a",
-    }
+    grammar = _depth1_tree()
     solver = %%MODEL_CLASS%%()
-    assert solver.solve(instance) == solver.solve(instance)
+    assert solver.solve(grammar) == solver.solve(grammar)
 
 
 if __name__ == "__main__":
-    test_two_region_full_table()
-    test_three_region_path()
+    test_depth1_identity_tree_is_sat()
+    test_leaf_pairs_are_reported()
     test_deterministic()
     print("visible tests passed")

@@ -1,28 +1,28 @@
 axes:
   - id: recursive_depth
-    description: "Nesting depth of recursively substituted gadgets; deeper copies must reuse the root gadget under local relabelling"
+    description: "Remaining depth of the recursively applied productions; unfolded occurrence count is 2^(depth+1)-1 while the grammar stays compact"
     class: "task"
     levels:
       easy:
-        "%%DEPTH%%": "1"
-      medium:
-        "%%DEPTH%%": "2"
-      hard:
         "%%DEPTH%%": "3"
+      medium:
+        "%%DEPTH%%": "6"
+      hard:
+        "%%DEPTH%%": "12"
 
   - id: state_space
-    description: "Prime cycle length; larger values make sparse-probe CSP search infeasible relative to cycle-intertwining completion"
+    description: "Finite interface alphabet size; larger values enlarge local pair tables without unfolding the grammar"
     class: "task"
     levels:
       easy:
-        "%%DOMAIN_SIZE%%": "5"
+        "%%INTERFACE_SIZE%%": "3"
       medium:
-        "%%DOMAIN_SIZE%%": "7"
+        "%%INTERFACE_SIZE%%": "5"
       hard:
-        "%%DOMAIN_SIZE%%": "13"
+        "%%INTERFACE_SIZE%%": "7"
 
   - id: gluing_regime
-    description: "Assembly regime: tree-like SAT, cyclic SAT, or a cyclic global obstruction whose copies are locally fine"
+    description: "Root closing regime: tree-like SAT, cyclic SAT, or a cyclic global obstruction whose every local table is nonempty"
     class: "task"
     levels:
       easy:
@@ -32,14 +32,23 @@ axes:
       hard:
         "%%GLUING_REGIME%%": "cyclic_unsat"
 
-  - id: transport_family
-    description: "Hidden overlap family in cycle coordinates: translations versus held-out affine intertwiners"
+  - id: label_opacity
+    description: "Local port labels: shared names versus arbitrary per-type relabellings that preserve the answer"
+    class: "presentation"
+    levels:
+      easy:
+        "%%LABEL_MODE%%": "transparent"
+      hard:
+        "%%LABEL_MODE%%": "opaque"
+
+  - id: structural_ambiguity
+    description: "Whether depth-1 expansions use one leaf type or a second decoy leaf with a different pair table"
     class: "task"
     levels:
       easy:
-        "%%TRANSPORT_FAMILY%%": "translation"
+        "%%AMBIGUITY%%": "clean"
       hard:
-        "%%TRANSPORT_FAMILY%%": "affine"
+        "%%AMBIGUITY%%": "decoy"
 
 scoring:
   mode: continuous_accuracy
@@ -47,7 +56,7 @@ scoring:
   partial_threshold: 0.60
 
 constants:
-  "%%MODEL_CLASS%%": "ChartAssemblySolver"
+  "%%MODEL_CLASS%%": "GrammarInterfaceSolver"
   "%%MODEL_FILE%%": "solver.py"
   "%%PATCHABLE_FILES%%": '["solver.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '""'
@@ -86,16 +95,17 @@ latent_factors:
   factors:
     task_state:
       # DEPTH <- axis_class:task
-      # DOMAIN_SIZE <- axis_class:task
+      # INTERFACE_SIZE <- axis_class:task
       # GLUING_REGIME <- axis_class:task
-      # TRANSPORT_FAMILY <- axis_class:task
-      placeholders: [DEPTH, DOMAIN_SIZE, GLUING_REGIME, TRANSPORT_FAMILY]
+      # AMBIGUITY <- axis_class:task
+      placeholders: [DEPTH, INTERFACE_SIZE, GLUING_REGIME, AMBIGUITY]
     causal_mechanism:
       unavailable: fixed hand-authored template code; a scaffold cannot derive a generative mechanism,
         and recording one it did not derive would be a causal claim nobody made (item 4 honesty
         constraint)
     observable_state:
-      unavailable: scaffold rules mapped no placeholder to observable_state
+      # LABEL_MODE <- axis_class:presentation
+      placeholders: [LABEL_MODE]
     proxy_signal:
       unavailable: scaffold rules mapped no placeholder to proxy_signal
     evaluator_state:

@@ -25,7 +25,7 @@ envs = [
     ("sheaf_invariant_gluing", "easy,hard"),
     ("sheaf_physical_constraints", "easy,hard"),
     ("recursive_gluing", "easy,easy,easy,easy"),
-    ("recursive_gluing_discovery", "easy,easy,easy,easy"),
+    ("recursive_gluing_discovery", "easy,easy,easy,easy,easy"),
 ]
 
 print("Testing generation and compilation of all 19 Category Theory environments...\n")
