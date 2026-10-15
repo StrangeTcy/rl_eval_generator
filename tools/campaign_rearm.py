@@ -236,6 +236,10 @@ def cron_is_not_delivering(newest_schedule_run, now: datetime, *, readable: bool
 
 SIBLING_ARMS_ITS_OWN_SUCCESSOR_SECONDS = 180
 
+# Statuses in which a run exists but has no runner. It cannot have reached any step, so it cannot be
+# the leg that continues the campaign; it is a reservation in the concurrency group.
+UNSTARTED_RUN_STATUSES = frozenset({"queued", "requested", "pending"})
+
 
 def sibling_will_arm_its_own_successor(run, now: datetime, *,
                                        threshold: int = SIBLING_ARMS_ITS_OWN_SUCCESSOR_SECONDS) -> bool:
@@ -253,9 +257,14 @@ def sibling_will_arm_its_own_successor(run, now: datetime, *,
         return False
     if str(run.get("status") or "") not in BUSY_RUN_STATUSES:
         return False
-    # `run_started_at` is what GitHub actually provides; the older stamps are fallbacks so that a
-    # sibling whose metadata says it has been touched for the last time an hour ago is still read as
-    # underway, which is what the guard meant before it cost two chains.
+    # A run GitHub has not handed a runner yet cannot be underway, whatever its timestamps say: the
+    # run list is stale in exactly the direction that matters here, and both chains died standing down
+    # for siblings that were `queued` at the moment of the check (Mercury #46, queued since 20:58 and
+    # refused by run 45 at 22:25:48; Atria #30, refused by run 29 at 22:28:12 thirteen seconds before
+    # its job began). Once there is a runner, `run_started_at` is the honest stamp and `updated_at` is
+    # the fallback for metadata that does not carry it.
+    if str(run.get("status") or "") in UNSTARTED_RUN_STATUSES:
+        return False
     started = (_parse_timestamp(run.get("run_started_at")) or _parse_timestamp(run.get("started_at"))
                or _parse_timestamp(run.get("updated_at")) or _parse_timestamp(run.get("created_at")))
     if started is None:
