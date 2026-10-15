@@ -1,0 +1,438 @@
+From 668dc13f9d5392f3753d95fa87ea71e7902ef9cc Mon Sep 17 00:00:00 2001
+From: arena-agent <297053741+arena-agent@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 19:47:31 +0000
+Subject: [PATCH] reporter: name the paid READY probe, and date the comment
+ that reports it
+
+Two reporting defects, both invisible to the campaign and both fatal to reading
+it. Neither touches a verdict-producing file, so this re-pin re-grades nothing.
+
+1. A leg that pauses in the Phase 2 compatibility probe banks no row, writes no
+   `campaign_progress.json`, and so leaves every counter where the last banking
+   leg put it. The comment said `Campaign state: paused` and nothing else. It now
+   names the probe, its refusal class, its attempt count, the age of
+   `compatibility.json`, and why the episode counter cannot move.
+
+2. `Updated` is the *checkpoint's* timestamp, so a leg that banks nothing leaves
+   it hours old and the comment cannot distinguish "nothing banked" from "the
+   reporter stopped". The comment now carries its own render clock plus the leg
+   run and attempt that produced it.
+
+Squashed from arena/70337724-rl-eval-generator f04e420 + dc3ddd8.
+---
+ tests/test_campaign_status_sidecar.py | 231 ++++++++++++++++++++++++++
+ tools/campaign_status_sidecar.py      | 145 ++++++++++++++++
+ 2 files changed, 376 insertions(+)
+
+diff --git a/tests/test_campaign_status_sidecar.py b/tests/test_campaign_status_sidecar.py
+index 242f7e1..d40b2c1 100644
+--- a/tests/test_campaign_status_sidecar.py
++++ b/tests/test_campaign_status_sidecar.py
+@@ -417,3 +417,234 @@ def test_gate_denominator_stays_unknown_rather_than_invented(tmp_path: Path) ->
+     body = _body(tmp_path)
+ 
+     assert "**Gate checkpointed:** `3 / ?`" in body
++
++
++def _probe_state(
++    tmp_path: Path,
++    *,
++    probe: dict,
++    pause_reason: str,
++    episodes_completed: int = 170,
++    episodes_total: int = 416,
++    waited: float = 3300.0,
++) -> None:
++    """The durable files a leg leaves when the paid READY probe is what stopped it.
++
++    Shaped like the Reasoning-Atria pairwise state of 2026-10-15: the progress file
++    frozen at the gate write that precedes the probe, the episodes banked by earlier
++    legs, and the probe's own record beside them.
++    """
++    write_progress(
++        tmp_path,
++        phase="exact-instance gate",
++        gate_total=189,
++        gate_completed=189,
++        episodes_total=episodes_total,
++        episodes_completed=episodes_completed,
++        current_case=None,
++    )
++    (tmp_path / "compatibility.json").write_text(json.dumps(probe), encoding="utf-8")
++    (tmp_path / "suite_checkpoint.json").write_text(
++        json.dumps(
++            {
++                "manifest_case_count": episodes_total,
++                "paused": True,
++                "pause_reason": pause_reason,
++                "results": [{"case_id": str(index)} for index in range(episodes_completed)],
++                "run": {"compatibility": {"status": probe.get("status"),
++                                          "error_type": probe.get("error_type"),
++                                          "waited_seconds": waited}},
++            }
++        ),
++        encoding="utf-8",
++    )
++    (tmp_path / "campaign_report.json").write_text(
++        json.dumps(
++            {
++                "status": "paused",
++                "pause_reason": pause_reason,
++                "resumable": pause_reason == "provider_infrastructure_error_compatibility",
++                "compatibility": {"status": probe.get("status"),
++                                  "attempts": probe.get("attempts"),
++                                  "waited_seconds": waited},
++            }
++        ),
++        encoding="utf-8",
++    )
++
++
++def test_body_names_the_probe_a_leg_is_waiting_out_instead_of_freezing_at_the_gate(tmp_path: Path) -> None:
++    """The stall that reads as a stuck counter is a phase the comment never named.
++
++    Three legs (04:52, 05:58, 06:59Z on 2026-10-15) each spent the profile's 3600 s
++    outage patience inside `_compatibility_with_patience`, exited 7 and banked no row,
++    while the comment kept reporting the gate snapshot the probe path never updates -
++    `Episodes checkpointed: 170 / 416` with an `Updated` stamp that did not move. The
++    probe's own record says which phase the leg is in, how the provider refused, and
++    when it last refused; the age of that file is the liveness channel the frozen
++    `Updated` line cannot be.
++    """
++    _probe_state(
++        tmp_path,
++        probe={
++            "status": "failed",
++            "error_type": "provider_transient",
++            "status_code": None,
++            "attempts": 6,
++            "attempt_logs": [
++                {"attempt": 5, "error_type": "http_error", "status_code": 503, "elapsed_ms": 812},
++                {"attempt": 6, "error_type": "timeout", "status_code": None, "elapsed_ms": 120000},
++            ],
++            "diagnostic_body": "PAYLOAD-THAT-MUST-NOT-BE-RENDERED",
++            "effective_request": {"model": "Atria-Dawn-Preview",
++                                  "request_extra": "PAYLOAD-THAT-MUST-NOT-BE-RENDERED"},
++        },
++        pause_reason="provider_infrastructure_error_compatibility",
++    )
++
++    body = _body(tmp_path)
++
++    assert "**Compatibility probe:**" in body
++    probe_line = next(line for line in body.splitlines() if line.startswith("- **Compatibility probe:**"))
++    assert "failed" in probe_line
++    assert "provider_transient" in probe_line
++    assert "last attempt timeout" in probe_line
++    assert "6 attempts" in probe_line
++    assert "last attempt took 120000 ms" in probe_line
++    assert "written " in probe_line and " s before this comment" in probe_line
++    assert "**Provider outage wait:** `3300.0 s waited" in body
++    assert "**Episodes this leg:** `none" in body
++    assert "Phase 2" in body and "Phase 3" in body
++    # The frozen counters are still reported, unchanged and unexplained-away.
++    assert "**Episodes checkpointed:** `170 / 416`" in body
++    # A provider payload is never a status line.
++    assert "PAYLOAD-THAT-MUST-NOT-BE-RENDERED" not in body
++
++
++def test_body_reports_the_answer_shape_when_the_probe_completed_but_was_not_ready(tmp_path: Path) -> None:
++    """A substantive probe failure is terminal, so its diagnosis has to be readable.
++
++    `completion_compatibility_failed` is not resumable and the supervisor will not
++    re-arm it: the provider answered, just not the exact acknowledgement the pinned
++    contract asks for. Whether it was truncated or padded is the whole question, and
++    the answer's shape - finish_reason and two lengths - answers it without printing
++    a provider response body.
++    """
++    _probe_state(
++        tmp_path,
++        probe={
++            "status": "failed",
++            "error_type": "invalid_compatibility_completion",
++            "status_code": 200,
++            "attempts": 1,
++            "attempt_logs": [],
++            "finish_reason": "length",
++            "content_length": 17,
++            "reasoning_content_length": 8192,
++            "diagnostic_body": "READY, but only after PAYLOAD-THAT-MUST-NOT-BE-RENDERED",
++        },
++        pause_reason="completion_compatibility_failed",
++        waited=0.0,
++    )
++
++    body = _body(tmp_path)
++
++    probe_line = next(line for line in body.splitlines() if line.startswith("- **Compatibility probe:**"))
++    assert "invalid_compatibility_completion" in probe_line
++    assert "HTTP 200" in probe_line
++    assert "finish_reason=length" in probe_line
++    assert "answer length=17" in probe_line
++    assert "reasoning length=8192" in probe_line
++    assert "PAYLOAD-THAT-MUST-NOT-BE-RENDERED" not in body
++
++
++def test_body_stays_quiet_about_a_probe_that_passed(tmp_path: Path) -> None:
++    """A passing probe is not news, and a stale pass must not be rendered as this leg's."""
++    write_progress(tmp_path, phase="episodes", episodes_total=416, episodes_completed=171)
++    (tmp_path / "compatibility.json").write_text(
++        json.dumps({"status": "passed", "attempts": 1, "attempt_logs": []}), encoding="utf-8"
++    )
++    (tmp_path / "suite_checkpoint.json").write_text(
++        json.dumps({"manifest_case_count": 416, "results": [{"case_id": str(i)} for i in range(171)]}),
++        encoding="utf-8",
++    )
++
++    body = _body(tmp_path)
++
++    assert "**Compatibility probe:**" not in body
++    assert "**Episodes this leg:**" not in body
++
++
++def test_body_says_when_the_newest_probe_passed_under_an_older_legs_pause(tmp_path: Path) -> None:
++    """The report is written when a leg ENDS, so its pause can be older than the probe."""
++    _probe_state(
++        tmp_path,
++        probe={"status": "passed", "attempts": 2, "attempt_logs": []},
++        pause_reason="provider_infrastructure_error_compatibility",
++    )
++
++    body = _body(tmp_path)
++
++    assert "**Compatibility probe:** `passed" in body
++    assert "the newest probe passed, so the pause above belongs to an earlier leg" in body
++    assert "**Episodes this leg:** `none" not in body
++
++
++def _stale_progress(tmp_path: Path) -> None:
++    """Leave a checkpoint whose own timestamp is hours old, as a paused leg does."""
++    write_progress(tmp_path, phase="episodes", current_case="case__office")
++    progress_file = tmp_path / "campaign_progress.json"
++    progress = json.loads(progress_file.read_text(encoding="utf-8"))
++    progress["updated_at"] = "2026-10-15T05:00:05Z"
++    progress_file.write_text(json.dumps(progress), encoding="utf-8")
++
++
++def test_the_comment_names_the_render_that_wrote_it(tmp_path: Path, monkeypatch) -> None:
++    """A frozen `Updated` must read as "nothing banked", never as "reporter dead".
++
++    `Updated` is the checkpoint's own timestamp, so a leg that pauses in Phase 2
++    leaves it where it was for hours. The render line carries this comment's own
++    clock, which is the only evidence in the comment that a reporter ran at all.
++    """
++    from datetime import UTC, datetime
++
++    monkeypatch.setenv("GITHUB_RUN_ID", "38758437040")
++    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
++    _stale_progress(tmp_path)
++
++    body = _body(tmp_path)
++
++    assert "- **Updated:** 2026-10-15T05:00:05Z" in body
++    rendered = next(
++        line for line in body.splitlines() if line.startswith("- **Comment rendered:**")
++    )
++    stamp = rendered.split("**Comment rendered:**", 1)[1].strip().split(", rendered by")[0]
++    age = abs((datetime.now(UTC) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds())
++    assert age < 120, f"the render line must carry this comment's clock, not the checkpoint's: {stamp}"
++    assert "2026-10-15T05:00:05Z" not in rendered
++
++
++def test_the_render_line_names_the_leg_that_rendered_it(tmp_path: Path, monkeypatch) -> None:
++    """Name the leg, so a reader can tell a chained leg from a dispatched one."""
++    monkeypatch.setenv("GITHUB_RUN_ID", "38758437040")
++    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "3")
++    _stale_progress(tmp_path)
++
++    body = _body(tmp_path)
++
++    assert "leg run 38758437040 attempt 3" in body
++
++
++def test_the_render_line_survives_a_bare_environment(tmp_path: Path, monkeypatch) -> None:
++    """The sidecar is fail-open: a missing variable omits a clause, never raises."""
++    monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
++    monkeypatch.delenv("GITHUB_RUN_ATTEMPT", raising=False)
++    _stale_progress(tmp_path)
++
++    body = _body(tmp_path)
++
++    rendered = next(
++        line for line in body.splitlines() if line.startswith("- **Comment rendered:**")
++    )
++    assert rendered.endswith("Z"), rendered
++    assert "leg run" not in rendered
+diff --git a/tools/campaign_status_sidecar.py b/tools/campaign_status_sidecar.py
+index a7b2ad9..8fe2663 100644
+--- a/tools/campaign_status_sidecar.py
++++ b/tools/campaign_status_sidecar.py
+@@ -230,6 +230,149 @@ def _infrastructure_detail(checkpoint: dict[str, Any]) -> list[str]:
+     return lines
+ 
+ 
++# The two pause reasons the paid READY probe writes. One is a provider that will
++# not answer (resumable, and the campaign re-arms itself); the other is a model
++# or API change that answered something else (terminal, and nothing resumes it).
++COMPATIBILITY_PAUSE_REASONS = frozenset({
++    "provider_infrastructure_error_compatibility",
++    "completion_compatibility_failed",
++})
++
++
++def _file_age_seconds(path: Path) -> float | None:
++    """Seconds since ``path`` was last written, or None when it cannot be stat'ed."""
++    try:
++        return max(0.0, time.time() - path.stat().st_mtime)
++    except OSError:
++        return None
++
++
++def _compatibility_detail(
++    output: Path,
++    checkpoint: dict[str, Any],
++    report: dict[str, Any],
++    pause_reason: str,
++) -> list[str]:
++    """Name the paid READY probe when it is what stands between this leg and the episodes.
++
++    The probe is Phase 2 of ``tools/atria_campaign.py`` and the episodes are Phase 3,
++    and the probe path writes no ``campaign_progress.json`` - it only rewrites
++    ``compatibility.json`` per attempt and the checkpoint/report when it gives up. A
++    leg waiting out a provider outage therefore leaves every counter in this comment
++    frozen at whatever the gate phase last wrote, with nothing to say which phase the
++    leg is actually in. That is exactly how the Reasoning-Atria pairwise campaign read
++    as "stuck on 170 / 416" for three hours on 2026-10-15: legs 04:52, 05:58 and
++    06:59Z each spent the profile's 3600 s outage patience inside
++    ``_compatibility_with_patience``, exited 7, banked no row, and re-armed a successor
++    that did the same - while this comment kept reporting the 05:00:05Z gate snapshot.
++
++    Everything rendered here is durable metadata the probe already persists: the
++    classification, the HTTP status, the attempt count, how long the last attempt took,
++    and the age of the file it wrote. The age is the liveness channel the frozen
++    ``Updated`` line cannot be - a leg still probing rewrites that file every backoff
++    round, so an age that keeps growing past the patience window is a leg that ended.
++    Never ``diagnostic_body`` or ``effective_request``: those are provider payloads.
++    """
++    probe = _read_json(output / "compatibility.json")
++    run = checkpoint.get("run")
++    run = run if isinstance(run, dict) else {}
++    recorded = run.get("compatibility")
++    recorded = recorded if isinstance(recorded, dict) else {}
++    reported = report.get("compatibility")
++    reported = reported if isinstance(reported, dict) else {}
++    status = str(probe.get("status") or recorded.get("status") or reported.get("status") or "")
++    if status == "passed" and pause_reason not in COMPATIBILITY_PAUSE_REASONS:
++        # A probe that passed is not news: the leg is in the episodes, where the
++        # counters above already speak. A stale pass from an earlier leg would be
++        # worse than silence, so this section only ever reports a refusal.
++        return []
++    if not status and pause_reason not in COMPATIBILITY_PAUSE_REASONS:
++        return []
++
++    attempts = [entry for entry in (probe.get("attempt_logs") or []) if isinstance(entry, dict)]
++    last = attempts[-1] if attempts else {}
++    parts = [status or "unrecorded"]
++    error_type = probe.get("error_type") or recorded.get("error_type")
++    if error_type:
++        parts.append(str(error_type))
++    if isinstance(last.get("error_type"), str) and last["error_type"]:
++        parts.append(f"last attempt {last['error_type']}")
++    status_code = probe.get("status_code") if probe.get("status_code") is not None else last.get("status_code")
++    if isinstance(status_code, int):
++        parts.append(f"HTTP {status_code}")
++    attempt_count = probe.get("attempts") or reported.get("attempts")
++    if isinstance(attempt_count, int):
++        parts.append(f"{attempt_count} attempt{'' if attempt_count == 1 else 's'}")
++    if isinstance(last.get("elapsed_ms"), int) and last["elapsed_ms"] > 0:
++        parts.append(f"last attempt took {last['elapsed_ms']} ms")
++    if str(probe.get("error_type") or "") == "invalid_compatibility_completion":
++        # The provider answered, so this is not an outage and the supervisor will not
++        # resume it: the acknowledgement itself was not the exact READY the pinned
++        # contract asks for. The shape of the answer is the diagnosis, and it is
++        # metadata rather than payload - a finish_reason and two lengths, never the
++        # text, which is a provider response body.
++        for key, label in (
++            ("finish_reason", "finish_reason"),
++            ("content_length", "answer length"),
++            ("reasoning_content_length", "reasoning length"),
++        ):
++            value = probe.get(key)
++            if isinstance(value, str) and value:
++                parts.append(f"{label}={value}")
++            elif isinstance(value, int):
++                parts.append(f"{label}={value}")
++    age = _file_age_seconds(output / "compatibility.json")
++    if age is not None:
++        parts.append(f"written {int(age)} s before this comment")
++    lines = [f"- **Compatibility probe:** `{' | '.join(parts)}`"]
++
++    waited = reported.get("waited_seconds")
++    if not isinstance(waited, (int, float)):
++        waited = recorded.get("waited_seconds")
++    if isinstance(waited, (int, float)):
++        lines.append(
++            f"- **Provider outage wait:** `{waited} s waited by the last leg that finished, "
++            "of the patience its profile allows`"
++        )
++    if pause_reason in COMPATIBILITY_PAUSE_REASONS:
++        if status == "passed":
++            lines.append(
++                "- **Episodes this leg:** `the newest probe passed, so the pause above belongs to "
++                "an earlier leg's report; this one is past Phase 2 and the episode counter moves "
++                "when it banks a row`"
++            )
++        else:
++            lines.append(
++                "- **Episodes this leg:** `none - the READY probe is Phase 2 and the episodes are "
++                "Phase 3, so a leg that pauses here banks no row and the episode counter above "
++                "cannot move until a probe passes`"
++            )
++    return lines
++
++
++def _rendered_by() -> str:
++    """Name this render, so a stale `Updated` can be told from a dead reporter.
++
++    `Updated` is the *checkpoint's* timestamp, and a leg that pauses in Phase 2
++    banks nothing, so that timestamp legitimately stays where it was for hours.
++    Read on its own it cannot distinguish "nothing new happened" from "the
++    reporter stopped running" -- and the second is the one an operator must act
++    on.  This line carries the render's own clock and the leg that produced it,
++    which is the heartbeat the rest of the comment is silent about.
++
++    Every field is fail-open: the sidecar must still render the campaign's truth
++    when the environment is bare, so a missing variable omits a clause rather
++    than raising.
++    """
++    rendered_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
++    leg: list[str] = []
++    run_id = os.environ.get("GITHUB_RUN_ID")
++    if run_id:
++        attempt = os.environ.get("GITHUB_RUN_ATTEMPT")
++        leg.append(f"leg run {run_id}" + (f" attempt {attempt}" if attempt else ""))
++    return f"{rendered_at}" + (f", rendered by {', '.join(leg)}" if leg else "")
++
++
+ def _body(output: Path) -> str:
+     progress = read_progress(output)
+     checkpoint = _read_json(output / "suite_checkpoint.json")
+@@ -257,6 +400,7 @@ def _body(output: Path) -> str:
+         f"## {_CAMPAIGN['body_label']} live status",
+         "",
+         f"- **Updated:** {progress.get('updated_at') or report.get('updated_at') or datetime.now(UTC).isoformat()}",
++        f"- **Comment rendered:** {_rendered_by()}",
+         status_line,
+         f"- **Campaign elapsed:** {_elapsed(campaign_started_at)}",
+         f"- **Phase:** `{phase}`",
+@@ -350,6 +494,7 @@ def _body(output: Path) -> str:
+     pause_reason = progress.get("pause_reason") or checkpoint.get("pause_reason") or report.get("pause_reason")
+     if pause_reason:
+         lines.append(f"- **Pause reason:** `{pause_reason}`")
++    lines.extend(_compatibility_detail(output, checkpoint, report, str(pause_reason or "")))
+     retry_summary = _retry_summary(checkpoint, report)
+     if retry_summary:
+         lines.append(f"- **Retries:** `{retry_summary}`")
+-- 
+2.39.5
+
