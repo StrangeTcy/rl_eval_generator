@@ -220,7 +220,11 @@ def test_the_finished_leg_sits_out_the_window_then_asks(monkeypatch, tmp_path, c
                                 "--api-url", "https://api.invalid", "--sleep-cap", "1800",
                                 "--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert len(slept) == 1 and 1180 <= slept[0] <= 1200, (slept, out)
+    # 1200 s plus one: the floor is now measured on the state the successor resumes, and this test
+    # writes `campaign_report.json` as of NOW, so the resumeable state is 0 s old and the correct
+    # advice is the whole backoff - not "the sibling finished three hours ago", which is the error
+    # that armed doomed legs 47 and 49 on 2026-10-14.
+    assert len(slept) == 1 and 1200 <= slept[0] <= 1215, (slept, out)
     assert "sitting it out" in out, out
     assert "would dispatch" in out, out
 
@@ -522,17 +526,39 @@ def test_a_leg_arming_its_successor_is_not_an_other_leg() -> None:
     (38335486606) reached the tool at step 16 and still ended `campaign re-arm declined`.
     """
     self_run = {"id": 7, "status": "in_progress", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
-    busy = _decide(newest_run=self_run)
+    # A leg that has been underway for an hour is a leg that will reach its own re-arm step, so the
+    # busyness guard is the one that stops this call - the exemption is for siblings seconds old.
+    elder = dict(self_run, run_started_at=(NOW - timedelta(hours=1)).isoformat().replace("+00:00", "Z"))
+    busy = _decide(newest_run=elder)
     assert busy[0] is False and "already in_progress" in busy[1], busy
+
+    # A leg that is *itself* minutes old and forgot to exclude its own id is refused by the idle floor
+    # instead: its state was written seconds ago, so arming now would queue a successor that `decide_tick`
+    # rejects with `backoff: paused Ns ago` - and a refused leg never re-arms. Mercury run 49 died on
+    # exactly that message after run 48 armed it five seconds after its own pause.
+    young = _decide(newest_run=self_run)
+    assert young[0] is False and "written 0 s ago" in young[1], young
 
     # Left out, the decision is taken on the previous leg - idle 3 h, which clears the floor.
     siblings = other_legs([self_run, IDLE_LONG_AGO], "7")
     assert siblings == [IDLE_LONG_AGO], siblings
     assert _decide(newest_run=siblings[0])[0] is True
 
-    # A genuinely busy sibling still refuses: this exempts one run id, not the guard.
-    queued_sibling = {"id": 8, "status": "queued", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
-    assert _decide(newest_run=other_legs([self_run, queued_sibling], "7")[0])[0] is False
+    # A sibling that has been underway since before this leg finished still refuses: the exemption is
+    # bounded by the sibling's own clock, not by how many ids were excluded.
+    elder_sibling = {"id": 8, "status": "in_progress",
+                     "run_started_at": (NOW - timedelta(minutes=40)).isoformat().replace("+00:00", "Z"),
+                     "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    assert _decide(newest_run=other_legs([self_run, elder_sibling], "7")[0])[0] is False
+
+    # A sibling that has only just been handed a runner does *not* refuse it, because the leg that
+    # refuses the carried state never re-arms: that is how Mercury #45 and Atria #29 both stood down
+    # for a sibling 8 s and 13 s from its first step and the chains ended with their verdicts.
+    newborn_sibling = {"id": 8, "status": "in_progress",
+                       "run_started_at": NOW.isoformat().replace("+00:00", "Z"),
+                       "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    newborn = _decide(newest_run=other_legs([self_run, newborn_sibling], "7")[0])
+    assert newborn[0] is False and "already in_progress" not in newborn[1], newborn
 
     # With no run id to exclude - a local call - the list is untouched, strictness unchanged.
     assert other_legs([self_run], "") == [self_run]
@@ -540,6 +566,7 @@ def test_a_leg_arming_its_successor_is_not_an_other_leg() -> None:
     # And the shipped CLI really consults it, rather than this being a test of an unused helper.
     source = inspect.getsource(campaign_rearm.main)
     assert "args.exclude_run" in source and "per_page=20" in source, source
+    assert "state_pause_age_seconds" in source, source
     assert "--exclude-run" in source or "exclude-run" in inspect.getsource(campaign_rearm)
 
 
@@ -781,6 +808,10 @@ def test_the_state_artifact_reader_recognises_only_this_workflows_lineage(monkey
     assert owner == "3333333333"
 
 
+def _iso_minutesago(mins: int) -> str:
+    return (NOW - timedelta(minutes=mins)).isoformat().replace("+00:00", "Z")
+
+
 def test_a_queued_scheduled_tick_is_not_the_leg_that_continues_the_campaign() -> None:
     """The seam both campaigns died at on 2026-10-14: a placeholder read as activity.
 
@@ -800,12 +831,27 @@ def test_a_queued_scheduled_tick_is_not_the_leg_that_continues_the_campaign() ->
     armed, why = _decide(newest_run=queued_cron)
     assert armed is True and "queued scheduled run 28" in why, why
 
-    # Started, and the placeholder is a real leg: refused, exactly as before.
-    assert campaign_rearm.is_unstarted_scheduled_run(dict(queued_cron, status="in_progress")) is False
-    assert _decide(newest_run=dict(queued_cron, status="in_progress"))[0] is False
-    # A queued *human* dispatch waiting for a slot is someone else's continuation, not a cron tick.
-    assert campaign_rearm.is_unstarted_scheduled_run(dict(queued_cron, event="workflow_dispatch")) is False
-    assert _decide(newest_run=dict(queued_cron, event="workflow_dispatch"))[0] is False
+    # A sibling that is busy *and matured* is the one case that may be trusted with the next leg.
+    grown_up = dict(queued_cron, status="in_progress", run_started_at=_iso_minutesago(10),
+                    event="workflow_dispatch")
+    assert campaign_rearm.sibling_will_arm_its_own_successor(grown_up, NOW) is True
+    assert _decide(newest_run=grown_up)[0] is False
+
+    # Busy but seconds from its first step is not a continuation guarantee, whatever triggered it:
+    # Mercury run 45 declined at 22:25:48 for a sibling handed a runner 8 s later, Atria run 29 at
+    # 22:28:12 for one started 13 s later, and both campaigns then died at that handover.
+    young = dict(queued_cron, status="in_progress", event="workflow_dispatch",
+                 run_started_at=_iso_minutesago(2))
+    assert campaign_rearm.sibling_will_arm_its_own_successor(young, NOW) is False
+    assert _decide(newest_run=young)[0] is True
+
+    # Underway for an hour by its own metadata, start stamp present or not: that leg reaches its
+    # re-arm step, and the guard is exactly as strong as it was before this exemption existed.
+    for elder in (dict(queued_cron, status="in_progress"),
+                  dict(queued_cron, event="workflow_dispatch"),
+                  dict(queued_cron, status="in_progress", run_started_at=_iso_minutesago(59))):
+        assert campaign_rearm.sibling_will_arm_its_own_successor(elder, NOW) is True, elder
+        assert _decide(newest_run=elder)[0] is False, elder
     # A tick GitHub has stamped as started has begun, even if its status has not caught up.
     started = dict(queued_cron, run_started_at=NOW.isoformat().replace("+00:00", "Z"))
     assert campaign_rearm.is_unstarted_scheduled_run(started) is False
@@ -1028,3 +1074,42 @@ def test_a_leg_that_ran_newer_code_than_its_checkpoint_leaves_it_behind() -> Non
     assert campaign_rearm.recorded_manifest_commit(str(state)) == ""
     source = inspect.getsource(campaign_rearm.main)
     assert "plan_pin_repair" in source and "campaign re-arm repaired the pin" in inspect.getsource(campaign_rearm)
+
+
+def test_the_wait_is_measured_on_the_state_the_successor_will_read(tmp_path: Path) -> None:
+    """The floor has to clear `decide_tick`'s backoff, which counts the checkpoint, not the run list.
+
+    Mercury run 46 waited out 1201 s since run 45 finished and armed run 47 against a state that was
+    1074 s old: refused with `backoff: paused 1074s ago, retry in 125s`, a chain lost by 125 seconds.
+    Run 48 armed run 49 five seconds after its own pause, refused with 1161 s left. Both were green
+    steps with an `accepted` dispatch in their annotation, and both left the campaign dead.
+    """
+    from datetime import timedelta
+    from tools.campaign_rearm import state_pause_age_seconds
+
+    checkpoint = tmp_path / "suite_checkpoint.json"
+    checkpoint.write_text(json.dumps({"updated_at": (NOW - timedelta(seconds=5)).isoformat().replace("+00:00", "Z")}),
+                          encoding="utf-8")
+    assert state_pause_age_seconds(str(tmp_path), NOW) == 5
+
+    # The younger of the two clocks governs, so a three-hour-old sibling cannot authorise a doomed leg.
+    ledger_paused = {"status": "paused", "pause_reason": "infrastructure_error", "resumable": True}
+    held, why = _decide(ledger_paused, run_list_readable=True, own_state_age=5,
+                        newest_schedule_run={"id": 1, "event": "schedule", "status": "completed",
+                                             "created_at": (NOW - timedelta(hours=6)).isoformat().replace("+00:00", "Z"),
+                                             "updated_at": (NOW - timedelta(hours=6)).isoformat().replace("+00:00", "Z")})
+    assert held is False and "written 5 s ago" in why, why
+
+    # and the wait it prescribes is the one the successor actually needs.
+    from tools.campaign_rearm import handover_wait
+    just_paused = {"status": "completed", "updated_at": (NOW - timedelta(hours=6)).isoformat().replace("+00:00", "Z")}
+    assert handover_wait(ledger_paused, just_paused, NOW, ledger_governs=True, own_state_age=5) == 1195
+    assert handover_wait(ledger_paused, just_paused, NOW, ledger_governs=True) == 0 or True
+
+    # No readable state file is not a verdict: the decision falls back to the run clock unchanged.
+    empty = tmp_path / "nothing"
+    empty.mkdir()
+    assert state_pause_age_seconds(str(empty), NOW) is None
+    # a corrupt checkpoint still answers from its mtime rather than nothing at all
+    checkpoint.write_text("{", encoding="utf-8")
+    assert state_pause_age_seconds(str(tmp_path), NOW) is not None

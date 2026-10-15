@@ -174,7 +174,8 @@ def _floor_state(report: object, newest_run: object, now: datetime,
 def handover_wait(report: object, newest_run: object, now: datetime, *,
                   min_interval_seconds: int | None = None,
                   sleep_cap: int | None = DEFAULT_SLEEP_CAP,
-                  ledger_governs: bool = False) -> int:
+                  ledger_governs: bool = False,
+                  own_state_age: int | None = None) -> int:
     """Seconds this leg should sit before asking, or 0 when no wait could make a successor acceptable."""
     state = _floor_state(report, newest_run, now, min_interval_seconds)
     if state is None:
@@ -183,6 +184,8 @@ def handover_wait(report: object, newest_run: object, now: datetime, *,
     if reason in LEDGER_GOVERNING_REASONS and not ledger_governs:
         return 0
     floor, age = state
+    if own_state_age is not None:
+        age = min(age, int(own_state_age))
     wait = int(floor - age)
     if wait <= 0:
         return 0
@@ -231,6 +234,65 @@ def cron_is_not_delivering(newest_schedule_run, now: datetime, *, readable: bool
     return gap >= int(interval) * int(tolerance)
 
 
+SIBLING_ARMS_ITS_OWN_SUCCESSOR_SECONDS = 180
+
+
+def sibling_will_arm_its_own_successor(run, now: datetime, *,
+                                       threshold: int = SIBLING_ARMS_ITS_OWN_SUCCESSOR_SECONDS) -> bool:
+    """Whether a busy sibling has been running long enough to be trusted with the next leg.
+
+    True only once the sibling's own job is minutes into its life. The step that arms a successor is
+    the last one, and a leg that refuses the carried state never reaches it - `Announce a refused tick
+    instead of a silent green one` fires and every remaining step is skipped. On 2026-10-14 both
+    pairwise campaigns died at that seam: Mercury run 45 declined at 22:25:48 in favour of run 46,
+    which had been queued since 20:58 and took a runner 8 s later; Atria run 29 declined at 22:28:12
+    in favour of run 30, which started 13 s later and refused the state. Standing down for a sibling
+    that has not yet survived its first minutes is not a guard, it is a bet.
+    """
+    if not isinstance(run, Mapping):
+        return False
+    if str(run.get("status") or "") not in BUSY_RUN_STATUSES:
+        return False
+    # `run_started_at` is what GitHub actually provides; the older stamps are fallbacks so that a
+    # sibling whose metadata says it has been touched for the last time an hour ago is still read as
+    # underway, which is what the guard meant before it cost two chains.
+    started = (_parse_timestamp(run.get("run_started_at")) or _parse_timestamp(run.get("started_at"))
+               or _parse_timestamp(run.get("updated_at")) or _parse_timestamp(run.get("created_at")))
+    if started is None:
+        return False
+    return int((now - started).total_seconds()) >= int(threshold)
+
+
+def state_pause_age_seconds(state_dir: str, now: datetime) -> int | None:
+    """Seconds since the state a successor would resume was written, from the files it will read.
+
+    `campaign_supervisor.decide_tick` refuses any resume whose `suite_checkpoint.json` is younger than
+    `RESUME_BACKOFF_SECONDS`, and that is the window this tool has to clear. It measured the wait
+    against the newest *other* run's `updated_at` instead - a different clock - and lost the chain on
+    the difference twice in one night: run 46 armed run 47 after a 1201 s gap since run 45 finished,
+    and run 47 was refused for `backoff: paused 1074s ago, retry in 125s`; run 48 armed run 49 five
+    seconds after its own pause, and run 49 was refused with 1161 s still to wait.
+    """
+    for name in ("suite_checkpoint.json", "campaign_report.json"):
+        path = os.path.join(state_dir, name)
+        stamp = None
+        try:
+            with open(path, encoding="utf-8") as handle:
+                record = json.load(handle)
+            if isinstance(record, Mapping):
+                stamp = _parse_timestamp(record.get("updated_at"))
+        except (OSError, ValueError):
+            stamp = None
+        if stamp is None:
+            try:
+                stamp = datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
+            except OSError:
+                continue
+        if stamp is not None:
+            return max(0, int((now - stamp).total_seconds()))
+    return None
+
+
 def is_unstarted_scheduled_run(run) -> bool:
     """True for a `schedule` run GitHub has queued but never given a runner.
 
@@ -263,6 +325,7 @@ def decide_rearm(
     sleep_cap: int | None = DEFAULT_SLEEP_CAP,
     run_list_readable: bool = False,
     newest_schedule_run: object = None,
+    own_state_age: int | None = None,
 ) -> tuple[bool, str]:
     """Return (dispatch?, reason). Pure: no network, no clock, no filesystem, so every branch
     is testable. Order matters: the stops a human would use are checked first, so a cancelled
@@ -332,8 +395,10 @@ def decide_rearm(
     # window produces a refused successor that does not re-arm, and a placeholder is no reason to skip
     # that wait - the exemption is about *busyness*, never about timing.
     placeholder = is_unstarted_scheduled_run(newest_run)
-    if run_status in BUSY_RUN_STATUSES and not placeholder:
-        return False, f"a leg is already {run_status}; the concurrency group would only queue another"
+    if run_status in BUSY_RUN_STATUSES and not placeholder \
+            and sibling_will_arm_its_own_successor(newest_run, now):
+        return False, (f"a leg is already {run_status} and has been underway long enough to arm its "
+                       "own successor; the concurrency group would only queue another")
     started = _parse_timestamp(newest_run.get("updated_at")) or _parse_timestamp(newest_run.get("created_at"))
     if started is None:
         if placeholder:
@@ -344,6 +409,9 @@ def decide_rearm(
         return False, "the most recent leg carries no readable timestamp"
     floor = effective_floor_seconds(reason, min_interval_seconds)
     age = int((now - started).total_seconds())
+    # The successor resumes the *state*, so the younger of the two clocks is the one that governs.
+    if own_state_age is not None:
+        age = min(age, int(own_state_age))
     if age < floor:
         governing = (
             "the supervisor's own resume backoff"
@@ -353,7 +421,7 @@ def decide_rearm(
         wait = int(floor - age)
         capped = sleep_cap is not None and wait > int(sleep_cap)
         return False, (
-            f"the most recent leg ended {age} s ago, below the {floor} s floor set by {governing}; "
+            f"the state to resume was written {age} s ago, below the {floor} s floor set by {governing}; "
             "a successor dispatched now would be refused with mode=none and would not re-arm"
             + (f" - and sitting it out is off: a {wait} s wait exceeds --sleep-cap={sleep_cap}" if capped else "")
         )
@@ -990,6 +1058,8 @@ def main(argv: list[str] | None = None) -> int:
                 (run for run in siblings if str(run.get("event") or "") == "schedule"), None)
 
     now = datetime.now(timezone.utc)
+    state_dir = os.path.dirname(os.path.abspath(args.report))
+    own_state_age = state_pause_age_seconds(state_dir, now)
     decision, reason = decide_rearm(
         report,
         newest_run=newest_run,
@@ -1005,6 +1075,7 @@ def main(argv: list[str] | None = None) -> int:
         was_cancelled=args.cancelled,
         run_list_readable=run_list_readable,
         newest_schedule_run=newest_schedule_run,
+        own_state_age=own_state_age,
     )
     if not decision:
         # The refusal may be purely temporal, in which case the fix is to wait, not to hand the
@@ -1012,11 +1083,41 @@ def main(argv: list[str] | None = None) -> int:
         wait = handover_wait(report, newest_run, now, min_interval_seconds=args.min_interval_seconds,
                              sleep_cap=args.sleep_cap,
                              ledger_governs=cron_is_not_delivering(
-                                 newest_schedule_run, now, readable=run_list_readable))
+                                 newest_schedule_run, now, readable=run_list_readable),
+                             own_state_age=own_state_age)
         if wait:
             print(f"campaign re-arm: a successor would be refused for another {wait} s, so this leg "
                   f"is sitting it out before dispatching", flush=True)
             SLEEP(wait + 1)
+            moment_before_waiting = now
+            age_before_waiting = own_state_age
+            # Re-read the world the successor will land in: the state may have been rewritten by a
+            # sibling that finished its wait while this leg slept, and a sibling that has since grown
+            # up will arm its own successor, which makes a second dispatch a doomed leg.
+            now = datetime.now(timezone.utc)
+            elapsed = int((now - moment_before_waiting).total_seconds())
+            reread = state_pause_age_seconds(state_dir, now)
+            # The wait was prescribed to age the state past the floor, so the age to judge is the one
+            # the state has *after* sitting it out: whichever is greater, what the file says now, or
+            # the age before plus the seconds this step actually intended to spend. Trusting the file
+            # alone would decline a handover whose wait was taken under a clock the step does not own.
+            after = None if age_before_waiting is None else int(age_before_waiting) + max(elapsed, wait)
+            if reread is not None and after is not None:
+                own_state_age = max(int(reread), after)
+            else:
+                own_state_age = reread if reread is not None else after
+            if token and workflow:
+                status_after, body_after = _request(
+                    f"{api}/repos/{args.repo}/actions/workflows/{workflow['id']}/runs?per_page=20",
+                    token or None)
+                if status_after == 200:
+                    run_list_readable = True
+                    siblings_after = other_legs((body_after or {}).get("workflow_runs") or [],
+                                                args.exclude_run)
+                    newest_run = siblings_after[0] if siblings_after else None
+                    newest_schedule_run = next(
+                        (run for run in siblings_after
+                         if str(run.get("event") or "") == "schedule"), None)
             decision, reason = decide_rearm(
                 report,
                 newest_run=newest_run,
@@ -1032,6 +1133,7 @@ def main(argv: list[str] | None = None) -> int:
                 was_cancelled=args.cancelled,
                 run_list_readable=run_list_readable,
                 newest_schedule_run=newest_schedule_run,
+                own_state_age=own_state_age,
             )
     if not decision:
         # A decline is a decision, and it must not live only in a log nobody opens: like the refused-tick
