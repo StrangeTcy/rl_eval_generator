@@ -580,6 +580,71 @@ def test_the_two_handovers_that_killed_both_chains_are_replayed_in_full() -> Non
     assert ok is True, why
 
 
+def test_the_intent_refusal_reports_the_field_the_pinned_code_cannot_name(tmp_path: Path) -> None:
+    """Atria has refused four legs on a sentence that names five candidates and no answer.
+
+    Runs 25, 28, 30 and 33 all ended on `campaign intent differs from the restored state`, and the
+    pinned controller at that lineage lists "provider, model, mode, manifest, or code context" without
+    saying which moved. The state bytes are unreachable from outside a runner, so the re-arm step -
+    the one place the files exist while somebody can still be told - compares them itself.
+    """
+    state = tmp_path / "out"
+    state.mkdir()
+    (state / "campaign_intent.json").write_text(json.dumps(
+        {"provider": "atria", "execution_mode": "paid", "manifest_commit": "6a24e77",
+         "gate_context_sha": "sha-AAA", "profile": "pairwise"}), encoding="utf-8")
+    (state / "suite_checkpoint.json").write_text(json.dumps(
+        {"updated_at": NOW.isoformat().replace("+00:00", "Z"),
+         "run": {"manifest_commit": "6a24e77", "gate_context_sha": "sha-BBB"}}), encoding="utf-8")
+    (state / "wrapper_failed.json").write_text(json.dumps(
+        {"pause_reason": "wrapper_exception", "detail": "campaign intent differs from the restored state"}),
+        encoding="utf-8")
+    lines = campaign_rearm.intent_drift_report(str(state), str(tmp_path))
+    joined = " | ".join(lines)
+    assert "1 field(s) differ" in joined, lines
+    assert "gate_context_sha" in joined and "sha-AAA" in joined and "sha-BBB" in joined, lines
+    assert "rebase_onto_ref remains the lever" in joined, lines
+
+    # An interrupted T1 is a hard stop on the launcher's own rebase path, and the report has to say so
+    # rather than send the operator to an input that refuses.
+    (state / "t1_started.json").write_text("{}", encoding="utf-8")
+    assert "rebase_onto_ref is not available" in " | ".join(campaign_rearm.intent_drift_report(str(state), str(tmp_path)))
+
+    # A pin that names a different commit than the leg ran is the other half of the same question, and
+    # its price is verdict files, never adjectives: an unreadable inventory says "unknown - not free".
+    (state / "campaign_ref.txt").write_text("ffcdc78\n", encoding="utf-8")
+    joined = " | ".join(campaign_rearm.intent_drift_report(str(state), str(tmp_path)))
+    assert "the checkpoint names 6a24e77 while this leg ran ffcdc78" in joined, joined
+    assert "price of a rebase is unknown - not free" in joined, joined
+
+    # No intent file is information too: the report lists what the state dir does hold, which is how
+    # the schema gets learned for a pin nobody can open an artifact for.
+    other = tmp_path / "empty"
+    other.mkdir()
+    (other / "suite_checkpoint.json").write_text("{}", encoding="utf-8")
+    joined = " | ".join(campaign_rearm.intent_drift_report(str(other), str(tmp_path)))
+    assert "campaign_intent.json is not readable" in joined and "suite_checkpoint.json" in joined, joined
+
+    # The decline line carries it, in the log and in the annotation, next to the cause.
+    marker = state / "wrapper_failed.json"
+    ok, reason = _decide({"status": "paused", "pause_reason": "wrapper_exception", "resumable": True},
+                         marker_paths=[str(marker)])
+    assert ok is False and "stopped on purpose" in reason, reason
+
+    # and a failure inside the report never reaches the decision.
+    def boom(*a, **k):
+        raise RuntimeError("nope")
+    saved = campaign_rearm.recorded_manifest_commit
+    campaign_rearm.recorded_manifest_commit = boom
+    try:
+        assert "drift report unavailable" in " ".join(
+            campaign_rearm.intent_drift_report(str(state), str(tmp_path)))
+    finally:
+        campaign_rearm.recorded_manifest_commit = saved
+    source = inspect.getsource(campaign_rearm.main)
+    assert "intent_drift_report" in source and "campaign re-arm declined" in source, source
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
