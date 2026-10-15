@@ -340,6 +340,29 @@ def _compatibility_detail(
     return lines
 
 
+def _rendered_by() -> str:
+    """Name this render, so a stale `Updated` can be told from a dead reporter.
+
+    `Updated` is the *checkpoint's* timestamp, and a leg that pauses in Phase 2
+    banks nothing, so that timestamp legitimately stays where it was for hours.
+    Read on its own it cannot distinguish "nothing new happened" from "the
+    reporter stopped running" -- and the second is the one an operator must act
+    on.  This line carries the render's own clock and the leg that produced it,
+    which is the heartbeat the rest of the comment is silent about.
+
+    Every field is fail-open: the sidecar must still render the campaign's truth
+    when the environment is bare, so a missing variable omits a clause rather
+    than raising.
+    """
+    rendered_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    leg: list[str] = []
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    if run_id:
+        attempt = os.environ.get("GITHUB_RUN_ATTEMPT")
+        leg.append(f"leg run {run_id}" + (f" attempt {attempt}" if attempt else ""))
+    return f"{rendered_at}" + (f", rendered by {', '.join(leg)}" if leg else "")
+
+
 def _body(output: Path) -> str:
     progress = read_progress(output)
     checkpoint = _read_json(output / "suite_checkpoint.json")
@@ -356,6 +379,7 @@ def _body(output: Path) -> str:
         f"## {_CAMPAIGN['body_label']} live status",
         "",
         f"- **Updated:** {progress.get('updated_at') or report.get('updated_at') or datetime.now(UTC).isoformat()}",
+        f"- **Comment rendered:** {_rendered_by()}",
         f"- **Campaign state:** `{status}`",
         f"- **Campaign elapsed:** {_elapsed(campaign_started_at)}",
         f"- **Phase:** `{phase}`",

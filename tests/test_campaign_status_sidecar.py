@@ -447,3 +447,63 @@ def test_body_says_when_the_newest_probe_passed_under_an_older_legs_pause(tmp_pa
     assert "**Compatibility probe:** `passed" in body
     assert "the newest probe passed, so the pause above belongs to an earlier leg" in body
     assert "**Episodes this leg:** `none" not in body
+
+
+def _stale_progress(tmp_path: Path) -> None:
+    """Leave a checkpoint whose own timestamp is hours old, as a paused leg does."""
+    write_progress(tmp_path, phase="episodes", current_case="case__office")
+    progress_file = tmp_path / "campaign_progress.json"
+    progress = json.loads(progress_file.read_text(encoding="utf-8"))
+    progress["updated_at"] = "2026-10-15T05:00:05Z"
+    progress_file.write_text(json.dumps(progress), encoding="utf-8")
+
+
+def test_the_comment_names_the_render_that_wrote_it(tmp_path: Path, monkeypatch) -> None:
+    """A frozen `Updated` must read as "nothing banked", never as "reporter dead".
+
+    `Updated` is the checkpoint's own timestamp, so a leg that pauses in Phase 2
+    leaves it where it was for hours. The render line carries this comment's own
+    clock, which is the only evidence in the comment that a reporter ran at all.
+    """
+    from datetime import UTC, datetime
+
+    monkeypatch.setenv("GITHUB_RUN_ID", "38758437040")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    _stale_progress(tmp_path)
+
+    body = _body(tmp_path)
+
+    assert "- **Updated:** 2026-10-15T05:00:05Z" in body
+    rendered = next(
+        line for line in body.splitlines() if line.startswith("- **Comment rendered:**")
+    )
+    stamp = rendered.split("**Comment rendered:**", 1)[1].strip().split(", rendered by")[0]
+    age = abs((datetime.now(UTC) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds())
+    assert age < 120, f"the render line must carry this comment's clock, not the checkpoint's: {stamp}"
+    assert "2026-10-15T05:00:05Z" not in rendered
+
+
+def test_the_render_line_names_the_leg_that_rendered_it(tmp_path: Path, monkeypatch) -> None:
+    """Name the leg, so a reader can tell a chained leg from a dispatched one."""
+    monkeypatch.setenv("GITHUB_RUN_ID", "38758437040")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "3")
+    _stale_progress(tmp_path)
+
+    body = _body(tmp_path)
+
+    assert "leg run 38758437040 attempt 3" in body
+
+
+def test_the_render_line_survives_a_bare_environment(tmp_path: Path, monkeypatch) -> None:
+    """The sidecar is fail-open: a missing variable omits a clause, never raises."""
+    monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
+    monkeypatch.delenv("GITHUB_RUN_ATTEMPT", raising=False)
+    _stale_progress(tmp_path)
+
+    body = _body(tmp_path)
+
+    rendered = next(
+        line for line in body.splitlines() if line.startswith("- **Comment rendered:**")
+    )
+    assert rendered.endswith("Z"), rendered
+    assert "leg run" not in rendered
