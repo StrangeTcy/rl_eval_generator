@@ -645,6 +645,66 @@ def test_the_intent_refusal_reports_the_field_the_pinned_code_cannot_name(tmp_pa
     assert "intent_drift_report" in source and "campaign re-arm declined" in source, source
 
 
+def test_a_tree_the_launcher_would_refuse_is_never_reported_as_a_free_landing(tmp_path: Path) -> None:
+    """`main` is missing `tools/inherit_campaign_state.py`; its own guard says so, and a landing check
+    that reads only verdict inventories cannot. On 2026-10-15 two rebase dispatches onto `main` died 14
+    seconds in at `Refuse code missing campaign gates` (Mercury run 54, Atria run 34) - correctly, at
+    the launcher's step, having billed nothing - and my own tool had called that ref a two-file landing.
+
+    The requirement list is read out of the launchers rather than hardcoded, so it cannot rot: a guard
+    that gains a file gains a veto here in the same commit.
+    """
+    guard = tmp_path / ".github" / "workflows"
+    guard.mkdir(parents=True)
+    (guard / "x-pairwise-campaign.yml").write_text(
+        "      - name: Refuse code missing campaign gates\n"
+        "        run: |\n"
+        "          test -f tools/instance_oracle_gate.py\n"
+        "          test -f tools/inherit_campaign_state.py\n"
+        "          grep -q \"def _apply_limit_overrides\" tools/atria_campaign.py\n",
+        encoding="utf-8")
+    files, greps, note = campaign_rearm.launch_requirements(str(tmp_path))
+    assert files == ["tools/instance_oracle_gate.py", "tools/inherit_campaign_state.py"], (files, note)
+    assert greps == [("def _apply_limit_overrides", "tools/atria_campaign.py")], greps
+    assert not note, note
+
+    ready, why = campaign_rearm.tree_launchable(str(tmp_path), files, greps)
+    assert ready is False and "tools/instance_oracle_gate.py" in why and "are not in it" in why, why
+    for name in files:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    (tmp_path / "tools" / "atria_campaign.py").write_text("def _apply_limit_overrides(x):\n    return x\n",
+                                                           encoding="utf-8")
+    assert campaign_rearm.tree_launchable(str(tmp_path), files, greps) == (True, "")
+    (tmp_path / "tools" / "atria_campaign.py").write_text("nothing here\n", encoding="utf-8")
+    ready, why = campaign_rearm.tree_launchable(str(tmp_path), files, greps)
+    assert ready is False and "_apply_limit_overrides" in why, why
+
+    withheld = campaign_rearm.landing_verdict({"a.py": "1"}, {"a.py": "1"},
+                                             upstream={"sha": "abc", "branch": "main", "ahead_by": 3},
+                                             marker_present=False, t1_incomplete=False,
+                                             unlaunchable="tools/inherit_campaign_state.py is not in it")
+    assert withheld["verdict"] == "withheld" and "gate check" in withheld["why"], withheld
+    assert withheld["why"].endswith("tools/inherit_campaign_state.py is not in it"), withheld
+    # Identical inventories are irrelevant to a tree that cannot run a campaign: the veto comes first.
+    free = campaign_rearm.landing_verdict({"a.py": "1"}, {"a.py": "1"},
+                                          upstream={"sha": "abc", "branch": "main", "ahead_by": 3},
+                                          marker_present=False, t1_incomplete=False)
+    assert free["verdict"] == "free", free
+
+    # The repository's own launchers are parsed too, not just the fixture above.
+    repo = Path(__file__).resolve().parents[1]
+    real_files, _real_greps, real_note = campaign_rearm.launch_requirements(str(repo))
+    if real_note == "":
+        assert "tools/instance_oracle_gate.py" in real_files, real_files
+        assert campaign_rearm.tree_launchable(str(repo), real_files, _real_greps)[0] is True, real_files
+
+    # And a decline is annotated, so an operator planning a rebase reads the veto off the run page.
+    source = inspect.getsource(campaign_rearm.main)
+    assert 'landing["verdict"] == "withheld"' in source and "::warning::campaign re-arm will not re-pin" in source
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
