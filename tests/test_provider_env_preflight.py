@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from urllib import error
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from arena.providers import Completion  # noqa: E402
+from arena.providers import Completion, ProviderError  # noqa: E402
 from tools import provider_env_preflight as probe  # noqa: E402
 from tools.provider_preflight import probe_provider  # noqa: E402
 
@@ -141,11 +142,30 @@ def test_a_key_that_only_exists_as_an_actions_secret_is_named_as_such() -> None:
         environ={},
     )
     assert stage["status"] == "key_not_visible_here"
-    assert stage["api_base_host"] is None
+    assert stage["key_source"] is None
+    # The endpoint is documented, so it resolves; the key is the missing half.
+    assert stage["api_base_source"] == "documented_default"
     assert any("Actions secret" in blocker for blocker in stage["blockers"])
 
 
 def test_no_endpoint_is_ever_guessed() -> None:
+    """A provider nobody documented gets no default, however plausible its name."""
+
+    stage = probe.stage_credential(
+        "workbuddy",
+        key_envs=("WORKBUDDY_API_KEY",),
+        base_envs=("WORKBUDDY_API_BASE",),
+        api_base=None,
+        secret_path=None,
+        environ={"WORKBUDDY_API_KEY": FAKE_KEY},
+    )
+    assert stage["status"] == "endpoint_not_declared"
+    assert stage["api_base_host"] is None
+    assert stage["api_base_source"] is None
+    assert any("none will be guessed" in blocker for blocker in stage["blockers"])
+
+
+def test_a_documented_endpoint_is_used_as_a_default_and_carries_its_citation() -> None:
     stage = probe.stage_credential(
         "agentrouter",
         key_envs=("AGENTROUTER_API_KEY",),
@@ -154,10 +174,29 @@ def test_no_endpoint_is_ever_guessed() -> None:
         secret_path=None,
         environ={"AGENTROUTER_API_KEY": FAKE_KEY},
     )
-    assert stage["status"] == "endpoint_not_declared"
-    assert stage["api_base_host"] is None
-    assert any("never be guessed" in blocker or "no endpoint is declared" in blocker
-               for blocker in stage["blockers"])
+    base, citation = probe.DOCUMENTED_BASES["agentrouter"]
+    assert stage["status"] == "ready"
+    assert stage["api_base_source"] == "documented_default"
+    assert stage["api_base_host"] == "agentrouter.org"
+    assert stage["api_base_documented_source"] == citation
+    # The OpenAI-compatible wire is the base with /v1; the bare host is Anthropic's.
+    assert base.endswith("/v1")
+    assert any("documented base is not a guessed one" in note for note in stage["notes"])
+    assert any("503" in note and "gpt-6-astra" in note for note in stage["notes"])
+    assert base not in json.dumps({k: v for k, v in stage.items() if k != "notes"})
+
+
+def test_using_the_anthropic_wire_form_for_an_openai_client_is_flagged() -> None:
+    stage = probe.stage_credential(
+        "agentrouter",
+        key_envs=("AGENTROUTER_API_KEY",),
+        base_envs=(),
+        api_base="https://agentrouter.org",
+        secret_path=None,
+        environ={"AGENTROUTER_API_KEY": FAKE_KEY},
+    )
+    assert stage["api_base_source"] == "cli"
+    assert any("does not carry the /v1 path" in note for note in stage["notes"])
 
 
 def test_the_key_environment_variables_are_tried_in_order() -> None:
@@ -283,6 +322,7 @@ def test_only_one_of_the_six_can_produce_a_gated_verdict() -> None:
 def test_the_wire_stage_accepts_only_an_answer_the_episode_loop_can_use() -> None:
     client = _FakeClient(_completion('{"type": "list_files", "path": "."}'))
     stage = probe.stage_wire(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="https://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -303,6 +343,7 @@ def test_the_wire_stage_accepts_only_an_answer_the_episode_loop_can_use() -> Non
 def test_prose_is_a_failure_even_though_it_is_http_200() -> None:
     client = _FakeClient(_completion("Sure! Let me start by listing the files in the workspace."))
     stage = probe.stage_wire(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="https://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -319,6 +360,7 @@ def test_prose_is_a_failure_even_though_it_is_http_200() -> None:
 def test_a_truncated_completion_names_the_knob_that_would_fix_it() -> None:
     client = _FakeClient(_completion('{"type": "apply_patch", "patch": "diff ', finish_reason="length"))
     stage = probe.stage_wire(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="https://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -334,6 +376,7 @@ def test_a_truncated_completion_names_the_knob_that_would_fix_it() -> None:
 def test_a_reasoning_channel_the_controller_would_ignore_is_reported_as_waste() -> None:
     client = _FakeClient(_completion('{"cmd": "ls"}', reasoning=4096))
     stage = probe.stage_wire(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="https://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -358,6 +401,7 @@ def test_the_wire_stage_spends_one_attempt_with_no_retries(
 
     monkeypatch.setattr(probe, "ProviderClient", fake_client)
     stage = probe.stage_wire(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="https://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -399,6 +443,7 @@ def test_the_catalog_stage_finds_the_model_the_filter_names(
     body = json.dumps({"data": [{"id": "astra-1"}, {"id": "astra-2-mini"}, {"id": "some-other"}]})
     monkeypatch.setattr(probe, "open_no_redirect", lambda req, timeout: _FakeResponse(body))
     stage = probe.stage_catalog(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="https://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -418,6 +463,7 @@ def test_a_roster_without_the_model_is_a_blocker_that_shows_the_roster(
     body = json.dumps({"data": [{"id": "something-else"}]})
     monkeypatch.setattr(probe, "open_no_redirect", lambda req, timeout: _FakeResponse(body))
     stage = probe.stage_catalog(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="https://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -434,6 +480,7 @@ def test_a_200_with_no_model_ids_means_the_endpoint_is_not_a_catalog(
 ) -> None:
     monkeypatch.setattr(probe, "open_no_redirect", lambda req, timeout: _FakeResponse("{\"ok\":true}"))
     stage = probe.stage_catalog(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="https://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -446,6 +493,7 @@ def test_a_200_with_no_model_ids_means_the_endpoint_is_not_a_catalog(
 
 def test_a_plaintext_base_is_refused_before_any_key_is_sent() -> None:
     stage = probe.stage_catalog(
+        provider="agentrouter",
         wire_provider="custom",
         api_base="http://router.example.invalid/v1",
         api_key=FAKE_KEY,
@@ -523,7 +571,7 @@ def test_the_rehearsal_command_names_the_variable_holding_the_endpoint() -> None
     assert "$AGENTROUTER_API_BASE" in plan["commands"]["one_case_rehearsal"]
     assert "$AGENTROUTER_API_BASE" in plan["commands"]["dry_run"]
     assert "router.example.invalid/v1" not in json.dumps(report)
-    assert _stage(report, "credential")["api_base_source"] == "cli_or_env"
+    assert _stage(report, "credential")["api_base_source"] == "env:AGENTROUTER_API_BASE"
 
 
 def test_the_wire_stage_is_skipped_when_the_catalog_matched_nothing() -> None:
@@ -588,13 +636,67 @@ def test_the_copyable_launcher_stays_inside_the_probes_own_cli() -> None:
     assert used <= valid, sorted(used - valid)
 
 
-def test_the_launcher_takes_the_endpoint_as_an_input_and_never_as_a_default() -> None:
+def test_the_launcher_only_carries_urls_somebody_published() -> None:
     text = LAUNCHER.read_text(encoding="utf-8")
-    urls = set(re.findall(r"https://[^\s\"']+", text))
-    # The only URL in the file is the wheel index; the endpoint arrives as an input.
-    assert urls == {"https://download.pytorch.org/whl/cpu"}, sorted(urls)
+    documented_base, citation = probe.DOCUMENTED_BASES["agentrouter"]
+    urls = {url.rstrip(".,;") for url in re.findall(r"https://[^\s\"')]+", text)}
+    assert urls <= {
+        "https://download.pytorch.org/whl/cpu",
+        documented_base,
+        citation,
+        "https://ps.air-outer.com/console/personal",
+    }, sorted(urls)
+    # The input default and the probe's documented default are the same string, so
+    # the launcher cannot drift away from the citation it claims to follow.
+    assert f'default: "{documented_base}"' in text
     assert "AGENTROUTER_API_BASE: ${{ inputs.api_base }}" in text
     assert "secrets.AGENTROUTER_API_KEY" in text
+
+
+def test_a_503_is_read_as_a_roster_problem_not_as_a_dead_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_503(req: Any, timeout: float) -> Any:
+        raise error.HTTPError(req.full_url, 503, "Service Unavailable", {}, None)
+
+    monkeypatch.setattr(probe, "open_no_redirect", raise_503)
+    stage = probe.stage_catalog(
+        provider="agentrouter",
+        wire_provider="custom",
+        api_base="https://agentrouter.org/v1",
+        api_key=FAKE_KEY,
+        model_filter="astra",
+        timeout=5.0,
+    )
+    assert stage["status"] == "http_error"
+    assert stage["status_code"] == 503
+    assert any("no available channel" in note for note in stage["notes"])
+
+
+def test_a_rejected_size_key_names_the_file_that_owns_it() -> None:
+    class _Refusing:
+        def complete(self, **kwargs: Any) -> Completion:
+            raise ProviderError(
+                "unsupported parameter",
+                status_code=400,
+                body="unsupported parameter: 'max_tokens' is not allowed with this model",
+            )
+
+    stage = probe.stage_wire(
+        provider="agentrouter",
+        wire_provider="custom",
+        api_base="https://agentrouter.org/v1",
+        api_key=FAKE_KEY,
+        model="gpt-6-astra",
+        max_tokens=96,
+        timeout=5.0,
+        client_factory=lambda: _Refusing(),
+    )
+    assert stage["status"] == "provider_error"
+    assert stage["status_code"] == 400
+    assert stage["error_type"] == "http_400"
+    assert any("_MAX_TOKENS_KEY" in note and "verdict-relevant" in note for note in stage["notes"])
+    assert FAKE_KEY not in json.dumps(stage)
 
 
 def test_the_summary_names_the_verdict_and_the_next_step() -> None:

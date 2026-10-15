@@ -4,22 +4,38 @@ name: AgentRouter astra environment preflight
 # recurrent-depth environments actually run against a model this account can
 # reach?  The probe is tools/provider_env_preflight.py, and it is staged so the
 # free half runs anywhere while the half that needs the key runs here, because
-# AGENTROUTER_API_KEY is an Actions secret and no local process can read it.
+# AGENTROUTER_API_KEY is an Actions secret and no local process can read it (the
+# API refuses to list secrets either).
+#
+# Endpoint and roster come from AgentRouter's own documentation,
+# https://agentrouter.org/docs/claude-code.html, retrieved 2026-10-15:
+#
+#   - the OpenAI-compatible wire is the base WITH /v1; the Anthropic wire is the
+#     bare host.  The two run in parallel and the docs warn against mixing them.
+#     This repository's client speaks OpenAI Chat Completions, so /v1 it is.
+#   - the documented OpenAI-wire models are gpt-5.6-sol and gpt-6-astra, so
+#     "astra" is gpt-6-astra.  The roster is dynamic - models come and go with
+#     capacity - and a misspelled or retired id answers 503 "no available
+#     channel" rather than 404, which is why the probe lists /models before it
+#     spends a completion.
+#   - the console roster (ps.air-outer.com/console/personal) is authoritative;
+#     the default below is a convenience, not a claim.
 #
 # Copy to .github/workflows/agentrouter-astra-env-preflight.yml.  This token
 # cannot write there: pushing a workflow file is refused without the `workflows`
-# permission, which is why the copyable examples live in docs/workflows/.
-#
-# The endpoint is an input, never a default.  Sending a bearer key to a host
-# inferred from a product name is how a credential leaks, so the probe refuses to
-# run its network stages without one.
+# permission, which is why the copyable launchers live in docs/workflows/.
 
 on:
   workflow_dispatch:
     inputs:
       api_base:
-        description: "AgentRouter's OpenAI-compatible base URL, from its own docs"
-        required: true
+        description: "OpenAI-compatible base URL (with /v1); leave as documented unless the console says otherwise"
+        required: false
+        default: "https://agentrouter.org/v1"
+      model:
+        description: "Exact model id to probe; empty takes the first catalog match for model_contains"
+        required: false
+        default: ""
       model_contains:
         description: "Substring the wanted model id must contain"
         required: false
@@ -67,14 +83,18 @@ jobs:
         env:
           AGENTROUTER_API_KEY: ${{ secrets.AGENTROUTER_API_KEY }}
           AGENTROUTER_API_BASE: ${{ inputs.api_base }}
+          PROBE_MODEL: ${{ inputs.model }}
         run: |
           set +e
+          model_flag=""
+          if [ -n "$PROBE_MODEL" ]; then model_flag="--model $PROBE_MODEL"; fi
           python tools/provider_env_preflight.py \
             --provider agentrouter \
             --stage "${{ inputs.stage }}" \
             --model-contains "${{ inputs.model_contains }}" \
             --wire-max-tokens "${{ inputs.wire_max_tokens }}" \
             --check-docker \
+            $model_flag \
             --emit-manifest runs/provider_env_preflight_manifest.json \
             --out runs/provider_env_preflight.json
           code=$?

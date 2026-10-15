@@ -654,11 +654,26 @@ with the account's own key) and `wire` (does one real completion come back
 untruncated *and* parse as an action `arena/episode.py` accepts — a 200 carrying
 prose is a failure here, which is the point).
 
-Two rules the probe keeps. It never guesses an endpoint: sending a bearer key to
-a host inferred from a product name is how a credential leaks, so the network
-stages require `--api-base`, `AGENTROUTER_API_BASE`, or a profile, and refuse
-without one. And its output carries no keys and no endpoints — host only — the
-same contract `provider_preflight` keeps.
+Two rules the probe keeps. It never *infers* an endpoint: a bearer key sent to a
+host nobody published is a leaked key, so a default is allowed only with the
+first-party page it came from, and the citation is written into the report next to
+the host. `agentrouter` is such a case — AgentRouter's own documentation gives
+`https://agentrouter.org/v1` for the OpenAI-compatible wire (the bare host is the
+Anthropic wire, and the two must not be mixed) and lists `gpt-5.6-sol` and
+`gpt-6-astra` as its OpenAI-wire models, so `--model-contains astra` resolves to
+`gpt-6-astra`. Its roster is dynamic and a misspelled or retired id answers `503
+no available channel` rather than 404, which the probe says out loud instead of
+reporting a dead endpoint. Everything else has to arrive through `--api-base`,
+`AGENTROUTER_API_BASE`, or a profile. Second rule: output carries no keys and no
+endpoints — host only — the same contract `provider_preflight` keeps, and the
+rehearsal command prints `$AGENTROUTER_API_BASE` instead of the URL so the report
+stays paste-able.
+
+The documented base lives in the probe rather than in `arena/secrets.py`'s
+`PROVIDER_DEFAULT_BASE` on purpose. That module is inside the gate closure
+(`tools/gate_context.py`), so modelling the provider there — four lines — would
+re-grade a running campaign's exact-instance gate rows. It is worth doing, bundled
+with a re-pin that is already being paid for; it is not worth buying on its own.
 
 `docs/workflows/agentrouter-astra-env-preflight.yml.example` is the copyable
 launcher that runs the staged probe where the secret lives, uploads the report,

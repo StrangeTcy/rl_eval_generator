@@ -53,12 +53,29 @@ Stages 6 and 7 need the key and are off unless ``--stage network``, ``--stage
 wire`` or ``--stage all`` asks for them.  Nothing spends by default and the wire
 stage is a single attempt with retries disabled.
 
-Endpoints are never guessed.  Sending a bearer key to a host inferred from a
-product name is how a credential leaks, so ``catalog`` and ``wire`` require
+Endpoints are never *inferred*.  Sending a bearer key to a host guessed from a
+product name is how a credential leaks, so a base has to be declared -
 ``--api-base``, ``providers.<name>.api_base`` in ``secret_key.json``, or
-``AGENTROUTER_API_BASE`` in the environment, and refuse without one.  Output
-follows ``provider_preflight``: no keys, no endpoints (host only), no raw bodies,
-and every serialized string passes ``redact_text`` as a final defense.
+``AGENTROUTER_API_BASE`` in the environment - or documented: ``DOCUMENTED_BASES``
+carries one only together with the first-party page it came from, and the citation
+is written into the report beside the host so it can be checked rather than
+trusted.  For ``agentrouter`` that page gives ``https://agentrouter.org/v1`` for
+the OpenAI-compatible wire (the bare host is the Anthropic wire, and the two must
+not be mixed) and lists ``gpt-5.6-sol`` and ``gpt-6-astra`` as its OpenAI-wire
+models, so the default ``--model-contains astra`` resolves to ``gpt-6-astra``.  Its
+roster is dynamic and a misspelled or retired id answers ``503 no available
+channel`` rather than 404, which ``PROVIDER_NOTES`` says out loud instead of
+letting a 503 read as a dead endpoint.  A provider that is neither declared nor
+documented gets no default at all.  Output follows ``provider_preflight``: no keys,
+no endpoints (host only), no raw bodies, and every serialized string passes
+``redact_text`` as a final defense.
+
+The documented base lives here rather than in ``arena/secrets.py``'s
+``PROVIDER_DEFAULT_BASE`` deliberately.  That module is inside the gate closure, so
+modelling the provider there - a four-line change that would also let
+``tools/provider_preflight.py`` answer by name - re-grades a running campaign's
+exact-instance gate rows.  Worth bundling with a re-pin that is being paid for
+anyway; not worth buying on its own.
 
 Exit codes: 0 the answer is yes, gaps allowed; 1 something blocks or constrains
 it; 2 this tool could not run.
@@ -122,6 +139,33 @@ DEFAULT_MATRICES: tuple[str, ...] = ("representative", "pairwise")
 # never promised to honour, so the credential stage reports the substitution as a
 # gap every single time it makes it.
 FALLBACK_WIRE_PROVIDER = "custom"
+
+# A documented endpoint is not a guessed one.  The rule this tool keeps is that a
+# bearer key is never sent to a host nobody published, so a default is allowed here
+# only with the first-party page it came from - and the citation is echoed into the
+# report, so a reader can check the source instead of trusting the default.
+# Anything not listed has to arrive through --api-base, a base environment
+# variable, or a profile in secret_key.json.
+DOCUMENTED_BASES: dict[str, tuple[str, str]] = {
+    # AgentRouter serves two wires from one host and its own documentation warns
+    # against mixing them: the OpenAI-compatible wire takes the base *with* /v1,
+    # the Anthropic wire takes it without.  This repository's client speaks OpenAI
+    # Chat Completions, so only the /v1 form is recorded.
+    "agentrouter": ("https://agentrouter.org/v1", "https://agentrouter.org/docs/claude-code.html"),
+}
+
+# Provider behaviour that changes how a failure has to be read.  Kept next to the
+# probe rather than in arena/secrets.py on purpose: that module is inside the
+# gate closure (tools/gate_context.py), so editing it re-grades a running
+# campaign's exact-instance gate rows, and a note about what a 503 means is not
+# worth 189 re-graded rows.
+PROVIDER_NOTES: dict[str, str] = {
+    "agentrouter": (
+        "the model roster is dynamic and a misspelled or retired id answers 503 'no available "
+        "channel' rather than 404; the documented OpenAI-wire models as of 2026-10 are "
+        "gpt-5.6-sol and gpt-6-astra, and the console roster is authoritative"
+    ),
+}
 
 OFFLINE_STAGES: tuple[str, ...] = ("credential", "env_build", "judge_stack", "gate_status", "plan")
 NETWORK_STAGES: tuple[str, ...] = ("catalog",)
@@ -228,18 +272,36 @@ def stage_credential(
     key_env_tried = list(key_envs) if not modelled else list(PROVIDER_ENV[provider]) + list(key_envs)
     key_source = next((f"env:{name}" for name in dict.fromkeys(key_env_tried) if env.get(name)), None)
 
-    base = api_base or next((env[name] for name in base_envs if env.get(name)), None)
     config, loaded_path = load_secret_config(secret_path)
     providers = config.get("providers")
     profiles: dict[str, Any] = providers if isinstance(providers, dict) else {}
     profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
     profile_base = str(profile.get("api_base")) if profile.get("api_base") else None
-    base = base or profile_base or (PROVIDER_DEFAULT_BASE.get(wire_provider) if modelled else None)
-    if not base and wire_provider in profiles and isinstance(profiles[wire_provider], dict):
-        fallback = profiles[wire_provider].get("api_base")
-        base = str(fallback) if fallback else None
-    if not base:
-        base = str(profiles.get(wire_provider, {}).get("api_base") or "") or None
+    documented = DOCUMENTED_BASES.get(provider)
+
+    base: str | None
+    base_source: str | None
+    base_env_set = next((name for name in base_envs if env.get(name)), None)
+    wire_profile = profiles.get(wire_provider)
+    wire_base = (
+        str(wire_profile.get("api_base"))
+        if isinstance(wire_profile, dict) and wire_profile.get("api_base")
+        else None
+    )
+    if api_base:
+        base, base_source = api_base, "cli"
+    elif base_env_set:
+        base, base_source = str(env[base_env_set]), f"env:{base_env_set}"
+    elif profile_base:
+        base, base_source = profile_base, "profile"
+    elif modelled and PROVIDER_DEFAULT_BASE.get(provider):
+        base, base_source = str(PROVIDER_DEFAULT_BASE[provider]), "provider_default"
+    elif wire_base:
+        base, base_source = wire_base, f"profile:{wire_provider}"
+    elif documented:
+        base, base_source = documented[0], "documented_default"
+    else:
+        base, base_source = None, None
 
     notes: list[str] = []
     blockers: list[str] = []
@@ -248,8 +310,29 @@ def stage_credential(
             f"{provider!r} is not a modelled provider (arena/secrets.py has no PROVIDER_ENV or "
             f"PROVIDER_DEFAULT_BASE entry), so a request would be sent as {wire_provider!r} with an "
             "explicit base and key-env; tools/provider_preflight.py cannot probe it at all and "
-            "answers 'credential_error' whether or not a key exists"
+            "answers 'credential_error' whether or not a key exists. Modelling it there is a "
+            "four-line change, but arena/secrets.py is inside the gate closure, so it re-grades a "
+            "running campaign's exact-instance gate rows and should ride along with a re-pin that "
+            "is being paid for anyway"
         )
+    if base_source == "documented_default" and documented:
+        notes.append(
+            f"the endpoint is {provider}'s documented default ({documented[0]}), taken from "
+            f"{documented[1]} because nothing declared one: a documented base is not a guessed "
+            "one, and the citation is here to be checked rather than trusted"
+        )
+    provider_note = PROVIDER_NOTES.get(provider)
+    if provider_note:
+        notes.append(provider_note)
+    if base and documented:
+        wanted = urlsplit(documented[0]).path.rstrip("/")
+        have = urlsplit(base).path.rstrip("/")
+        if wanted and not have.endswith(wanted):
+            notes.append(
+                f"the endpoint in use does not carry the {wanted} path the OpenAI-compatible wire "
+                "is documented to use; on this host the bare address is the Anthropic wire, which "
+                "this repository's client does not speak"
+            )
     resolve_error: str | None = None
     try:
         creds = resolve_provider(
@@ -278,7 +361,8 @@ def stage_credential(
         status = "key_not_visible_here"
     elif not resolved_base:
         blockers.append(
-            "no endpoint is declared and none will be guessed: pass --api-base, set "
+            "no endpoint is declared, none is documented for this provider, and none will be "
+            "guessed: pass --api-base, set "
             + (base_envs[0] if base_envs else "the base environment variable")
             + ", or put providers."
             + wire_provider
@@ -297,10 +381,8 @@ def stage_credential(
         "key_env_names_tried": list(dict.fromkeys(key_env_tried)),
         "key_source": key_source or (resolved_source if resolved_source.startswith("file") else None),
         "api_base_host": _host_of(resolved_base),
-        "api_base_source": (
-            "cli_or_env" if (api_base or any(env.get(name) for name in base_envs)) else
-            ("profile" if profile_base else ("provider_default" if modelled else None))
-        ),
+        "api_base_source": base_source,
+        "api_base_documented_source": documented[1] if (documented and base_source == "documented_default") else None,
         "secret_file": str(loaded_path) if loaded_path else None,
         "secret_file_provider_names": sorted(str(name) for name in profiles),
         "resolution_error": resolve_error,
@@ -862,6 +944,7 @@ def emit_manifest(
 
 def stage_catalog(
     *,
+    provider: str,
     wire_provider: str,
     api_base: str,
     api_key: str,
@@ -890,6 +973,7 @@ def stage_catalog(
             request_id = _request_id(getattr(response, "headers", None))
         ids = _model_ids(json.loads(body))
     except error.HTTPError as exc:
+        notes = [PROVIDER_NOTES[provider]] if (exc.code == 503 and provider in PROVIDER_NOTES) else []
         return {
             "stage": "catalog",
             "status": "http_error",
@@ -898,8 +982,10 @@ def stage_catalog(
             "model_count": 0,
             "matched_models": [],
             "latency_ms": round((time.monotonic() - started) * 1000),
-            "blockers": [f"GET /models answered HTTP {exc.code}: the key or the endpoint is wrong"],
-            "notes": [],
+            "blockers": [
+                f"GET /models answered HTTP {exc.code}: the key, the endpoint, or the wire is wrong"
+            ],
+            "notes": notes,
             "hard_blocker": True,
         }
     except (OSError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
@@ -955,6 +1041,7 @@ def stage_catalog(
 
 def stage_wire(
     *,
+    provider: str,
     wire_provider: str,
     api_base: str,
     api_key: str,
@@ -997,17 +1084,36 @@ def stage_wire(
             model=model, messages=messages, max_tokens=max_tokens, temperature=0.0
         )
     except ProviderError as exc:
+        code = getattr(exc, "status_code", None)
+        body = str(getattr(exc, "body", ""))
+        notes = [body[:400]] if body else []
+        if code == 503 and provider in PROVIDER_NOTES:
+            notes.append(PROVIDER_NOTES[provider])
+        if code == 400 and "max_tokens" in body:
+            # The size key is chosen by arena/providers._MAX_TOKENS_KEY, which
+            # special-cases mercury alone, and request_extra is forbidden from
+            # carrying either size key - so an endpoint that wants
+            # max_completion_tokens cannot be satisfied from a profile or a flag.
+            notes.append(
+                "the endpoint rejected max_tokens; the key is chosen by arena/providers."
+                "_MAX_TOKENS_KEY (mercury is its only entry) and request_extra may not carry "
+                "either size key, so the fix is one line in a verdict-relevant file and belongs "
+                "with a re-pin that is being paid for anyway"
+            )
         return {
             "stage": "wire",
             "status": "provider_error",
-            "error_type": getattr(exc, "error_type", type(exc).__name__),
-            "status_code": getattr(exc, "status_code", None),
+            "error_type": (
+                getattr(exc, "error_type", None)
+                or (f"http_{code}" if code else type(exc).__name__)
+            ),
+            "status_code": code,
             "request_id": getattr(exc, "request_id", None),
             "latency_ms": round((time.monotonic() - started) * 1000),
             "blockers": [
                 f"the endpoint refused one completion ({getattr(exc, 'error_type', 'provider_error')})"
             ],
-            "notes": [str(getattr(exc, "body", ""))[:400]],
+            "notes": notes,
             "hard_blocker": True,
         }
     except (OSError, ValueError, TimeoutError) as exc:
@@ -1212,6 +1318,7 @@ def run_preflight(
     base = api_base or next((env[name] for name in base_envs if env.get(name)), None)
     if asked_for_network and key and base:
         catalog = stage_catalog(
+            provider=provider,
             wire_provider=str(credential["wire_provider"]),
             api_base=base,
             api_key=key,
@@ -1224,6 +1331,7 @@ def run_preflight(
         if asked_for_wire and wire_model:
             stages.append(
                 stage_wire(
+                    provider=provider,
                     wire_provider=str(credential["wire_provider"]),
                     api_base=base,
                     api_key=key,

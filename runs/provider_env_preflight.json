@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "event": "provider_env_preflight",
-  "checked_at": "2026-10-15T10:47:40.232520Z",
+  "checked_at": "2026-10-15T15:58:33.237992Z",
   "question": {
     "provider": "agentrouter",
     "model_filter": "astra",
@@ -30,16 +30,19 @@
         "AGENTROUTER_API_TOKEN"
       ],
       "key_source": null,
-      "api_base_host": null,
-      "api_base_source": null,
+      "api_base_host": "agentrouter.org",
+      "api_base_source": "documented_default",
+      "api_base_documented_source": "https://agentrouter.org/docs/claude-code.html",
       "secret_file": null,
       "secret_file_provider_names": [],
-      "resolution_error": "No API base for provider 'custom'; pass --api-base or set providers.custom.api_base in secret_key.json",
+      "resolution_error": null,
       "blockers": [
         "no key is reachable from this process: an Actions secret is invisible here, so the catalog and wire stages have to run inside a workflow that maps it to an environment variable"
       ],
       "notes": [
-        "'agentrouter' is not a modelled provider (arena/secrets.py has no PROVIDER_ENV or PROVIDER_DEFAULT_BASE entry), so a request would be sent as 'custom' with an explicit base and key-env; tools/provider_preflight.py cannot probe it at all and answers 'credential_error' whether or not a key exists"
+        "'agentrouter' is not a modelled provider (arena/secrets.py has no PROVIDER_ENV or PROVIDER_DEFAULT_BASE entry), so a request would be sent as 'custom' with an explicit base and key-env; tools/provider_preflight.py cannot probe it at all and answers 'credential_error' whether or not a key exists. Modelling it there is a four-line change, but arena/secrets.py is inside the gate closure, so it re-grades a running campaign's exact-instance gate rows and should ride along with a re-pin that is being paid for anyway",
+        "the endpoint is agentrouter's documented default (https://agentrouter.org/v1), taken from https://agentrouter.org/docs/claude-code.html because nothing declared one: a documented base is not a guessed one, and the citation is here to be checked rather than trusted",
+        "the model roster is dynamic and a misspelled or retired id answers 503 'no available channel' rather than 404; the documented OpenAI-wire models as of 2026-10 are gpt-5.6-sol and gpt-6-astra, and the console roster is authoritative"
       ],
       "hard_blocker": false
     },
@@ -157,7 +160,7 @@
       "blockers": [],
       "notes": [],
       "hard_blocker": false,
-      "elapsed_ms": 934
+      "elapsed_ms": 983
     },
     {
       "stage": "judge_stack",
@@ -589,7 +592,9 @@
       "credential: no key is reachable from this process: an Actions secret is invisible here, so the catalog and wire stages have to run inside a workflow that maps it to an environment variable"
     ],
     "gaps": [
-      "credential: 'agentrouter' is not a modelled provider (arena/secrets.py has no PROVIDER_ENV or PROVIDER_DEFAULT_BASE entry), so a request would be sent as 'custom' with an explicit base and key-env; tools/provider_preflight.py cannot probe it at all and answers 'credential_error' whether or not a key exists",
+      "credential: 'agentrouter' is not a modelled provider (arena/secrets.py has no PROVIDER_ENV or PROVIDER_DEFAULT_BASE entry), so a request would be sent as 'custom' with an explicit base and key-env; tools/provider_preflight.py cannot probe it at all and answers 'credential_error' whether or not a key exists. Modelling it there is a four-line change, but arena/secrets.py is inside the gate closure, so it re-grades a running campaign's exact-instance gate rows and should ride along with a re-pin that is being paid for anyway",
+      "credential: the endpoint is agentrouter's documented default (https://agentrouter.org/v1), taken from https://agentrouter.org/docs/claude-code.html because nothing declared one: a documented base is not a guessed one, and the citation is here to be checked rather than trusted",
+      "credential: the model roster is dynamic and a misspelled or retired id answers 503 'no available channel' rather than 404; the documented OpenAI-wire models as of 2026-10 are gpt-5.6-sol and gpt-6-astra, and the console roster is authoritative",
       "judge_stack: this host has no torch, torchvision, so --sandbox local cannot run an episode here; the pinned CPU judge stack is a container/CI property",
       "judge_stack: no docker binary on this host, so --sandbox docker cannot run an episode here",
       "judge_stack: shared/Dockerfile.agent installs torch, torchvision unpinned while shared/Dockerfile.judge pins torch==2.5.1, torchvision==0.20.1, so the agent and the judge can disagree about the library that grades the work",
