@@ -43,13 +43,40 @@ def _intent(tmp: Path, *, sha: str, **kwargs):
     )
 
 
-def test_a_moved_grading_digest_still_refuses_a_resume(tmp_path: Path, monkeypatch) -> None:
-    """Without the flag nothing changes: a tick that finds a different code context is refused, so
-    the rebase cannot be reached by accident from the scheduler."""
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+def test_a_leg_that_inherits_a_moved_grading_context_carries_the_ledger(tmp_path: Path, monkeypatch) -> None:
+    """A state can only be authored in one grading context, so the leg that follows a rebase always
+    finds a digest it did not choose. Refusing it protected nothing - the digest is checked where a
+    verdict is reused (tools/run_suite.py:837, :855, tools/inherit_campaign_state.py:257), so the
+    rows were always going to be re-graded - and it cost both campaigns their lineage: Mercury run
+    37 at 2026-10-13T23:17:26Z and Atria run 22 at 21:52:09Z each died writing
+    `wrapper_failed.json`, `pause_reason=wrapper_exception`, for this refusal alone, behind an
+    acknowledgement a tick cannot give. So carry, and record who authorised the move."""
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
     _intent(tmp_path, sha=SHA_A)
-    with pytest.raises(ValueError, match="changed: gate_context_sha"):
-        _intent(tmp_path, sha=SHA_B)
+    value = _intent(tmp_path, sha=SHA_B)
+    assert value["gate_context_sha"] == SHA_B
+    assert value["rebased_from_gate_context_sha"] == SHA_A
+    assert value["rebase_authorized_by"].startswith("inherited")
+    assert json.loads((tmp_path / "campaign_intent.json").read_text(encoding="utf-8")) == value
+    # And it stays idempotent: the next leg at the same context records nothing new.
+    again = _intent(tmp_path, sha=SHA_B)
+    assert again["rebased_from_gate_context_sha"] == SHA_A
+
+
+def test_only_the_grading_context_may_drift_without_an_operator(tmp_path: Path, monkeypatch) -> None:
+    """The safety property the refusal was accused of blocking is preserved exactly: a tick may not
+    change what is measured. Provider, model, endpoint, effort, mode and manifest identity still
+    refuse, from any event."""
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+    first = {"provider": "atria", "name": "pairwise_a"}
+    other = {"provider": "mercury", "name": "pairwise_a", "model": "mercury-2.5"}
+    _record_campaign_intent(
+        tmp_path, MANIFEST, execution_mode="paid", gate_context_sha=SHA_A, profile=first
+    )
+    with pytest.raises(ValueError, match="changed: .*provider"):
+        _record_campaign_intent(
+            tmp_path, MANIFEST, execution_mode="paid", gate_context_sha=SHA_B, profile=other
+        )
 
 
 def test_an_explicit_rebase_records_what_moved_instead_of_pretending_it_did_not(
@@ -136,13 +163,15 @@ def test_a_target_without_the_waiver_is_named_before_the_leg_is_billed(tmp_path:
     assert "rebase_onto_ref empty" in mode, mode
 
 
-def test_a_rebase_refuses_a_schedule_event(tmp_path: Path, monkeypatch) -> None:
-    """Only a human dispatch may re-pin a lineage. A cron tick deciding its own code context is the
-    silent drift the digest exists to prevent."""
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+def test_an_operator_rebase_is_recorded_as_authorised(tmp_path: Path, monkeypatch) -> None:
+    """The flag still means something: it is what distinguishes a human naming a new ref from a leg
+    that merely inherits one, in the file a reader inspects afterwards."""
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "Mercury pairwise campaign")
     _intent(tmp_path, sha=SHA_A)
-    with pytest.raises(ValueError, match="not an explicit workflow_dispatch"):
-        _intent(tmp_path, sha=SHA_B, allow_gate_context_rebase=True)
+    value = _intent(tmp_path, sha=SHA_B, allow_gate_context_rebase=True)
+    assert value["rebase_authorized_by"] == "operator rebase dispatch"
+    assert value["rebased_by"] == "Mercury pairwise campaign"
 
 
 def test_a_rebase_does_not_tolerate_a_changed_target(tmp_path: Path, monkeypatch) -> None:

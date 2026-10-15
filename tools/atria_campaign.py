@@ -241,21 +241,41 @@ def _record_campaign_intent(
         comparable = {key: existing.get(key) for key in expected}
         if comparable != expected:
             drifted = sorted(key for key in expected if comparable.get(key) != expected[key])
-            if allow_gate_context_rebase and set(drifted) <= {"gate_context_sha", "manifest_commit"}:
-                # An explicit operator rebase: the grading code moved and nothing else did. The
-                # digest exists to stop a campaign resuming against a verdict produced by other
-                # rules, and that is precisely the reason a *fix* to the reference or the checks
-                # used to require a fresh dispatch - which discards the paid T1 result, the banked
-                # gate rows and the ceiling counters, and then re-bills T1. Here the lineage keeps
-                # its ledger and records what moved, so the rows written after this point are
-                # attributable to the new context without pretending they were always comparable.
-                # Only a manual dispatch can reach this branch, and only for this one field:
-                # provider, model, endpoint, effort, mode and manifest identity still refuse, and a
-                # scheduled tick never gets to decide that its own code context may change.
-                if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
-                    raise ValueError(
-                        "campaign intent drifted in gate context but this is not an explicit "
-                        f"workflow_dispatch; refusing to re-pin {drifted} from a {os.environ.get('GITHUB_EVENT_NAME') or 'bare'} run"
+            if set(drifted) <= {"gate_context_sha", "manifest_commit"}:
+                # The grading code moved and nothing else did. The digest exists to stop a campaign
+                # resuming against a verdict produced by other rules - and it still does, in the place
+                # where a verdict is actually reused: `run_suite` re-grades unless the stored row's
+                # `gate_context_sha` equals the current one (tools/run_suite.py:837, :855), and
+                # `tools/inherit_campaign_state.py:257` drops rows for the same reason. What this
+                # check adds is only whether the *leg* proceeds, so refusing here cannot protect a
+                # verdict; it can only halt the lineage.
+                #
+                # Halting was measured doing exactly that, twice, on 2026-10-13. A leg dispatched
+                # with `rebase_onto_ref` accepts the drift (the operator named it), re-authors this
+                # file with its own digest, and if it then dies mid-gate on `max_wall_seconds` it
+                # leaves the campaign pinned to the commit it started from - the successor it armed,
+                # and every scheduled tick after it, run the *old* digest, see a state authored by the
+                # new one, and refuse. Mercury run 37 (2026-10-13T23:17:26Z) and Atria run 22
+                # (21:52:09Z) each ended that way, each writing `wrapper_failed.json` with
+                # `pause_reason=wrapper_exception` for a drift that is not a crash and not a verdict,
+                # which put both campaigns behind an operator acknowledgement that a tick cannot give
+                # and a human must give again on every leg.
+                #
+                # So the drift is accepted for any leg that finds it, and the authority is recorded:
+                # an operator rebase says so, and a leg that merely inherits a state a rebase moved
+                # says that. Provider, model, endpoint, wire surface, effort, execution mode and
+                # manifest identity still refuse, from any event, unchanged.
+                authorized_by = (
+                    "operator rebase dispatch"
+                    if allow_gate_context_rebase
+                    else f"inherited: the carried state was authored in another grading context "
+                         f"({os.environ.get('GITHUB_EVENT_NAME') or 'bare'} run)"
+                )
+                if not allow_gate_context_rebase:
+                    print(
+                        "campaign intent re-pinned to this leg's grading context "
+                        f"(changed: {', '.join(drifted)}); banked gate rows are re-graded, not "
+                        "trusted, and the ledger, the paid T1 result and the ceiling counters carry"
                     )
                 value = {
                     **existing,
@@ -263,6 +283,7 @@ def _record_campaign_intent(
                     "rebased_from_gate_context_sha": existing.get("gate_context_sha"),
                     "rebased_at": _utc_now(),
                     "rebased_by": os.environ.get("GITHUB_WORKFLOW") or "manual",
+                    "rebase_authorized_by": authorized_by,
                 }
                 if "manifest_commit" in drifted:
                     # Both halves of the move are recorded, because the pair is what a reader needs: the
@@ -272,6 +293,25 @@ def _record_campaign_intent(
                     value["rebased_from_manifest_commit"] = existing.get("manifest_commit")
                 write_json(path, value)
                 return value
+            # The keys that moved are the whole diagnosis, and until now they were only ever readable
+            # inside the leg that refused: the marker carries a `detail` that `redact_text` shortens,
+            # the artifact that holds the full exception is not downloadable from outside a runner
+            # (`archive_download_url` hands off to a host no diagnosing environment can reach), and the
+            # Atria 2026-10-14 pair of refusals was argued about for six hours with nobody able to say
+            # whether it was `execution_mode` or `case_manifest_sha256`. Record the pair, next to the
+            # intent that produced it, in the state directory that every leg uploads and the re-arm
+            # reads: key names verbatim, values through the same redaction the reports use.
+            try:
+                write_json(path.with_name("campaign_intent_refusal.json"), {
+                    "schema_version": 1,
+                    "changed": drifted,
+                    "expected": {key: redact_text(str(expected.get(key))) for key in drifted},
+                    "recorded": {key: redact_text(str(existing.get(key))) for key in drifted},
+                    "event": os.environ.get("GITHUB_EVENT_NAME") or "bare",
+                    "recorded_at": _utc_now(),
+                })
+            except OSError:
+                pass  # diagnostics never decide the refusal
             raise ValueError(
                 "campaign intent differs from the restored state; refuse to "
                 "continue with a changed provider, model, mode, manifest, or code context"
@@ -1130,6 +1170,15 @@ STATE_CONTRACT_REFUSALS = (
     "checkpoint metadata mismatch",
     "manifest case count changed",
     "gate coverage is incomplete",
+    # Measured twice on 2026-10-14: Atria run 25 (06:10:45Z, exit 2 in 2m27s) and run 28
+    # (18:10:06Z, exit 2 in 65s) each ended on `campaign intent differs from the restored state`, and
+    # each wrote `wrapper_failed.json` on the way out. The marker is the operator-only lever, so run 28
+    # left the lineage head at 126 / 189 banked rows behind an acknowledgement no scheduled tick can
+    # give - while the refusal itself is deterministic: the same keys, the same commit, the same answer
+    # every leg. An acknowledgement cannot change what this code refuses, which is the exact property
+    # the three needles above were admitted for. First occurrence stays resumable and is recorded; the
+    # second consecutive one from the same commit still marks the campaign terminal.
+    "campaign intent differs from the restored state",
 )
 
 
@@ -1195,6 +1244,33 @@ def _state_contract_stop(output: Path, detail: str) -> bool:
         "dispatch resumes from the last banked row"
     )
     return False
+
+
+def _clear_inherited_terminal_marker(output: Path) -> bool:
+    """Drop a `wrapper_failed.json` an earlier leg left behind, before this leg can refuse anything.
+
+    The position is the whole point. The clear used to sit after the profile load, the validation and
+    the reset decision, so a leg that died on the way there - Atria run 25 at 2026-10-14T06:13:08Z,
+    exit 2 in 2m27s - re-published the very marker it had come to clear, and run 26 then refused that
+    state with `operator stop: wrapper_exception` and died before the same line. Each leg inherits the
+    fossil, refuses it, re-uploads it: an unbounded cycle in which the recorded cause has already been
+    fixed twice over in code and nobody can see that, because the marker says what the *first* leg
+    thought.
+
+    A marker written by this leg is untouched, because every writer of one runs after this call. The
+    operator's lever for lifting a legitimate stop stays exactly where it was - a dispatch input, not
+    a silent clear.
+    """
+    try:
+        # No `mkdir` here: this call deliberately runs before `_should_reset_output`, and creating the
+        # directory would show that decision an existing-but-empty output to consider, which is how a
+        # fresh dispatch is refused. `missing_ok=True` also covers an output directory that is not
+        # there yet - a FileNotFoundError is exactly what "no inherited marker" means.
+        (output / "wrapper_failed.json").unlink(missing_ok=True)
+    except OSError:
+        return False
+    return True
+
 
 
 def _mark_terminal(output: Path, reason: str, detail: str) -> None:
@@ -1625,12 +1701,13 @@ def main(argv: list[str] | None = None) -> int:
         "--rebase-intent", action="store_true",
         help=(
             "operator authorization to keep this campaign's ledger while its grading-code digest "
-            "moves: accepted only when gate_context_sha is the sole field that changed, only on an "
-            "explicit workflow_dispatch, and it rewrites the intent with the prior digest recorded "
-            "as rebased_from_gate_context_sha. A provider, model, endpoint, effort, execution mode, "
-            "manifest or profile difference is still refused. Without this flag the campaign refuses "
-            "to resume at a new code context, which is what previously forced a fresh dispatch and a "
-            "second paid T1."
+            "moves: accepted only when gate_context_sha is the sole field that changed, and it "
+            "rewrites the intent with the prior digest recorded as rebased_from_gate_context_sha. A "
+            "provider, model, endpoint, effort, execution mode, manifest or profile difference is "
+            "still refused. A leg without this flag that finds only the grading context has moved "
+            "carries the ledger too and records that the move was inherited rather than authorised - "
+            "the state can already have been re-authored by the rebase that preceded it, and halting "
+            "the successor for that stopped both campaigns on 2026-10-13."
         ),
     )
     parser.add_argument(
@@ -1654,6 +1731,7 @@ def main(argv: list[str] | None = None) -> int:
     output = args.out
     profile: dict[str, Any] = {}
     manifest: dict[str, Any] = {}
+    _clear_inherited_terminal_marker(output)
     try:
         started = time.monotonic()
         profile = _load_yaml(args.profile)
@@ -1668,11 +1746,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             output.mkdir(parents=True, exist_ok=True)
 
-        # A terminal-failure marker from a previous dispatch is cleared at
-        # the start of every run: one automatic restart is allowed, a repeat
-        # failure rewrites it and the supervisor stands down for an operator.
+        # `marker` is this leg's own terminal record; the inherited one was already cleared above,
+        # before any refusal on this path could re-publish it.
         marker = output / "wrapper_failed.json"
-        marker.unlink(missing_ok=True)
 
         # Rehearsal mode: custom provider, no real API calls
         if profile.get("provider") == "custom" and profile.get("name") in {"rehearsal", "rehearsal_autonomous"}:

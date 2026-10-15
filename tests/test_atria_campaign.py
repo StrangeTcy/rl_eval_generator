@@ -399,3 +399,73 @@ def test_a_state_contract_refusal_does_not_write_the_gate_it_cannot_pass(tmp_pat
     (tmp_path / "state_contract_stop.json").write_text(json.dumps(same), encoding="utf-8")
     assert atria_campaign._state_contract_stop(tmp_path, detail) is True
     assert json.loads((tmp_path / "state_contract_stop.json").read_text(encoding="utf-8"))["count"] == 2
+
+
+def test_an_inherited_terminal_marker_is_cleared_before_the_leg_can_refuse_anything(tmp_path) -> None:
+    """A leg that dies on the way to the campaign must not re-publish the stop it came to clear.
+
+    That was the whole of Atria's second death: the marker's cause had already been fixed in code, but
+    every leg exited early enough to leave the fossil in place, so the next leg refused it and left it
+    there again. The clear is therefore the first act of the leg, and the assertion below is on order
+    rather than behaviour, because that is the property that broke.
+    """
+    import json as _json
+    from tools.atria_campaign import _clear_inherited_terminal_marker
+
+    out = tmp_path / "campaign"
+    out.mkdir()
+    (out / "wrapper_failed.json").write_text(
+        _json.dumps({"pause_reason": "wrapper_exception", "detail": "a stale refusal"}), encoding="utf-8"
+    )
+    (out / "suite_checkpoint.json").write_text("{}", encoding="utf-8")
+    assert _clear_inherited_terminal_marker(out) is True
+    assert not (out / "wrapper_failed.json").exists()
+    assert (out / "suite_checkpoint.json").exists()  # only the marker, never the ledger
+    # Nothing to clear, and a directory that does not exist yet, are both non-events.
+    assert _clear_inherited_terminal_marker(out) is True
+    assert _clear_inherited_terminal_marker(tmp_path / "absent") is True
+
+    source = (Path(__file__).resolve().parents[1] / "tools" / "atria_campaign.py").read_text(encoding="utf-8")
+    body = source[source.index("    args = parser.parse_args(argv)"):source.index("        profile = _load_yaml(args.profile)")]
+    assert "_clear_inherited_terminal_marker(output)" in body, body[-500:]
+
+
+def test_an_intent_drift_is_recorded_with_the_field_that_moved(tmp_path: Path) -> None:
+    """A drift the allowlist does not cover still has to say, somewhere readable, which field drifted.
+
+    Atria runs 25 and 28 refused `campaign intent differs from the restored state` four hours apart and
+    neither the marker nor the annotation could be read from outside a runner, so six hours of diagnosis
+    could not tell `execution_mode` from `case_manifest_sha256`. The keys are written next to the intent,
+    unredacted for the names, and the refusal stands exactly as it did.
+    """
+    detail = (
+        "ValueError: campaign intent differs from the restored state; refuse to continue with a changed "
+        "provider, model, mode, manifest, or code context (changed: execution_mode)"
+    )
+    first = atria_campaign._record_campaign_intent(
+        tmp_path, {}, execution_mode="paid", gate_context_sha="a" * 64, profile={}
+    )
+    assert first["execution_mode"] == "paid"
+    with pytest.raises(ValueError) as exc:
+        atria_campaign._record_campaign_intent(
+            tmp_path, {}, execution_mode="gates_only", gate_context_sha="a" * 64, profile={}
+        )
+    assert "changed: execution_mode" in str(exc.value)
+    recorded = json.loads((tmp_path / "campaign_intent_refusal.json").read_text(encoding="utf-8"))
+    assert recorded["changed"] == ["execution_mode"]
+    assert recorded["expected"]["execution_mode"] == "gates_only"
+    assert recorded["recorded"]["execution_mode"] == "paid"
+
+    # A drift the allowlist covers is not a refusal and writes no diagnostic.
+    (tmp_path / "campaign_intent_refusal.json").unlink()
+    moved = atria_campaign._record_campaign_intent(
+        tmp_path, {}, execution_mode="paid", gate_context_sha="b" * 64, profile={}
+    )
+    assert moved["gate_context_sha"] == "b" * 64
+    assert not (tmp_path / "campaign_intent_refusal.json").exists()
+
+    # And the drift refusal is metered like every other deterministic refusal: it does not, on its own,
+    # spend the one lever that cannot fix it. (Atria 28 lost 126 banked gate rows to this, not to the
+    # drift: the marker it wrote behind it is what no scheduled tick can pass.)
+    assert atria_campaign._state_contract_stop(tmp_path, detail) is False
+    assert not (tmp_path / "wrapper_failed.json").exists()

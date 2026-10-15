@@ -246,6 +246,36 @@ def _gated(tmp_path: Path, *, name: str, detail: str, ledger: str, stamped: str 
     return decide_tick(state, expected_provider="mercury")["reason"]
 
 
+def _two_commit_repo(tmp_path: Path) -> tuple[Path, str, str]:
+    """A throwaway git repository with two real commits: (root, parent, child).
+
+    Ancestry is what these assertions are about, so they make their own history instead of naming two
+    commits of this branch. The old form - `0ddcd39` and `5cb4205`, hard-coded - was true of a full clone
+    and false of the `fetch-depth: 1` checkout CI uses, where git cannot see either object and the
+    fail-closed answer is "not an ancestor": the suite measured the machine, and was red in CI for it.
+    """
+    import subprocess
+
+    repo = tmp_path / "gitrepo"
+    repo.mkdir(parents=True, exist_ok=True)
+
+    def git(*args: str) -> str:
+        done = subprocess.run(("git", "-C", str(repo)) + args, capture_output=True, text=True, check=True)
+        return done.stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.email", "campaign@example.invalid")
+    git("config", "user.name", "campaign")
+    (repo / "ledger").write_text("first\n", encoding="utf-8")
+    git("add", "ledger")
+    git("commit", "-qm", "one")
+    parent = git("rev-parse", "HEAD")
+    (repo / "ledger").write_text("second\n", encoding="utf-8")
+    git("add", "ledger")
+    git("commit", "-qm", "two")
+    return repo, parent, git("rev-parse", "HEAD")
+
+
 def test_an_operator_gate_its_code_cannot_reproduce_says_so(tmp_path: Path) -> None:
     """Runs 27 and 29 died on a marker whose cause was a stamp mismatch, and the reason line said nothing
     about whether that mismatch could still happen. It is computable from the staged files, so it is now
@@ -256,16 +286,27 @@ def test_an_operator_gate_its_code_cannot_reproduce_says_so(tmp_path: Path) -> N
     assert reason.startswith("operator stop: wrapper_exception")  # the refusal itself never softens
 
 
-def test_a_self_contradictory_artifact_is_described_by_its_ancestry(tmp_path: Path) -> None:
-    # 0ddcd39 is an ancestor of 5cb4205 in this repository - measured with the same git command the
-    # helper runs - so a leg started on that code carries the ledger with the move recorded.
-    reason = _gated(tmp_path, name="ff", detail=CONTRACT_DETAIL, ledger=LEDGER, stamped=STAMPED)
+def test_a_self_contradictory_artifact_is_described_by_its_ancestry(tmp_path: Path, monkeypatch) -> None:
+    repo, parent, child = _two_commit_repo(tmp_path)
+    from tools import campaign_supervisor
+
+    monkeypatch.setattr(campaign_supervisor, "GIT_ROOT", str(repo))
+
+    # A parent commit in a checkpoint and a child commit in the manifest is a fast-forward, measured with
+    # the same git command the helper runs, so a leg started on that code carries the ledger with the move
+    # recorded.
+    reason = _gated(tmp_path, name="ff", detail=CONTRACT_DETAIL, ledger=parent, stamped=child)
     assert "fast-forward of one lineage" in reason, reason
     assert "`rebase_onto_ref` is only needed to run newer code" in reason, reason
 
     # A rewind is not a fast-forward, and the gate is then about the state, not the form.
-    back = _gated(tmp_path, name="rewind", detail=CONTRACT_DETAIL, ledger=STAMPED, stamped=LEDGER)
+    back = _gated(tmp_path, name="rewind", detail=CONTRACT_DETAIL, ledger=child, stamped=parent)
     assert "the gate stands on the state" in back, back
+
+    # An object the checkout cannot see answers False, which is the fail-closed half of the helper - and
+    # it is what a shallow CI clone used to make of this repository's own history.
+    nowhere = _gated(tmp_path, name="unseen", detail=CONTRACT_DETAIL, ledger=LEDGER, stamped=STAMPED)
+    assert "the gate stands on the state" in nowhere, nowhere
 
 
 def test_a_real_crash_gate_is_left_unexplained(tmp_path: Path) -> None:
@@ -276,3 +317,21 @@ def test_a_real_crash_gate_is_left_unexplained(tmp_path: Path) -> None:
     missing = _gated(tmp_path, name="unreadable", detail=CONTRACT_DETAIL, ledger=LEDGER, stamped=None)
     assert "not both readable" in missing, missing
 
+
+
+def test_the_ancestry_helper_asks_the_jobs_checkout_and_not_its_own_location() -> None:
+    """The launcher fetches this file alone into `$RUNNER_TEMP` and runs it there.
+
+    `__file__` arithmetic then resolves to the runner's home directory, where no `.git` exists, so every
+    reachability probe answers False - a fail-closed answer about the *file's location*, presented as a
+    verdict about the campaign's commits. `GITHUB_WORKSPACE` is the checkout the leg was measured against,
+    so it wins when GitHub sets it; and a helper that cannot ask git still refuses, which is the half of
+    the behaviour that must not be "fixed" into an assumption.
+    """
+    import inspect
+
+    from tools import campaign_supervisor
+
+    source = inspect.getsource(campaign_supervisor)
+    assert 'GIT_ROOT = os.environ.get("GITHUB_WORKSPACE") or' in source, source
+    assert campaign_supervisor._is_ancestor("deadbeef", "cafebabe") is False

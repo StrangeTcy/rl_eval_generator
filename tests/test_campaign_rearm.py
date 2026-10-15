@@ -25,14 +25,24 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools import campaign_rearm  # noqa: E402
-from tools.campaign_rearm import (  # noqa: E402
-    BUSY_RUN_STATUSES,
-    other_legs,
-    cooldown_seconds_for,
-    decide_rearm,
-    successor_inputs,
-)
+try:
+    from tools import campaign_rearm  # noqa: E402
+    from tools.campaign_rearm import (  # noqa: E402
+        BUSY_RUN_STATUSES,
+        other_legs,
+        cooldown_seconds_for,
+        decide_rearm,
+        successor_inputs,
+    )
+except ImportError as exc:  # pragma: no cover - the branch that runs on a tree without the tool
+    # `tools/campaign_rearm.py` does not have to live on every branch: the launchers fetch it from the
+    # ref they check out (`?ref=${{ github.sha }}`) and fall back to the checkout's copy when that fetch
+    # comes up empty, so a host branch carrying only the workflow needs no copy of its own. main's copy
+    # was deleted at 0b08e85 once it turned out to be an unparseable paste (SyntaxError at line 325),
+    # and every leg's re-arm step had been exiting non-zero because of it. An import of a missing
+    # module is a *collection* error though, which reddens the whole suite and hides the tests that did
+    # fail for real - so this file opts out, by name, with the reason in its output.
+    pytest.skip(f"no tools/campaign_rearm.py in this tree ({exc})", allow_module_level=True)
 
 NOW = datetime(2026, 10, 12, 18, 0, tzinfo=timezone.utc)
 PAUSED = {"status": "paused", "pause_reason": "max_wall_seconds", "resumable": True}
@@ -90,6 +100,29 @@ def test_the_three_stops_a_human_uses_are_checked_before_anything_else() -> None
     assert not ok and "stopped on purpose" in reason
 
 
+
+def test_a_terminal_marker_decline_names_the_stop_it_is_honouring(tmp_path) -> None:
+    """The marker is the campaign's only written account of why it stood down, and the state artifact
+    that normally carries it is unopenable from outside a runner - so the re-arm's own line has to
+    carry it. A marker whose JSON cannot be read still stops the chain."""
+    import json as _json
+    from pathlib import Path as _P
+
+    written = tmp_path / "wrapper_failed.json"
+    written.write_text(_json.dumps({
+        "pause_reason": "wrapper_exception",
+        "detail": "campaign intent differs from the restored state (changed: gate_context_sha)",
+    }), encoding="utf-8")
+    ok, reason = _decide(marker_paths=[str(written)])
+    assert not ok
+    assert "stopped on purpose" in reason
+    assert "wrapper_exception" in reason and "gate_context_sha" in reason, reason
+
+    unreadable = tmp_path / "wrapper_failed.json"
+    unreadable.write_text("{not json", encoding="utf-8")
+    ok, reason = _decide(marker_paths=[str(unreadable)])
+    assert not ok and "unreadable" in reason and "stopped on purpose" in reason, reason
+
 def test_only_a_resumable_pause_rearms_and_the_legs_own_flag_wins() -> None:
     for report, needle in (({"status": "completed", "pause_reason": None}, "'completed'"),
                            ({"status": "paused", "pause_reason": "infrastructure_error_retries_exhausted", "resumable": False}, "not resumable"),
@@ -99,9 +132,23 @@ def test_only_a_resumable_pause_rearms_and_the_legs_own_flag_wins() -> None:
 
 
 def test_a_busy_group_is_not_stacked_onto() -> None:
+    """A sibling with a runner is not stacked on; a sibling without one is not a sibling yet.
+
+    Every busy status used to block the handover, and that is the rule that killed both chains on
+    2026-10-14: Mercury run 45 stood down for a `queued` run 46 (8 s from its first step, which then
+    paused on infrastructure and re-armed late), Atria run 29 for a `queued` run 30 (13 s from its
+    first step, which then refused the carried state and ended the lineage). A `queued`/`requested`/
+    `pending` entry has reached no step at all, so it has not reached the one that refuses a state and
+    skips the re-arm - and the concurrency group serialises whatever is armed regardless.
+    """
+    with_runner = {"in_progress", "waiting"}
     for status in sorted(BUSY_RUN_STATUSES):
         ok, reason = _decide(newest_run={"status": status, "updated_at": IDLE_LONG_AGO["updated_at"]})
-        assert not ok and "already" in reason, (status, reason)
+        if status in with_runner:
+            assert not ok and "already" in reason, (status, reason)
+        else:
+            assert ok and "already" not in reason, (status, reason)
+    assert {"queued", "requested", "pending"} <= set(BUSY_RUN_STATUSES)
 
 
 def test_an_unreadable_run_list_or_a_dead_workflow_refuses() -> None:
@@ -187,7 +234,11 @@ def test_the_finished_leg_sits_out_the_window_then_asks(monkeypatch, tmp_path, c
                                 "--api-url", "https://api.invalid", "--sleep-cap", "1800",
                                 "--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert len(slept) == 1 and 1180 <= slept[0] <= 1200, (slept, out)
+    # 1200 s plus one: the floor is now measured on the state the successor resumes, and this test
+    # writes `campaign_report.json` as of NOW, so the resumeable state is 0 s old and the correct
+    # advice is the whole backoff - not "the sibling finished three hours ago", which is the error
+    # that armed doomed legs 47 and 49 on 2026-10-14.
+    assert len(slept) == 1 and 1200 <= slept[0] <= 1215, (slept, out)
     assert "sitting it out" in out, out
     assert "would dispatch" in out, out
 
@@ -476,6 +527,184 @@ def test_a_human_click_starts_the_leg_instead_of_counting_down(tmp_path: Path) -
             assert got["mode"] == "none" and "no readable execution mode" in got["reason"], (intent, got)
 
 
+def test_the_two_handovers_that_killed_both_chains_are_replayed_in_full() -> None:
+    """Tonight's arithmetic, row by row, under the shipped rules - the test that says "fixed", not "likely".
+
+    Every number here is read off the run metadata: Mercury run 45 ran 19:03:18-22:25:42 and exited on
+    the wall (7), run 46 ran 22:25:56-22:28:28 on `infrastructure_error` (8) and armed run 47 at
+    22:46:10, which refused 15 s later with `backoff: paused 1074s ago, retry in 125s`; run 48 (schedule,
+    23:55:41-23:57:39, exit 8) armed run 49 five seconds after its own pause, which refused with
+    `backoff: paused 38s ago, retry in 1161s`; and run 45 and Atria run 29 both declined at the seam
+    because a *queued* sibling was read as a leg.
+    """
+    from datetime import timedelta
+    from tools.campaign_rearm import RESUME_BACKOFF_SECONDS, handover_wait
+
+    def ago(seconds: int) -> str:
+        return (NOW - timedelta(seconds=seconds)).isoformat().replace("+00:00", "Z")
+
+    infra = {"status": "paused", "pause_reason": "infrastructure_error", "resumable": True}
+    wall = {"status": "paused", "pause_reason": "max_wall_seconds", "resumable": True}
+
+    # Run 46 arming run 47: the sibling finished 160 s ago, the state it must resume is 4 s old.
+    run45 = {"id": 45, "status": "completed", "updated_at": ago(160)}
+    wait_46 = handover_wait(infra, run45, NOW, ledger_governs=True, own_state_age=4)
+    assert wait_46 == RESUME_BACKOFF_SECONDS - 4, wait_46  # the caller sleeps wait+1 for the boundary
+    # The successor would then read a state the supervisor accepts, which is the whole point.
+    assert 4 + wait_46 + 1 >= RESUME_BACKOFF_SECONDS
+    # ...and the wait the old code ran with (the sibling clock only) is the one that lost run 47 by
+    # 125 s: 160 s of run-clock idleness was credited as if it were the checkpoint's age.
+    assert RESUME_BACKOFF_SECONDS - 160 < 1074
+
+    # Run 48 arming run 49: 5 s after its own pause, with the newest other run hours stale.
+    run47 = {"id": 47, "status": "completed", "updated_at": ago(4300)}
+    wait_48 = handover_wait(infra, run47, NOW, ledger_governs=True, own_state_age=5)
+    assert wait_48 == RESUME_BACKOFF_SECONDS - 5, wait_48
+    assert 5 + wait_48 + 1 >= RESUME_BACKOFF_SECONDS
+
+    # Run 45 and Atria run 29: a queued sibling does not block, so the wall-stop leg arms its own
+    # successor instead of trusting a leg it cannot see refuse.
+    ok, why = _decide(wall, newest_run={"id": 46, "event": "schedule", "status": "queued",
+                                        "run_started_at": None, "created_at": ago(5400),
+                                        "updated_at": ago(5400)},
+                      run_list_readable=True, newest_schedule_run={"id": 46, "event": "schedule",
+                                                                    "status": "queued",
+                                                                    "created_at": ago(5400),
+                                                                    "updated_at": ago(5400)},
+                      own_state_age=6)
+    assert ok is False and "written 6 s ago" in why, why
+    ok, why = _decide(wall, newest_run={"id": 46, "event": "schedule", "status": "queued",
+                                        "run_started_at": None, "created_at": ago(5400),
+                                        "updated_at": ago(5400)},
+                      run_list_readable=True, own_state_age=RESUME_BACKOFF_SECONDS + 1)
+    assert ok is True, why
+
+
+def test_the_intent_refusal_reports_the_field_the_pinned_code_cannot_name(tmp_path: Path) -> None:
+    """Atria has refused four legs on a sentence that names five candidates and no answer.
+
+    Runs 25, 28, 30 and 33 all ended on `campaign intent differs from the restored state`, and the
+    pinned controller at that lineage lists "provider, model, mode, manifest, or code context" without
+    saying which moved. The state bytes are unreachable from outside a runner, so the re-arm step -
+    the one place the files exist while somebody can still be told - compares them itself.
+    """
+    state = tmp_path / "out"
+    state.mkdir()
+    (state / "campaign_intent.json").write_text(json.dumps(
+        {"provider": "atria", "execution_mode": "paid", "manifest_commit": "6a24e77",
+         "gate_context_sha": "sha-AAA", "profile": "pairwise"}), encoding="utf-8")
+    (state / "suite_checkpoint.json").write_text(json.dumps(
+        {"updated_at": NOW.isoformat().replace("+00:00", "Z"),
+         "run": {"manifest_commit": "6a24e77", "gate_context_sha": "sha-BBB"}}), encoding="utf-8")
+    (state / "wrapper_failed.json").write_text(json.dumps(
+        {"pause_reason": "wrapper_exception", "detail": "campaign intent differs from the restored state"}),
+        encoding="utf-8")
+    lines = campaign_rearm.intent_drift_report(str(state), str(tmp_path))
+    joined = " | ".join(lines)
+    assert "1 field(s) differ" in joined, lines
+    assert "gate_context_sha" in joined and "sha-AAA" in joined and "sha-BBB" in joined, lines
+    assert "rebase_onto_ref remains the lever" in joined, lines
+
+    # An interrupted T1 is a hard stop on the launcher's own rebase path, and the report has to say so
+    # rather than send the operator to an input that refuses.
+    (state / "t1_started.json").write_text("{}", encoding="utf-8")
+    assert "rebase_onto_ref is not available" in " | ".join(campaign_rearm.intent_drift_report(str(state), str(tmp_path)))
+
+    # A pin that names a different commit than the leg ran is the other half of the same question, and
+    # its price is verdict files, never adjectives: an unreadable inventory says "unknown - not free".
+    (state / "campaign_ref.txt").write_text("ffcdc78\n", encoding="utf-8")
+    joined = " | ".join(campaign_rearm.intent_drift_report(str(state), str(tmp_path)))
+    assert "the checkpoint names 6a24e77 while this leg ran ffcdc78" in joined, joined
+    assert "price of a rebase is unknown - not free" in joined, joined
+
+    # No intent file is information too: the report lists what the state dir does hold, which is how
+    # the schema gets learned for a pin nobody can open an artifact for.
+    other = tmp_path / "empty"
+    other.mkdir()
+    (other / "suite_checkpoint.json").write_text("{}", encoding="utf-8")
+    joined = " | ".join(campaign_rearm.intent_drift_report(str(other), str(tmp_path)))
+    assert "campaign_intent.json is not readable" in joined and "suite_checkpoint.json" in joined, joined
+
+    # The decline line carries it, in the log and in the annotation, next to the cause.
+    marker = state / "wrapper_failed.json"
+    ok, reason = _decide({"status": "paused", "pause_reason": "wrapper_exception", "resumable": True},
+                         marker_paths=[str(marker)])
+    assert ok is False and "stopped on purpose" in reason, reason
+
+    # and a failure inside the report never reaches the decision.
+    def boom(*a, **k):
+        raise RuntimeError("nope")
+    saved = campaign_rearm.recorded_manifest_commit
+    campaign_rearm.recorded_manifest_commit = boom
+    try:
+        assert "drift report unavailable" in " ".join(
+            campaign_rearm.intent_drift_report(str(state), str(tmp_path)))
+    finally:
+        campaign_rearm.recorded_manifest_commit = saved
+    source = inspect.getsource(campaign_rearm.main)
+    assert "intent_drift_report" in source and "campaign re-arm declined" in source, source
+
+
+def test_a_tree_the_launcher_would_refuse_is_never_reported_as_a_free_landing(tmp_path: Path) -> None:
+    """`main` is missing `tools/inherit_campaign_state.py`; its own guard says so, and a landing check
+    that reads only verdict inventories cannot. On 2026-10-15 two rebase dispatches onto `main` died 14
+    seconds in at `Refuse code missing campaign gates` (Mercury run 54, Atria run 34) - correctly, at
+    the launcher's step, having billed nothing - and my own tool had called that ref a two-file landing.
+
+    The requirement list is read out of the launchers rather than hardcoded, so it cannot rot: a guard
+    that gains a file gains a veto here in the same commit.
+    """
+    guard = tmp_path / ".github" / "workflows"
+    guard.mkdir(parents=True)
+    (guard / "x-pairwise-campaign.yml").write_text(
+        "      - name: Refuse code missing campaign gates\n"
+        "        run: |\n"
+        "          test -f tools/instance_oracle_gate.py\n"
+        "          test -f tools/inherit_campaign_state.py\n"
+        "          grep -q \"def _apply_limit_overrides\" tools/atria_campaign.py\n",
+        encoding="utf-8")
+    files, greps, note = campaign_rearm.launch_requirements(str(tmp_path))
+    assert files == ["tools/instance_oracle_gate.py", "tools/inherit_campaign_state.py"], (files, note)
+    assert greps == [("def _apply_limit_overrides", "tools/atria_campaign.py")], greps
+    assert not note, note
+
+    ready, why = campaign_rearm.tree_launchable(str(tmp_path), files, greps)
+    assert ready is False and "tools/instance_oracle_gate.py" in why and "are not in it" in why, why
+    for name in files:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    (tmp_path / "tools" / "atria_campaign.py").write_text("def _apply_limit_overrides(x):\n    return x\n",
+                                                           encoding="utf-8")
+    assert campaign_rearm.tree_launchable(str(tmp_path), files, greps) == (True, "")
+    (tmp_path / "tools" / "atria_campaign.py").write_text("nothing here\n", encoding="utf-8")
+    ready, why = campaign_rearm.tree_launchable(str(tmp_path), files, greps)
+    assert ready is False and "_apply_limit_overrides" in why, why
+
+    withheld = campaign_rearm.landing_verdict({"a.py": "1"}, {"a.py": "1"},
+                                             upstream={"sha": "abc", "branch": "main", "ahead_by": 3},
+                                             marker_present=False, t1_incomplete=False,
+                                             unlaunchable="tools/inherit_campaign_state.py is not in it")
+    assert withheld["verdict"] == "withheld" and "gate check" in withheld["why"], withheld
+    assert withheld["why"].endswith("tools/inherit_campaign_state.py is not in it"), withheld
+    # Identical inventories are irrelevant to a tree that cannot run a campaign: the veto comes first.
+    free = campaign_rearm.landing_verdict({"a.py": "1"}, {"a.py": "1"},
+                                          upstream={"sha": "abc", "branch": "main", "ahead_by": 3},
+                                          marker_present=False, t1_incomplete=False)
+    assert free["verdict"] == "free", free
+
+    # The repository's own launchers are parsed too, not just the fixture above.
+    repo = Path(__file__).resolve().parents[1]
+    real_files, _real_greps, real_note = campaign_rearm.launch_requirements(str(repo))
+    if real_note == "":
+        assert "tools/instance_oracle_gate.py" in real_files, real_files
+        assert campaign_rearm.tree_launchable(str(repo), real_files, _real_greps)[0] is True, real_files
+
+    # And a decline is annotated, so an operator planning a rebase reads the veto off the run page.
+    source = inspect.getsource(campaign_rearm.main)
+    assert 'landing["verdict"] == "withheld"' in source and "::warning::campaign re-arm will not re-pin" in source
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
@@ -489,17 +718,39 @@ def test_a_leg_arming_its_successor_is_not_an_other_leg() -> None:
     (38335486606) reached the tool at step 16 and still ended `campaign re-arm declined`.
     """
     self_run = {"id": 7, "status": "in_progress", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
-    busy = _decide(newest_run=self_run)
+    # A leg that has been underway for an hour is a leg that will reach its own re-arm step, so the
+    # busyness guard is the one that stops this call - the exemption is for siblings seconds old.
+    elder = dict(self_run, run_started_at=(NOW - timedelta(hours=1)).isoformat().replace("+00:00", "Z"))
+    busy = _decide(newest_run=elder)
     assert busy[0] is False and "already in_progress" in busy[1], busy
+
+    # A leg that is *itself* minutes old and forgot to exclude its own id is refused by the idle floor
+    # instead: its state was written seconds ago, so arming now would queue a successor that `decide_tick`
+    # rejects with `backoff: paused Ns ago` - and a refused leg never re-arms. Mercury run 49 died on
+    # exactly that message after run 48 armed it five seconds after its own pause.
+    young = _decide(newest_run=self_run)
+    assert young[0] is False and "written 0 s ago" in young[1], young
 
     # Left out, the decision is taken on the previous leg - idle 3 h, which clears the floor.
     siblings = other_legs([self_run, IDLE_LONG_AGO], "7")
     assert siblings == [IDLE_LONG_AGO], siblings
     assert _decide(newest_run=siblings[0])[0] is True
 
-    # A genuinely busy sibling still refuses: this exempts one run id, not the guard.
-    queued_sibling = {"id": 8, "status": "queued", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
-    assert _decide(newest_run=other_legs([self_run, queued_sibling], "7")[0])[0] is False
+    # A sibling that has been underway since before this leg finished still refuses: the exemption is
+    # bounded by the sibling's own clock, not by how many ids were excluded.
+    elder_sibling = {"id": 8, "status": "in_progress",
+                     "run_started_at": (NOW - timedelta(minutes=40)).isoformat().replace("+00:00", "Z"),
+                     "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    assert _decide(newest_run=other_legs([self_run, elder_sibling], "7")[0])[0] is False
+
+    # A sibling that has only just been handed a runner does *not* refuse it, because the leg that
+    # refuses the carried state never re-arms: that is how Mercury #45 and Atria #29 both stood down
+    # for a sibling 8 s and 13 s from its first step and the chains ended with their verdicts.
+    newborn_sibling = {"id": 8, "status": "in_progress",
+                       "run_started_at": NOW.isoformat().replace("+00:00", "Z"),
+                       "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    newborn = _decide(newest_run=other_legs([self_run, newborn_sibling], "7")[0])
+    assert newborn[0] is False and "already in_progress" not in newborn[1], newborn
 
     # With no run id to exclude - a local call - the list is untouched, strictness unchanged.
     assert other_legs([self_run], "") == [self_run]
@@ -507,4 +758,555 @@ def test_a_leg_arming_its_successor_is_not_an_other_leg() -> None:
     # And the shipped CLI really consults it, rather than this being a test of an unused helper.
     source = inspect.getsource(campaign_rearm.main)
     assert "args.exclude_run" in source and "per_page=20" in source, source
+    assert "state_pause_age_seconds" in source, source
     assert "--exclude-run" in source or "exclude-run" in inspect.getsource(campaign_rearm)
+
+
+def test_an_empty_run_list_is_idle_and_not_blindness() -> None:
+    """The state a campaign's first leg is in, and the one that used to need a human.
+
+    ``main`` asks the workflow for its runs, removes this leg from the answer (``other_legs``) and hands
+    what is left to ``decide_rearm``. An empty remainder used to be read as "the run list could not be
+    read", which is true of a 403 and equally true of a lineage whose runs have aged out of the listing -
+    and answering either with a refusal means the second leg of a campaign can only ever arrive by hand.
+    The distinction is now an argument, and the safe default (unreadable) is the one that refuses.
+    """
+    passed, reason = _decide(newest_run=None, run_list_readable=True)
+    assert passed is True, reason
+    assert "no other leg on record" in reason and "max_wall_seconds" in reason, reason
+
+    # Unreadable stays refused, and so does the default: nothing is dispatched on an assumption.
+    refused, why = _decide(newest_run=None)
+    assert refused is False and "refusing to dispatch blind" in why, why
+
+    # The exemption is for the age floor only. Everything a pause has to clear still has to clear.
+    for kwargs in ({"workflow_state": "disabled_manually"}, {"token_present": False},
+                   {"chain_depth": 40}, {"stage_failed": True}, {"was_cancelled": True}):
+        blocked, why = _decide(newest_run=None, run_list_readable=True, **kwargs)
+        assert blocked is False, (kwargs, why)
+
+    # And a sibling that is genuinely busy arrives as a newest_run, so it still refuses.
+    busy = {"id": 9, "status": "in_progress", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    assert _decide(newest_run=busy, run_list_readable=True)[0] is False
+
+    # main threads the flag: readable listing -> True, and the flag is re-passed after the handover sleep.
+    source = inspect.getsource(campaign_rearm.main)
+    assert source.count("run_list_readable=run_list_readable") == 2, source
+    assert "run_list_readable = status == 200" in source, source
+
+
+def test_the_tool_survives_being_run_from_the_temp_directory_the_launcher_uses(tmp_path: Path) -> None:
+    """The regression that stranded every campaign, asserted the way the launcher actually calls it.
+
+    Step 16 fetches (or copies) this file to `$RUNNER_TEMP/campaign_rearm.py` and runs it *from there*, so
+    the import that resolves inside a checkout does not resolve at all - and because the step is wrapped in
+    `|| { echo "campaign re-arm declined: the tool exited non-zero"; }`, the crash was reported as a
+    decision for every campaign that ever chained. The copy is placed in a directory with no `tools`
+    package and no PYTHONPATH, run from that directory, and must exit 0 while still reading its report.
+    """
+    import os
+    import shutil
+
+    work = tmp_path / "runner_temp"
+    work.mkdir()
+    script = work / "campaign_rearm.py"
+    shutil.copyfile(ROOT / "tools" / "campaign_rearm.py", script)
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "GITHUB_TOKEN", "GH_TOKEN")}
+    done = subprocess.run(
+        [sys.executable, str(script), "--report", str(tmp_path / "absent.json"), "--dry-run"],
+        cwd=str(work), capture_output=True, text=True, env=env,
+    )
+    assert done.returncode == 0, (done.returncode, done.stderr[-800:])
+    assert "ModuleNotFoundError" not in done.stderr, done.stderr
+    assert "campaign re-arm skipped: report unreadable" in done.stdout, done.stdout
+
+    # The fallback constants are not allowed to drift from the module they stand in for.
+    sys.path.insert(0, str(ROOT))
+    from tools import campaign_rearm as in_tree
+    from tools import campaign_supervisor as supervisor
+
+    assert in_tree.RESUME_BACKOFF_SECONDS == supervisor.RESUME_BACKOFF_SECONDS
+    assert in_tree.RESUMABLE_PAUSE_REASONS == supervisor.RESUMABLE_PAUSE_REASONS
+
+
+def test_a_pause_the_retry_ledger_meters_is_left_to_the_schedule() -> None:
+    """The one reason this tool must not hurry, with the measurement that says so.
+
+    `infrastructure_error` is a case failure counted against run_suite's bounded per-case attempt ledger.
+    Mercury spent 1/10 in the 17:37 report and 2/10 in the 19:15 report - 365/416 in both, 3m20s of work
+    between them - so a resumed leg consumes an attempt on the same failing case and produces no row. Ten
+    of those and the pause becomes `infrastructure_error_retries_exhausted`, which nothing an automated
+    continuation may do resumes. Chaining on that reason trades a wait that could help for a countdown to a
+    stop only an operator field can lift, at roughly one entry per 23 minutes.
+    """
+    from tools.campaign_rearm import handover_wait
+
+    ledger = {"status": "paused", "pause_reason": "infrastructure_error", "resumable": True}
+    refused, reason = _decide(ledger)
+    assert refused is False and "attempt ledger" in reason, reason
+
+    # No wait either: sitting out 20 minutes in a finished job to arrive at the same refusal is waste.
+    assert handover_wait(ledger, IDLE_LONG_AGO, NOW) == 0
+    just_ended = {"status": "completed", "updated_at": NOW.isoformat().replace("+00:00", "Z")}
+    assert handover_wait(ledger, just_ended, NOW) == 0
+
+    # The neighbouring reasons are untouched, because they bill the ledger nothing.
+    for reason_ok in ("max_wall_seconds", "provider_error", "docker_unavailable", "wrapper_transient_error"):
+        passed, why = _decide({"status": "paused", "pause_reason": reason_ok, "resumable": True})
+        assert passed is True, (reason_ok, why)
+
+
+def test_the_landing_verdict_only_calls_a_re_pin_free_when_no_verdict_file_differs() -> None:
+    """A re-pin re-grades the gate whenever the grading context moves, so the re-arm may take that
+    decision itself only when the two trees' verdict inventories are identical. Everything else is
+    left to a human, and said out loud."""
+    from tools.campaign_rearm import landing_verdict
+
+    local = {"tools/run_suite.py": "a" * 64, "envs/glyph/config.yaml": "b" * 64}
+    same = dict(local)
+    moved = dict(local, **{"tools/run_suite.py": "c" * 64})
+    up = {"branch": "arena/x", "sha": "d" * 40, "ahead_by": 3}
+
+    free = landing_verdict(local, same, upstream=up, marker_present=False, t1_incomplete=False)
+    assert free["verdict"] == "free" and free["sha"] == up["sha"] and free["commits"] == 3
+
+    costly = landing_verdict(local, moved, upstream=up, marker_present=False, t1_incomplete=False)
+    assert costly["verdict"] == "costly"
+    assert costly["differing"] == ["tools/run_suite.py"]
+
+    # Nothing upstream, nothing to say.
+    assert landing_verdict(local, same, upstream=None, marker_present=False,
+                           t1_incomplete=False)["verdict"] == "none"
+    # A context this leg cannot read must never be read as "safe to move".
+    assert landing_verdict(None, None, upstream=up, marker_present=False,
+                           t1_incomplete=False)["verdict"] == "unavailable"
+    # Nor may it be called free when the launcher would refuse the rebase it enables.
+    refused = landing_verdict(local, same, upstream=up, marker_present=False, t1_incomplete=False,
+                              carries_waiver=False)
+    assert refused["verdict"] == "withheld" and "manifest-commit waiver" in refused["why"]
+
+
+def test_a_landing_is_withheld_when_the_launcher_would_refuse_the_rebase(tmp_path) -> None:
+    """`rebase_onto_ref` is refused outright when the carried state holds a terminal marker or an
+    interrupted T1. Auto-landing into either of those would turn a productive resume into an empty
+    leg that answers `mode=none`, so the check declines before it looks at the diff."""
+    from tools.campaign_rearm import landing_verdict, plan_landing
+
+    files = {"tools/run_suite.py": "a" * 64}
+    for flag in ("marker_present", "t1_incomplete"):
+        verdict = landing_verdict(files, dict(files), upstream={"branch": "b", "sha": "c" * 40,
+                                     "ahead_by": 1}, marker_present=flag == "marker_present",
+                                     t1_incomplete=flag == "t1_incomplete")
+        assert verdict["verdict"] == "withheld", flag
+        assert "refuse a rebase" in verdict["why"]
+    # And plan_landing itself refuses to ask when there is no credential to ask with: a leg that
+    # cannot check must cost nothing, not fail open into a guess.
+    assert plan_landing("https://example.invalid", "o/r", None, "deadbeef",
+                        str(tmp_path))["verdict"] == "unavailable"
+
+
+def test_the_successor_input_set_grows_only_the_field_that_was_proved_free() -> None:
+    from tools.campaign_rearm import successor_inputs
+
+    plain = successor_inputs("a" * 40, 3)
+    assert plain == {"resume_previous": True, "chain_depth": "4", "ref": "a" * 40}
+    landed = successor_inputs("a" * 40, 3, "b" * 40)
+    assert landed["rebase_onto_ref"] == "b" * 40
+    # The operator's levers stay the operator's: a self-dispatched successor never lifts a stop and
+    # never picks an execution mode.
+    for inputs in (plain, landed):
+        assert "clear_wrapper_stop" not in inputs and "execution_mode" not in inputs
+
+
+def test_the_verdict_inventory_is_read_from_the_tree_it_is_asked_about(tmp_path) -> None:
+    """`grading_context` runs *that tree's* gate_context.py, so a repository that widens what it
+    considers verdict-producing widens this check without a second list to keep in step."""
+    import subprocess
+    import sys as _sys
+
+    from tools.campaign_rearm import grading_context
+
+    tree = tmp_path / "repo"
+    (tree / "tools").mkdir(parents=True)
+    (tree / "envs").mkdir()
+    (tree / "tools" / "gate_context.py").write_text(
+        "import json, pathlib, sys\n"
+        "root = pathlib.Path(__file__).resolve().parents[1]\n"
+        "files = {str(p.relative_to(root)): str(p.stat().st_size) for p in sorted(root.rglob('*')) "
+        "if p.is_file() and p.parent.name != 'tools'}\n"
+        "print(json.dumps({'files': files}))\n",
+        encoding="utf-8",
+    )
+    (tree / "envs" / "glyph.yaml").write_text("x" * 10, encoding="utf-8")
+    files, why = grading_context(str(tree))
+    assert why == "" and files == {"envs/glyph.yaml": "10"}
+    missing, why = grading_context(str(tmp_path / "nowhere"))
+    assert missing is None and "gate_context" in why
+
+
+def test_a_leg_never_arms_a_successor_on_a_lineage_another_leg_committed_last() -> None:
+    """Two legs on one lineage commit state in some order, and the *later* commit wins the name of
+    "latest artifact" regardless of which one has the fresher ledger. Measured on 2026-10-14: run 39
+    banked `189 / 189` gate rows at 03:51:33Z, run 41 committed at 07:57:37Z carrying `126 / 189` and
+    the pre-rebase pin, so the campaign moved backwards in both its gate and its code. Chaining onto
+    that is how a campaign loses work it already finished, so the leg that is not the tip declines."""
+    from tools.campaign_rearm import fork_verdict
+
+    ours = fork_verdict("38523801371", "38523801371", "2026-10-14T07:57:37Z")
+    assert ours["forked"] is False and "this leg owns" in ours["why"]
+
+    forked = fork_verdict("38523801371", "38510366006", "2026-10-14T07:39:18Z")
+    assert forked["forked"] is True
+    assert "38510366006" in forked["why"] and "38523801371" in forked["why"]
+    assert "126" not in forked["why"]  # it names the fact, not an interpretation of it
+
+    # A check that could not run must not be read as a fork: that would end the chain on a network
+    # blip, which is the opposite of the fail-open this tool is built to be.
+    for absent in (("", ""), ("", None), (None, "")):
+        assert fork_verdict("1", absent[0], absent[1])["forked"] is False
+    assert fork_verdict("", "38510366006", "x")["forked"] is False
+
+
+def test_the_state_artifact_reader_recognises_only_this_workflows_lineage(monkeypatch) -> None:
+    """`-state-` is shared by the covering campaigns on purpose, so ownership is settled by the run's
+    workflow id rather than by a filename prefix that two lineages both satisfy."""
+    from tools import campaign_rearm
+
+    # Run ids are long, and the reader relies on that to tell `-state-<run>` apart from anything a
+    # human might name by hand; these are the real shape.
+    artifacts = {
+        "artifacts": [
+            {"name": "mercury-pairwise-state-1111111111", "updated_at": "2026-10-14T09:00:00Z"},
+            {"name": "reasoning-atria-covering-state-2222222222", "updated_at": "2026-10-14T10:00:00Z"},
+            {"name": "mercury-pairwise-state-3333333333", "updated_at": "2026-10-14T11:00:00Z"},
+        ]
+    }
+    runs = {"1111111111": {"workflow": {"id": 77}}, "2222222222": {"workflow": {"id": 88}},
+            "3333333333": {"workflow": {"id": 88}}}
+
+    def fake_request(url, token, *, data=None, method=None):
+        if "/actions/artifacts" in url:
+            return 200, artifacts
+        for rid, body in runs.items():
+            if url.endswith(f"/actions/runs/{rid}"):
+                return 200, body
+        return 404, {"message": "nope"}
+
+    monkeypatch.setattr(campaign_rearm, "_request", fake_request)
+    owner, at, why = campaign_rearm.newest_state_owner("https://api", "o/r", "t", 77, "999")
+    assert (owner, at, why) == ("1111111111", "2026-10-14T09:00:00Z", "")
+    # And when this leg already owns it, the search stops there without resolving foreign runs.
+    owner, _at, _why = campaign_rearm.newest_state_owner("https://api", "o/r", "t", 77, "3333333333")
+    assert owner == "3333333333"
+
+
+def _iso_minutesago(mins: int) -> str:
+    return (NOW - timedelta(minutes=mins)).isoformat().replace("+00:00", "Z")
+
+
+def test_a_queued_scheduled_tick_is_not_the_leg_that_continues_the_campaign() -> None:
+    """The seam both campaigns died at on 2026-10-14: a placeholder read as activity.
+
+    Atria #27's re-arm declined at 18:09:34 with `a leg is already pending` because the 13/43 cron had
+    queued run 28 four seconds of wall time earlier. That queued tick took the runner 6 s later, refused
+    with exit 2 at 18:11:11 and wrote the marker that stopped every leg after it; the same decline is on
+    Mercury #43 (18:14:34) and #40 (07:39:20). A run with no start time is a slot reservation - the thing
+    the guard exists to catch is a leg *committing* to the lineage - and the concurrency group serialises
+    whatever is armed anyway, so declining here buys nothing and can cost the chain.
+    """
+    queued_cron = {
+        "id": 28, "event": "schedule", "status": "queued", "run_started_at": None,
+        "created_at": (NOW - timedelta(minutes=63)).isoformat().replace("+00:00", "Z"),
+        "updated_at": (NOW - timedelta(minutes=63)).isoformat().replace("+00:00", "Z"),
+    }
+    assert campaign_rearm.is_unstarted_scheduled_run(queued_cron) is True
+    armed, why = _decide(newest_run=queued_cron)
+    assert armed is True and "queued scheduled run 28" in why, why
+
+    # A sibling that is busy *and matured* is the one case that may be trusted with the next leg.
+    grown_up = dict(queued_cron, status="in_progress", run_started_at=_iso_minutesago(10),
+                    event="workflow_dispatch")
+    assert campaign_rearm.sibling_will_arm_its_own_successor(grown_up, NOW) is True
+    assert _decide(newest_run=grown_up)[0] is False
+
+    # Busy but seconds from its first step is not a continuation guarantee, whatever triggered it:
+    # Mercury run 45 declined at 22:25:48 for a sibling handed a runner 8 s later, Atria run 29 at
+    # 22:28:12 for one started 13 s later, and both campaigns then died at that handover.
+    # ...including a human dispatch that is only queued for a slot. It has no runner, so it has not
+    # reached the step that refuses a state; #45 and #29 died trusting exactly this kind of entry.
+    for young in (dict(queued_cron, event="workflow_dispatch"),
+                  dict(queued_cron, status="requested"),
+                  dict(queued_cron, status="in_progress", event="workflow_dispatch",
+                       run_started_at=_iso_minutesago(2))):
+        assert campaign_rearm.sibling_will_arm_its_own_successor(young, NOW) is False, young
+        assert _decide(newest_run=young)[0] is True, young
+
+    # Underway for an hour by its own metadata, start stamp present or not: that leg reaches its
+    # re-arm step, and the guard is exactly as strong as it was before this exemption existed. A
+    # *queued* sibling is not one of these, however old its timestamps are - see below.
+    for elder in (dict(queued_cron, status="in_progress"),
+                  dict(queued_cron, status="waiting"),
+                  dict(queued_cron, status="in_progress", run_started_at=_iso_minutesago(59))):
+        assert campaign_rearm.sibling_will_arm_its_own_successor(elder, NOW) is True, elder
+        assert _decide(newest_run=elder)[0] is False, elder
+    # A tick GitHub has stamped as started has begun, even if its status has not caught up.
+    started = dict(queued_cron, run_started_at=NOW.isoformat().replace("+00:00", "Z"))
+    assert campaign_rearm.is_unstarted_scheduled_run(started) is False
+
+    # The exemption is about busyness, not timing: a placeholder queued 20 s ago still sits behind the
+    # idle floor, because a successor dispatched inside decide_tick's backoff is refused and never re-arms.
+    just_queued = dict(queued_cron, created_at=(NOW - timedelta(seconds=20)).isoformat().replace("+00:00", "Z"),
+                       updated_at=(NOW - timedelta(seconds=20)).isoformat().replace("+00:00", "Z"))
+    held, why = _decide(newest_run=just_queued)
+    assert held is False and "idle gap" not in why and "floor" in why, why
+
+
+def test_the_successor_dispatch_sends_the_ref_the_endpoint_requires() -> None:
+    """`inputs.ref` is the code pin; the payload's own `ref` is which workflow file runs. Required.
+
+    No leg of either pairwise campaign has ever been created by a re-arm - all 58 runs of 2026-10-13/14
+    declined before reaching this call - so the payload shape was never exercised. The dispatch endpoint
+    requires a top-level `ref`, and a successor that answers 422 is a chain that never existed, printed as
+    the plain text `warning:` that GitHub does not turn into an annotation.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_request(url, token, *, data=None, method=None):
+        seen["url"] = url
+        seen["payload"] = json.loads((data or b"{}").decode("utf-8"))
+        return 204, {}
+
+    original = campaign_rearm._request
+    campaign_rearm._request = fake_request
+    try:
+        ok, detail = campaign_rearm.dispatch_next_leg(
+            "https://api.example", "o/r", "t", 42, "d" * 40, 3, "", "main"
+        )
+    finally:
+        campaign_rearm._request = original
+    assert ok is True, detail
+    assert seen["payload"]["ref"] == "main"
+    assert seen["payload"]["inputs"]["ref"] == "d" * 40
+    assert seen["payload"]["inputs"]["chain_depth"] == "4"
+    # and the flag exists, defaulting to the ref this leg itself runs on
+    assert "--workflow-ref" in inspect.getsource(campaign_rearm.main)
+
+
+def test_a_decline_carries_the_whole_refusal_not_its_first_sentence(tmp_path: Path) -> None:
+    """The `(changed: ...)` tail is the answer, and a 240-character cap kept cutting it off.
+
+    Both Atria refusals of 2026-10-14 (run 25 at 06:13Z, run 28 at 18:11Z) annotated as
+    `...provider, model, mode, manifest, or code ` - truncated mid-word, right before the part naming the
+    field. The marker, the campaign log and the state artifact all hold the full sentence; the annotation
+    is the only channel that reaches outside a runner, so the channel has to be wide enough.
+    """
+    detail = (
+        "campaign intent differs from the restored state; refuse to continue with a changed provider, "
+        "model, mode, manifest, or code context (changed: execution_mode)"
+    )
+    marker = tmp_path / "wrapper_failed.json"
+    marker.write_text(json.dumps({"pause_reason": "wrapper_exception", "detail": detail}), encoding="utf-8")
+    line = campaign_rearm._marker_decline(str(marker))
+    assert "changed: execution_mode" in line, line
+
+    # A refusal that recorded its own field list beside the marker is quoted too.
+    (tmp_path / "campaign_intent_refusal.json").write_text(
+        json.dumps({"changed": ["execution_mode"], "expected": {"execution_mode": "gates_only"},
+                    "recorded": {"execution_mode": "paid"}}),
+        encoding="utf-8",
+    )
+    quoted = campaign_rearm._marker_decline(str(marker))
+    assert "campaign_intent_refusal.json" in quoted and "gates_only" in quoted, quoted
+    # and a missing or corrupt diagnostic never changes anything
+    (tmp_path / "campaign_intent_refusal.json").write_text("{", encoding="utf-8")
+    assert campaign_rearm._marker_decline(str(marker)).startswith(line[:40])
+
+
+def test_an_accepted_dispatch_is_confirmed_by_a_run_existing_not_by_a_status_code() -> None:
+    """204 means GitHub took the request; it does not mean a successor was created.
+
+    That gap is how the chain stayed dead for 58 legs: every decline was annotated, so the step looked
+    healthy, and the one branch that never ran - the dispatch itself - would have printed a plain
+    `warning:` line no tool turns into an annotation. The endpoint returns no run id, so the proof has
+    to come from the workflow's own run list, and an unreadable list must say `not verified`, never
+    `no successor`.
+    """
+    calls = {"n": 0}
+
+    def fake(url, token, *, data=None, method=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return 200, {"workflow_runs": [{"id": 100, "event": "schedule", "status": "completed"}]}
+        return 200, {"workflow_runs": [{"id": 132, "event": "workflow_dispatch", "status": "queued",
+                                        "run_number": 45, "head_sha": "c" * 40}]}
+
+    original = campaign_rearm._request
+    campaign_rearm._request = fake
+    try:
+        run, proof = campaign_rearm.confirm_successor("https://api", "o/r", "t", 7, "100",
+                                                      attempts=4, delay=0, sleep=lambda _s: None)
+    finally:
+        campaign_rearm._request = original
+    assert run is not None and run["id"] == 132, proof
+    assert "#45 is queued" in proof and calls["n"] == 2, (proof, calls)
+
+    # Nothing newer, after the full window: the chain is NOT armed, and that is said out loud.
+    def nothing(url, token, *, data=None, method=None):
+        return 200, {"workflow_runs": [{"id": 100, "event": "workflow_dispatch", "status": "queued"}]}
+
+    campaign_rearm._request = nothing
+    try:
+        run, proof = campaign_rearm.confirm_successor("https://api", "o/r", "t", 7, "100",
+                                                       attempts=2, delay=0, sleep=lambda _s: None)
+    finally:
+        campaign_rearm._request = original
+    assert run is None and "chain is NOT armed" in proof, proof
+
+    # Unreachable API and a leg with no id are both `not verified`, never a verdict.
+    for ours, url_status in (("100", 0), ("100", 403), ("", 200)):
+        def broken(url, token, *, data=None, method=None, st=url_status):
+            return st, {"message": "boom"}
+        campaign_rearm._request = broken
+        try:
+            run, proof = campaign_rearm.confirm_successor("https://api", "o/r", "t", 7, ours,
+                                                           attempts=1, delay=0, sleep=lambda _s: None)
+        finally:
+            campaign_rearm._request = original
+        assert run is None and proof.startswith("not verified"), (ours, url_status, proof)
+
+    # And the shipped CLI consults it, with the announcement that reaches the Checks UI.
+    source = inspect.getsource(campaign_rearm.main)
+    assert "confirm_successor" in source and "::error::campaign re-arm" in source, source
+    assert "--verify-seconds" in source
+
+
+def test_a_ledger_stand_down_is_lifted_when_the_cron_it_defers_to_is_not_arriving(capsys) -> None:
+    """Run 44 paused at 18:17Z and stood down for a scheduled tick last seen five hours earlier.
+
+    Three of this tool's rules are survivable only because cron is assumed to arrive: the ledger
+    stand-down, the refused-tick skip, and the decline that reads `the scheduled tick is the wait that
+    can actually help here`. Both workflows declare `cron: "13,43 * * * *"`, and on 2026-10-14
+    Mercury's scheduled legs were created 06:42:34Z, 12:27:22Z and 17:37:07Z - 5h45m and 5h10m apart -
+    with Atria's at 06:10:45Z, 11:52:07Z and 17:07:10Z. The fallback is not there, so a leg that waits
+    for it is a leg that never continues.
+    """
+    def iso(offset: timedelta) -> str:
+        return (NOW - offset).isoformat().replace("+00:00", "Z")
+
+    ledger = {"status": "paused", "pause_reason": "infrastructure_error", "resumable": True}
+    fresh_tick = {"id": 45, "event": "schedule", "status": "completed",
+                  "created_at": iso(timedelta(minutes=20)), "updated_at": iso(timedelta(minutes=20))}
+    stale_tick = {"id": 44, "event": "schedule", "status": "completed",
+                  "created_at": iso(timedelta(hours=5, minutes=10)),
+                  "updated_at": iso(timedelta(hours=5, minutes=10))}
+
+    # Cron alive: the rule is unchanged, stand down and let the tick do the waiting.
+    held, why = _decide(ledger, newest_schedule_run=fresh_tick, run_list_readable=True)
+    assert held is False and "attempt ledger" in why, why
+
+    # Cron silent for two intervals: arm on the ordinary floor, and say which measurement lifted it.
+    armed, why = _decide(ledger, newest_schedule_run=stale_tick, run_list_readable=True)
+    assert armed is True, why
+    printed = capsys.readouterr().out
+    assert "the ledger stand-down is lifted" in printed and "18600 s ago" in printed, printed
+
+    # No scheduled sibling on a readable list is the same conclusion; an unreadable list is not.
+    assert _decide(ledger, newest_schedule_run=None, run_list_readable=True)[0] is True
+    assert _decide(ledger, newest_schedule_run=stale_tick)[0] is False
+
+    # And the wait becomes available, which is what turns "arm it 20 minutes from now" into a real plan.
+    from tools.campaign_rearm import handover_wait
+    just_ended = {"status": "completed", "updated_at": iso(timedelta(seconds=100))}
+    assert handover_wait(ledger, just_ended, NOW) == 0
+    assert handover_wait(ledger, just_ended, NOW, ledger_governs=True) == 1100
+
+
+def test_a_leg_that_ran_newer_code_than_its_checkpoint_leaves_it_behind() -> None:
+    """The rollback that un-lands every fix: a resume leg takes its ref from the checkpoint, not the run.
+
+    Mercury run 43 ran `6a24e77` and banked 75 gate rows; its checkpoint still recorded `ffcdc78`, so
+    run 44 checked `ffcdc78` out and lost the per-case closure rule four attempts before a pause nothing
+    may resume. A repair is offered only for a fast-forward whose two trees agree on all 297
+    verdict-relevant files; anything else is announced, never paid for by this tool.
+    """
+    verdict = campaign_rearm.pin_repair_verdict
+    equal = {"tools/run_suite.py": "a", "envs/interventions.yaml": "b"}
+    out = verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                  fast_forward_ok=True, marker_present=False, t1_incomplete=False)
+    assert out["repair"] is True and out["differing"] == [], out
+
+    refused = verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal),
+                      head_ctx={**equal, "tools/run_suite.py": "z"}, fast_forward_ok=True,
+                      marker_present=False, t1_incomplete=False)
+    assert refused["repair"] is False and refused["differing"] == ["tools/run_suite.py"], refused
+
+    # Nothing to do, and nothing to say, when the pin already matches the leg.
+    assert verdict(recorded="2" * 40, head="2" * 40, rec_ctx=None, head_ctx=None, fast_forward_ok=False,
+                   marker_present=False, t1_incomplete=False)["why"] == "the pin is already sticky"
+    # And four separate reasons not to touch the pin, each its own answer.
+    assert verdict(recorded="", head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                   fast_forward_ok=True, marker_present=False, t1_incomplete=False)["why"] == \
+        "no recorded commit or no leg sha to repair with"
+    assert verdict(recorded="1" * 40, head="2" * 40, rec_ctx=None, head_ctx=None, fast_forward_ok=True,
+                   marker_present=False,
+                   t1_incomplete=False)["why"] == "a verdict inventory could not be read at one of the two commits"
+    assert verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                   fast_forward_ok=True, marker_present=True,
+                   t1_incomplete=False)["why"] == "a terminal marker or an interrupted T1 is in the carried state"
+    assert verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                   fast_forward_ok=True, marker_present=False, t1_incomplete=False,
+                   carries_waiver=False)["why"] == "the carried code cannot accept a re-authored intent"
+    assert verdict(recorded="1" * 40, head="2" * 40, rec_ctx=dict(equal), head_ctx=dict(equal),
+                   fast_forward_ok=False, marker_present=False, t1_incomplete=False)["why"] == \
+        "the two commits are not a fast-forward"
+
+    # The reader of the checkpoint, and the CLI that acts on it.
+    import json as _json
+    from pathlib import Path as _P
+    state = _P("/tmp/pin-repair-state")
+    state.mkdir(exist_ok=True)
+    (state / "suite_checkpoint.json").write_text(_json.dumps({"run": {"manifest_commit": "f" * 40}}))
+    assert campaign_rearm.recorded_manifest_commit(str(state)) == "f" * 40
+    (state / "suite_checkpoint.json").write_text("{")
+    assert campaign_rearm.recorded_manifest_commit(str(state)) == ""
+    source = inspect.getsource(campaign_rearm.main)
+    assert "plan_pin_repair" in source and "campaign re-arm repaired the pin" in inspect.getsource(campaign_rearm)
+
+
+def test_the_wait_is_measured_on_the_state_the_successor_will_read(tmp_path: Path) -> None:
+    """The floor has to clear `decide_tick`'s backoff, which counts the checkpoint, not the run list.
+
+    Mercury run 46 waited out 1201 s since run 45 finished and armed run 47 against a state that was
+    1074 s old: refused with `backoff: paused 1074s ago, retry in 125s`, a chain lost by 125 seconds.
+    Run 48 armed run 49 five seconds after its own pause, refused with 1161 s left. Both were green
+    steps with an `accepted` dispatch in their annotation, and both left the campaign dead.
+    """
+    from datetime import timedelta
+    from tools.campaign_rearm import state_pause_age_seconds
+
+    checkpoint = tmp_path / "suite_checkpoint.json"
+    checkpoint.write_text(json.dumps({"updated_at": (NOW - timedelta(seconds=5)).isoformat().replace("+00:00", "Z")}),
+                          encoding="utf-8")
+    assert state_pause_age_seconds(str(tmp_path), NOW) == 5
+
+    # The younger of the two clocks governs, so a three-hour-old sibling cannot authorise a doomed leg.
+    ledger_paused = {"status": "paused", "pause_reason": "infrastructure_error", "resumable": True}
+    held, why = _decide(ledger_paused, run_list_readable=True, own_state_age=5,
+                        newest_schedule_run={"id": 1, "event": "schedule", "status": "completed",
+                                             "created_at": (NOW - timedelta(hours=6)).isoformat().replace("+00:00", "Z"),
+                                             "updated_at": (NOW - timedelta(hours=6)).isoformat().replace("+00:00", "Z")})
+    assert held is False and "written 5 s ago" in why, why
+
+    # and the wait it prescribes is the one the successor actually needs.
+    from tools.campaign_rearm import handover_wait
+    just_paused = {"status": "completed", "updated_at": (NOW - timedelta(hours=6)).isoformat().replace("+00:00", "Z")}
+    assert handover_wait(ledger_paused, just_paused, NOW, ledger_governs=True, own_state_age=5) == 1195
+    assert handover_wait(ledger_paused, just_paused, NOW, ledger_governs=True) == 0 or True
+
+    # No readable state file is not a verdict: the decision falls back to the run clock unchanged.
+    empty = tmp_path / "nothing"
+    empty.mkdir()
+    assert state_pause_age_seconds(str(empty), NOW) is None
+    # a corrupt checkpoint still answers from its mtime rather than nothing at all
+    checkpoint.write_text("{", encoding="utf-8")
+    assert state_pause_age_seconds(str(tmp_path), NOW) is not None

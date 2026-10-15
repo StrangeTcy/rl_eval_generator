@@ -1174,6 +1174,7 @@ def run_suite(
         )
         secret = credentials.api_key
     case_index = 0
+    infrastructure_failures_this_leg = 0
     retry_case_id: str | None = None
     case_attempts_spent = 0
     case_try_count = 0
@@ -1194,6 +1195,10 @@ def run_suite(
             "generation_error",
             "compile_error",
             "blocked_config_drift",
+            # A case whose automatic infrastructure retries ran out is closed, not pending: the row
+            # says `infrastructure_unscored` with the harness's own words in `error`, and
+            # `coverage.json` counts it under that status. It is never counted as a score.
+            "infrastructure_unscored",
         }:
             case_index += 1
             continue
@@ -1615,12 +1620,37 @@ def run_suite(
             previous_retries = int(retry_ledger.get(case_id, 0) or 0)
             next_retries = previous_retries + 1
             retry_ledger[case_id] = next_retries
-            checkpoint["paused"] = True
-            checkpoint["pause_reason"] = (
-                "infrastructure_error"
-                if next_retries <= MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES
-                else "infrastructure_error_retries_exhausted"
-            )
+            if next_retries > MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES:
+                # The bound is reached, so the case is closed as explicitly unscored - with the
+                # harness's own words kept in `error` - and the plan continues. Halting instead,
+                # which is what this used to do, is measured harm and no benefit: Mercury run 35
+                # paused at 365/416 on `epistemic_silence__observation=message_protocol=`
+                # pair_prior=skewed_scenario=expedition__seed-0`, whose judge returned
+                # `not_submitted` twice in a row, and the ten-attempt bound meant the lineage
+                # reached a non-resumable stop while 51 cases that never got a turn were still in
+                # the plan. A per-case bound is a bound on that case, not a licence to stop the
+                # campaign. `infrastructure_error_retries_exhausted` is no longer written; a
+                # persistent harness defect still ends the leg below, on the second failure.
+                result["status"] = "infrastructure_unscored"
+                result["unscored_after_attempts"] = next_retries
+                checkpoint.setdefault("unscored_cases", {})[case_id] = {
+                    "attempts": next_retries,
+                    "error": result.get("error"),
+                    "recorded_at": _utc_now(),
+                }
+                # No `continue`: the row is the same object `checkpoint["results"]` holds (it was
+                # assigned above, before this branch), and the tail of the loop is what writes the
+                # checkpoint atomically and advances `case_index`. Skipping it would lose the close
+                # on the next leg and walk the same case again in this one.
+            else:
+                # One unscored case is that case's problem: the plan continues and the next leg
+                # retries it from the atomic checkpoint, which is what the bound was for. Two in the
+                # same leg is the image or the judge being down, and the leg stops rather than bill
+                # an attempt per case against a dead harness.
+                infrastructure_failures_this_leg += 1
+                if infrastructure_failures_this_leg >= 2:
+                    checkpoint["paused"] = True
+                    checkpoint["pause_reason"] = "infrastructure_error"
         elif (
             max_http_attempts is not None
             and http_attempts_reserved >= max_http_attempts
@@ -1666,6 +1696,14 @@ def run_suite(
         if checkpoint.get("paused"):
             break
         case_index += 1
+    if not checkpoint.get("paused") and any(
+        row.get("status") == "infrastructure_error" for row in result_by_case.values()
+    ):
+        # The plan was walked end to end with at least one case still awaiting its retry, so this is
+        # not a completion: resume, retry the unscored cases, and let the bound close them one by
+        # one. Reporting `completed` here would let a transient judge loss become a silent hole.
+        checkpoint["paused"] = True
+        checkpoint["pause_reason"] = "infrastructure_error"
     if dry_run:
         checkpoint["results"] = list(result_by_case.values())
         checkpoint["updated_at"] = _utc_now()

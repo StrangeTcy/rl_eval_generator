@@ -1,0 +1,47 @@
+# Held outside .github/workflows/ on purpose, and this is the measurement that decided it: pushing this
+# file to its real path was rejected by the server - "refusing to allow a GitHub App to create or update
+# workflow `.github/workflows/campaign-kick.yml` without `workflows` permission" (16:01 UTC, push of
+# 5939fba). The App that carries this workspace cannot add a trigger, so the trigger is not mine to give.
+# This is the copy that would go in, unchanged, if it ever becomes obtainable; tests/test_campaign_kick.py
+# parses it and asserts it stays narrow (push-only, one branch, no schedule block, actions:write and
+# nothing else), so the example cannot rot into something wider than the tool it calls.
+# One campaign leg, started by a push, for the case where the scheduler produces no tick.
+#
+# This file is deliberately narrow and it is deliberately not on the default branch's schedule: it reacts
+# to a push to this branch only, it dispatches at most one leg per push, and it dispatches only while a
+# committed `campaign_kick.json` is inside its own expiry window (the window is what stops this becoming a
+# self-perpetuating trigger - and it is why there is no `schedule:` block here). The instruction itself is
+# checked in tools/campaign_kick.py: wrong event, wrong branch, expired, stale, disabled workflow, a leg
+# already queued or running, or a token that may not dispatch, and nothing is sent.
+#
+# The payload it may send is fixed to {resume_previous: true, chain_depth: 0}. Nothing on this form is an
+# authorization: `rebase_onto_ref`, `clear_wrapper_stop`, execution modes and ceiling overrides are
+# refused by the campaign's own tools outside a human dispatch, and this workflow cannot add them.
+#
+# `actions: write` is the whole point of the file: the `tests` job in ci.yml has no GITHUB_TOKEN in its
+# environment at all (measured 15:53 UTC - the kick printed "skipped: no GITHUB_TOKEN in this job"), so
+# the job that is allowed to dispatch has to say so itself.
+name: Campaign kick
+
+on:
+  push:
+    branches:
+      - arena/595b91e0-rl-eval-generator
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  kick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Start the leg the committed instruction asks for
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/campaign_kick.py

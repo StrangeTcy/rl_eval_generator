@@ -66,6 +66,18 @@ STATE_CONTRACT_MARKERS = (
 )
 
 
+# The checkout this file was fetched from, as a name rather than a `__file__` arithmetic: a test of the
+# ancestry verdict has to be able to point it at a repository it made itself, because CI checks this out
+# with `fetch-depth: 1` and an assertion about two named commits of this branch is then a claim about the
+# clone, not about the rule. That is exactly how tests/test_campaign_supervisor.py went red in CI and green
+# on a desk (16:0x UTC, 2026-10-13).
+# Prefer the job's checkout: the launcher fetches this file alone into `$RUNNER_TEMP` and runs it there,
+# where `__file__` arithmetic resolves to the runner's home and every `git` probe fails closed - which is
+# correct behaviour for a commit the checkout cannot see and wrong behaviour for one it can. The
+# workspace is the checkout the leg is measuring, so it answers first when GitHub says it exists.
+GIT_ROOT = os.environ.get("GITHUB_WORKSPACE") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def _is_ancestor(older: str, newer: str) -> bool:
     """Reachability test for two shas, answered by the checkout this file was fetched from.
 
@@ -75,12 +87,13 @@ def _is_ancestor(older: str, newer: str) -> bool:
     """
     import subprocess
 
+    root = GIT_ROOT
+
     def usable(value: str) -> bool:
         return 7 <= len(value) <= 40 and all(char in "0123456789abcdef" for char in value)
 
     if not (usable(older) and usable(newer)):
         return False
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for value in (older, newer):
         if subprocess.run(["git", "-C", root, "cat-file", "-e", f"{value}^{{commit}}"],
                           capture_output=True, text=True).returncode != 0:

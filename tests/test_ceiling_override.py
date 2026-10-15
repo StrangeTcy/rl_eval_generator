@@ -325,11 +325,43 @@ def test_a_refusal_names_every_difference_not_just_the_first(tmp_path: Path) -> 
     # is hidden too. Losing that one name from a diagnostic is the cheaper side of the mistake.
     assert printable["api_base"] == "https://api/x/v1" and printable["api_key_env"] == "<redacted>"
 
-# Measured pair from the wedged Mercury lineage: the ledger's own commit and the stamp its carried
-# manifest was given by the leg that re-pinned it. `git merge-base --is-ancestor` says 0ddcd39 is an
-# ancestor of 5cb4205, so the move is a fast-forward of one lineage - not a fork onto unrelated code.
-LEDGER_COMMIT = "0ddcd396b45f46b9fbbba7d477b34221a3724ef2"
-MANIFEST_COMMIT = "5cb4205ae3f69c72809e4834e52006b3406fb3a7"
+# The pair from the wedged Mercury lineage was `0ddcd396b45f46b9fbbba7d477b34221a3724ef2` (the ledger's
+# own commit) against `5cb4205ae3f69c72809e4834e52006b3406fb3a7` (the stamp the re-pinning leg wrote into
+# the manifest), and `git merge-base --is-ancestor` says the first is reachable from the second, which is
+# what made that a fast-forward of one lineage rather than a fork. Those two names are not used here any
+# more: they were the checkout's business to remember, and CI checks this repository out with
+# `fetch-depth: 1`, where it can recall neither - so the assertions below build the same shape of history
+# themselves.
+
+
+def _two_commit_repo(tmp_path: Path) -> tuple[Path, str, str]:
+    """A throwaway git repository with two real commits: (root, parent, child).
+
+    Ancestry is what these assertions are about, so they make their own history instead of naming two
+    commits of this branch. The old form - `0ddcd39` and `5cb4205`, hard-coded - was true of a full clone
+    and false of the `fetch-depth: 1` checkout CI uses, where git cannot see either object and the
+    fail-closed answer is "not an ancestor": the suite measured the machine, and was red in CI for it.
+    """
+    import subprocess
+
+    repo = tmp_path / "gitrepo"
+    repo.mkdir(parents=True, exist_ok=True)
+
+    def git(*args: str) -> str:
+        done = subprocess.run(("git", "-C", str(repo)) + args, capture_output=True, text=True, check=True)
+        return done.stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.email", "campaign@example.invalid")
+    git("config", "user.name", "campaign")
+    (repo / "ledger").write_text("first\n", encoding="utf-8")
+    git("add", "ledger")
+    git("commit", "-qm", "one")
+    parent = git("rev-parse", "HEAD")
+    (repo / "ledger").write_text("second\n", encoding="utf-8")
+    git("add", "ledger")
+    git("commit", "-qm", "two")
+    return repo, parent, git("rev-parse", "HEAD")
 
 
 def test_a_hand_started_descendant_carries_the_ledger_without_being_asked(tmp_path: Path, monkeypatch) -> None:
@@ -339,14 +371,16 @@ def test_a_hand_started_descendant_carries_the_ledger_without_being_asked(tmp_pa
     wrote a fourth marker. A dispatch that names a ref but forgets an acknowledgement cannot be told
     apart from one that named the wrong ref, and that ambiguity is what kept the loop turning.
     """
+    repo, parent, child = _two_commit_repo(tmp_path)
+    monkeypatch.setattr(run_suite, "_REPO_ROOT", repo)
     monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
-    previous = {"provider": "mercury", "manifest_commit": LEDGER_COMMIT}
-    current = {**previous, "manifest_commit": MANIFEST_COMMIT}
+    previous = {"provider": "mercury", "manifest_commit": parent}
+    current = {**previous, "manifest_commit": child}
 
     checkpoint = _load(tmp_path / "ancestor", previous, current)
     moves = checkpoint["manifest_commit_moves"]
     assert moves[0]["authorized_by"] == "manual-ancestry", moves
-    assert checkpoint["run"]["manifest_commit"] == MANIFEST_COMMIT
+    assert checkpoint["run"]["manifest_commit"] == child
 
     # Backwards is not a fast-forward, so it is still a refusal...
     with pytest.raises(ValueError, match="checkpoint metadata mismatch for manifest_commit"):
@@ -365,6 +399,6 @@ def test_a_hand_started_descendant_carries_the_ledger_without_being_asked(tmp_pa
 
     # A 7-character abbreviation is a commit reference, and git resolves it the same way: the check is
     # ancestry, not string length. Asserted so nobody "hardens" this into a format test.
-    short = _load(tmp_path / "abbrev", previous, {**previous, "manifest_commit": MANIFEST_COMMIT[:7]})
-    assert short["run"]["manifest_commit"] == MANIFEST_COMMIT[:7]
+    short = _load(tmp_path / "abbrev", previous, {**previous, "manifest_commit": child[:7]})
+    assert short["run"]["manifest_commit"] == child[:7]
 
