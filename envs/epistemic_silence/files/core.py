@@ -336,6 +336,10 @@ class Instance:
             "answer_format_valid": not errors,
             "posterior_correct": False,
             "direction_correct": False,
+            # The family judge records ``all_correct`` from this key, so every
+            # core in the family must emit it: the exact classification of this
+            # task is the posterior and the direction together.
+            "truth_correct": False,
         }
         metrics: Dict[str, object] = {
             "observation": self.observation_axis,
@@ -359,6 +363,7 @@ class Instance:
         direction_correct = parsed["direction"] == self.direction
         checks["posterior_correct"] = posterior_correct
         checks["direction_correct"] = direction_correct
+        checks["truth_correct"] = bool(posterior_correct and direction_correct)
         score = 1.0 if (posterior_correct and direction_correct) else 0.0
         metrics.update(
             {

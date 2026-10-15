@@ -423,7 +423,14 @@ class Instance:
     def grade(self, answer: object, pass_threshold: float) -> dict:
         """Exact classification: full credit only on the exact equilibrium."""
         parsed, errors = _parse_answer(answer, self.types_a, self.types_b)
-        checks = {"answer_format_valid": not errors, "equilibrium_correct": False}
+        checks = {
+            "answer_format_valid": not errors,
+            "equilibrium_correct": False,
+            # The family judge records ``all_correct`` from this key, so every
+            # core in the family must emit it: the exact classification of this
+            # task is the equilibrium itself.
+            "truth_correct": False,
+        }
         metrics: Dict[str, object] = {
             "types": self.types_axis,
             "payoffs": self.payoffs_axis,
@@ -443,6 +450,7 @@ class Instance:
             and parsed["player_b"] == self.equilibrium["player_b"]
         )
         checks["equilibrium_correct"] = correct
+        checks["truth_correct"] = bool(correct)
         score = 1.0 if correct else 0.0
         metrics.update(
             {
