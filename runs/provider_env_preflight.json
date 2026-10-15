@@ -1,0 +1,603 @@
+{
+  "schema_version": 1,
+  "event": "provider_env_preflight",
+  "checked_at": "2026-10-15T10:47:40.232520Z",
+  "question": {
+    "provider": "agentrouter",
+    "model_filter": "astra",
+    "model": null,
+    "environments": [
+      "rd_adaptive_halting",
+      "rd_gradient_credit",
+      "rd_state_carry",
+      "sheaf_invariant_gluing",
+      "sheaf_physical_constraints",
+      "sheaf_schema_sync"
+    ],
+    "stage": "offline",
+    "paid_stage_requested": false
+  },
+  "stages": [
+    {
+      "stage": "credential",
+      "status": "key_not_visible_here",
+      "provider": "agentrouter",
+      "modelled_provider": false,
+      "wire_provider": "custom",
+      "key_env_names_tried": [
+        "AGENTROUTER_API_KEY",
+        "AGENT_ROUTER_API_KEY",
+        "AGENTROUTER_API_TOKEN"
+      ],
+      "key_source": null,
+      "api_base_host": null,
+      "api_base_source": null,
+      "secret_file": null,
+      "secret_file_provider_names": [],
+      "resolution_error": "No API base for provider 'custom'; pass --api-base or set providers.custom.api_base in secret_key.json",
+      "blockers": [
+        "no key is reachable from this process: an Actions secret is invisible here, so the catalog and wire stages have to run inside a workflow that maps it to an environment variable"
+      ],
+      "notes": [
+        "'agentrouter' is not a modelled provider (arena/secrets.py has no PROVIDER_ENV or PROVIDER_DEFAULT_BASE entry), so a request would be sent as 'custom' with an explicit base and key-env; tools/provider_preflight.py cannot probe it at all and answers 'credential_error' whether or not a key exists"
+      ],
+      "hard_blocker": false
+    },
+    {
+      "stage": "selection",
+      "status": "ready",
+      "environments": {
+        "rd_adaptive_halting": "envs/recurrent_depth/adaptive_halting/config.yaml",
+        "rd_gradient_credit": "envs/recurrent_depth/gradient_credit/config.yaml",
+        "rd_state_carry": "envs/recurrent_depth/state_carry/config.yaml",
+        "sheaf_invariant_gluing": "envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml",
+        "sheaf_physical_constraints": "envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml",
+        "sheaf_schema_sync": "envs/cat_theo/sheaf/sheaf_schema_sync/config.yaml"
+      },
+      "env_dirs": [
+        "envs/cat_theo/sheaf",
+        "envs/recurrent_depth"
+      ],
+      "requested_names": [],
+      "names_not_in_registry": [],
+      "blockers": [],
+      "notes": []
+    },
+    {
+      "stage": "env_build",
+      "status": "ready",
+      "environment_count": 6,
+      "environments": {
+        "rd_adaptive_halting": {
+          "status": "ready",
+          "config_path": "envs/recurrent_depth/adaptive_halting/config.yaml",
+          "cases_checked": 1,
+          "cases": [
+            {
+              "status": "ready",
+              "generated_file_count": 38,
+              "eval_scripts_checked": 0,
+              "case_id": "rd_adaptive_halting__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0",
+              "difficulty": "easy,easy,easy,easy,easy"
+            }
+          ]
+        },
+        "rd_gradient_credit": {
+          "status": "ready",
+          "config_path": "envs/recurrent_depth/gradient_credit/config.yaml",
+          "cases_checked": 1,
+          "cases": [
+            {
+              "status": "ready",
+              "generated_file_count": 38,
+              "eval_scripts_checked": 0,
+              "case_id": "rd_gradient_credit__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0",
+              "difficulty": "easy,easy,easy,easy,easy"
+            }
+          ]
+        },
+        "rd_state_carry": {
+          "status": "ready",
+          "config_path": "envs/recurrent_depth/state_carry/config.yaml",
+          "cases_checked": 1,
+          "cases": [
+            {
+              "status": "ready",
+              "generated_file_count": 38,
+              "eval_scripts_checked": 0,
+              "case_id": "rd_state_carry__recurrence_depth=easy_clue_clarity=easy_visible_tests=easy_implementation_obfuscation=easy_batching_complexity=easy__seed-0",
+              "difficulty": "easy,easy,easy,easy,easy"
+            }
+          ]
+        },
+        "sheaf_invariant_gluing": {
+          "status": "ready",
+          "config_path": "envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml",
+          "cases_checked": 1,
+          "cases": [
+            {
+              "status": "ready",
+              "generated_file_count": 36,
+              "eval_scripts_checked": 1,
+              "case_id": "sheaf_invariant_gluing__naming=easy_symptom_mask=easy__seed-0",
+              "difficulty": "easy,easy"
+            }
+          ]
+        },
+        "sheaf_physical_constraints": {
+          "status": "ready",
+          "config_path": "envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml",
+          "cases_checked": 1,
+          "cases": [
+            {
+              "status": "ready",
+              "generated_file_count": 36,
+              "eval_scripts_checked": 1,
+              "case_id": "sheaf_physical_constraints__naming=easy_symptom_mask=easy__seed-0",
+              "difficulty": "easy,easy"
+            }
+          ]
+        },
+        "sheaf_schema_sync": {
+          "status": "ready",
+          "config_path": "envs/cat_theo/sheaf/sheaf_schema_sync/config.yaml",
+          "cases_checked": 1,
+          "cases": [
+            {
+              "status": "ready",
+              "generated_file_count": 36,
+              "eval_scripts_checked": 1,
+              "case_id": "sheaf_schema_sync__naming=easy_symptom_mask=easy__seed-0",
+              "difficulty": "easy,easy"
+            }
+          ]
+        }
+      },
+      "not_ready": [],
+      "blockers": [],
+      "notes": [],
+      "hard_blocker": false,
+      "elapsed_ms": 934
+    },
+    {
+      "stage": "judge_stack",
+      "status": "host_limited",
+      "judge_image": {
+        "present": true,
+        "pins": {
+          "torch": "2.5.1",
+          "torchvision": "0.20.1"
+        },
+        "floats": []
+      },
+      "agent_image": {
+        "present": true,
+        "pins": {},
+        "floats": [
+          "torch",
+          "torchvision"
+        ]
+      },
+      "judge_image_provides": [
+        "PIL",
+        "evaluator_views",
+        "experiment_arms",
+        "experiment_spec",
+        "generation_manifest",
+        "information_policy",
+        "inspect_logs",
+        "judge_lib",
+        "latent_spec",
+        "patch_validator",
+        "presentation_identity",
+        "pytest",
+        "run_eval",
+        "run_train",
+        "source_validator",
+        "submit",
+        "tool_state",
+        "torch",
+        "torchvision"
+      ],
+      "judge_imports": {
+        "rd_adaptive_halting": {
+          "status": "imports_satisfied",
+          "imports": [
+            "__future__",
+            "ast",
+            "halting",
+            "json",
+            "judge_lib",
+            "math",
+            "os",
+            "patch_validator",
+            "re",
+            "shutil",
+            "subprocess",
+            "sys",
+            "tempfile",
+            "time",
+            "torch",
+            "typing"
+          ],
+          "missing_imports": [],
+          "judge_files": [
+            "judge.py",
+            "judge_lib.py",
+            "patch_validator.py",
+            "source_validator.py"
+          ]
+        },
+        "rd_gradient_credit": {
+          "status": "imports_satisfied",
+          "imports": [
+            "__future__",
+            "ast",
+            "json",
+            "judge_lib",
+            "math",
+            "os",
+            "patch_validator",
+            "re",
+            "recurrent_block",
+            "shutil",
+            "subprocess",
+            "sys",
+            "tempfile",
+            "time",
+            "torch",
+            "typing"
+          ],
+          "missing_imports": [],
+          "judge_files": [
+            "judge.py",
+            "judge_lib.py",
+            "patch_validator.py",
+            "source_validator.py"
+          ]
+        },
+        "rd_state_carry": {
+          "status": "imports_satisfied",
+          "imports": [
+            "__future__",
+            "ast",
+            "json",
+            "judge_lib",
+            "math",
+            "os",
+            "patch_validator",
+            "re",
+            "recurrent_block",
+            "shutil",
+            "subprocess",
+            "sys",
+            "tempfile",
+            "time",
+            "torch",
+            "typing"
+          ],
+          "missing_imports": [],
+          "judge_files": [
+            "judge.py",
+            "judge_lib.py",
+            "patch_validator.py",
+            "source_validator.py"
+          ]
+        },
+        "sheaf_invariant_gluing": {
+          "status": "imports_satisfied",
+          "imports": [
+            "__future__",
+            "ast",
+            "json",
+            "judge_lib",
+            "math",
+            "os",
+            "patch_validator",
+            "re",
+            "shutil",
+            "subprocess",
+            "sys",
+            "tempfile",
+            "time",
+            "torch",
+            "typing"
+          ],
+          "missing_imports": [],
+          "judge_files": [
+            "judge.py",
+            "judge_lib.py",
+            "patch_validator.py",
+            "source_validator.py"
+          ]
+        },
+        "sheaf_physical_constraints": {
+          "status": "imports_satisfied",
+          "imports": [
+            "__future__",
+            "ast",
+            "json",
+            "judge_lib",
+            "math",
+            "os",
+            "patch_validator",
+            "re",
+            "shutil",
+            "subprocess",
+            "sys",
+            "tempfile",
+            "time",
+            "torch",
+            "typing"
+          ],
+          "missing_imports": [],
+          "judge_files": [
+            "judge.py",
+            "judge_lib.py",
+            "patch_validator.py",
+            "source_validator.py"
+          ]
+        },
+        "sheaf_schema_sync": {
+          "status": "imports_satisfied",
+          "imports": [
+            "__future__",
+            "ast",
+            "json",
+            "judge_lib",
+            "math",
+            "os",
+            "patch_validator",
+            "re",
+            "shutil",
+            "subprocess",
+            "sys",
+            "tempfile",
+            "time",
+            "torch",
+            "typing"
+          ],
+          "missing_imports": [],
+          "judge_files": [
+            "judge.py",
+            "judge_lib.py",
+            "patch_validator.py",
+            "source_validator.py"
+          ]
+        }
+      },
+      "judge_imports_unchecked": [],
+      "host_modules": {
+        "torch": {
+          "present": false,
+          "version": null
+        },
+        "torchvision": {
+          "present": false,
+          "version": null
+        }
+      },
+      "host_can_run_episodes": false,
+      "docker": {
+        "binary": false
+      },
+      "ci_installs_judge_stack": [
+        {
+          "workflow": "atria-campaign.yml",
+          "steps": [],
+          "pins": {
+            "torch": "2.5.1",
+            "torchvision": "0.20.1"
+          }
+        },
+        {
+          "workflow": "atria-first5.yml",
+          "steps": [],
+          "pins": {
+            "torch": "2.5.1",
+            "torchvision": "0.20.1"
+          }
+        },
+        {
+          "workflow": "mercury-covering-campaign.yml",
+          "steps": [
+            "Install pinned CPU judge stack"
+          ],
+          "pins": {
+            "torch": "2.5.1",
+            "torchvision": "0.20.1"
+          }
+        },
+        {
+          "workflow": "mercury-pairwise-campaign.yml",
+          "steps": [
+            "Install pinned CPU judge stack"
+          ],
+          "pins": {
+            "torch": "2.5.1",
+            "torchvision": "0.20.1"
+          }
+        },
+        {
+          "workflow": "reasoning-atria-covering-campaign.yml",
+          "steps": [
+            "Install pinned CPU judge stack"
+          ],
+          "pins": {
+            "torch": "2.5.1",
+            "torchvision": "0.20.1"
+          }
+        },
+        {
+          "workflow": "reasoning-atria-pairwise-campaign.yml",
+          "steps": [
+            "Install pinned CPU judge stack"
+          ],
+          "pins": {
+            "torch": "2.5.1",
+            "torchvision": "0.20.1"
+          }
+        }
+      ],
+      "ci_pins": {
+        "torch": "2.5.1",
+        "torchvision": "0.20.1"
+      },
+      "blockers": [],
+      "notes": [
+        "this host has no torch, torchvision, so --sandbox local cannot run an episode here; the pinned CPU judge stack is a container/CI property",
+        "no docker binary on this host, so --sandbox docker cannot run an episode here",
+        "shared/Dockerfile.agent installs torch, torchvision unpinned while shared/Dockerfile.judge pins torch==2.5.1, torchvision==0.20.1, so the agent and the judge can disagree about the library that grades the work",
+        "6 workflow(s) install the pinned CPU judge stack, so an episode can run in CI even where this host cannot"
+      ],
+      "hard_blocker": false
+    },
+    {
+      "stage": "gate_status",
+      "status": "ready",
+      "environments": {
+        "rd_adaptive_halting": {
+          "exact_instance_reference": null,
+          "graded_by": "compile_only",
+          "verdict_relevant_files": [
+            "envs/recurrent_depth/adaptive_halting/config.yaml",
+            "envs/recurrent_depth/adaptive_halting/files/halting.py",
+            "envs/recurrent_depth/adaptive_halting/files/judge.py",
+            "envs/recurrent_depth/adaptive_halting/files/prompt.md",
+            "envs/recurrent_depth/adaptive_halting/files/train.py",
+            "envs/recurrent_depth/adaptive_halting/files/visible_tests.py"
+          ]
+        },
+        "rd_gradient_credit": {
+          "exact_instance_reference": null,
+          "graded_by": "compile_only",
+          "verdict_relevant_files": [
+            "envs/recurrent_depth/gradient_credit/config.yaml",
+            "envs/recurrent_depth/gradient_credit/files/judge.py",
+            "envs/recurrent_depth/gradient_credit/files/prompt.md",
+            "envs/recurrent_depth/gradient_credit/files/recurrent_block.py",
+            "envs/recurrent_depth/gradient_credit/files/train.py",
+            "envs/recurrent_depth/gradient_credit/files/visible_tests.py"
+          ]
+        },
+        "rd_state_carry": {
+          "exact_instance_reference": "hidden_depth_exact",
+          "graded_by": "exact_instance_gate",
+          "verdict_relevant_files": [
+            "envs/recurrent_depth/state_carry/config.yaml",
+            "envs/recurrent_depth/state_carry/files/judge.py",
+            "envs/recurrent_depth/state_carry/files/prompt.md",
+            "envs/recurrent_depth/state_carry/files/recurrent_block.py",
+            "envs/recurrent_depth/state_carry/files/train.py",
+            "envs/recurrent_depth/state_carry/files/visible_tests.py"
+          ]
+        },
+        "sheaf_invariant_gluing": {
+          "exact_instance_reference": null,
+          "graded_by": "compile_only",
+          "verdict_relevant_files": [
+            "envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml",
+            "envs/cat_theo/sheaf/sheaf_invariant_gluing/files/judge.py",
+            "envs/cat_theo/sheaf/sheaf_invariant_gluing/files/pipeline.py",
+            "envs/cat_theo/sheaf/sheaf_invariant_gluing/files/prompt.md",
+            "envs/cat_theo/sheaf/sheaf_invariant_gluing/files/visible_tests.py"
+          ]
+        },
+        "sheaf_physical_constraints": {
+          "exact_instance_reference": null,
+          "graded_by": "compile_only",
+          "verdict_relevant_files": [
+            "envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml",
+            "envs/cat_theo/sheaf/sheaf_physical_constraints/files/judge.py",
+            "envs/cat_theo/sheaf/sheaf_physical_constraints/files/prompt.md",
+            "envs/cat_theo/sheaf/sheaf_physical_constraints/files/route.py",
+            "envs/cat_theo/sheaf/sheaf_physical_constraints/files/visible_tests.py"
+          ]
+        },
+        "sheaf_schema_sync": {
+          "exact_instance_reference": null,
+          "graded_by": "compile_only",
+          "verdict_relevant_files": [
+            "envs/cat_theo/sheaf/sheaf_schema_sync/config.yaml",
+            "envs/cat_theo/sheaf/sheaf_schema_sync/files/judge.py",
+            "envs/cat_theo/sheaf/sheaf_schema_sync/files/migration.py",
+            "envs/cat_theo/sheaf/sheaf_schema_sync/files/prompt.md",
+            "envs/cat_theo/sheaf/sheaf_schema_sync/files/visible_tests.py"
+          ]
+        }
+      },
+      "compile_only": [
+        "rd_adaptive_halting",
+        "rd_gradient_credit",
+        "sheaf_invariant_gluing",
+        "sheaf_physical_constraints",
+        "sheaf_schema_sync"
+      ],
+      "blockers": [],
+      "notes": [
+        "5 of 6 environments are absent from instance_oracle_gate.REFERENCES (rd_adaptive_halting, rd_gradient_credit, sheaf_invariant_gluing, sheaf_physical_constraints, sheaf_schema_sync), so they are generated and compiled but never gated: a score from them is a scoreboard row, not an exact-instance verdict",
+        "every one of these environments is inside the gate closure (tools/gate_context.py), so editing one re-grades a running campaign's exact-instance gate rows"
+      ],
+      "hard_blocker": false
+    },
+    {
+      "stage": "plan",
+      "status": "ready",
+      "matrices": {
+        "representative": {
+          "case_count": 6,
+          "by_environment": {
+            "rd_adaptive_halting": 1,
+            "rd_gradient_credit": 1,
+            "rd_state_carry": 1,
+            "sheaf_invariant_gluing": 1,
+            "sheaf_physical_constraints": 1,
+            "sheaf_schema_sync": 1
+          },
+          "estimated_api_calls_at_max_steps": 180
+        },
+        "pairwise": {
+          "case_count": 72,
+          "by_environment": {
+            "rd_adaptive_halting": 15,
+            "rd_gradient_credit": 15,
+            "rd_state_carry": 15,
+            "sheaf_invariant_gluing": 9,
+            "sheaf_physical_constraints": 9,
+            "sheaf_schema_sync": 9
+          },
+          "estimated_api_calls_at_max_steps": 2160
+        }
+      },
+      "manifest_path": "runs/provider_env_preflight_manifest.json",
+      "commands": {
+        "emit_manifest": "python tools/provider_env_preflight.py --stage offline --matrix pairwise --emit-manifest runs/provider_env_preflight_manifest.json",
+        "dry_run": "python tools/run_suite.py --manifest runs/provider_env_preflight_manifest.json --provider custom --model <model-id-from-catalog> --api-base <api-base> --api-key-env AGENTROUTER_API_KEY --dry-run --max-cases 1",
+        "one_case_rehearsal": "python tools/run_suite.py --manifest runs/provider_env_preflight_manifest.json --provider custom --model <model-id-from-catalog> --api-base <api-base> --api-key-env AGENTROUTER_API_KEY --sandbox docker --max-cases 1 --max-steps 30 --max-tokens 1024 --max-api-calls 30 --max-wall-seconds 900"
+      },
+      "blockers": [],
+      "notes": [
+        "the counts are cases, not spend: one case is at most --max-steps completions, and the rehearsal command above bounds calls, tokens and wall time so a first run cannot run away"
+      ],
+      "hard_blocker": false
+    }
+  ],
+  "verdict": {
+    "verdict": "unknown_needs_ci",
+    "hard_blockers": [],
+    "blockers": [
+      "credential: no key is reachable from this process: an Actions secret is invisible here, so the catalog and wire stages have to run inside a workflow that maps it to an environment variable"
+    ],
+    "gaps": [
+      "credential: 'agentrouter' is not a modelled provider (arena/secrets.py has no PROVIDER_ENV or PROVIDER_DEFAULT_BASE entry), so a request would be sent as 'custom' with an explicit base and key-env; tools/provider_preflight.py cannot probe it at all and answers 'credential_error' whether or not a key exists",
+      "judge_stack: this host has no torch, torchvision, so --sandbox local cannot run an episode here; the pinned CPU judge stack is a container/CI property",
+      "judge_stack: no docker binary on this host, so --sandbox docker cannot run an episode here",
+      "judge_stack: shared/Dockerfile.agent installs torch, torchvision unpinned while shared/Dockerfile.judge pins torch==2.5.1, torchvision==0.20.1, so the agent and the judge can disagree about the library that grades the work",
+      "judge_stack: 6 workflow(s) install the pinned CPU judge stack, so an episode can run in CI even where this host cannot",
+      "gate_status: 5 of 6 environments are absent from instance_oracle_gate.REFERENCES (rd_adaptive_halting, rd_gradient_credit, sheaf_invariant_gluing, sheaf_physical_constraints, sheaf_schema_sync), so they are generated and compiled but never gated: a score from them is a scoreboard row, not an exact-instance verdict",
+      "gate_status: every one of these environments is inside the gate closure (tools/gate_context.py), so editing one re-grades a running campaign's exact-instance gate rows",
+      "plan: the counts are cases, not spend: one case is at most --max-steps completions, and the rehearsal command above bounds calls, tokens and wall time so a first run cannot run away"
+    ],
+    "next_step": "run the offline stages in CI, where the secret exists"
+  }
+}

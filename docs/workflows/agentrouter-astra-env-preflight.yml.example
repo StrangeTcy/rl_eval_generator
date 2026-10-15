@@ -1,0 +1,111 @@
+name: AgentRouter astra environment preflight
+
+# Asks one question before any campaign does: can the sheaf environments and the
+# recurrent-depth environments actually run against a model this account can
+# reach?  The probe is tools/provider_env_preflight.py, and it is staged so the
+# free half runs anywhere while the half that needs the key runs here, because
+# AGENTROUTER_API_KEY is an Actions secret and no local process can read it.
+#
+# Copy to .github/workflows/agentrouter-astra-env-preflight.yml.  This token
+# cannot write there: pushing a workflow file is refused without the `workflows`
+# permission, which is why the copyable examples live in docs/workflows/.
+#
+# The endpoint is an input, never a default.  Sending a bearer key to a host
+# inferred from a product name is how a credential leaks, so the probe refuses to
+# run its network stages without one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "AgentRouter's OpenAI-compatible base URL, from its own docs"
+        required: true
+      model_contains:
+        description: "Substring the wanted model id must contain"
+        required: false
+        default: "astra"
+      stage:
+        description: "network lists the roster for free; wire spends one completion"
+        required: false
+        default: "network"
+        type: choice
+        options:
+          - offline
+          - network
+          - wire
+          - all
+      wire_max_tokens:
+        description: "Cap for the single wire probe completion"
+        required: false
+        default: "96"
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+
+      # The probe compares what the judges import against what the judge image
+      # pins and what this host has.  Installing the same pinned stack the
+      # campaign workflows install makes that comparison about the runner that
+      # would really run an episode, instead of about a bare checkout.
+      - name: Install pinned CPU judge stack
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu \
+            torch==2.5.1 torchvision==0.20.1
+
+      - name: Ask whether the sheaf and recurrent-depth environments can run on astra
+        env:
+          AGENTROUTER_API_KEY: ${{ secrets.AGENTROUTER_API_KEY }}
+          AGENTROUTER_API_BASE: ${{ inputs.api_base }}
+        run: |
+          set +e
+          python tools/provider_env_preflight.py \
+            --provider agentrouter \
+            --stage "${{ inputs.stage }}" \
+            --model-contains "${{ inputs.model_contains }}" \
+            --wire-max-tokens "${{ inputs.wire_max_tokens }}" \
+            --check-docker \
+            --emit-manifest runs/provider_env_preflight_manifest.json \
+            --out runs/provider_env_preflight.json
+          code=$?
+          set -e
+          echo "probe exit code: $code"
+          if [ "$code" -eq 2 ]; then
+            echo "::error::the probe itself failed; its report is not an answer"
+            exit 2
+          fi
+          # 1 is an answer, not a malfunction: it means something blocks or
+          # constrains the run.  Only 'blocked' should turn this job red, because
+          # that is the verdict no amount of money or patience changes.
+          python - <<'PY'
+          import json, sys
+          report = json.load(open("runs/provider_env_preflight.json"))
+          verdict = report["verdict"]["verdict"]
+          print(f"verdict: {verdict}")
+          print(f"next: {report['verdict']['next_step']}")
+          sys.exit(1 if verdict == "blocked" else 0)
+          PY
+
+      # The probe prints ::notice::/::warning:: lines itself while GITHUB_RUN_ID
+      # is set, because the Actions log endpoints are closed to the credential
+      # that can read everything else about a run: an annotation is the only
+      # output of a job that survives it.  The artifact is the full evidence.
+      - name: Upload the preflight report and the rehearsal manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-env-preflight
+          path: |
+            runs/provider_env_preflight.json
+            runs/provider_env_preflight_manifest.json
+          if-no-files-found: warn

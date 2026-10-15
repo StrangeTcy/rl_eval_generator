@@ -623,6 +623,49 @@ which installs CUDA-enabled PyTorch via a build argument (`ARG TORCH_INDEX`).
 
 ---
 
+## Can this model run these environments?
+
+`tools/provider_env_preflight.py` answers that before anything is paid for. It
+exists because the question cannot be answered by `tools/provider_preflight.py`:
+a provider that `arena/secrets.py` does not model (an AgentRouter trial key, say)
+makes `resolve_provider` raise before a credential is ever consulted, and the
+older probe reports `credential_error` whether the key works or does not exist.
+
+```bash
+# Free, offline, and the only half that can run on a workstation: an Actions
+# secret is not readable by a local process or by the API.
+python tools/provider_env_preflight.py --stage offline
+
+# Inside CI, where the key exists.  network lists the roster for free; wire
+# spends exactly one completion, with retries disabled.
+python tools/provider_env_preflight.py --stage all \
+  --api-base "$AGENTROUTER_API_BASE" --model-contains astra --check-docker
+```
+
+The stages are ordered by what they cost: `credential` (is a key reachable, and
+under which provider name would it be sent), `env_build` (can each environment be
+generated, compiled and judge-validated — `suite_inventory`'s own per-case
+preflight, reused so the two cannot drift), `judge_stack` (do the judges import
+anything the judge image does not install, do the image pins match what CI
+installs, can this host or only CI run an episode), `gate_status` (would a score
+be an exact-instance gated verdict or a compile-only one), `plan` (how many cases
+per matrix, and what one bounded rehearsal costs), then `catalog` (`GET /models`
+with the account's own key) and `wire` (does one real completion come back
+untruncated *and* parse as an action `arena/episode.py` accepts — a 200 carrying
+prose is a failure here, which is the point).
+
+Two rules the probe keeps. It never guesses an endpoint: sending a bearer key to
+a host inferred from a product name is how a credential leaks, so the network
+stages require `--api-base`, `AGENTROUTER_API_BASE`, or a profile, and refuse
+without one. And its output carries no keys and no endpoints — host only — the
+same contract `provider_preflight` keeps.
+
+`docs/workflows/agentrouter-astra-env-preflight.yml.example` is the copyable
+launcher that runs the staged probe where the secret lives, uploads the report,
+and turns only a `blocked` verdict red.
+
+---
+
 ## Running tests
 
 ```bash
