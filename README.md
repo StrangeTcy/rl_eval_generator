@@ -10,7 +10,7 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 
 *   **Research-Style ML Debugging:** `glyph`, `batchnorm_ema`, `moco`
 *   **Paper-to-Code & Stateful Investigation:** `rope`
-*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (18 environments)
+*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (19 environments)
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
 *   **Latent Substrate & Weird Machine Discovery:** `weird_machine/*` (6 environments)
     > *These tasks evaluate whether agents can recognize and exploit latent computational power in substrates whose surface semantics present them as non-programming artifacts.*
@@ -134,7 +134,7 @@ Axes:
 
 ### Category-Theoretic Compositional Environments (`envs/cat_theo/`)
 
-A specialized suite of 18 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
+A specialized suite of 19 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
 
 *   **Core Category Theory Tasks:**
     1. `tensor_functor`: Refactoring rigid tensor operations into coordinate-free functors commuting with `torch.vmap` and `grad`.
@@ -160,7 +160,8 @@ A specialized suite of 18 environments targeting compositional reasoning, algebr
     17. `sheaf_physical_constraints`: Building a distributed network-topology traffic scheduler that respects global backbone bandwidth constraints.
 
 *   **Recursive local-to-global gluing:**
-    18. `recursive_gluing`: Repairing a finite-domain region-network solver so recursively assembled local charts glue to a globally consistent assignment, or correctly reporting that a cyclic obstruction admits none.
+    18. `recursive_gluing`: Fully observed finite CSP control — repair a solver so recursively assembled local charts glue, or report a cyclic obstruction.
+    19. `recursive_gluing_discovery`: Same hidden networks with withheld overlap tables. Local cycles and sparse probes are public; the judge scores the hidden complete relations, so a generic CSP on the observations fails while discovering and reusing the self-similar transport succeeds.
 
 ### Latent Substrate & Weird Machine Environments (`envs/weird_machine/`)
 

@@ -35,6 +35,7 @@ environments:
 
   # Recursive local-to-global gluing
   recursive_gluing: envs/cat_theo/recursive_gluing/config.yaml
+  recursive_gluing_discovery: envs/cat_theo/recursive_gluing_discovery/config.yaml
 
   # Epistemic reasoning games
   epistemic_games: envs/epistemic_games/config.yaml

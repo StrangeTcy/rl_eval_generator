@@ -25,9 +25,10 @@ envs = [
     ("sheaf_invariant_gluing", "easy,hard"),
     ("sheaf_physical_constraints", "easy,hard"),
     ("recursive_gluing", "easy,easy,easy,easy"),
+    ("recursive_gluing_discovery", "easy,easy,easy,easy"),
 ]
 
-print("Testing generation and compilation of all 18 Category Theory environments...\n")
+print("Testing generation and compilation of all 19 Category Theory environments...\n")
 
 failed = False
 for env, diff in envs:
@@ -83,4 +84,4 @@ if failed:
     print("\n❌ One or more tests failed.")
     sys.exit(1)
 else:
-    print("\nAll 18 environments generated and compiled successfully with ZERO syntax errors and unresolved placeholders!")
+    print("\nAll 19 environments generated and compiled successfully with ZERO syntax errors and unresolved placeholders!")
