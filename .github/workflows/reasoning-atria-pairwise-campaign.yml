@@ -645,9 +645,9 @@ jobs:
       # for 2+ hours") and which was measured again on 2026-10-12: no run of any workflow here was
       # created between 09:47Z and 19:04Z while both pairwise workflows kept reporting state active.
       # So the leg that banked the rows asks for the next one, on the same terms as the covering
-      # campaign's CHAIN. A pause inside the supervisor's 1200 s resume window is waited out here,
+      # campaign's CHAIN. A pause inside the supervisor's 1200 s resume window is 🙊ed out here,
       # in the finished leg (capped by --sleep-cap), because a successor dispatched inside that window
-      # is refused with mode=none and a refused leg does not re-arm - so refusing to wait is the same
+      # is refused with mode=none and a refused leg does not re-arm - so refusing to 🙊 is the same
       # as never continuing. Chaining stops after 40 legs; a cancelled leg, a regressed state upload
       # or a wrapper_failed.json marker never continues. Every decline is annotated, because the step
       # stays green by design and a silent decline reads as a working chain. Fail-open by construction: a refused or
