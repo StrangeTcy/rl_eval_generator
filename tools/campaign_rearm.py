@@ -209,7 +209,27 @@ def cron_delivery_gap(newest_schedule_run, now: datetime) -> int | None:
     return max(0, int((now - at).total_seconds()))
 
 
+def cron_cadence_seconds(schedule_runs) -> list[int]:
+    """Gaps between the creations of successive `schedule` runs, newest first.
+
+    The recency of one tick says nothing about cadence, which is the error that parked Mercury run 55
+    at 05:03Z: the handover was declined in favour of "the scheduled tick" because a tick had been
+    created 26 minutes earlier, while that workflow's real tick series was 17:37:07, 20:58:26,
+    23:54:59 and 04:37:26 - gaps of 3 h 21 m, 2 h 56 m and 4 h 42 m against a declared `13,43 * * * *`.
+    """
+    stamps = []
+    for run in schedule_runs or []:
+        if not isinstance(run, Mapping) or str(run.get("event") or "") != "schedule":
+            continue
+        at = _parse_timestamp(run.get("created_at")) or _parse_timestamp(run.get("updated_at"))
+        if at is not None:
+            stamps.append(at)
+    stamps.sort(reverse=True)
+    return [int((a - b).total_seconds()) for a, b in zip(stamps, stamps[1:])]
+
+
 def cron_is_not_delivering(newest_schedule_run, now: datetime, *, readable: bool,
+                           schedule_runs=None,
                            interval: int = DEFAULT_CRON_INTERVAL_SECONDS,
                            tolerance: int = 2) -> bool:
     """Whether the fallback this tool would otherwise defer to has stopped arriving.
@@ -229,6 +249,18 @@ def cron_is_not_delivering(newest_schedule_run, now: datetime, *, readable: bool
     """
     if not readable:
         return False
+    # Cadence first. Two or more ticks whose spacing exceeds the declared interval times the tolerance is
+    # a scheduler not honouring its own declaration, however fresh the newest one is; a single measured
+    # gap is not a cadence, and deferring a handover to an unmeasurable scheduler is what cost the
+    # campaign its hours on 2026-10-14 and its next leg on 2026-10-15.
+    if schedule_runs is not None:
+        series = [run for run in (schedule_runs or [])
+                  if isinstance(run, Mapping) and str(run.get("event") or "") == "schedule"]
+        cadence = cron_cadence_seconds(series)
+        if len(cadence) >= 2:
+            return max(cadence) > int(interval) * int(tolerance)
+        # One scheduled sibling, or none at all, is not a cadence to defer to.
+        return True
     gap = cron_delivery_gap(newest_schedule_run, now)
     if gap is None:
         return not isinstance(newest_schedule_run, Mapping)
@@ -319,6 +351,42 @@ def is_unstarted_scheduled_run(run) -> bool:
     return not (run.get("run_started_at") or run.get("started_at"))
 
 
+def _ledger_rows(path: str) -> int | None:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            record = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(record, Mapping):
+        return None
+    rows = record.get("results")
+    return len(rows) if isinstance(rows, list) else None
+
+
+def ledger_progress(state_dir: str, runner_temp: str = "") -> tuple[int, int] | None:
+    """Rows in the ledger the leg started with and in the ledger it is leaving: (before, after).
+
+    No launcher change is needed to reach the "before": the `$RUNNER_TEMP/<name>_state` directory that
+    `Stage campaign state for upload` compares against, to decide whether a checkpoint regressed, still
+    holds the restored copy while the re-arm step runs. This is the number that separates a productive
+    leg from a spin - Mercury run 55 worked 8 m 43 s and moved the ledger, runs 50-52 died at ~117 s on
+    the same row - and a ledger-metered stand-down should spend an attempt when the campaign advanced.
+    """
+    after = _ledger_rows(os.path.join(state_dir, "suite_checkpoint.json"))
+    if after is None:
+        return None
+    for root in [r for r in (runner_temp, os.environ.get("RUNNER_TEMP", "")) if r]:
+        try:
+            names = sorted(n for n in os.listdir(root) if n.endswith("_state"))
+        except OSError:
+            continue
+        for name in reversed(names):
+            found = _ledger_rows(os.path.join(root, name, "suite_checkpoint.json"))
+            if found is not None:
+                return found, after
+    return None
+
+
 def decide_rearm(
     report,
     *,
@@ -336,6 +404,8 @@ def decide_rearm(
     run_list_readable: bool = False,
     newest_schedule_run: object = None,
     own_state_age: int | None = None,
+    schedule_runs: object = None,
+    progress: tuple[int, int] | None = None,
 ) -> tuple[bool, str]:
     """Return (dispatch?, reason). Pure: no network, no clock, no filesystem, so every branch
     is testable. Order matters: the stops a human would use are checked first, so a cancelled
@@ -359,19 +429,30 @@ def decide_rearm(
     if not resumable:
         return False, f"pause_reason={reason!r} is not resumable; a successor leg would refuse this state"
     if reason in LEDGER_GOVERNING_REASONS:
-        if not cron_is_not_delivering(newest_schedule_run, now, readable=run_list_readable):
+        idle = cron_is_not_delivering(newest_schedule_run, now, readable=run_list_readable,
+                                      schedule_runs=schedule_runs)
+        advanced = bool(progress and progress[1] > progress[0])
+        if not idle and not advanced:
+            gap = cron_delivery_gap(newest_schedule_run, now)
+            parts = []
+            if gap is not None:
+                parts.append(f"newest scheduled sibling created {gap} s ago")
+            if progress:
+                parts.append(f"ledger {progress[0]} -> {progress[1]} rows")
             return False, (
                 f"pause_reason={reason!r} is metered by the campaign's per-case attempt ledger, which the "
                 "next leg would consume on the same failing case without producing the row; the scheduled "
                 "tick is the wait that can actually help here"
+                + (f" ({'; '.join(parts)})" if parts else "")
             )
-        gap = cron_delivery_gap(newest_schedule_run, now)
-        print(
-            "campaign re-arm: the ledger stand-down is lifted, because the tick it defers to has not "
-            f"arrived - this workflow's newest scheduled sibling run was created "
-            + (f"{gap} s ago, against a {DEFAULT_CRON_INTERVAL_SECONDS} s cron"
-               if gap is not None else "not at all")
-        )
+        print("campaign re-arm: the ledger stand-down is lifted because "
+              + ("the ledger advanced, so an attempt is worth spending" if advanced
+                 else "the tick it defers to is not arriving on its declared interval")
+              + (f" ({progress[0]} -> {progress[1]} rows in the checkpoint)" if progress else "")
+              + "; scheduled-tick gaps on this workflow: "
+              + (", ".join(f"{g} s" for g in cron_cadence_seconds(schedule_runs)[:4])
+                 or "no two scheduled runs to compare")
+              + f", against a {DEFAULT_CRON_INTERVAL_SECONDS} s cron")
     if chain_depth >= max_chain_depth:
         return False, (
             f"chain_depth={chain_depth} reached the cap of {max_chain_depth}; cron remains the only "
@@ -1392,6 +1473,7 @@ def main(argv: list[str] | None = None) -> int:
 
     newest_run: Mapping[str, Any] | None = None
     newest_schedule_run: Mapping[str, Any] | None = None
+    schedule_runs: list = []
     workflow: dict | None = None
     # Three states, and the difference between the last two is what this file exists to get right: the
     # list was never asked for (nothing to conclude), it was asked for and failed (refuse to dispatch
@@ -1411,12 +1493,13 @@ def main(argv: list[str] | None = None) -> int:
             if listed and not siblings:
                 print("campaign re-arm: the only leg on record is this one, so it does not count as busy")
             newest_run = siblings[0] if siblings else None
-            newest_schedule_run = next(
-                (run for run in siblings if str(run.get("event") or "") == "schedule"), None)
+            schedule_runs = [run for run in siblings if str(run.get("event") or "") == "schedule"]
+            newest_schedule_run = schedule_runs[0] if schedule_runs else None
 
     now = datetime.now(timezone.utc)
     state_dir = os.path.dirname(os.path.abspath(args.report))
     own_state_age = state_pause_age_seconds(state_dir, now)
+    progress = ledger_progress(state_dir)
     drift = (intent_drift_report(state_dir, os.getcwd(), api, args.repo, token or None)
              if any(m and os.path.exists(m) for m in (args.markers or [])) else [])
     decision, reason = decide_rearm(
@@ -1435,6 +1518,8 @@ def main(argv: list[str] | None = None) -> int:
         run_list_readable=run_list_readable,
         newest_schedule_run=newest_schedule_run,
         own_state_age=own_state_age,
+        schedule_runs=schedule_runs,
+        progress=progress,
     )
     if not decision:
         # The refusal may be purely temporal, in which case the fix is to wait, not to hand the
@@ -1442,7 +1527,9 @@ def main(argv: list[str] | None = None) -> int:
         wait = handover_wait(report, newest_run, now, min_interval_seconds=args.min_interval_seconds,
                              sleep_cap=args.sleep_cap,
                              ledger_governs=cron_is_not_delivering(
-                                 newest_schedule_run, now, readable=run_list_readable),
+                                 newest_schedule_run, now, readable=run_list_readable,
+                                 schedule_runs=schedule_runs)
+                             or bool(progress and progress[1] > progress[0]),
                              own_state_age=own_state_age)
         if wait:
             print(f"campaign re-arm: a successor would be refused for another {wait} s, so this leg "
@@ -1474,9 +1561,10 @@ def main(argv: list[str] | None = None) -> int:
                     siblings_after = other_legs((body_after or {}).get("workflow_runs") or [],
                                                 args.exclude_run)
                     newest_run = siblings_after[0] if siblings_after else None
-                    newest_schedule_run = next(
-                        (run for run in siblings_after
-                         if str(run.get("event") or "") == "schedule"), None)
+                    schedule_runs = [run for run in siblings_after
+                                     if str(run.get("event") or "") == "schedule"]
+                    newest_schedule_run = schedule_runs[0] if schedule_runs else None
+                    progress = ledger_progress(state_dir) or progress
             decision, reason = decide_rearm(
                 report,
                 newest_run=newest_run,
@@ -1493,6 +1581,8 @@ def main(argv: list[str] | None = None) -> int:
                 run_list_readable=run_list_readable,
                 newest_schedule_run=newest_schedule_run,
                 own_state_age=own_state_age,
+                schedule_runs=schedule_runs,
+                progress=progress,
             )
     if not decision:
         # A decline is a decision, and it must not live only in a log nobody opens: like the refused-tick
