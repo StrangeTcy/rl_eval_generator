@@ -49,11 +49,49 @@ class OracleBudgetExceeded(RuntimeError):
 
 
 def unfolded_occurrences(depth: int) -> int:
+    """Complete binary tree of stem/leaf copies: 2**(depth+1) - 1."""
     return (1 << (depth + 1)) - 1
 
 
 def unfolded_leaves(depth: int) -> int:
     return 1 << depth
+
+
+def unfolded_internal(depth: int) -> int:
+    """Stem occurrences: 2**depth - 1."""
+    return (1 << depth) - 1
+
+
+def expanded_port_variables(depth: int) -> int:
+    """One enter and one leave variable per occurrence."""
+    return 2 * unfolded_occurrences(depth)
+
+
+def expanded_overlap_count(depth: int, *, closing: bool) -> int:
+    """Leaf pair-tables + three wirings per internal + optional root closing.
+
+    leaves + 3 * internals + closing = 2**d + 3*(2**d - 1) + [0|1]
+    = 2**(d+2) - 3 + [0|1].
+    """
+    return (1 << (depth + 2)) - 3 + (1 if closing else 0)
+
+
+def grammar_has_closing(grammar: Mapping[str, Any]) -> bool:
+    closing = grammar.get("closing")
+    return bool(closing and closing.get("pairs"))
+
+
+def expanded_occurrence_count(instance: Mapping[str, Any]) -> int:
+    names = {rid.rsplit("/", 1)[0] for rid in instance["regions"]}
+    return len(names)
+
+
+def certificate_bytes(cert: Mapping[str, Any]) -> int:
+    return len(json.dumps(cert, sort_keys=True, separators=(",", ":")))
+
+
+def summary_depth_keys(realizable: Mapping[str, Mapping[str, list]]) -> int:
+    return sum(len(depths) for depths in realizable.values())
 
 
 def public_grammar(grammar: Mapping[str, Any]) -> dict[str, Any]:
@@ -261,12 +299,19 @@ def verify_certificate(grammar: Mapping[str, Any], raw: Any) -> tuple[bool, str]
     return True, "ok"
 
 
-def expand_grammar(grammar: Mapping[str, Any]) -> dict[str, Any]:
-    """Unfold into a region network in type-local labels (shallow cross-check)."""
+def expand_grammar(
+    grammar: Mapping[str, Any], *, max_depth: int = MAX_EXPAND_DEPTH
+) -> dict[str, Any]:
+    """Unfold into a region network in type-local labels.
+
+    Default ``max_depth`` is the judge/cross-check cap. Raising it is a
+    deliberate measurement or test override; exceeding it is a resource
+    failure, not unsat.
+    """
     depth = int(grammar["depth"])
-    if depth > MAX_EXPAND_DEPTH:
+    if depth > max_depth:
         raise OracleBudgetExceeded(
-            f"refusing to expand depth {depth}; this is not evidence of unsat"
+            f"refusing to expand depth {depth} (cap {max_depth}); this is not evidence of unsat"
         )
     modules = grammar["modules"]
     regions: dict[str, dict[str, list[str]]] = {}
@@ -602,7 +647,12 @@ def arm_compact(grammar: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def arm_expanded(grammar: Mapping[str, Any]) -> dict[str, Any]:
-    """Shallow explicit CSP on the unfolding. Status only; summaries from compact."""
+    """Cross-check: independent expanded SAT, then the compact certificate.
+
+    SAT is decided by the expanded CSP. The compact ``realizable`` tables are
+    not computed by expansion; filling the exact-match certificate still uses
+    the compact oracle. The scaling experiment never calls this function.
+    """
     sat = expanded_satisfiable(grammar)
     cert = reference_certificate(grammar)
     if sat != (cert["status"] == "sat"):
@@ -611,7 +661,11 @@ def arm_expanded(grammar: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def arm_given_canonical(grammar: Mapping[str, Any]) -> dict[str, Any]:
-    """Same compact DP; stands for the 'revealed coordinates' condition in tests."""
+    """Placeholder for a future revealed-coordinates condition.
+
+    Currently identical to ``arm_compact``. It is not a distinct implemented
+    solver and has not been run as a model-facing experimental arm.
+    """
     return reference_certificate(grammar)
 
 

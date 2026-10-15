@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import json
 import re
 import shutil
 import subprocess
@@ -193,21 +194,22 @@ def test_axes_move_the_task() -> None:
 def test_compact_oracle_agrees_with_shallow_expansion() -> None:
     for depth in (1, 2, 3):
         for regime in (NET.TREE, NET.CYCLIC_SAT, NET.CYCLIC_UNSAT):
-            for ambiguity in (NET.CLEAN, NET.DECOY):
-                grammar = NET.generate_grammar(
-                    depth=depth,
-                    interface_size=5,
-                    regime=regime,
-                    opacity=NET.OPAQUE,
-                    ambiguity=ambiguity,
-                    seed=10 + depth,
-                )
-                compact_sat = NET.grammar_satisfiable(grammar)
-                expanded_sat = NET.expanded_satisfiable(grammar)
-                assert compact_sat is expanded_sat, (depth, regime, ambiguity)
-                compact_root = NET.root_accepted_pairs(grammar, NET.compact_summaries(grammar))
-                expanded_root = NET.expanded_root_pairs(grammar)
-                assert compact_root == expanded_root, (depth, regime, ambiguity)
+            for opacity in (NET.TRANSPARENT, NET.OPAQUE):
+                for ambiguity in (NET.CLEAN, NET.DECOY):
+                    grammar = NET.generate_grammar(
+                        depth=depth,
+                        interface_size=5,
+                        regime=regime,
+                        opacity=opacity,
+                        ambiguity=ambiguity,
+                        seed=10 + depth,
+                    )
+                    compact_sat = NET.grammar_satisfiable(grammar)
+                    expanded_sat = NET.expanded_satisfiable(grammar)
+                    assert compact_sat is expanded_sat, (depth, regime, opacity, ambiguity)
+                    compact_root = NET.root_accepted_pairs(grammar, NET.compact_summaries(grammar))
+                    expanded_root = NET.expanded_root_pairs(grammar)
+                    assert compact_root == expanded_root, (depth, regime, opacity, ambiguity)
 
 
 def test_hard_depth_is_not_expanded() -> None:
@@ -393,6 +395,196 @@ def test_generation_cli() -> None:
     finally:
         for path in created:
             shutil.rmtree(path, ignore_errors=True)
+
+
+def test_occurrence_formula_matches_shallow_unfoldings() -> None:
+    for depth in (1, 2, 3, 4):
+        grammar = NET.generate_grammar(
+            depth=depth,
+            interface_size=5,
+            regime=NET.CYCLIC_UNSAT,
+            opacity=NET.OPAQUE,
+            ambiguity=NET.CLEAN,
+            seed=0,
+        )
+        instance = NET.expand_grammar(grammar)
+        assert NET.expanded_occurrence_count(instance) == NET.unfolded_occurrences(depth)
+        assert NET.unfolded_occurrences(depth) == (1 << (depth + 1)) - 1
+        assert len(instance["regions"]) == NET.expanded_port_variables(depth)
+        assert len(instance["overlaps"]) == NET.expanded_overlap_count(depth, closing=True)
+
+
+def test_expanded_counts_match_formulas_including_tree() -> None:
+    tree = NET.generate_grammar(
+        depth=3,
+        interface_size=3,
+        regime=NET.TREE,
+        opacity=NET.TRANSPARENT,
+        ambiguity=NET.CLEAN,
+        seed=1,
+    )
+    inst = NET.expand_grammar(tree)
+    assert NET.expanded_occurrence_count(inst) == 15
+    assert len(inst["regions"]) == 30
+    assert len(inst["overlaps"]) == NET.expanded_overlap_count(3, closing=False)
+    unsat = NET.generate_grammar(
+        depth=3,
+        interface_size=3,
+        regime=NET.CYCLIC_UNSAT,
+        opacity=NET.TRANSPARENT,
+        ambiguity=NET.CLEAN,
+        seed=1,
+    )
+    inst_u = NET.expand_grammar(unsat)
+    assert len(inst_u["overlaps"]) == NET.expanded_overlap_count(3, closing=True)
+    assert len(inst_u["overlaps"]) == len(inst["overlaps"]) + 1
+
+
+def test_compact_input_smaller_than_measured_expansion() -> None:
+    for depth in (3, 6):
+        grammar = NET.generate_grammar(
+            depth=depth,
+            interface_size=5,
+            regime=NET.CYCLIC_UNSAT,
+            opacity=NET.OPAQUE,
+            ambiguity=NET.CLEAN,
+            seed=0,
+        )
+        compact = NET.compact_input_bytes(grammar)
+        expanded = NET.expand_grammar(grammar, max_depth=depth)
+        expanded_bytes = len(json.dumps(expanded, separators=(",", ":")))
+        assert compact < expanded_bytes
+        assert expanded_bytes / compact > 5
+        assert NET.expanded_occurrence_count(expanded) == NET.unfolded_occurrences(depth)
+
+
+def test_certificate_grows_with_depth_not_occurrences() -> None:
+    cells = []
+    keys = []
+    occ = []
+    for depth in (3, 6, 12, 24):
+        grammar = NET.generate_grammar(
+            depth=depth,
+            interface_size=5,
+            regime=NET.CYCLIC_UNSAT,
+            opacity=NET.OPAQUE,
+            ambiguity=NET.CLEAN,
+            seed=0,
+        )
+        cert = NET.reference_certificate(grammar)
+        cells.append(NET.summary_cells(cert["realizable"]))
+        keys.append(NET.summary_depth_keys(cert["realizable"]))
+        occ.append(NET.unfolded_occurrences(depth))
+        blob = json.dumps(cert)
+        assert "root/L" not in blob
+        assert cert["realizable"]["stem"].keys() == {str(k) for k in range(1, depth + 1)}
+    assert keys == [4, 7, 13, 25]  # tip@0 + stem@1..d
+    assert cells[0] < cells[-1] < 200
+    assert occ[-1] / occ[0] > 1000
+    assert cells[-1] / cells[0] < 10
+
+
+def test_deep_compact_oracle_does_not_materialize() -> None:
+    grammar = NET.generate_grammar(
+        depth=48,
+        interface_size=5,
+        regime=NET.CYCLIC_UNSAT,
+        opacity=NET.OPAQUE,
+        ambiguity=NET.CLEAN,
+        seed=0,
+    )
+    cert = NET.reference_certificate(grammar)
+    ok, reason = NET.verify_certificate(grammar, cert)
+    assert ok, reason
+    assert cert["status"] == "unsat"
+    assert NET.summary_cells(cert["realizable"]) == 5 * (48 + 1)
+    with pytest.raises(NET.OracleBudgetExceeded):
+        NET.expand_grammar(grammar)
+    assert "regions" not in NET.public_grammar(grammar)
+
+
+def test_label_opacity_is_per_type_not_per_occurrence() -> None:
+    grammar = NET.generate_grammar(
+        depth=3,
+        interface_size=5,
+        regime=NET.CYCLIC_SAT,
+        opacity=NET.OPAQUE,
+        ambiguity=NET.DECOY,
+        seed=4,
+    )
+    instance = NET.expand_grammar(grammar)
+    domains = {tuple(spec["domain"]) for spec in instance["regions"].values()}
+    assert len(instance["regions"]) == NET.expanded_port_variables(3)
+    assert len(domains) == 3  # stem, tip, weed — shared across occurrences
+    assert len(domains) < NET.unfolded_occurrences(3)
+    twin = NET.relabel_grammar(grammar, seed=21)
+    assert NET.grammar_satisfiable(twin) is NET.grammar_satisfiable(grammar)
+    assert twin["modules"]["stem"]["ports_domain"] != grammar["modules"]["stem"]["ports_domain"]
+
+
+def test_resource_exhaustion_is_not_recorded_as_unsat() -> None:
+    grammar = NET.generate_grammar(
+        depth=6,
+        interface_size=5,
+        regime=NET.TREE,
+        opacity=NET.TRANSPARENT,
+        ambiguity=NET.CLEAN,
+        seed=0,
+    )
+    assert NET.grammar_satisfiable(grammar) is True
+    with pytest.raises(NET.OracleBudgetExceeded, match="not evidence of unsat"):
+        NET.expand_grammar(grammar, max_depth=4)
+    with pytest.raises(NET.OracleBudgetExceeded, match="refusing to call this unsat"):
+        NET.compact_summaries(grammar, max_nodes=1)
+
+
+def test_scaling_script_is_deterministic_and_does_not_touch_campaigns(
+    tmp_path: Path,
+) -> None:
+    script = ROOT / "tools" / "recursive_gluing_scaling.py"
+    source = script.read_text(encoding="utf-8")
+    assert "experiment_arms" not in source
+    assert "campaigns" not in source
+    out_a = tmp_path / "a.json"
+    out_b = tmp_path / "b.json"
+    cmd = [
+        sys.executable,
+        str(script),
+        "--compact-depths",
+        "3",
+        "--expand-depths",
+        "3",
+        "--attempt-expand",
+        "none",
+        "--repeats",
+        "1",
+        "--seed",
+        "0",
+        "--interface-size",
+        "5",
+        "--regime",
+        "cyclic_unsat",
+    ]
+    for dest in (out_a, out_b):
+        proc = subprocess.run(
+            [*cmd, "--json", str(dest)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+    a = json.loads(out_a.read_text(encoding="utf-8"))
+    b = json.loads(out_b.read_text(encoding="utf-8"))
+    assert a["config"]["seed"] == b["config"]["seed"] == 0
+    assert a["config"]["campaign_state"] == "untouched"
+    assert a["compact"][0]["grammar_bytes"] == b["compact"][0]["grammar_bytes"]
+    assert a["compact"][0]["occurrences"] == 15
+    assert a["expanded"][0]["occurrences"] == 15
+    assert a["expanded"][0]["variables"] == 30
+    assert a["expanded"][0]["used_compact_oracle"] is False
+    assert a["expanded"][0]["kind"] == "measured"
+    assert a["compact"][0]["status"] == "unsat"
+    assert a["expanded"][0]["sat"] is False
 
 
 def test_visible_tests_pass_on_baseline() -> None:

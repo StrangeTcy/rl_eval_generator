@@ -6,16 +6,24 @@ Control: `recursive_gluing` v0 (commit `93cc8dc`) remains the fully expanded CSP
 ## Hypothesis
 
 A model that recovers the reusable interface of a recursively defined constraint
-grammar can solve instances whose unfolded occurrence count is exponential in
-the description size. A generic expanded CSP solver cannot, except on shallow
-instances that this environment keeps as a cross-check, not as the task.
+grammar can answer from a description whose size does not grow with the unfolded
+occurrence count \(2^{d+1}-1\). That is a claim about *representation*, and about
+what a future model evaluation might show. It is not a claim that the expanded
+CSP is computationally infeasible at the current hard axis.
 
-Correct answers are not proof of discovery. The environment makes structure-aware
-computation useful and separates three later experimental conditions:
+Measured compact-vs-expanded sizes and runtimes are in
+`2026-10-16-recursive-gluing-scaling.md`. On this implementation the expanded
+solver still materializes and decides d=12 (hard axis) in about a second; d=15
+is expensive in memory and time; d=24 was not materialized.
+
+Correct answers are not proof of discovery. No model has been run. Three
+*later* experimental conditions are named only as a design split, not as
+completed arms:
 
 1. ordinary explicit CSP on a materialised unfolding (v0 / expand-baseline);
-2. a solver given canonical integer coordinates;
-3. a solver that must work from opaque type-local frames and the compact grammar.
+2. a solver given canonical integer coordinates (not implemented as a distinct
+   solver; `arm_given_canonical` currently aliases the compact oracle);
+3. a solver that must work from type-local frames and the compact grammar.
 
 ## Formal class
 
@@ -82,8 +90,13 @@ on satisfiability and on the root pair set.
   instance never includes them.
 - Treating decoy `weed` as `tip`: declared task change (`structural_ambiguity`).
 - Label permutation: presentation change (`label_opacity`); answer preserved.
+  Implemented as a **per-module-type** relabelling. Stem occurrences share one
+  domain. Per-occurrence / per-rule opacity is a remaining limitation, not a
+  current axis.
 
 ## What this does not claim
 
 No model has been run. Passing the compact reference solver shows the instrument
-is exactly checkable, not that a model discovered the transducer.
+is exactly checkable, not that a model discovered the transducer. Exponential
+occurrence counts do not by themselves imply exponential expanded runtime; see
+the scaling report.
