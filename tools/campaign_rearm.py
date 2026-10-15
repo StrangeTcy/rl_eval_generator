@@ -483,6 +483,120 @@ def _marker_decline(path: str) -> str:
     )
 
 
+INTENT_FIELDS = ("provider", "model", "endpoint", "effort", "reasoning_effort", "execution_mode",
+                "manifest_commit", "gate_context_sha", "profile", "max_tokens_total", "max_api_calls")
+
+
+def _read_map(path: str) -> dict | None:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            record = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    return record if isinstance(record, Mapping) else None
+
+
+def _flatten(record: Mapping) -> dict:
+    """One level deep, stringified, with `run.*` also readable bare.
+
+    The carried intent is flat (`provider`, `manifest_commit`) and the checkpoint nests the same
+    fields under `run`, so a comparison that kept only dotted keys would report "0 shared fields" for
+    two records that differ in three. Hoisting the nested group's members is what makes the diff mean
+    anything; the dotted form is kept as well, because an intent that nests differently is exactly the
+    case a reader needs named.
+    """
+    out: dict[str, str] = {}
+    for key, value in record.items():
+        if isinstance(value, Mapping):
+            for inner, ival in value.items():
+                if isinstance(ival, (Mapping, list)):
+                    continue
+                out[f"{key}.{inner}"] = str(ival)[:60]
+                if str(key) == "run" and str(inner) not in out:
+                    out[str(inner)] = str(ival)[:60]
+        elif not isinstance(value, (Mapping, list)):
+            out[str(key)] = str(value)[:60]
+    return out
+
+
+def intent_drift_report(state_dir: str, cwd: str, api: str = "", repo: str = "",
+                        token: str | None = None) -> list[str]:
+    """Which field the intent refusal was really about, from the files the leg left beside its marker.
+
+    Atria has refused four times on the same sentence - `campaign intent differs from the restored
+    state`, runs 25 (06:13Z), 28 (18:11Z), 30 (22:30Z) and 33 (02:28Z on 2026-10-15) - and the
+    pinned controller at that lineage's ref lists the five candidates without naming the moved one:
+    "provider, model, mode, manifest, or code context". A `clear_wrapper_stop` dispatch proved the
+    launcher's side of the handover clean (#33 got `Decide` green and `Announce a refused tick`
+    skipped, so the operator stop was lifted), and the byte-level state is unreachable from outside a
+    runner (`archive_download_url` hands off to a host this sandbox cannot open). So this reads what
+    is on the local disk at the re-arm step - the one place the state files exist while a human can
+    still be told something - and prints the comparison the pinned code is too old to make.
+    """
+    lines: list[str] = []
+    try:
+        here = os.path.abspath(state_dir)
+        carried = _read_map(os.path.join(here, "campaign_intent.json"))
+        restored = _read_map(os.path.join(here, "suite_checkpoint.json"))
+        if carried is None or restored is None:
+            try:
+                present = sorted(f for f in os.listdir(here) if f.endswith(".json"))[:12]
+            except OSError:
+                present = []
+            missing = "campaign_intent.json" if carried is None else "suite_checkpoint.json"
+            lines.append(f"{missing} is not readable in the state dir, so the moved field cannot be "
+                         f"named here (state files present: {', '.join(present) or 'none'})")
+        else:
+            left, right = _flatten(carried), _flatten(restored)
+            shared = sorted(set(left) & set(right))
+            moved = [k for k in INTENT_FIELDS if k in left and k in right and left[k] != right[k]]
+            moved += [k for k in shared if k not in moved and left[k] != right[k]]
+            if moved:
+                pairs = "; ".join(f"{k}: carried={left[k]!r} vs state={right[k]!r}" for k in moved[:6])
+                more = f" (+{len(moved) - 6} more)" if len(moved) > 6 else ""
+                lines.append(f"{len(moved)} field(s) differ between the carried intent and the restored "
+                             f"state: {pairs}{more}")
+            else:
+                only_left = sorted(set(left) - set(right))[:8]
+                only_right = sorted(set(right) - set(left))[:8]
+                lines.append(f"the carried intent and the restored state agree on all {len(shared)} "
+                             "shared field(s), so the refusal turned on a field the state does not "
+                             f"record (intent-only: {', '.join(only_left) or '-'}; state-only: "
+                             f"{', '.join(only_right) or '-'})")
+        recorded = recorded_manifest_commit(here)
+        head = leg_head_sha(cwd, here)
+        # The two shas are printed whether or not they agree: Atria's lineage has refused on this
+        # sentence for four legs and nobody outside a runner has been able to say what code it is
+        # running, because the file that records it is inside the artifact.
+        lines.append(f"this leg's code is {(head or 'unreadable')[:7]} and the checkpoint names "
+                     f"{(recorded or 'nothing')[:7]}")
+        if recorded and head and recorded != head:
+            head_ctx, _ = grading_context(cwd)
+            with tempfile.TemporaryDirectory(prefix="campaign-drift-") as work:
+                ok, _detail = fetch_tree(cwd, recorded, work)
+                rec_ctx, _ = grading_context(work) if ok else (None, "")
+            if rec_ctx is not None and head_ctx is not None:
+                differing = sorted(k for k in set(rec_ctx) | set(head_ctx) if rec_ctx.get(k) != head_ctx.get(k))
+                cost = (f"a rebase onto {head[:7]} would re-grade the gate over {len(differing)} "
+                        f"verdict file(s)" if differing else
+                        f"a rebase onto {head[:7]} is free: no verdict-producing file differs from "
+                        f"{recorded[:7]}")
+                lines.append(f"the checkpoint names {recorded[:7]} while this leg ran {head[:7]}; {cost}")
+            else:
+                lines.append(f"the checkpoint names {recorded[:7]} while this leg ran {head[:7]}, and a "
+                             "verdict inventory could not be read at one of them, so the price of a "
+                             "rebase is unknown - not free")
+        t1_incomplete = (os.path.exists(os.path.join(here, "t1_started.json"))
+                         and not os.path.exists(os.path.join(here, "t1_same_fact_presentation.json")))
+        lines.append("the launcher refuses a rebase while a carried T1 is interrupted, so "
+                     "rebase_onto_ref is not available in this state" if t1_incomplete else
+                     "no interrupted T1 in the carried state, so rebase_onto_ref remains the lever if "
+                     "the moved field is the grading context")
+    except Exception as exc:  # a diagnostic never changes the decision it annotates
+        lines.append(f"drift report unavailable: {type(exc).__name__}")
+    return lines
+
+
 def _state_diagnostics(marker_path: str) -> list[str]:
     """What the campaign recorded beside the marker, in the order a reader needs it.
 
@@ -1069,6 +1183,8 @@ def main(argv: list[str] | None = None) -> int:
     now = datetime.now(timezone.utc)
     state_dir = os.path.dirname(os.path.abspath(args.report))
     own_state_age = state_pause_age_seconds(state_dir, now)
+    drift = (intent_drift_report(state_dir, os.getcwd(), api, args.repo, token or None)
+             if any(m and os.path.exists(m) for m in (args.markers or [])) else [])
     decision, reason = decide_rearm(
         report,
         newest_run=newest_run,
@@ -1147,6 +1263,10 @@ def main(argv: list[str] | None = None) -> int:
     if not decision:
         # A decline is a decision, and it must not live only in a log nobody opens: like the refused-tick
         # announcement, this reaches the Checks UI and the jobs API.
+        if drift:
+            # One annotation, not two: the cause and the price of the only remaining lever have to be
+            # readable in the same line, because the state they describe is unreachable afterwards.
+            reason = f"{reason} | {' | '.join(drift)}"
         print(f"campaign re-arm skipped: {reason}")
         print(f"::warning::campaign re-arm declined: {reason}")
         return 0
