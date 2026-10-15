@@ -220,6 +220,126 @@ def _infrastructure_detail(checkpoint: dict[str, Any]) -> list[str]:
     return lines
 
 
+# The two pause reasons the paid READY probe writes. One is a provider that will
+# not answer (resumable, and the campaign re-arms itself); the other is a model
+# or API change that answered something else (terminal, and nothing resumes it).
+COMPATIBILITY_PAUSE_REASONS = frozenset({
+    "provider_infrastructure_error_compatibility",
+    "completion_compatibility_failed",
+})
+
+
+def _file_age_seconds(path: Path) -> float | None:
+    """Seconds since ``path`` was last written, or None when it cannot be stat'ed."""
+    try:
+        return max(0.0, time.time() - path.stat().st_mtime)
+    except OSError:
+        return None
+
+
+def _compatibility_detail(
+    output: Path,
+    checkpoint: dict[str, Any],
+    report: dict[str, Any],
+    pause_reason: str,
+) -> list[str]:
+    """Name the paid READY probe when it is what stands between this leg and the episodes.
+
+    The probe is Phase 2 of ``tools/atria_campaign.py`` and the episodes are Phase 3,
+    and the probe path writes no ``campaign_progress.json`` - it only rewrites
+    ``compatibility.json`` per attempt and the checkpoint/report when it gives up. A
+    leg waiting out a provider outage therefore leaves every counter in this comment
+    frozen at whatever the gate phase last wrote, with nothing to say which phase the
+    leg is actually in. That is exactly how the Reasoning-Atria pairwise campaign read
+    as "stuck on 170 / 416" for three hours on 2026-10-15: legs 04:52, 05:58 and
+    06:59Z each spent the profile's 3600 s outage patience inside
+    ``_compatibility_with_patience``, exited 7, banked no row, and re-armed a successor
+    that did the same - while this comment kept reporting the 05:00:05Z gate snapshot.
+
+    Everything rendered here is durable metadata the probe already persists: the
+    classification, the HTTP status, the attempt count, how long the last attempt took,
+    and the age of the file it wrote. The age is the liveness channel the frozen
+    ``Updated`` line cannot be - a leg still probing rewrites that file every backoff
+    round, so an age that keeps growing past the patience window is a leg that ended.
+    Never ``diagnostic_body`` or ``effective_request``: those are provider payloads.
+    """
+    probe = _read_json(output / "compatibility.json")
+    run = checkpoint.get("run")
+    run = run if isinstance(run, dict) else {}
+    recorded = run.get("compatibility")
+    recorded = recorded if isinstance(recorded, dict) else {}
+    reported = report.get("compatibility")
+    reported = reported if isinstance(reported, dict) else {}
+    status = str(probe.get("status") or recorded.get("status") or reported.get("status") or "")
+    if status == "passed" and pause_reason not in COMPATIBILITY_PAUSE_REASONS:
+        # A probe that passed is not news: the leg is in the episodes, where the
+        # counters above already speak. A stale pass from an earlier leg would be
+        # worse than silence, so this section only ever reports a refusal.
+        return []
+    if not status and pause_reason not in COMPATIBILITY_PAUSE_REASONS:
+        return []
+
+    attempts = [entry for entry in (probe.get("attempt_logs") or []) if isinstance(entry, dict)]
+    last = attempts[-1] if attempts else {}
+    parts = [status or "unrecorded"]
+    error_type = probe.get("error_type") or recorded.get("error_type")
+    if error_type:
+        parts.append(str(error_type))
+    if isinstance(last.get("error_type"), str) and last["error_type"]:
+        parts.append(f"last attempt {last['error_type']}")
+    status_code = probe.get("status_code") if probe.get("status_code") is not None else last.get("status_code")
+    if isinstance(status_code, int):
+        parts.append(f"HTTP {status_code}")
+    attempt_count = probe.get("attempts") or reported.get("attempts")
+    if isinstance(attempt_count, int):
+        parts.append(f"{attempt_count} attempt{'' if attempt_count == 1 else 's'}")
+    if isinstance(last.get("elapsed_ms"), int) and last["elapsed_ms"] > 0:
+        parts.append(f"last attempt took {last['elapsed_ms']} ms")
+    if str(probe.get("error_type") or "") == "invalid_compatibility_completion":
+        # The provider answered, so this is not an outage and the supervisor will not
+        # resume it: the acknowledgement itself was not the exact READY the pinned
+        # contract asks for. The shape of the answer is the diagnosis, and it is
+        # metadata rather than payload - a finish_reason and two lengths, never the
+        # text, which is a provider response body.
+        for key, label in (
+            ("finish_reason", "finish_reason"),
+            ("content_length", "answer length"),
+            ("reasoning_content_length", "reasoning length"),
+        ):
+            value = probe.get(key)
+            if isinstance(value, str) and value:
+                parts.append(f"{label}={value}")
+            elif isinstance(value, int):
+                parts.append(f"{label}={value}")
+    age = _file_age_seconds(output / "compatibility.json")
+    if age is not None:
+        parts.append(f"written {int(age)} s before this comment")
+    lines = [f"- **Compatibility probe:** `{' | '.join(parts)}`"]
+
+    waited = reported.get("waited_seconds")
+    if not isinstance(waited, (int, float)):
+        waited = recorded.get("waited_seconds")
+    if isinstance(waited, (int, float)):
+        lines.append(
+            f"- **Provider outage wait:** `{waited} s waited by the last leg that finished, "
+            "of the patience its profile allows`"
+        )
+    if pause_reason in COMPATIBILITY_PAUSE_REASONS:
+        if status == "passed":
+            lines.append(
+                "- **Episodes this leg:** `the newest probe passed, so the pause above belongs to "
+                "an earlier leg's report; this one is past Phase 2 and the episode counter moves "
+                "when it banks a row`"
+            )
+        else:
+            lines.append(
+                "- **Episodes this leg:** `none - the READY probe is Phase 2 and the episodes are "
+                "Phase 3, so a leg that pauses here banks no row and the episode counter above "
+                "cannot move until a probe passes`"
+            )
+    return lines
+
+
 def _body(output: Path) -> str:
     progress = read_progress(output)
     checkpoint = _read_json(output / "suite_checkpoint.json")
@@ -290,6 +410,7 @@ def _body(output: Path) -> str:
     pause_reason = progress.get("pause_reason") or checkpoint.get("pause_reason") or report.get("pause_reason")
     if pause_reason:
         lines.append(f"- **Pause reason:** `{pause_reason}`")
+    lines.extend(_compatibility_detail(output, checkpoint, report, str(pause_reason or "")))
     retry_summary = _retry_summary(checkpoint, report)
     if retry_summary:
         lines.append(f"- **Retries:** `{retry_summary}`")

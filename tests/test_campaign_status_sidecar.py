@@ -276,3 +276,174 @@ def test_describe_error_truncates_and_names_the_type() -> None:
     long = campaign_status_sidecar._describe_error(ValueError("x" * 500))
     assert long.startswith("ValueError: ")
     assert len(long) <= 200
+
+
+def _probe_state(
+    tmp_path: Path,
+    *,
+    probe: dict,
+    pause_reason: str,
+    episodes_completed: int = 170,
+    episodes_total: int = 416,
+    waited: float = 3300.0,
+) -> None:
+    """The durable files a leg leaves when the paid READY probe is what stopped it.
+
+    Shaped like the Reasoning-Atria pairwise state of 2026-10-15: the progress file
+    frozen at the gate write that precedes the probe, the episodes banked by earlier
+    legs, and the probe's own record beside them.
+    """
+    write_progress(
+        tmp_path,
+        phase="exact-instance gate",
+        gate_total=189,
+        gate_completed=189,
+        episodes_total=episodes_total,
+        episodes_completed=episodes_completed,
+        current_case=None,
+    )
+    (tmp_path / "compatibility.json").write_text(json.dumps(probe), encoding="utf-8")
+    (tmp_path / "suite_checkpoint.json").write_text(
+        json.dumps(
+            {
+                "manifest_case_count": episodes_total,
+                "paused": True,
+                "pause_reason": pause_reason,
+                "results": [{"case_id": str(index)} for index in range(episodes_completed)],
+                "run": {"compatibility": {"status": probe.get("status"),
+                                          "error_type": probe.get("error_type"),
+                                          "waited_seconds": waited}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps(
+            {
+                "status": "paused",
+                "pause_reason": pause_reason,
+                "resumable": pause_reason == "provider_infrastructure_error_compatibility",
+                "compatibility": {"status": probe.get("status"),
+                                  "attempts": probe.get("attempts"),
+                                  "waited_seconds": waited},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_body_names_the_probe_a_leg_is_waiting_out_instead_of_freezing_at_the_gate(tmp_path: Path) -> None:
+    """The stall that reads as a stuck counter is a phase the comment never named.
+
+    Three legs (04:52, 05:58, 06:59Z on 2026-10-15) each spent the profile's 3600 s
+    outage patience inside `_compatibility_with_patience`, exited 7 and banked no row,
+    while the comment kept reporting the gate snapshot the probe path never updates -
+    `Episodes checkpointed: 170 / 416` with an `Updated` stamp that did not move. The
+    probe's own record says which phase the leg is in, how the provider refused, and
+    when it last refused; the age of that file is the liveness channel the frozen
+    `Updated` line cannot be.
+    """
+    _probe_state(
+        tmp_path,
+        probe={
+            "status": "failed",
+            "error_type": "provider_transient",
+            "status_code": None,
+            "attempts": 6,
+            "attempt_logs": [
+                {"attempt": 5, "error_type": "http_error", "status_code": 503, "elapsed_ms": 812},
+                {"attempt": 6, "error_type": "timeout", "status_code": None, "elapsed_ms": 120000},
+            ],
+            "diagnostic_body": "PAYLOAD-THAT-MUST-NOT-BE-RENDERED",
+            "effective_request": {"model": "Atria-Dawn-Preview",
+                                  "request_extra": "PAYLOAD-THAT-MUST-NOT-BE-RENDERED"},
+        },
+        pause_reason="provider_infrastructure_error_compatibility",
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Compatibility probe:**" in body
+    probe_line = next(line for line in body.splitlines() if line.startswith("- **Compatibility probe:**"))
+    assert "failed" in probe_line
+    assert "provider_transient" in probe_line
+    assert "last attempt timeout" in probe_line
+    assert "6 attempts" in probe_line
+    assert "last attempt took 120000 ms" in probe_line
+    assert "written " in probe_line and " s before this comment" in probe_line
+    assert "**Provider outage wait:** `3300.0 s waited" in body
+    assert "**Episodes this leg:** `none" in body
+    assert "Phase 2" in body and "Phase 3" in body
+    # The frozen counters are still reported, unchanged and unexplained-away.
+    assert "**Episodes checkpointed:** `170 / 416`" in body
+    # A provider payload is never a status line.
+    assert "PAYLOAD-THAT-MUST-NOT-BE-RENDERED" not in body
+
+
+def test_body_reports_the_answer_shape_when_the_probe_completed_but_was_not_ready(tmp_path: Path) -> None:
+    """A substantive probe failure is terminal, so its diagnosis has to be readable.
+
+    `completion_compatibility_failed` is not resumable and the supervisor will not
+    re-arm it: the provider answered, just not the exact acknowledgement the pinned
+    contract asks for. Whether it was truncated or padded is the whole question, and
+    the answer's shape - finish_reason and two lengths - answers it without printing
+    a provider response body.
+    """
+    _probe_state(
+        tmp_path,
+        probe={
+            "status": "failed",
+            "error_type": "invalid_compatibility_completion",
+            "status_code": 200,
+            "attempts": 1,
+            "attempt_logs": [],
+            "finish_reason": "length",
+            "content_length": 17,
+            "reasoning_content_length": 8192,
+            "diagnostic_body": "READY, but only after PAYLOAD-THAT-MUST-NOT-BE-RENDERED",
+        },
+        pause_reason="completion_compatibility_failed",
+        waited=0.0,
+    )
+
+    body = _body(tmp_path)
+
+    probe_line = next(line for line in body.splitlines() if line.startswith("- **Compatibility probe:**"))
+    assert "invalid_compatibility_completion" in probe_line
+    assert "HTTP 200" in probe_line
+    assert "finish_reason=length" in probe_line
+    assert "answer length=17" in probe_line
+    assert "reasoning length=8192" in probe_line
+    assert "PAYLOAD-THAT-MUST-NOT-BE-RENDERED" not in body
+
+
+def test_body_stays_quiet_about_a_probe_that_passed(tmp_path: Path) -> None:
+    """A passing probe is not news, and a stale pass must not be rendered as this leg's."""
+    write_progress(tmp_path, phase="episodes", episodes_total=416, episodes_completed=171)
+    (tmp_path / "compatibility.json").write_text(
+        json.dumps({"status": "passed", "attempts": 1, "attempt_logs": []}), encoding="utf-8"
+    )
+    (tmp_path / "suite_checkpoint.json").write_text(
+        json.dumps({"manifest_case_count": 416, "results": [{"case_id": str(i)} for i in range(171)]}),
+        encoding="utf-8",
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Compatibility probe:**" not in body
+    assert "**Episodes this leg:**" not in body
+
+
+def test_body_says_when_the_newest_probe_passed_under_an_older_legs_pause(tmp_path: Path) -> None:
+    """The report is written when a leg ENDS, so its pause can be older than the probe."""
+    _probe_state(
+        tmp_path,
+        probe={"status": "passed", "attempts": 2, "attempt_logs": []},
+        pause_reason="provider_infrastructure_error_compatibility",
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Compatibility probe:** `passed" in body
+    assert "the newest probe passed, so the pause above belongs to an earlier leg" in body
+    assert "**Episodes this leg:** `none" not in body
