@@ -138,16 +138,35 @@ def test_a_chained_campaign_presents_a_resume_as_a_resume() -> None:
     pinned code it ships with, so once self-dispatch exists a resume arrives as
     a workflow_dispatch and must be presented to the controller as an event it
     treats as a resume. Only the chaining launcher needs this: with cron-only
-    continuation every resume really is a schedule event."""
+    continuation every resume really is a schedule event.
+
+    Two mechanisms satisfy it, and the rule is about the outcome rather than the
+    spelling:
+
+      * a step-level override that rewrites the variable to a resume event only
+        when the resume path was taken -- what the chained example ships;
+      * unsetting it for the controller process, ``env -u GITHUB_EVENT_NAME``,
+        what the deployed workflow switched to. ``_should_reset_output`` reads a
+        missing variable as ``event local is a resume`` (tools/atria_campaign.py
+        around line 954) and preserves the output, so a variable that cannot be
+        read cannot resolve to the wrong string either.
+
+    What stays forbidden is a chained campaign that presents neither, because
+    that is the configuration that wiped 73 banked episodes.
+    """
     for path in ALL_CAMPAIGN_WORKFLOWS:
         if _step(path, CHAIN_STEP_NAME) is None:
             continue
         campaign = _step(path, CAMPAIGN_STEP_NAME)
         assert campaign is not None, f"{path.name}: no campaign run step"
         override = (campaign.get("env") or {}).get("GITHUB_EVENT_NAME", "")
-        assert "steps.mode.outputs.mode == 'resume'" in override, (
-            f"{path.name}: a chained resume must present GITHUB_EVENT_NAME as a "
-            f"resume; got {override!r}"
+        overridden = "steps.mode.outputs.mode == 'resume'" in override
+        unset_in_step = "env -u GITHUB_EVENT_NAME" in str(campaign.get("run") or "")
+        assert overridden or unset_in_step, (
+            f"{path.name}: a chained campaign launches the controller as a plain "
+            "event, so an explicit resume would be read as a fresh start and wipe "
+            f"the restored state; env is {override!r} and the step body does not "
+            "unset GITHUB_EVENT_NAME"
         )
 
 
