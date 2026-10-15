@@ -42,6 +42,45 @@ def _restore_campaign_identity():
     campaign_status_sidecar._CAMPAIGN.update(snapshot)
 
 
+def test_every_referenced_status_pin_file_exists_and_is_unique() -> None:
+    """A `--pin-file` the tree does not contain is not "unpinned", it is unpinned by accident.
+
+    Both pairwise launchers passed `experiments/mercury_pairwise_status_issue.txt` and
+    `experiments/reasoning_atria_pairwise_status_issue.txt`, and neither file was in any ref, so every
+    pairwise leg selected its Issue from the ladder's middle rung - title matching over the first 100
+    open Issues. That rung is the one that scattered Atria's status across #4, #5, #6, #8 and #9, and it
+    fails again the moment a title is reworded or the open list outgrows a page. The pin lives in the
+    checked-out ref, so unlike the state artifact it is usable exactly when the restored state is too old
+    to name an Issue - which is a normal Tuesday for a campaign that inherits checkpoints.
+    """
+    import re
+
+    referenced: dict[str, set[str]] = {}
+    for launcher in sorted((ROOT / "handoff").glob("*pairwise-campaign.yml")):
+        text = launcher.read_text(encoding="utf-8")
+        for path in re.findall(r"--pin-file\s+(\S+)", text):
+            referenced.setdefault(path, set()).add(launcher.name)
+    assert referenced, "the handoff launchers are expected to pin their status Issue"
+    for path, launchers in referenced.items():
+        assert (ROOT / path).is_file(), f"{sorted(launchers)} pass --pin-file {path}, which is not in the tree"
+
+    numbers = {}
+    for path in referenced:
+        raw = (ROOT / path).read_text(encoding="utf-8").strip().lstrip("#").strip()
+        assert raw.isdigit() and int(raw) > 0, f"{path} must hold a bare Issue number, got {raw!r}"
+        numbers[path] = int(raw)
+    assert len(set(numbers.values())) == len(numbers), (
+        f"two campaigns sharing one status Issue overwrite each other's line: {numbers}"
+    )
+    # And the label each pin belongs to is the one its launcher passes, or the pin moves the wrong
+    # campaign's report: the comment header is cosmetic, but the title fallback is not.
+    for launcher in sorted((ROOT / "handoff").glob("*pairwise-campaign.yml")):
+        text = launcher.read_text(encoding="utf-8")
+        labels = set(re.findall(r'--label\s+"([^"]+)"', text))
+        pins = set(re.findall(r"--pin-file\s+(\S+)", text))
+        assert len(labels) == len(pins) == 1, (launcher.name, labels, pins)
+
+
 def _run(tmp_path: Path, monkeypatch, api, listing=None) -> tuple[object, str | None]:
     def fake_api_any(_token, method, path, payload=None):
         if method == "GET" and "/issues?" in path:

@@ -750,6 +750,62 @@ def test_cadence_and_ledger_progress_are_measured_not_assumed(tmp_path, monkeypa
     assert src.count("schedule_runs=schedule_runs") == 4  # both decide_rearm calls plus handover_wait
 
 
+def test_the_handover_decision_is_written_into_the_state_and_flushed(tmp_path, monkeypatch, capsys) -> None:
+    """`record_handover` is the only thing that tells a reader why the campaign went quiet.
+
+    It has to be durable (the marker travels with the checkpoint, so the next leg inherits the previous
+    leg's reason) and it has to fail open in both directions: a state directory that cannot be written
+    and a sidecar that cannot be imported must not change this step's exit code, because this step is the
+    one that keeps the campaign alive.
+    """
+    from tools import campaign_rearm as cr
+
+    calls: list = []
+
+    class Stub:
+        @staticmethod
+        def flush(out):
+            calls.append(str(out))
+            return None
+
+    monkeypatch.setattr(cr, "_load_sidecar", lambda: Stub)
+    cr.record_handover(str(tmp_path), "declined", "the ledger stand-down: no rows produced", waited=1201)
+
+    marker = json.loads((tmp_path / "campaign_handover.json").read_text(encoding="utf-8"))
+    assert marker["decision"] == "declined"
+    assert marker["waited_seconds"] == 1201
+    assert "ledger stand-down" in marker["reason"]
+    assert marker["written_at"].endswith("Z")
+    assert calls == [str(tmp_path)], calls
+
+    # A sidecar from an older pinned checkout has no `flush`: also a printed line, not a crash,
+    # because this step is the one that keeps the campaign alive.
+    class NoFlush:
+        pass
+
+    monkeypatch.setattr(cr, "_load_sidecar", lambda: NoFlush)
+    cr.record_handover(str(tmp_path), "armed", "dispatching successor")
+    assert "no flush entry point" in capsys.readouterr().out
+
+    # A sidecar that cannot be loaded is a printed line, not a failure.
+    monkeypatch.setattr(cr, "_load_sidecar", lambda: None)
+    cr.record_handover(str(tmp_path), "armed", "dispatching successor")
+    printed = capsys.readouterr().out
+    assert "no loadable campaign_status_sidecar.py" in printed, printed
+    fresh = json.loads((tmp_path / "campaign_handover.json").read_text(encoding="utf-8"))
+    assert fresh["decision"] == "armed" and fresh["waited_seconds"] == 0
+
+    # And an unwritable state directory costs a line, nothing else.
+    monkeypatch.setattr(cr, "_load_sidecar", lambda: Stub)
+    cr.record_handover(str(tmp_path / "no" / "such" / "dir"), "armed", "x")  # created on demand
+    assert (tmp_path / "no" / "such" / "dir" / "campaign_handover.json").is_file()
+
+    # Every decision path records: the decline, the fork refusal, the dry run and the dispatch.
+    source = inspect.getsource(campaign_rearm.main)
+    assert source.count("record_handover(") == 4, source
+    assert "slept = max(slept, int(wait) + 1)" in source, source
+
+
 def test_a_productive_leg_arms_when_it_is_run_the_way_the_launcher_runs_it(tmp_path: Path) -> None:
     """The same conclusion through `main`, not only through the pure decision function.
 
