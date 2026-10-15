@@ -77,3 +77,122 @@ The new campaigns will do the same, each into its own Issue:
 - Mercury + reasoning-Atria covering-campaign profiles (`experiments/*.yaml`) and
   the two `docs/workflows/*.yml.example`.
 - Wire the epistemic-process-control ideas into the campaign matrices.
+
+---
+
+# Pairwise campaign (t=2 + difficulty ladder + interventions)
+
+Landed in commit `d31e52f`+ (this branch): `matrix: {mode: pairwise}`, the
+`tools/twin_preflight.py` verification lane, and two new profiles. Nothing about
+the two live covering campaigns changed.
+
+## Upload route (two files, one click each)
+
+| download | copy to |
+|---|---|
+| `raw/…/handoff/mercury-pairwise-campaign.yml` | `.github/workflows/mercury-pairwise-campaign.yml` |
+| `raw/…/handoff/reasoning-atria-pairwise-campaign.yml` | `.github/workflows/reasoning-atria-pairwise-campaign.yml` |
+
+```
+https://github.com/StrangeTcy/rl_eval_generator/raw/arena/595b91e0-rl-eval-generator/handoff/mercury-pairwise-campaign.yml
+https://github.com/StrangeTcy/rl_eval_generator/raw/arena/595b91e0-rl-eval-generator/handoff/reasoning-atria-pairwise-campaign.yml
+```
+
+They are clones of the fixed covering workflows with exactly these differences:
+name / concurrency group / `runs/*_pairwise_campaign` state dir / artifact prefix
+`*-pairwise-state-` / status label + `--pin-file` / profile path, plus four added
+lines in *Refuse code missing campaign gates* that require `matrix_mode_of`,
+`expand_interventions`, `tools/twin_preflight.py` and the `"pairwise"` mode to exist
+in the pinned checkout. Budgets are unchanged (job 350, step 330,
+`CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))`).
+
+## What is inherited from the covering campaigns, and what is not
+
+Pairwise does not *subsume* covering case for case - it shares 142 of its 241
+vectors, drops 99 (the single-axis spikes, including all seven
+`manual_gate_blocked_exclusions` ids) and adds 216. Of covering's 96 gated rows,
+**40 lie inside this plan**. So the new workflow does not resume the old run: it
+*inherits* the part that is legitimately portable - the exact-instance gate rows -
+through a step placed after the state restore and before anything is billed
+(`tools/inherit_campaign_state.py`, reported in `$OUT/inheritance_report.json`).
+
+Rows are keyed on the case content hash and accepted only under
+`gate_context_sha == git rev-parse HEAD`, so the carry works **only when both
+campaigns run the same commit**. The tool refuses rather than rewriting that sha,
+and nothing campaign-scoped moves: no `suite_checkpoint.json` (episodes), no
+`campaign_intent.json`, no terminal markers. T1's report carries at the same
+revision, or across revisions only with `--allow-cross-revision-t1`, recorded in the
+report as `t1_source_ref`.
+
+A resumed campaign checks out the ref recorded in its own state artifact, so today:
+
+| campaign | pinned lineage | gate rows | episodes |
+|---|---|---|---|
+| Mercury covering (#17) | its recorded ref | 72/72 banked | 17/217 and paying |
+| Atria covering (#16) | its recorded ref | 72/72 banked | 14/217, paused at the wall |
+| pairwise (new) | must start at a tip that has `mode: pairwise` | inherits 0 until the shas align | - |
+
+Sequence that makes the inheritance pay, if you want the 40 rows:
+
+1. Land the profiles + controller on `main`.
+2. Re-pin **one** covering campaign (fresh dispatch at that tip, same state dir and
+   Issue). Its gate phase re-banks rows at the new sha - and note the cost: those
+   72 already-banked rows stop being usable *for it* at that moment too.
+3. Launch the pairwise campaign at that same tip: it inherits every row that is
+   both banked and in its plan, and gates only the rest (~229 rows).
+
+If that ordering is not worth 40 rows to you, skip the middle step: launch the
+pairwise campaign directly, accept `refused_gate_context_differs`, and let it gate
+its own 269 rows once - they then belong to its lineage and every later tick reuses
+them for free.
+
+## Order of operations
+
+1. Upload both workflow files.
+2. The profiles (`experiments/*_pairwise_campaign.yaml`) and the controller changes
+   must be on `main` **before** the workflows are useful: an old checkout rejects
+   `matrix.mode: pairwise`, and the gate step says so instead of billing a
+   strength-1 campaign by accident.
+3. Dispatch once with `execution_mode: gates_only` - provider-free; it exercises the
+   gate, the twin preflight and the inheritance step, and writes both
+   `twin_preflight.json` and `inheritance_report.json` so you can read the numbers
+   before spending anything.
+4. Dispatch `paid` with `resume_previous` left **unchecked** (fresh). Scheduled ticks
+   resume it from there.
+5. After the first tick posts, write that issue number into
+   `experiments/<provider>_pairwise_status_issue.txt`. Until then the sidecar finds
+   the newest open Issue titled "<label> live status"; the label is distinct from the
+   covering campaigns' on purpose, as are the state directory, pin file and artifact
+   prefix.
+
+## Size, for reference
+
+496 vectors at seed 0 (358 pairwise + 138 twins), 269 gated rows, 19,840 calls and
+163 M tokens at the repo's own per-case estimate; profile ceilings 21,200 calls /
+136 M tokens (~1.4 x one 100 M grant). `bill_verified_only` drops the twins that did
+not verify (79 pass / 33 fail / 26 unverified measured), so the billed count starts
+near 437.
+
+## Pinned revisions: why a resumed tick cannot pick up a fix
+
+`resume_previous: true` (the default) makes the launcher *ignore* the `ref` input. The
+mode step reads the newest `<prefix>-state-<run>` artifact and checks out the revision it
+records - `campaign_ref.txt`, else `.run.manifest_commit` - because a campaign must not
+change code mid-lineage. Two consequences worth knowing before you read a failure:
+
+- A failed tick still re-uploads its state (`if: always()` on the staging step), so a
+  revision that cannot run re-pins itself on every tick. Waiting does not fix it.
+- Anything fixed after that revision - code, or a profile ceiling - is invisible to the
+  lineage until one dispatch with `resume_previous` unchecked, which is step 4 above.
+
+That is the whole story of Atria's exit-2 ticks: the pinned revision's
+`tools/atria_campaign.py` predated `--allow-cross-revision-t1` tolerance, and its profile
+ceiling `max_http_attempts: 56166` is below the bound for the plan it now guards
+(6 + 422 x 20 x 2 x 6 = 101,286), so removing the stray flag lines from the deployed
+launcher is not sufficient on its own - the next refusal is queued behind it. The ceiling
+fix (`119,046`, sized on the full 496-case plan) is in the profiles on this branch.
+
+`tests/test_launcher_flag_compatibility.py` is the guard: no launcher may hand a tool a flag
+that tool does not declare, no launcher may rely on the controller's *tolerance* of a
+swallowed flag, and a flag once moved to another tool stays declared where it used to live.
+

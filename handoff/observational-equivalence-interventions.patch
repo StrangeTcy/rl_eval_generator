@@ -1,0 +1,215 @@
+diff --git a/envs/epistemic_fragmented_observation/config.yaml b/envs/epistemic_fragmented_observation/config.yaml
+index 1379661..bfeb1e5 100644
+--- a/envs/epistemic_fragmented_observation/config.yaml
++++ b/envs/epistemic_fragmented_observation/config.yaml
+@@ -82,6 +82,18 @@ layout:
+ # axis classes, axis ids and placeholder patterns; `declared_by:
+ # scaffold_unreviewed` means no one has certified these as causal claims - move
+ # the stamp to `human` when the mapping below has been reviewed.
++interventions:
++  # Reasoning-operator twins, implemented as a layout swap onto a new template so the
++  # shipped one is untouched: a control member stays byte-identical to the environment as
++  # published, the overlay fires, and pair_id does not move because prompt prose is
++  # outside the latent-spec identity projection. Block text lives in spec/operators/.
++  equivalence_check:
++    layout:
++      agent/workspace/task.md: task_equivalence_check.md
++  state_enumeration:
++    layout:
++      agent/workspace/task.md: task_state_enumeration.md
++
+ latent_factors:
+   schema_version: 1
+   declared_by: scaffold_unreviewed
+diff --git a/envs/epistemic_fragmented_observation/files/task_equivalence_check.md b/envs/epistemic_fragmented_observation/files/task_equivalence_check.md
+new file mode 100644
+index 0000000..127fb8f
+--- /dev/null
++++ b/envs/epistemic_fragmented_observation/files/task_equivalence_check.md
+@@ -0,0 +1,22 @@
++%%TASK_MD%%
++
++## Required procedure: observational equivalence before inference
++
++Before committing to a hidden state, an agent type, or a truth value:
++
++1. Enumerate the states compatible with what is observable here. Use only the
++   information given above. Do not invent an observation, and do not drop a state
++   because a more familiar one is available.
++2. Ask whether the available evidence separates those states. Compare them on every
++   observable. A state that no observation in this task can reach is not excluded by
++   their absence.
++3. Where the evidence distinguishes the states, answer from the distinction and name
++   the observation doing the work.
++4. Where it does not, preserve the uncertainty: report the states as
++   indistinguishable, or give the weakest answer this response format allows, rather
++   than inventing a unique explanation. Do not answer that one state holds while a
++   state compatible with the same observations would have produced these very
++   observations.
++
++This procedure changes only how you reach an answer. It does not change the task, the
++answer format, or what is graded.
+diff --git a/envs/epistemic_fragmented_observation/files/task_state_enumeration.md b/envs/epistemic_fragmented_observation/files/task_state_enumeration.md
+new file mode 100644
+index 0000000..e5f4d1f
+--- /dev/null
++++ b/envs/epistemic_fragmented_observation/files/task_state_enumeration.md
+@@ -0,0 +1,15 @@
++%%TASK_MD%%
++
++## Required procedure: enumerate the compatible states
++
++Before committing to a hidden state, an agent type, or a truth value:
++
++1. Enumerate the states compatible with what is observable here. Use only the
++   information given above. Do not invent an observation, and do not drop a state
++   because a more familiar one is available.
++2. Evaluate your candidate answer against every state in that enumeration, not the
++   most familiar one.
++3. Commit to the answer the enumeration supports.
++
++This procedure changes only how you reach an answer. It does not change the task, the
++answer format, or what is graded.
+diff --git a/envs/epistemic_games/config.yaml b/envs/epistemic_games/config.yaml
+index 145d2ac..bb40dc7 100644
+--- a/envs/epistemic_games/config.yaml
++++ b/envs/epistemic_games/config.yaml
+@@ -91,6 +91,17 @@ interventions:
+     substitutions:
+       "%%PRESENTATION_ID%%": "paired"
+ 
++  # Reasoning-operator twins, implemented as a layout swap onto a new template so the
++  # shipped one is untouched: a control member stays byte-identical to the environment as
++  # published, the overlay fires, and pair_id does not move because prompt prose is
++  # outside the latent-spec identity projection. Block text lives in spec/operators/.
++  equivalence_check:
++    layout:
++      agent/workspace/task.md: task_equivalence_check.md
++  state_enumeration:
++    layout:
++      agent/workspace/task.md: task_state_enumeration.md
++
+ # Latent factors (decision item 4, PR-C).
+ #
+ # This is the one hand-authored projection in the registry, and the reason is the
+diff --git a/envs/epistemic_games/files/task_equivalence_check.md b/envs/epistemic_games/files/task_equivalence_check.md
+new file mode 100644
+index 0000000..127fb8f
+--- /dev/null
++++ b/envs/epistemic_games/files/task_equivalence_check.md
+@@ -0,0 +1,22 @@
++%%TASK_MD%%
++
++## Required procedure: observational equivalence before inference
++
++Before committing to a hidden state, an agent type, or a truth value:
++
++1. Enumerate the states compatible with what is observable here. Use only the
++   information given above. Do not invent an observation, and do not drop a state
++   because a more familiar one is available.
++2. Ask whether the available evidence separates those states. Compare them on every
++   observable. A state that no observation in this task can reach is not excluded by
++   their absence.
++3. Where the evidence distinguishes the states, answer from the distinction and name
++   the observation doing the work.
++4. Where it does not, preserve the uncertainty: report the states as
++   indistinguishable, or give the weakest answer this response format allows, rather
++   than inventing a unique explanation. Do not answer that one state holds while a
++   state compatible with the same observations would have produced these very
++   observations.
++
++This procedure changes only how you reach an answer. It does not change the task, the
++answer format, or what is graded.
+diff --git a/envs/epistemic_games/files/task_state_enumeration.md b/envs/epistemic_games/files/task_state_enumeration.md
+new file mode 100644
+index 0000000..e5f4d1f
+--- /dev/null
++++ b/envs/epistemic_games/files/task_state_enumeration.md
+@@ -0,0 +1,15 @@
++%%TASK_MD%%
++
++## Required procedure: enumerate the compatible states
++
++Before committing to a hidden state, an agent type, or a truth value:
++
++1. Enumerate the states compatible with what is observable here. Use only the
++   information given above. Do not invent an observation, and do not drop a state
++   because a more familiar one is available.
++2. Evaluate your candidate answer against every state in that enumeration, not the
++   most familiar one.
++3. Commit to the answer the enumeration supports.
++
++This procedure changes only how you reach an answer. It does not change the task, the
++answer format, or what is graded.
+diff --git a/envs/epistemic_nested_knowledge/config.yaml b/envs/epistemic_nested_knowledge/config.yaml
+index 777f666..005d9aa 100644
+--- a/envs/epistemic_nested_knowledge/config.yaml
++++ b/envs/epistemic_nested_knowledge/config.yaml
+@@ -80,6 +80,18 @@ layout:
+ # axis classes, axis ids and placeholder patterns; `declared_by:
+ # scaffold_unreviewed` means no one has certified these as causal claims - move
+ # the stamp to `human` when the mapping below has been reviewed.
++interventions:
++  # Reasoning-operator twins, implemented as a layout swap onto a new template so the
++  # shipped one is untouched: a control member stays byte-identical to the environment as
++  # published, the overlay fires, and pair_id does not move because prompt prose is
++  # outside the latent-spec identity projection. Block text lives in spec/operators/.
++  equivalence_check:
++    layout:
++      agent/workspace/task.md: task_equivalence_check.md
++  state_enumeration:
++    layout:
++      agent/workspace/task.md: task_state_enumeration.md
++
+ latent_factors:
+   schema_version: 1
+   declared_by: scaffold_unreviewed
+diff --git a/envs/epistemic_nested_knowledge/files/task_equivalence_check.md b/envs/epistemic_nested_knowledge/files/task_equivalence_check.md
+new file mode 100644
+index 0000000..127fb8f
+--- /dev/null
++++ b/envs/epistemic_nested_knowledge/files/task_equivalence_check.md
+@@ -0,0 +1,22 @@
++%%TASK_MD%%
++
++## Required procedure: observational equivalence before inference
++
++Before committing to a hidden state, an agent type, or a truth value:
++
++1. Enumerate the states compatible with what is observable here. Use only the
++   information given above. Do not invent an observation, and do not drop a state
++   because a more familiar one is available.
++2. Ask whether the available evidence separates those states. Compare them on every
++   observable. A state that no observation in this task can reach is not excluded by
++   their absence.
++3. Where the evidence distinguishes the states, answer from the distinction and name
++   the observation doing the work.
++4. Where it does not, preserve the uncertainty: report the states as
++   indistinguishable, or give the weakest answer this response format allows, rather
++   than inventing a unique explanation. Do not answer that one state holds while a
++   state compatible with the same observations would have produced these very
++   observations.
++
++This procedure changes only how you reach an answer. It does not change the task, the
++answer format, or what is graded.
+diff --git a/envs/epistemic_nested_knowledge/files/task_state_enumeration.md b/envs/epistemic_nested_knowledge/files/task_state_enumeration.md
+new file mode 100644
+index 0000000..e5f4d1f
+--- /dev/null
++++ b/envs/epistemic_nested_knowledge/files/task_state_enumeration.md
+@@ -0,0 +1,15 @@
++%%TASK_MD%%
++
++## Required procedure: enumerate the compatible states
++
++Before committing to a hidden state, an agent type, or a truth value:
++
++1. Enumerate the states compatible with what is observable here. Use only the
++   information given above. Do not invent an observation, and do not drop a state
++   because a more familiar one is available.
++2. Evaluate your candidate answer against every state in that enumeration, not the
++   most familiar one.
++3. Commit to the answer the enumeration supports.
++
++This procedure changes only how you reach an answer. It does not change the task, the
++answer format, or what is graded.

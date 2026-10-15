@@ -1,0 +1,1343 @@
+{
+  "generated_from": "spec/observational-equivalence-check.yaml with handoff/observational-equivalence-interventions.patch applied",
+  "member_count": 39,
+  "members": [
+    {
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "pair_id_stability",
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__baseline__seed-3",
+      "pair_id": "Pd76ac37197775b57",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 3,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "eg_nonident_baseline",
+      "tree_sha256": "ed0327310bd17430be2ad3db0debe3a23c4b335c45b735537c840f96a8230cc3",
+      "twin_check": null
+    },
+    {
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "pair_id_stability",
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__baseline__seed-4",
+      "pair_id": "Pb85b930d014c4d6e",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 4,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "eg_nonident_baseline",
+      "tree_sha256": "a9a93a686bc920b9fbe0d2d28aefb1ebe1139278a85de5748333a69f608bd818",
+      "twin_check": null
+    },
+    {
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "pair_id_stability",
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__baseline__seed-5",
+      "pair_id": "Pc424b74990ed67e2",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 5,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "eg_nonident_baseline",
+      "tree_sha256": "4287c75098a96830584eec926ba369accd8733dfe01c7df79c4158ad22a19a2c",
+      "twin_check": null
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__equivalence_check__seed-3",
+      "pair_id": "Pd76ac37197775b57",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_nonident_equivalence_check",
+      "tree_sha256": "4d8a7766b18510039ecb2c606b967fb866c935d7cf5bd0d320c1ad5ec70c3161",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__equivalence_check__seed-4",
+      "pair_id": "Pb85b930d014c4d6e",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_nonident_equivalence_check",
+      "tree_sha256": "19e50f3b587a198a70638a256719af48fffffad9c3c6ba996774937fb1270df7",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__equivalence_check__seed-5",
+      "pair_id": "Pc424b74990ed67e2",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_nonident_equivalence_check",
+      "tree_sha256": "e0521e09ad8c76ddbd3fef224301316b806594a4676be81b090a35f100bba870",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__state_enumeration__seed-3",
+      "pair_id": "Pd76ac37197775b57",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_nonident_state_enumeration",
+      "tree_sha256": "5b46ac2ef7c3f52d55627ae51699f943eb5764b5c4f37a93a0c826d1032c1293",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__state_enumeration__seed-4",
+      "pair_id": "Pb85b930d014c4d6e",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_nonident_state_enumeration",
+      "tree_sha256": "e4bc231dfa1ba62ecbdf00ea321b0c04cdcf672b559dbfac23b3fe4f92a2f8db",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_non_identifiable",
+        "false_unique_explanation_rate",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-ambiguous_framing-narrative_presentation-paired_prior-skewed_scenario-trap__state_enumeration__seed-5",
+      "pair_id": "Pc424b74990ed67e2",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_nonident_state_enumeration",
+      "tree_sha256": "0d9ff3e4be934326c23c5d35a17ea744422b63b42769b57de1b2bdc5d1683f3b",
+      "twin_check": "pass"
+    },
+    {
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__baseline__seed-3",
+      "pair_id": "Pfe4e6901db1efa3a",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 3,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "eg_ident_baseline",
+      "tree_sha256": "ffd6e5c3b4178cc034771788d99d58143f132e277cd2059d80dc23d4a74ae4cd",
+      "twin_check": null
+    },
+    {
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__baseline__seed-4",
+      "pair_id": "P4ae3c7f80a259ed8",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 4,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "eg_ident_baseline",
+      "tree_sha256": "10579d84be43e2fc6a4a27052719a65a1fda8825a89eb06a4975607c275f32f8",
+      "twin_check": null
+    },
+    {
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__baseline__seed-5",
+      "pair_id": "P5f17e0ff8d97f3e7",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 5,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "eg_ident_baseline",
+      "tree_sha256": "50f91aff9e7dc7f011d5fc6ff56239e97c0df4398582ac532e7a86e0300d13ec",
+      "twin_check": null
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__equivalence_check__seed-3",
+      "pair_id": "Pfe4e6901db1efa3a",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_ident_equivalence_check",
+      "tree_sha256": "ae68a3d19baa411d462efe2683dc9543dc269305b0a7ad03c734e02e7ad7a661",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__equivalence_check__seed-4",
+      "pair_id": "P4ae3c7f80a259ed8",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_ident_equivalence_check",
+      "tree_sha256": "39f4623fa130d2997b8ed1b49a59d5a3c33e1aeacb8adbc54b422b629dad1d00",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "support_undercommit_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__equivalence_check__seed-5",
+      "pair_id": "P5f17e0ff8d97f3e7",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_ident_equivalence_check",
+      "tree_sha256": "98dbf50d1591780f6f4da0edb7e8682ea3bd1898e19754fb9c606a3a50735d4f",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__state_enumeration__seed-3",
+      "pair_id": "Pfe4e6901db1efa3a",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_ident_state_enumeration",
+      "tree_sha256": "8a8b8a4e9fa5b7416ff6d3a4986d6e752d8d260051ea117d232769e214811e8d",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__state_enumeration__seed-4",
+      "pair_id": "P4ae3c7f80a259ed8",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_ident_state_enumeration",
+      "tree_sha256": "dfeb13dace6fc15734850e2ba79b70c9014d1d705105cbbd06fe24be35b57e5a",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__state_enumeration__seed-5",
+      "pair_id": "P5f17e0ff8d97f3e7",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "eg_ident_state_enumeration",
+      "tree_sha256": "2bb82ec9c8fe5a54395f757314649933beb464d4ef06b04fec36f8f62674a4d2",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true,
+        "pair_id_moved": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "task_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "prior"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "substitution"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__prior__seed-3",
+      "pair_id": "Pa14c0512f0c56133",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": false,
+      "spec_member_id": "eg_identifiable_prior",
+      "tree_sha256": "b14654539133a1fc9ccf9f7cd12a22e6932c9468c9a40487870451468d0d5748",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true,
+        "pair_id_moved": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "task_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "prior"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "substitution"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__prior__seed-4",
+      "pair_id": "P8d60510092a302f2",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": false,
+      "spec_member_id": "eg_identifiable_prior",
+      "tree_sha256": "9de23a07938179e7afd4bfae957f7897c2cf22bc7fc79bda94e05aa383d3ecbb",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true,
+        "pair_id_moved": true
+      },
+      "check_problems": [],
+      "config_sha256": "668044ef714fe25a9ee1339678499a3bfbe6de6e88b715a4e6d594dd021e4587",
+      "environment": "epistemic_games",
+      "equivalences": [
+        "task_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "prior"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "substitution"
+      ],
+      "name": "epistemic_games__evidence-strong_framing-bare_table_presentation-solo_prior-balanced_scenario-report__prior__seed-5",
+      "pair_id": "P3b55e89cc574cdb0",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": false,
+      "spec_member_id": "eg_identifiable_prior",
+      "tree_sha256": "f052c76180132b9a0cba74b1669f45aae1b9c3e2bd9eb3296317b635d81cd1b2",
+      "twin_check": "pass"
+    },
+    {
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__baseline__seed-3",
+      "pair_id": "P34f61ee01aaf6fad",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 3,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "nk_baseline",
+      "tree_sha256": "e3cfaa80c9f9dd790c245218d21f33dc8963325b50791b873730d65403513cb9",
+      "twin_check": null
+    },
+    {
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__baseline__seed-4",
+      "pair_id": "P622edf368e08a6b8",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 4,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "nk_baseline",
+      "tree_sha256": "093ade57cb930575e88d611f643aaa28a50eda2b02422c4062e949405c64f16f",
+      "twin_check": null
+    },
+    {
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__baseline__seed-5",
+      "pair_id": "P528729859da5c0e1",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 5,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "nk_baseline",
+      "tree_sha256": "6a35eedb03bf78d6c3f1da4f175a952a6e8dda6ca53ae266494d18e4a63ee0d0",
+      "twin_check": null
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1",
+        "Hnull"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__equivalence_check__seed-3",
+      "pair_id": "P34f61ee01aaf6fad",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "nk_equivalence_check",
+      "tree_sha256": "e5b960592a50784be5daad643fc9c88aaa0fb654ef64844210df5f5772530306",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1",
+        "Hnull"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__equivalence_check__seed-4",
+      "pair_id": "P622edf368e08a6b8",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "nk_equivalence_check",
+      "tree_sha256": "ea62fa7b516183e6c6c6cb333da2c6dacede35de540c4a7bd2128ae3bca26fd2",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1",
+        "Hnull"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__equivalence_check__seed-5",
+      "pair_id": "P528729859da5c0e1",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "nk_equivalence_check",
+      "tree_sha256": "8a56be4da3cc2c32f2405afa85479897fe6169f6061303c4af11dedb68e5d783",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__state_enumeration__seed-3",
+      "pair_id": "P34f61ee01aaf6fad",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "nk_state_enumeration",
+      "tree_sha256": "1e25f027b58775d6dbfe723060536166203da88248c51f570c95a2e7d7028373",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__state_enumeration__seed-4",
+      "pair_id": "P622edf368e08a6b8",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "nk_state_enumeration",
+      "tree_sha256": "b694af5e1b591c8812c178120732ae49c97271d8b5ac3ae1e86ebd5d1849cd48",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "c1dd4546e65b4e232810a1266d96fab00955663b8e5f278719981e7114f68161",
+      "environment": "epistemic_nested_knowledge",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_nested_knowledge__order-first_scenario-expedition_worlds-four__state_enumeration__seed-5",
+      "pair_id": "P528729859da5c0e1",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "nk_state_enumeration",
+      "tree_sha256": "241a47dd2c7b0740fc126a4db485e7d1da0f3d4fc43a74b32d7b7f6b08c5b858",
+      "twin_check": "pass"
+    },
+    {
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__baseline__seed-3",
+      "pair_id": "Pdd3c4df4930de234",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 3,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "fo_baseline",
+      "tree_sha256": "93e6d0da2223574cae66eb3d07525dc0936e81cef3276640947b96d6ab8e24b5",
+      "twin_check": null
+    },
+    {
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__baseline__seed-4",
+      "pair_id": "Pf08b024ca618223d",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 4,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "fo_baseline",
+      "tree_sha256": "b28bdea02e2171bcd3c150d7dcba3eb2d8225c2ea451424c4fcfda4a55d1ec01",
+      "twin_check": null
+    },
+    {
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [],
+      "expect": "unspecified",
+      "hypotheses": [
+        "H1",
+        "H0",
+        "Hnull"
+      ],
+      "interventions": [],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__baseline__seed-5",
+      "pair_id": "Pb50e13d6325ce4de",
+      "pair_id_basis": "latent_spec",
+      "role": "baseline",
+      "seed": 5,
+      "shares_pair_id_with_baseline": null,
+      "spec_member_id": "fo_baseline",
+      "tree_sha256": "4f28f33a03471323ad766615045853a3d0572b96f9979a3a99151e0037764cdf",
+      "twin_check": null
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1",
+        "Hnull"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__equivalence_check__seed-3",
+      "pair_id": "Pdd3c4df4930de234",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "fo_equivalence_check",
+      "tree_sha256": "921d021e3cb5a0ee51fc01b66242601224d0054a5de94b2a44843fbab39c933c",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1",
+        "Hnull"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__equivalence_check__seed-4",
+      "pair_id": "Pf08b024ca618223d",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "fo_equivalence_check",
+      "tree_sha256": "11d80c3c05facf455a639eb1769d6e494d5f4a9461cc58f06556bd1ffe9acfd6",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H1",
+        "Hnull"
+      ],
+      "interventions": [
+        "equivalence_check"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "format_cost_rate",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__equivalence_check__seed-5",
+      "pair_id": "Pb50e13d6325ce4de",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "fo_equivalence_check",
+      "tree_sha256": "0002f924980843b593ba962d92528cd35adffe085b83aff3c1d43c03aeb54334",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__state_enumeration__seed-3",
+      "pair_id": "Pdd3c4df4930de234",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 3,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "fo_state_enumeration",
+      "tree_sha256": "f5656b6be3008d5e480649b2ac9fc220d173bc5b226c6a846c697a98eb2758bd",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__state_enumeration__seed-4",
+      "pair_id": "Pf08b024ca618223d",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 4,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "fo_state_enumeration",
+      "tree_sha256": "e1ed1ae35f1f00bc1e2230827c7e0a1640558f5449ae13d30fabb44e511dbdd0",
+      "twin_check": "pass"
+    },
+    {
+      "check_checks": {
+        "normalized_trees_differ": true,
+        "only_the_instance_label_differs": false,
+        "overlay_fired": true
+      },
+      "check_problems": [],
+      "config_sha256": "f607a8610512c07e371ed9c9ca770543cbccdc17dda6e8a3e91b82e7b6bf0e4b",
+      "environment": "epistemic_fragmented_observation",
+      "equivalences": [
+        "observation_changing"
+      ],
+      "expect": "sensitive",
+      "hypotheses": [
+        "H0"
+      ],
+      "interventions": [
+        "state_enumeration"
+      ],
+      "measurements": [
+        "accuracy_identifiable",
+        "pair_id_stability"
+      ],
+      "mechanisms": [
+        "layout"
+      ],
+      "name": "epistemic_fragmented_observation__fragment-symmetric_scenario-expedition_worlds-four__state_enumeration__seed-5",
+      "pair_id": "Pb50e13d6325ce4de",
+      "pair_id_basis": "latent_spec",
+      "role": "member",
+      "seed": 5,
+      "shares_pair_id_with_baseline": true,
+      "spec_member_id": "fo_state_enumeration",
+      "tree_sha256": "8940671cde0e32dccb1a8f5315e0c162c494936789ce2ede65f4bed8fd1592f7",
+      "twin_check": "pass"
+    }
+  ],
+  "verification": {
+    "counts": {
+      "fail": 0,
+      "pass": 27,
+      "unchecked": 12,
+      "unverified": 0
+    },
+    "failures": [],
+    "reading": "pass means the generated trees match the declared equivalence; it says nothing yet about any model. unverified means the declaration could not be checked mechanically and must not be reported as an invariance.",
+    "unverified_are_failures": false
+  }
+}

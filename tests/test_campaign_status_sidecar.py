@@ -31,6 +31,18 @@ def _issue_selection_is_off(monkeypatch):
     )
 
 
+def test_the_report_names_the_code_the_leg_ran(tmp_path: Path) -> None:
+    """Four legs died on a stamp mismatch and none of them said which checkout they were defending.
+
+    The Actions log is not readable from the API that can read this comment, so the comment has to carry
+    the fact: `Leg code: <sha> @ <ref>` distinguishes a leg that ran the waiver from one that never saw it.
+    """
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "running", "updated_at": "2026-10-13T02:11:08Z"}), encoding="utf-8"
+    )
+    body = campaign_status_sidecar._body(tmp_path)
+    assert "- **Leg code:** `" in body, body
+
 def test_sidecar_renders_durable_gate_progress_without_network(tmp_path: Path) -> None:
     write_progress(
         tmp_path,
@@ -106,6 +118,170 @@ def test_sidecar_renders_terminal_state_pause_reason_and_retries(tmp_path: Path)
     assert "**Campaign elapsed:**" in body
 
 
+def test_a_wrapper_crash_is_legible_in_the_comment_without_log_access(tmp_path: Path) -> None:
+    """`blocked` is not an explanation, and the log that holds one is not readable by everyone.
+
+    Mercury run 22 (2026-10-12T23:59:53Z) wrote a `blocked` report plus wrapper_failed.json after 2h22m
+    that banked nothing; the only account of why sat in the artifact. The sidecar quotes it.
+    """
+    (tmp_path / "wrapper_failed.json").write_text(
+        json.dumps({
+            "pause_reason": "infrastructure_error",
+            "detail": "RuntimeError:  judge\n\nstack  exited 1",
+            "recorded_at": "2026-10-12T23:59:49Z",
+        }),
+        encoding="utf-8",
+    )
+    body = _body(tmp_path)
+    assert "**Wrapper failure:** `infrastructure_error` at `2026-10-12T23:59:49Z`" in body
+    assert "RuntimeError: judge stack exited 1" in body, "the detail must be flattened, not raw"
+    assert "wrapper_failed" not in body.split("Wrapper failure")[0], "no line before it should name the file"
+
+    # Absent marker: nothing is appended, because a healthy leg must not look like a crashed one.
+    (tmp_path / "wrapper_failed.json").unlink()
+    assert "Wrapper failure" not in _body(tmp_path)
+
+
+def test_campaign_state_line_names_the_leg_that_wrote_the_report(tmp_path: Path) -> None:
+    """The state line must not masquerade as live during a running leg.
+
+    Report written at 14:42, heartbeat at 21:15: `paused / max_wall_seconds` is run 14's ending, not
+    the current state, and a reader who takes it as current will conclude a working campaign died.
+    """
+    write_progress(tmp_path, phase="cases")
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({
+            "status": "paused",
+            "pause_reason": "max_wall_seconds",
+            "updated_at": "2026-10-12T14:42:11Z",
+        }),
+        encoding="utf-8",
+    )
+    # write_progress stamps its own live updated_at (tools/campaign_progress.py:30), which is the
+    # point: the timestamp line is now, the state line is hours old, and only the label keeps those
+    # from being read as the same moment.
+    body = _body(tmp_path)
+    from tools.campaign_progress import PROGRESS_FILE
+    live = json.loads((tmp_path / PROGRESS_FILE).read_text())["updated_at"]
+    assert f"- **Updated:** {live}" in body
+    assert "Campaign state:** `paused` (report from `2026-10-12T14:42:11Z`" in body
+
+    # An older leg's report has no `updated_at` at all (only some writers set it: compare
+    # tools/atria_campaign.py:1501 with :1737), and a bare `paused` is exactly the misread this line
+    # exists to prevent, so the fallback wording carries the same warning without a timestamp.
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "paused", "pause_reason": "infrastructure_error"}), encoding="utf-8"
+    )
+    assert "untimed report from the last leg that finished" in _body(tmp_path)
+
+
+def test_the_api_host_comes_from_the_environment(tmp_path: Path, monkeypatch) -> None:
+    """A hardcoded host makes a flush untestable and unreachable on anything but github.com.
+
+    The re-arm step calls `flush` with its own `--api-url` semantics, so the sidecar has to honour
+    `GITHUB_API_URL` like every other tool in `tools/` does; otherwise the one call the campaign makes
+    after its own step ends is the one call nobody can point at a fixture.
+    """
+    seen: list[str] = []
+
+    def fake_urlopen(request, timeout=None):
+        seen.append(request.full_url)
+
+        class R:
+            def read(self):
+                return b"{}"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        return R()
+
+    monkeypatch.setenv("GITHUB_API_URL", "http://127.0.0.1:9/api")
+    monkeypatch.setattr(campaign_status_sidecar.urllib.request, "urlopen", fake_urlopen)
+    campaign_status_sidecar._api("t", "PATCH", "/repos/o/r/issues/comments/1", {"body": "x"})
+    assert seen == ["http://127.0.0.1:9/api/repos/o/r/issues/comments/1"], seen
+
+    monkeypatch.delenv("GITHUB_API_URL")
+    seen.clear()
+    campaign_status_sidecar._api("t", "PATCH", "/repos/o/r/issues/comments/1", {"body": "x"})
+    assert seen == ["https://api.github.com/repos/o/r/issues/comments/1"], seen
+
+
+def test_a_frozen_progress_marker_is_reported_as_frozen_not_as_the_time(tmp_path: Path) -> None:
+    """Three readings of the same timestamp, and only one of them is honest about what it proves.
+
+    Atria's Issue #20 was PATCHed on a 30 s cadence for 14 h on 2026-10-15 while the progress marker in
+    its state said 05:00:05Z. An operator comparing the Issue's own `updated_at` with the body saw a live
+    campaign; the truth was that the leg had produced no durable metadata for 14 hours. So the body names
+    the file the stamp came from and how old it is, and does not present it as the current time.
+    """
+    import json as _json
+
+    (tmp_path / "campaign_progress.json").write_text(
+        _json.dumps({"phase": "episodes", "updated_at": "2026-01-01T00:00:00Z"}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "(from the leg's progress marker)" in body, body
+    assert "no durable progress for" in body, body
+
+    # No marker at all is a different fact and gets its own sentence: here the only clock is the
+    # sidecar's, which proves the observer is alive and says nothing about the leg.
+    (tmp_path / "campaign_progress.json").unlink()
+    body = _body(tmp_path)
+    assert "sidecar clock only" in body, body
+
+
+def test_the_last_handover_decision_is_part_of_the_status(tmp_path: Path) -> None:
+    """A leg that sleeps 1201 s before arming a successor must not look like a campaign that died.
+
+    The re-arm step runs after the campaign step's sidecar is killed, so its decision reached only the
+    Actions log. Mercury's #21 stopped moving at 19:27:12Z on 2026-10-15 for that reason alone.
+    """
+    (tmp_path / "campaign_handover.json").write_text(
+        json.dumps({
+            "decision": "armed",
+            "reason": "campaign re-arm dispatching successor",
+            "waited_seconds": 1201,
+            "written_at": "2026-10-15T19:27:11Z",
+        }),
+        encoding="utf-8",
+    )
+
+    body = _body(tmp_path)
+
+    assert "- **Last handover:** `armed`" in body, body
+    assert "waited 1201 s" in body, body
+
+
+def test_a_missing_pin_file_is_announced_where_the_checks_ui_shows_it(capsys, monkeypatch) -> None:
+    """The sidecar is fail-open in a way that is easy to mistake for a campaign that is not reporting."""
+    for name in ("GH_TOKEN", "GITHUB_TOKEN", "GITHUB_REPOSITORY"):
+        monkeypatch.delenv(name, raising=False)
+
+    # `main` configures process-global campaign identity, so restore it: a leaked pin path would
+    # otherwise decide what the next test in the process finds.
+    snapshot = dict(campaign_status_sidecar._CAMPAIGN)
+    # A repo-relative scratch path would be created by the first cycle; with no token the process
+    # returns before it touches the filesystem, which is the fail-open contract under test.
+    rc = campaign_status_sidecar.main(
+        ["--out", "/nonexistent-sidecar-test/ignored", "--pin-file",
+         "experiments/no_such_pin_file.txt", "--once"]
+    )
+
+    assert rc == 0
+    printed = capsys.readouterr().out
+    assert "::warning::campaign status: the Issue pin file experiments/no_such_pin_file.txt" in printed
+    assert "first 100 open Issues" in printed, printed
+    campaign_status_sidecar._CAMPAIGN.clear()
+    campaign_status_sidecar._CAMPAIGN.update(snapshot)
+    campaign_status_sidecar._REPORTING.clear()
+
+
 def test_sidecar_reuses_one_durable_issue_and_comment(tmp_path: Path, monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
 
@@ -122,18 +298,38 @@ def test_sidecar_reuses_one_durable_issue_and_comment(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr(campaign_status_sidecar, "_api", fake_api)
 
-    campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token")
-    campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token")
+    status: dict = {}
+    campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token", status=status)
+    assert status["outcome"] == "published", status
+    campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token", status=status)
 
+    # A second cycle that renders the same durable content must not reach the API at all. A PATCH of
+    # identical text still advances the Issue's `updated_at`, and that is the field an operator reads as
+    # "the campaign is progressing" - which is how Atria #20 looked alive for 14 h while its leg
+    # produced nothing.
+    assert status["outcome"] == "unchanged", status
     assert calls == [
         ("POST", "/repos/owner/repository/issues"),
         ("POST", "/repos/owner/repository/issues/42/comments"),
         ("PATCH", "/repos/owner/repository/issues/comments/99"),
-        ("PATCH", "/repos/owner/repository/issues/comments/99"),
     ]
+
+    # New campaign state publishes on the next cycle, throttle or no throttle...
+    (tmp_path / "suite_checkpoint.json").write_text(json.dumps({"results": [{}]}), encoding="utf-8")
+    campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token", status=status)
+    assert status["outcome"] == "published", status
+    # ...and a caller that sets the interval to 0 gets a PATCH every time, which is what `--once` uses.
+    campaign_status_sidecar.report_once(tmp_path, "owner/repository", "test-token",
+                                        min_publish_interval=0.0, status=status)
+    assert len(calls) == 5, calls
+    assert calls[-1] == ("PATCH", "/repos/owner/repository/issues/comments/99")
+
     state = json.loads((tmp_path / "campaign_status_comment.json").read_text(encoding="utf-8"))
     assert state["issue_number"] == 42
     assert state["comment_id"] == 99
+    # The label travels with the identity so a later flush cannot post into another campaign's Issue.
+    assert state["label"] == campaign_status_sidecar._CAMPAIGN["body_label"]
+    assert state["body_key"]
 
 
 def test_sidecar_does_not_create_another_issue_when_comment_creation_retries(tmp_path: Path, monkeypatch) -> None:
@@ -201,6 +397,27 @@ def test_body_flags_an_exhausted_infrastructure_budget(tmp_path: Path) -> None:
     })
 
     assert "budget exhausted, stops for an operator" in campaign_status_sidecar._body(tmp_path)
+
+
+def test_a_case_closed_as_unscored_is_reported_as_closed_not_as_an_operator_gate(tmp_path: Path) -> None:
+    """`tools/run_suite.py` closes a case whose automatic bound ran out as `infrastructure_unscored`
+    and continues with the plan, so the live status must not send the reader to an operator who has
+    nothing left to authorise. The old wording is kept for a row that has not been closed."""
+    bound = campaign_status_sidecar.MAX_AUTOMATIC_INFRASTRUCTURE_RETRIES
+    _write_checkpoint(
+        tmp_path,
+        {
+            "paused": False,
+            "infrastructure_retries": {"glyph/easy/0": bound + 1, "weird_machine/hard/0": bound + 1},
+            "results": [
+                {"case_id": "glyph/easy/0", "status": "infrastructure_unscored", "error": "arena controller or judge failed before producing a valid score"},
+                {"case_id": "weird_machine/hard/0", "status": "infrastructure_error", "error": "episode subprocess exceeded its independent timeout"},
+            ],
+        },
+    )
+    body = campaign_status_sidecar._body(tmp_path)
+    assert "row recorded as unscored and the plan continued past it" in body
+    assert "budget exhausted, stops for an operator" in body  # the unclosed case still says so
 
 
 def test_body_omits_the_section_without_infrastructure_retries(tmp_path: Path) -> None:
@@ -276,3 +493,54 @@ def test_describe_error_truncates_and_names_the_type() -> None:
     long = campaign_status_sidecar._describe_error(ValueError("x" * 500))
     assert long.startswith("ValueError: ")
     assert len(long) <= 200
+
+
+def test_gate_denominator_survives_the_move_to_episodes(tmp_path: Path) -> None:
+    """`189 / ?` is not a finished wall, and reading it as one is a live failure mode.
+
+    The progress file only carries ``gate_total`` while the campaign is inside the gate, so
+    every status comment written after the phase flips prints a bare row count. That is the
+    exact line an operator (or an agent) uses to decide whether a campaign is still gating,
+    so the denominator is recovered from durable state: ``instance_gate.gated_case_count``
+    in the checkpoint, which ``run_suite`` records as ``len(gated_cases)``.
+    """
+    write_progress(tmp_path, phase="episodes", episodes_total=416, episodes_completed=17)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {str(index): {} for index in range(189)}}), encoding="utf-8"
+    )
+    (tmp_path / "suite_checkpoint.json").write_text(
+        json.dumps({"instance_gate": {"gated_case_count": 189, "passed": True}}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `189 / 189`" in body
+    assert "?" not in body.split("**Gate checkpointed:**")[1].splitlines()[0]
+    assert "**Gate progress:** `████████████████████`" in body
+
+
+def test_gate_denominator_falls_back_to_the_leg_report(tmp_path: Path) -> None:
+    """A leg mid-gate has no checkpoint gate record yet; the report copy is the next durable one."""
+    write_progress(tmp_path, phase="exact-instance gate", gate_completed=56)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {str(index): {} for index in range(56)}}), encoding="utf-8"
+    )
+    (tmp_path / "campaign_report.json").write_text(
+        json.dumps({"status": "paused", "gated_case_count": 189}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `56 / 189`" in body
+
+
+def test_gate_denominator_stays_unknown_rather_than_invented(tmp_path: Path) -> None:
+    """Nothing durable, no denominator: the question mark is the honest answer."""
+    write_progress(tmp_path, phase="exact-instance gate", gate_completed=3)
+    (tmp_path / "instance_oracles_partial.json").write_text(
+        json.dumps({"rows": {"0": {}, "1": {}, "2": {}}}), encoding="utf-8"
+    )
+
+    body = _body(tmp_path)
+
+    assert "**Gate checkpointed:** `3 / ?`" in body

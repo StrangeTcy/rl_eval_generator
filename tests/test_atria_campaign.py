@@ -312,3 +312,160 @@ def test_fresh_output_reset_refuses_to_remove_unrecognized_directory(tmp_path: P
         atria_campaign._reset_fresh_campaign_output(unrelated)
 
     assert (unrelated / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_blocked_gate_rows_are_reported_by_group_so_a_cut_log_cannot_lose_a_class() -> None:
+    """A listing capped at twenty rows per category is how a blocked campaign read as a small one.
+
+    The log named 14 rows while the artifact held 49, and every reading of that sample was a guess
+    about the rest. The shape of a failure set - which reason, on which axis levels, how many - is
+    what an omission list has to be written from, and it is bounded, so it is what the summary leads
+    with.
+    """
+    rows = [
+        {
+            "case_id": f"moco__naming={'hard' if index % 2 else 'medium'}_distractors=easy_"
+                       "queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0",
+            "status": "blocked",
+            "reason": "oracle_error",
+        }
+        for index in range(35)
+    ] + [
+        {
+            "case_id": "glyph__architecture=hard_optimizer=hard_red_herring=easy_visible_tests=easy"
+                       "_data_clue=medium_symptom_mask=medium__seed-0",
+            "status": "blocked",
+            "reason": "plausible_wrong_did_not_grade_as_expected",
+        }
+    ] * 8
+
+    formatted = atria_campaign._format_failure_diagnostics({"exact_instance_failed_cases": rows})
+
+    assert "43 blocked exact-instance oracle row(s), 3 group(s):" in formatted
+    assert "oracle_error x18 on naming=medium" in formatted
+    assert "oracle_error x17 on naming=hard" in formatted
+    assert "plausible_wrong_did_not_grade_as_expected x8 on architecture=hard" in formatted
+    # axis names contain underscores, so a naive split reported `mask=medium` for `symptom_mask=medium`
+    assert "symptom_mask=medium" in formatted
+    assert "calibration_class: reference_not_configured_for_this_vector" in formatted
+
+
+def test_more_groups_than_fit_are_counted_rather_than_dropped() -> None:
+    rows = [
+        {
+            "case_id": f"glyph__ax{index:02d}=hard_optimizer=medium_red_herring=easy__seed-0",
+            "status": "blocked",
+            "reason": "reference_did_not_grade_as_expected",
+        }
+        for index in range(30)
+    ]
+
+    formatted = atria_campaign._format_failure_diagnostics({"exact_instance_failed_cases": rows})
+
+    assert "30 blocked exact-instance oracle row(s), 30 group(s):" in formatted
+    assert "+5 further group(s) covering 5 row(s)" in formatted
+
+
+def test_a_state_contract_refusal_does_not_write_the_gate_it_cannot_pass(tmp_path: Path) -> None:
+    """Five Mercury legs inherited a marker whose only cause was the leg before it.
+
+    The marker means "an operator must acknowledge", and the acknowledgement the launcher accepts covers
+    a harness crash - never a contract refusal, which repeats byte-identically. So the first one is
+    recorded and leaves the state reachable by a plain dispatch; a second, at the same commit, with the
+    same detail, is a fix that did not take and re-arms the gate.
+    """
+    detail = (
+        "checkpoint metadata mismatch for manifest_commit: "
+        "'0ddcd396b45f46b9fbbba7d477b34221a3724ef2' != '5cb4205ae3f69c72809e4834e52006b3406fb3a7'"
+    )
+    assert atria_campaign._state_contract_stop(tmp_path, detail) is False
+    assert (tmp_path / "state_contract_stop.json").is_file()
+    assert not (tmp_path / "wrapper_failed.json").exists()
+
+    # A genuine crash still gates, unchanged.
+    assert atria_campaign._state_contract_stop(tmp_path, "TypeError: unsupported operand") is True
+
+    # Same detail, same code: the second leg escalates. (The commit identity is what makes this a
+    # "nothing changed" test rather than a "this string exists somewhere in history" test.)
+    first = json.loads((tmp_path / "state_contract_stop.json").read_text(encoding="utf-8"))
+    recorded = {**first, "at_commit": "0" * 40, "detail": detail, "count": 1}
+    (tmp_path / "state_contract_stop.json").write_text(json.dumps(recorded), encoding="utf-8")
+    assert atria_campaign._state_contract_stop(tmp_path, detail) is False
+    after = json.loads((tmp_path / "state_contract_stop.json").read_text(encoding="utf-8"))
+    assert after["count"] == 1, after  # a different commit resets the counter
+
+    # Same detail, same commit, twice in a row: gate an operator.
+    same = {**after, "at_commit": after["at_commit"], "count": 1}
+    (tmp_path / "state_contract_stop.json").write_text(json.dumps(same), encoding="utf-8")
+    assert atria_campaign._state_contract_stop(tmp_path, detail) is True
+    assert json.loads((tmp_path / "state_contract_stop.json").read_text(encoding="utf-8"))["count"] == 2
+
+
+def test_an_inherited_terminal_marker_is_cleared_before_the_leg_can_refuse_anything(tmp_path) -> None:
+    """A leg that dies on the way to the campaign must not re-publish the stop it came to clear.
+
+    That was the whole of Atria's second death: the marker's cause had already been fixed in code, but
+    every leg exited early enough to leave the fossil in place, so the next leg refused it and left it
+    there again. The clear is therefore the first act of the leg, and the assertion below is on order
+    rather than behaviour, because that is the property that broke.
+    """
+    import json as _json
+    from tools.atria_campaign import _clear_inherited_terminal_marker
+
+    out = tmp_path / "campaign"
+    out.mkdir()
+    (out / "wrapper_failed.json").write_text(
+        _json.dumps({"pause_reason": "wrapper_exception", "detail": "a stale refusal"}), encoding="utf-8"
+    )
+    (out / "suite_checkpoint.json").write_text("{}", encoding="utf-8")
+    assert _clear_inherited_terminal_marker(out) is True
+    assert not (out / "wrapper_failed.json").exists()
+    assert (out / "suite_checkpoint.json").exists()  # only the marker, never the ledger
+    # Nothing to clear, and a directory that does not exist yet, are both non-events.
+    assert _clear_inherited_terminal_marker(out) is True
+    assert _clear_inherited_terminal_marker(tmp_path / "absent") is True
+
+    source = (Path(__file__).resolve().parents[1] / "tools" / "atria_campaign.py").read_text(encoding="utf-8")
+    body = source[source.index("    args = parser.parse_args(argv)"):source.index("        profile = _load_yaml(args.profile)")]
+    assert "_clear_inherited_terminal_marker(output)" in body, body[-500:]
+
+
+def test_an_intent_drift_is_recorded_with_the_field_that_moved(tmp_path: Path) -> None:
+    """A drift the allowlist does not cover still has to say, somewhere readable, which field drifted.
+
+    Atria runs 25 and 28 refused `campaign intent differs from the restored state` four hours apart and
+    neither the marker nor the annotation could be read from outside a runner, so six hours of diagnosis
+    could not tell `execution_mode` from `case_manifest_sha256`. The keys are written next to the intent,
+    unredacted for the names, and the refusal stands exactly as it did.
+    """
+    detail = (
+        "ValueError: campaign intent differs from the restored state; refuse to continue with a changed "
+        "provider, model, mode, manifest, or code context (changed: execution_mode)"
+    )
+    first = atria_campaign._record_campaign_intent(
+        tmp_path, {}, execution_mode="paid", gate_context_sha="a" * 64, profile={}
+    )
+    assert first["execution_mode"] == "paid"
+    with pytest.raises(ValueError) as exc:
+        atria_campaign._record_campaign_intent(
+            tmp_path, {}, execution_mode="gates_only", gate_context_sha="a" * 64, profile={}
+        )
+    assert "changed: execution_mode" in str(exc.value)
+    recorded = json.loads((tmp_path / "campaign_intent_refusal.json").read_text(encoding="utf-8"))
+    assert recorded["changed"] == ["execution_mode"]
+    assert recorded["expected"]["execution_mode"] == "gates_only"
+    assert recorded["recorded"]["execution_mode"] == "paid"
+
+    # A drift the allowlist covers is not a refusal and writes no diagnostic.
+    (tmp_path / "campaign_intent_refusal.json").unlink()
+    moved = atria_campaign._record_campaign_intent(
+        tmp_path, {}, execution_mode="paid", gate_context_sha="b" * 64, profile={}
+    )
+    assert moved["gate_context_sha"] == "b" * 64
+    assert not (tmp_path / "campaign_intent_refusal.json").exists()
+
+    # And the drift refusal is metered like every other deterministic refusal: it does not, on its own,
+    # spend the one lever that cannot fix it. (Atria 28 lost 126 banked gate rows to this, not to the
+    # drift: the marker it wrote behind it is what no scheduled tick can pass.)
+    assert atria_campaign._state_contract_stop(tmp_path, detail) is False
+    assert not (tmp_path / "wrapper_failed.json").exists()
