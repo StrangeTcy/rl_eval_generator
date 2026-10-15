@@ -1,0 +1,698 @@
+# Manual-copy example only. Do not commit this file under .github/workflows/.
+# Copy to .github/workflows/reasoning-atria-pairwise-campaign.yml after review.
+#
+# THIS FILE IS THE ONLY THING THAT HAS TO BE UPLOADED. Everything else the campaign
+# needs - tools/suite_inventory.py's pairwise mode, tools/twin_preflight.py,
+# tools/inherit_campaign_state.py and the
+# experiments/reasoning_atria_pairwise_campaign.yaml profile - is read from the checkout of
+# the `ref` input below, which currently points at the session branch (tip
+# 4202f83). The job therefore runs the campaign as
+# written there without any of it landing on main first; `campaign_ref.txt` records
+# the resolved commit on the first dispatch and every scheduled tick resumes at
+# that same commit, so a later push to the branch does not move a running campaign.
+# A workflow file cannot be created by this checkout (the App has no `workflows`
+# permission), which is why exactly one manual copy step remains.
+#
+# Launches Atria reasoning at high reasoning effort on Responses, runs the
+# T1 same_fact_presentation profile first, then the provider-pinned strength-2
+# campaign: 496 vectors (358 pairwise over every axis plus the uniform
+# easy/medium/hard ladder, and 138 intervention twins), of which 269 owe an
+# exact-instance gate row. One gate case can need up to 108 minutes, so the live
+# step is capped at 330 minutes and the overall job at 350; the controller gets the
+# remaining live-step budget after T1's 70 minutes. Scheduled runs resume its
+# checkpoint, and gate rows already banked by this campaign are reused from its own
+# artifact - which is why a resume is cheap and a fresh dispatch is not.
+# T1 interruption is an operator stop (not auto-replayed).
+# Live status is posted to an Atria-specific Issue, via its own label and
+# pin file. Pick `paid` at the first dispatch: the execution mode is read back
+# only from the persisted intent, so a lineage started `gates_only` can never
+# be promoted later by a resume - a dropdown is ignored on that path.
+name: Reasoning-Atria pairwise campaign
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or full commit SHA containing the pinned campaign code (main after this work lands there)"
+        required: true
+        default: arena/595b91e0-rl-eval-generator
+      execution_mode:
+        description: "Choose whether this explicit dispatch may make provider calls"
+        required: true
+        type: choice
+        options:
+          - paid
+          - gates_only
+        default: paid
+      resume_previous:
+        description: "Resume the latest campaign-state artifact instead of starting fresh"
+        required: true
+        type: boolean
+        default: true
+      clear_wrapper_stop:
+        description: "Operator acknowledgement for a state the campaign stopped on purpose. A leg whose wrapper crashed leaves wrapper_failed.json in the state artifact, and by design nothing resumes from it (tools/atria_campaign.py:1592-1596, tools/campaign_supervisor.py:207-215) - which left no lever, because resuming is refused and dispatching fresh drops the banked episodes and re-bills T1. This lifts ONLY that harness-crash stop, for a hand dispatch: pause_reason wrapper_exception, wrapper_transient_error, infrastructure_error or docker_unavailable. It never lifts a spend ceiling, an interrupted T1, a compatibility refusal or an exhausted retry count, and a self-dispatched successor cannot use it. The new leg clears the marker itself, so a repeat crash stops again."
+        required: false
+        default: false
+        type: boolean
+      rebase_onto_ref:
+        description: "Optional branch or full SHA to re-pin this campaign's CODE to while carrying its existing state forward - the paid T1 result, the banked gate rows, the ceiling counters. The controller accepts it only when the grading-code digest is the single field that moved; a provider, model, endpoint, effort, execution mode, manifest or profile difference is still refused. Refused if the carried state records a terminal failure or an interrupted T1. The execution mode is read back from the carried intent, so this can neither promote nor demote what is authorised to bill. Leave empty to keep the pinned commit."
+        required: false
+        default: ''
+        type: string
+      max_tokens_total_override:
+        description: "Optional spend ceiling above the pinned profile's value. Only a number greater than the one a budget pause stopped at lifts that pause; it changes the budget, never the measurement contract."
+        required: false
+        default: ''
+        type: string
+      max_api_calls_override:
+        description: "Optional spend ceiling above the pinned profile's value, same rule as max_tokens_total_override."
+        required: false
+        default: ''
+        type: string
+      chain_depth:
+        description: "Internal: how many self-dispatched continuations precede this one. The re-arm step increments it; a human dispatch resets it to 0 and the cap is 40."
+        required: false
+        default: "0"
+  schedule:
+    - cron: "13,43 * * * *"
+
+permissions:
+  contents: read
+  actions: write  # read, plus the successor dispatch tools/campaign_rearm.py asks for
+  issues: write
+
+concurrency:
+  group: reasoning-atria-pairwise-campaign
+  cancel-in-progress: false
+
+jobs:
+  campaign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Decide fresh dispatch versus supervised resume
+        id: mode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REBASE="${{ inputs.rebase_onto_ref }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$REBASE" ]; then
+            # Three ways to continue, and the two obvious ones each lose something. A resume runs the
+            # commit pinned inside its own state artifact (tools/campaign_supervisor.py takes
+            # resume_ref from checkpoint.run.manifest_commit), so it can never pick up a fix; a fresh
+            # dispatch takes the new code and throws the paid T1 result, the banked gate rows and the
+            # ceiling counters away - then re-bills T1 for the privilege. A rebase is the third path:
+            # new code at $REBASE, the ledger of the latest state artifact, and --rebase-intent so the
+            # controller records the moved grading-context digest instead of refusing to continue.
+            # Authorization does not change here: the mode is read back from the carried intent, never
+            # from this dropdown, so a rebase cannot promote a gates-only lineage into a billable one.
+            LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+              --jq '[.artifacts[] | select(.name | startswith("reasoning-atria-pairwise-state-")) | select(.expired == false)] | sort_by(.created_at) | last // empty')
+            if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+              echo "mode=fresh" >> "$GITHUB_OUTPUT"
+              echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+              echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+              echo "reason=rebase requested but no state artifact exists; dispatching fresh at $REBASE" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            ARTIFACT_ID=$(printf '%s' "$LATEST" | jq -r '.id')
+            STATE_STAGE="$RUNNER_TEMP/reasoning_atria_state"
+            rm -rf "$STATE_STAGE"
+            mkdir -p "$STATE_STAGE"
+            gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/reasoning_atria_state.zip"
+            unzip -q "$RUNNER_TEMP/reasoning_atria_state.zip" -d "$STATE_STAGE"
+            if [ ! -s "$STATE_STAGE/campaign_intent.json" ]; then
+              # No intent means no continuation authority, and inventing one from a dispatch dropdown
+              # is the promotion the resume path already refuses. Fall back to fresh, and say so.
+              echo "mode=fresh" >> "$GITHUB_OUTPUT"
+              echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+              echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+              echo "reason=carried state has no campaign intent; rebasing onto $REBASE as a fresh lineage" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ -f "$STATE_STAGE/wrapper_failed.json" ]; then
+              # Refused by default, and only an explicit operator acknowledgement lifts it. The rule is
+              # the campaign's own ("one automatic restart is allowed, a repeat failure rewrites it and
+              # the supervisor stands down for an operator", tools/atria_campaign.py:1592-1596) and
+              # `tools/inherit_campaign_state.py` keeps wrapper_failed.json in its NOT_INHERITED list -
+              # but that left the operator with no lever at all: a resume is refused by the marker and a
+              # fresh dispatch drops 190 banked episodes and re-bills T1. So the acknowledgement is a
+              # dispatch input, recorded on the run's own page, limited to a harness crash (a wrapper
+              # dying is not a measurement verdict), and self-terminating: the new leg clears the marker
+              # at its start, so if it crashes again the stop comes back.
+              TERMINAL=$(jq -r '.pause_reason // "unknown"' "$STATE_STAGE/wrapper_failed.json" 2>/dev/null || true)
+              LIFTABLE=0
+              case "$TERMINAL" in
+                wrapper_exception|wrapper_transient_error|infrastructure_error|docker_unavailable) LIFTABLE=1 ;;
+              esac
+              if [ "${{ inputs.clear_wrapper_stop }}" = "true" ] && [ "$LIFTABLE" = 1 ]; then
+                echo "::notice::operator cleared a recorded wrapper stop ($TERMINAL) for this dispatch; a repeat crash stops the chain again"
+              else
+                echo "mode=none" >> "$GITHUB_OUTPUT"
+                echo "reason=operator stop: the carried state records a terminal failure ($TERMINAL); clear_wrapper_stop lifts it only for a harness crash" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            if [ -f "$STATE_STAGE/t1_started.json" ] && [ ! -f "$STATE_STAGE/t1_same_fact_presentation.json" ]; then
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=operator stop: carried T1 was interrupted before its report; a rebase never replays paid calls" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # `|| true` on purpose: a carried intent that will not parse must reach the refusal below,
+            # which names the problem in the leg's output, rather than killing the step with a raw jq
+            # parse error that looks like infrastructure and says nothing about the state file.
+            CARRIED_MODE=$(jq -r '.execution_mode // empty' "$STATE_STAGE/campaign_intent.json" 2>/dev/null || true)
+            case "$CARRIED_MODE" in
+              paid|gates_only) ;;
+              *) CARRIED_MODE="" ;;
+            esac
+            if [ -z "$CARRIED_MODE" ]; then
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+              echo "reason=carried intent has no readable execution mode; refusing to guess what may bill" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "mode=rebase" >> "$GITHUB_OUTPUT"
+            echo "ref=$REBASE" >> "$GITHUB_OUTPUT"
+            echo "execution_mode=$CARRIED_MODE" >> "$GITHUB_OUTPUT"
+            echo "state_staged=true" >> "$GITHUB_OUTPUT"
+            echo "reason=rebasing the carried ledger onto $REBASE, keeping the carried $CARRIED_MODE mode" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
+             && [ "${{ inputs.resume_previous }}" != "true" ]; then
+            echo "mode=fresh" >> "$GITHUB_OUTPUT"
+            echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+            echo "execution_mode=${{ inputs.execution_mode }}" >> "$GITHUB_OUTPUT"
+            echo "reason=explicit fresh manual dispatch" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LATEST=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name | startswith("reasoning-atria-pairwise-state-")) | select(.expired == false)] | sort_by(.created_at) | last // empty')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=no Reasoning-Atria pairwise state artifact" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ARTIFACT_ID=$(printf '%s' "$LATEST" | jq -r '.id')
+          STATE_STAGE="$RUNNER_TEMP/reasoning_atria_state"
+          rm -rf "$STATE_STAGE"
+          mkdir -p "$STATE_STAGE"
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/reasoning_atria_state.zip"
+          unzip -q "$RUNNER_TEMP/reasoning_atria_state.zip" -d "$STATE_STAGE"
+          PINNED_REF=$(cat "$STATE_STAGE/campaign_ref.txt" 2>/dev/null || true)
+          if [ -z "$PINNED_REF" ]; then
+            PINNED_REF=$(jq -r '.run.manifest_commit // empty' "$STATE_STAGE/suite_checkpoint.json" 2>/dev/null || true)
+          fi
+          if [ -z "$PINNED_REF" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=state artifact has no recorded ref" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SUPERVISOR="$RUNNER_TEMP/campaign_supervisor.py"
+          if ! gh api "repos/${{ github.repository }}/contents/tools/campaign_supervisor.py?ref=$PINNED_REF" --jq '.content' | base64 -d > "$SUPERVISOR" 2>/dev/null || [ ! -s "$SUPERVISOR" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "reason=provider-free supervisor unavailable at pinned ref" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LIMIT_ARGS=()
+          if [ -n "${{ inputs.max_tokens_total_override }}" ]; then
+            LIMIT_ARGS+=("max_tokens_total=${{ inputs.max_tokens_total_override }}")
+          fi
+          if [ -n "${{ inputs.max_api_calls_override }}" ]; then
+            LIMIT_ARGS+=("max_api_calls=${{ inputs.max_api_calls_override }}")
+          fi
+          DECISION=$(python3 -c '
+          import importlib.util, inspect, json, sys
+          spec = importlib.util.spec_from_file_location("campaign_supervisor", sys.argv[1])
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          kwargs = {"expected_provider": "atria"}
+          # A supervisor pinned before ceilings could be lifted from the dispatcher has
+          # no parameter to receive one, and handing it a stray argument would crash the
+          # mode decision. Read the pinned signature; pass only what it understands.
+          if "limits_override" in inspect.signature(module.decide_tick).parameters:
+              kwargs["limits_override"] = sys.argv[3:]
+          print(json.dumps(module.decide_tick(sys.argv[2], **kwargs)))
+          ' "$SUPERVISOR" "$STATE_STAGE" "${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}")
+          MODE=$(printf '%s' "$DECISION" | jq -r '.mode')
+          REASON=$(printf '%s' "$DECISION" | jq -r '.reason')
+          REF=$(printf '%s' "$DECISION" | jq -r '.ref // empty')
+          EXECUTION_MODE=$(printf '%s' "$DECISION" | jq -r '.execution_mode // empty')
+          # A human click is not a tick, and it must not be answered with a countdown.
+          # RESUME_BACKOFF_SECONDS (tools/campaign_supervisor.py, applied in decide_tick ahead of any
+          # resume, and reachable from no CLI flag) exists to stop a cron loop hammering a provider
+          # that just failed. The covering campaign exempts the operator from exactly that window -
+          # its YAML checks `age < 1200 and not manual_continue` - while the pairwise path delegates
+          # to decide_tick and had no way to say "a person is here". So a click 49 s after a pause was
+          # refused with `backoff: paused 49s ago, retry in 1150s` (Mercury run 21,
+          # 2026-10-12T21:27:51Z) and left the operator holding a green tick. Lift the window and
+          # nothing else:
+          #   * only for a workflow_dispatch whose chain_depth is 0 or empty - a hand, never this
+          #     workflow's own re-arm, which must keep waiting or it rebuilds the tight loop;
+          #   * only when the window was the single objection (the reason begins "backoff:"), so an
+          #     operator stop, a spent ceiling or a missing artifact keeps refusing;
+          #   * with the execution mode read back from the carried intent, never from the dropdown, so
+          #     a manual start cannot authorise billing that a resume could not.
+          CHAIN="${{ inputs.chain_depth }}"
+          case "$CHAIN" in ''|0) HUMAN_CLICK=1 ;; *) HUMAN_CLICK=0 ;; esac
+          LIFT=""
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$HUMAN_CLICK" = 1 ] && [ "$MODE" = "none" ]; then
+            case "$REASON" in
+              backoff:*) LIFT="backoff" ;;
+              "operator stop:"*)
+                # The same short list the rebase path accepts: a harness crash, nothing else.
+                if [ "${{ inputs.clear_wrapper_stop }}" = "true" ]; then
+                  case "$(jq -r '.pause_reason // empty' "$STATE_STAGE/wrapper_failed.json" 2>/dev/null || true)" in
+                    wrapper_exception|wrapper_transient_error|infrastructure_error|docker_unavailable)
+                      LIFT="wrapper-stop" ;;
+                  esac
+                fi ;;
+            esac
+          fi
+          if [ -n "$LIFT" ]; then
+            CARRIED_MODE=$(jq -r '.execution_mode // empty' "$STATE_STAGE/campaign_intent.json" 2>/dev/null || true)
+            case "$CARRIED_MODE" in
+              paid|gates_only)
+                MODE=resume
+                REF="${REF:-$PINNED_REF}"
+                EXECUTION_MODE=$CARRIED_MODE
+                REASON="manual dispatch: the $LIFT was lifted for this click (it had said: $REASON)"
+                ;;
+              *)
+                REASON="$REASON - a manual dispatch could not lift it: the carried intent has no readable execution mode"
+                ;;
+            esac
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+          if [ "$MODE" != "none" ]; then
+            echo "ref=${REF:-$PINNED_REF}" >> "$GITHUB_OUTPUT"
+            echo "execution_mode=$EXECUTION_MODE" >> "$GITHUB_OUTPUT"
+            echo "state_staged=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Announce a refused tick instead of a silent green one
+        # A `mode=none` decision skips every remaining step and exits 0, so "the campaign is being
+        # continued on cron" and "the campaign refuses to be continued" are indistinguishable from
+        # the runs list. That indistinguishability is what made waiting for a tick a plausible plan
+        # for a day: the refusal was real, its reason sat in the log of a step nobody reads, and no
+        # state moved. Emit the supervisor's reason as an annotation - visible in the Checks UI and
+        # through GET /actions/runs/<id>/jobs, so a resume claim about this campaign can be
+        # falsified in one tick instead of one conversation - and keep the leg green: a refusal is a
+        # decision, not a fault, and a red X every half hour trains everyone to ignore the colour.
+        if: steps.mode.outputs.mode == 'none'
+        env:
+          REFUSAL_REASON: ${{ steps.mode.outputs.reason }}
+        run: |
+          set -euo pipefail
+          reason=$(printf '%s' "${REFUSAL_REASON:-no reason recorded}" | tr -d '\r\n' | sed 's/%/%25/g')
+          echo "::warning::this leg declined to continue the campaign: ${reason}"
+
+      - name: Initialize fresh campaign state
+        if: steps.mode.outputs.mode != 'none' && steps.mode.outputs.mode == 'fresh'
+        run: |
+          set -euo pipefail
+          BOOTSTRAP="$RUNNER_TEMP/reasoning_atria_bootstrap"
+          rm -rf "$BOOTSTRAP"
+          mkdir -p "$BOOTSTRAP"
+          printf '%s\n' "${{ steps.mode.outputs.ref }}" > "$BOOTSTRAP/campaign_ref.txt"
+          printf '{"provider":"atria","execution_mode":"%s"}\n' \
+            "${{ steps.mode.outputs.execution_mode }}" > "$BOOTSTRAP/campaign_bootstrap.json"
+
+      - name: Check out pinned campaign code
+        if: steps.mode.outputs.mode != 'none'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.mode.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Refuse code missing campaign gates
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          test -f tools/instance_oracle_gate.py
+          test -f tools/atria_campaign.py
+          test -f tools/matched_fact_probe.py
+          test -f tools/campaign_supervisor.py
+          # This launcher needs the strength-2 mode and the twin preflight in the
+          # pinned code, or it would silently bill a strength-1 campaign: a resume
+          # pinned to an older commit must stop here, not discover it at row 40.
+          grep -q "def matrix_mode_of" tools/atria_campaign.py
+          grep -q "expand_interventions" tools/atria_campaign.py
+          test -f tools/twin_preflight.py
+          grep -q '"pairwise"' tools/suite_inventory.py
+          test -f tools/inherit_campaign_state.py
+          # A ceiling override the pinned code cannot parse would otherwise be dropped
+          # on the floor: the operator would think they authorised more spend and the
+          # campaign would stop at the same number again. Refuse the leg instead.
+          if [ -n "${{ inputs.max_tokens_total_override }}${{ inputs.max_api_calls_override }}" ]; then
+            grep -q "def _apply_limit_overrides" tools/atria_campaign.py || {
+              echo "the pinned ref has no --limit support; dispatch a ref that does, or clear the override inputs"
+              exit 1
+            }
+          fi
+
+      - name: Set up Python
+        if: steps.mode.outputs.mode != 'none'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Create virtual environment and install controller dependencies
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt
+
+      - name: Install pinned CPU judge stack
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          .venv/bin/python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 torchvision==0.20.1
+          .venv/bin/python -m pip install jinja2
+
+      - name: Restore or initialize campaign output
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          OUT=runs/reasoning_atria_pairwise_campaign
+          mkdir -p "$OUT"
+          if [ "${{ steps.mode.outputs.state_staged }}" = "true" ]; then
+            cp -a "$RUNNER_TEMP/reasoning_atria_state/." "$OUT/"
+          else
+            cp -a "$RUNNER_TEMP/reasoning_atria_bootstrap/." "$OUT/"
+          fi
+          git rev-parse HEAD > "$OUT/campaign_ref.txt"
+
+      - name: Guard the shared Atria account-wide request budget
+        id: atria_rate
+        if: steps.mode.outputs.mode != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BUSY=$(gh api "repos/${{ github.repository }}/actions/runs?status=in_progress&per_page=100" \
+            --jq '[.workflow_runs[]
+                   | select((.id | tostring) != "${{ github.run_id }}")
+                   | select(.name == "Atria pairwise campaign"
+                         or .name == "Atria Dawn Preview first-five pilot"
+                         or .name == "Reasoning-Atria pairwise campaign")]
+                  | length')
+          if [ "$BUSY" -gt 0 ]; then
+            echo "safe=false" >> "$GITHUB_OUTPUT"
+            echo "reason=another Atria consumer is using the shared account request budget" >> "$GITHUB_OUTPUT"
+            echo "Another Atria consumer is active; this tick will preserve state without provider calls."
+          else
+            echo "safe=true" >> "$GITHUB_OUTPUT"
+            echo "reason=no competing Atria consumer" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refuse a plan whose exact-instance reference cannot be applied
+        if: contains(fromJSON('["fresh", "rebase"]'), steps.mode.outputs.mode)
+        run: |
+          set -euo pipefail
+          # The exact-instance gate patches a generated case before its judge ever sees it,
+          # and a stale literal inside a reference - a filename the `naming` axis renames, an
+          # exact-text needle the `optimizer` axis rewrites - surfaces as oracle_error rows
+          # after a tick of billed work. Two campaigns were blocked that way. This runs the
+          # same patch path with no Docker, no torch and no provider call, over every gated
+          # case of the plan the profile will ship, and refuses the dispatch in ~2 minutes.
+          # Fresh dispatches only: a resumed tick runs pinned code that already passed this.
+          # A rebase runs new code against an old ledger, so it must clear this too - it is the
+          # check that catches a reference which cannot be applied to a vector it certifies.
+          .venv/bin/python tools/instance_oracle_preflight.py \
+            --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+            --out runs/reasoning_atria_pairwise_campaign/instance_oracle_preflight.json
+
+      - name: Inherit exact-instance gate rows from the covering campaign
+        if: steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          OUT=runs/reasoning_atria_pairwise_campaign
+          # Strength-2 does not subsume strength-1 case for case: 142 of the 241
+          # covering vectors recur here, 99 are not in this plan at all, and 216 are
+          # new. Only the exact-instance gate rows carry across that boundary, and
+          # only under the same verdict context - they are keyed on the case content
+          # hash and accepted under gate_context_sha == the digest of the
+          # verdict-relevant files that tools/gate_context.py computes (never
+          # `git rev-parse HEAD`: a revision-pinned context discarded every banked
+          # row on a documentation commit, so the gate restarted from zero each tick
+          # and never finished). The tool refuses rather than rewriting that context,
+          # and the episode ledger, intent and terminal markers are never inherited.
+          if [ -s "$OUT/instance_oracles_partial.json" ]; then
+            echo "this campaign already has gate rows of its own; nothing to inherit"
+            exit 0
+          fi
+          INHERIT="$RUNNER_TEMP/reasoning_atria_inherit"
+          rm -rf "$INHERIT"; mkdir -p "$INHERIT"
+          SRC_RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/reasoning-atria-covering-campaign.yml/runs?per_page=5" \
+            --jq '[.workflow_runs[] | select(.status == "completed")] | (.[0].id // empty)' || true)
+          if [ -z "${SRC_RUN:-}" ]; then
+            echo "no completed Reasoning-Atria covering campaign run to inherit from; starting clean"
+            exit 0
+          fi
+          SRC_ART=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SRC_RUN/artifacts" \
+            --jq '([.artifacts[] | select(.name | startswith("reasoning-atria-covering-state-")) | select(.expired == false)] | sort_by(.created_at) | last | .name) // empty' || true)
+          if [ -z "${SRC_ART:-}" ]; then
+            echo "no Reasoning-Atria covering campaign state artifact on run $SRC_RUN; starting clean"
+            exit 0
+          fi
+          gh run download "$SRC_RUN" -n "$SRC_ART" --dir "$INHERIT" || echo "artifact download failed; starting clean"
+          if [ -d "$INHERIT" ] && [ -n "$(ls -A "$INHERIT" 2>/dev/null || true)" ]; then
+            .venv/bin/python tools/inherit_campaign_state.py \
+              --from "$INHERIT" --to "$OUT" \
+              --allow-cross-revision-t1 \
+              --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+              || echo "inheritance failed; the campaign will gate from scratch"
+            cat "$OUT/inheritance_report.json" 2>/dev/null || true
+          fi
+
+      # The live-status reporter is not the measurement: it only renders the checkpoint the
+      # pinned controller writes, so it is read from main instead of from the pin. This is what
+      # lets a reporting fix reach a running campaign without re-pinning it -- and it is why
+      # `Updated` alone could not be trusted, since the pin's copy froze whenever a leg banked
+      # nothing, which read exactly like a reporter that had died.
+      # Fail-open by construction: if main's copy is missing or does not compile, the pin's copy
+      # runs and the campaign is unaffected. `--out`, `--pin-file`, the reader the sidecar
+      # imports and the interpreter all stay the pin's; the grading digest is computed from a
+      # `git archive` of the revision, so editing this one worktree file cannot move it.
+      - name: Refresh the live-status reporter from main
+        if: steps.mode.outputs.mode != 'none'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REPORTER="$RUNNER_TEMP/campaign_status_sidecar.py"
+          if gh api "repos/${{ github.repository }}/contents/tools/campaign_status_sidecar.py?ref=${{ vars.CAMPAIGN_REPORTING_REF || 'main' }}" --jq '.content' | base64 -d > "$REPORTER" 2>/dev/null && [ -s "$REPORTER" ] && .venv/bin/python -m py_compile "$REPORTER"; then
+            cp "$REPORTER" tools/campaign_status_sidecar.py
+            echo "reporter refreshed from main: $(sha256sum tools/campaign_status_sidecar.py | cut -c1-12)"
+          else
+            echo "reporter stays the pin's copy: main's copy unreadable or not valid Python"
+          fi
+      - name: Run T1 and pairwise campaign with live Issue status
+        if: steps.mode.outputs.mode != 'none' && steps.atria_rate.outputs.safe == 'true'
+        timeout-minutes: 330
+        env:
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_MODE: ${{ steps.mode.outputs.execution_mode }}
+        run: |
+          set -euo pipefail
+          STEP_STARTED=$SECONDS
+          OUT=runs/reasoning_atria_pairwise_campaign
+          .venv/bin/python tools/campaign_status_sidecar.py \
+            --out "$OUT" \
+            --label "Reasoning-Atria pairwise campaign" \
+            --pin-file experiments/reasoning_atria_pairwise_status_issue.txt \
+            --interval-seconds 30 &
+          sidecar_pid=$!
+          cleanup() {
+            kill "$sidecar_pid" 2>/dev/null || true
+            wait "$sidecar_pid" 2>/dev/null || true
+            if [ -f "$OUT/t1_started.json" ] && [ ! -f "$OUT/t1_same_fact_presentation.json" ]; then
+              printf '{"status":"interrupted","resume_policy":"operator_review_required_no_replay"}\n' \
+                > "$OUT/t1_interrupted.json"
+            fi
+            .venv/bin/python tools/campaign_status_sidecar.py \
+              --out "$OUT" \
+              --label "Reasoning-Atria pairwise campaign" \
+              --pin-file experiments/reasoning_atria_pairwise_status_issue.txt \
+              --once || true
+          }
+          trap cleanup EXIT
+
+          if [ "$EXECUTION_MODE" = "paid" ]; then
+            .venv/bin/python tools/matched_fact_probe.py \
+              --profile experiments/t1_reasoning_atria.yaml --plan > "$OUT/t1_plan.json"
+            .venv/bin/python tools/t1_paired_report.py \
+              --m0 --seeds 6 --out "$OUT/t1_m0.json" > /dev/null
+            if [ ! -f "$OUT/t1_same_fact_presentation.json" ]; then
+              # An interrupted leg leaves no T1 result, so this block would replay the whole probe
+              # from the start - paid, and up to 4200 seconds of it. The cleanup trap writes
+              # t1_interrupted.json with resume_policy operator_review_required_no_replay, and
+              # nothing read that marker, which made the declared policy decorative: the next tick
+              # simply spent the calls again, and the tick after that, until the phase completed on
+              # its own. Refuse instead, and name the way out. This sits inside the paid branch, so
+              # a gates_only dispatch is never blocked by a stale marker, and a fresh dispatch does
+              # not restore one.
+              if [ -f "$OUT/t1_interrupted.json" ]; then
+                echo "T1 was interrupted on an earlier leg and never completed: refusing to replay" \
+                     "it here (see $OUT/t1_interrupted.json). Run the dedicated T1 workflow to" \
+                     "finish the phase, or remove the marker to accept the replay."
+                exit 1
+              fi
+              printf '{"phase":"started","resume_policy":"operator_review_on_interruption"}\n' \
+                > "$OUT/t1_started.json"
+              timeout --foreground --signal=TERM --kill-after=30s 4200s \
+                .venv/bin/python tools/matched_fact_probe.py \
+                  --profile experiments/t1_reasoning_atria.yaml \
+                  --out "$OUT/t1_same_fact_presentation.json" \
+                  --progress-dir "$OUT" > /dev/null
+            fi
+          fi
+
+          ELAPSED_SECONDS=$((SECONDS - STEP_STARTED))
+          MAX_CAMPAIGN_SECONDS=$(.venv/bin/python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["campaign_job_seconds"])' \
+            experiments/reasoning_atria_pairwise_campaign.yaml)
+          # Keep one minute for sidecar cleanup before the 330-minute step limit.
+          CAMPAIGN_SECONDS=$((19800 - ELAPSED_SECONDS - 60))
+          if [ "$CAMPAIGN_SECONDS" -gt "$MAX_CAMPAIGN_SECONDS" ]; then
+            CAMPAIGN_SECONDS=$MAX_CAMPAIGN_SECONDS
+          fi
+          echo "Reasoning-Atria campaign budget: elapsed=${ELAPSED_SECONDS}s profile_max=${MAX_CAMPAIGN_SECONDS}s effective=${CAMPAIGN_SECONDS}s"
+          if [ "$CAMPAIGN_SECONDS" -lt 600 ]; then
+            echo "Insufficient time remains for a safe pairwise-campaign tick."
+            exit 1
+          fi
+
+          # Every step runs in its own shell, so nothing carried over from the mode
+          # decision exists here: the first version of this block read an array built in
+          # the other step and every leg died on "LIMIT_ARGS: unbound variable". Build it
+          # again, in this step, from the same inputs.
+          LIMIT_ARGS=()
+          if [ -n "${{ inputs.max_tokens_total_override }}" ]; then
+            LIMIT_ARGS+=(--limit "max_tokens_total=${{ inputs.max_tokens_total_override }}")
+          fi
+          if [ -n "${{ inputs.max_api_calls_override }}" ]; then
+            LIMIT_ARGS+=(--limit "max_api_calls=${{ inputs.max_api_calls_override }}")
+          fi
+          if [ "${#LIMIT_ARGS[@]}" -gt 0 ]; then
+            LIMIT_ARGS+=(--raise-ceiling "${{ github.actor }}")
+          fi
+          REBASE_ARG=()
+          if [ "${{ steps.mode.outputs.mode }}" = "rebase" ]; then
+            # Declared here, not in the mode step: Actions steps do not share a shell, and this is
+            # the only step that invokes the controller. The ${ARR[@]+...} form keeps `set -u` from
+            # failing on an empty array, which is what a non-rebase dispatch leaves behind.
+            REBASE_ARG+=(--rebase-intent)
+          fi
+          if [ "$EXECUTION_MODE" = "paid" ]; then
+            .venv/bin/python tools/atria_campaign.py \
+              --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+              --out "$OUT" --allow-provider --job-seconds "$CAMPAIGN_SECONDS" \
+              "${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}" \
+              "${REBASE_ARG[@]+"${REBASE_ARG[@]}"}"
+          else
+            .venv/bin/python tools/atria_campaign.py \
+              --profile experiments/reasoning_atria_pairwise_campaign.yaml \
+              --out "$OUT" --gates-only --job-seconds "$CAMPAIGN_SECONDS" \
+              "${REBASE_ARG[@]+"${REBASE_ARG[@]}"}"
+          fi
+
+      - name: Stage campaign state for upload
+        id: stage
+        if: always() && steps.mode.outputs.mode != 'none'
+        run: |
+          set -euo pipefail
+          STAGED="$RUNNER_TEMP/reasoning_atria_upload"
+          rm -rf "$STAGED"
+          mkdir -p "$STAGED"
+          BEFORE=0
+          RESTORED="$RUNNER_TEMP/reasoning_atria_state/suite_checkpoint.json"
+          if [ "${{ steps.mode.outputs.state_staged }}" = "true" ] && [ -f "$RESTORED" ]; then
+            BEFORE=$(jq '(.results // []) | length' "$RESTORED")
+          fi
+          AFTER=0
+          CURRENT=runs/reasoning_atria_pairwise_campaign/suite_checkpoint.json
+          [ ! -f "$CURRENT" ] || AFTER=$(jq '(.results // []) | length' "$CURRENT")
+          echo "recorded episodes before=$BEFORE after=$AFTER"
+          if [ "${{ steps.mode.outputs.state_staged }}" = "true" ] && [ "$AFTER" -lt "$BEFORE" ]; then
+            echo "::error::Campaign checkpoint regressed; preserving restored state."
+            cp -a "$RUNNER_TEMP/reasoning_atria_state/." "$STAGED/"
+            echo "regressed=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "regressed=false" >> "$GITHUB_OUTPUT"
+          if [ -d runs/reasoning_atria_pairwise_campaign ]; then
+            cp -a runs/reasoning_atria_pairwise_campaign/. "$STAGED/"
+          else
+            cp -a "$RUNNER_TEMP/reasoning_atria_bootstrap/." "$STAGED/"
+          fi
+
+      - name: Upload Reasoning-Atria campaign state
+        if: always() && steps.mode.outputs.mode != 'none'
+        uses: actions/upload-artifact@v4
+        with:
+          name: reasoning-atria-pairwise-state-${{ github.run_id }}
+          path: ${{ runner.temp }}/reasoning_atria_upload/
+          if-no-files-found: warn
+          retention-days: 90
+
+      # A resumable pause is only a pause if something starts the successor leg. The repository's
+      # cron is not under its control - GitHub drops scheduled ticks on this repo, which the Atria
+      # covering launcher already documents ("after run 36791154490 ended at 04:35 UTC nothing ran
+      # for 2+ hours") and which was measured again on 2026-10-12: no run of any workflow here was
+      # created between 09:47Z and 19:04Z while both pairwise workflows kept reporting state active.
+      # So the leg that banked the rows asks for the next one, on the same terms as the covering
+      # campaign's CHAIN. A pause inside the supervisor's 1200 s resume window is waited out here,
+      # in the finished leg (capped by --sleep-cap), because a successor dispatched inside that window
+      # is refused with mode=none and a refused leg does not re-arm - so refusing to wait is the same
+      # as never continuing. Chaining stops after 40 legs; a cancelled leg, a regressed state upload
+      # or a wrapper_failed.json marker never continues. Every decline is annotated, because the step
+      # stays green by design and a silent decline reads as a working chain. Fail-open by construction: a refused or
+      # unreachable re-arm prints the reason and leaves the leg green, and the cron stays as the
+      # fallback. To stop the chain without disabling the workflow, cancel the running leg.
+      - name: Re-arm the next leg after a resumable pause
+        if: always() && !cancelled() && steps.mode.outputs.mode != 'none'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHAIN_DEPTH: ${{ github.event_name == 'workflow_dispatch' && inputs.chain_depth || '0' }}
+        run: |
+          set -uo pipefail
+          OUT=runs/reasoning_atria_pairwise_campaign
+          if [ ! -x .venv/bin/python ]; then
+            echo "campaign re-arm skipped: no virtualenv in this leg, so the scheduler was not asked"
+            echo "::warning::campaign re-arm declined: no virtualenv in this leg, the scheduler was not asked"
+            exit 0
+          fi
+          # The re-arm is operations, not measurement, so it runs from the ref this workflow file came
+          # from and not from the campaign's pinned checkout. The difference is whether the mechanism
+          # exists at all: a leg resumed from an old checkpoint checks out an old commit, and that tree
+          # has no tools/campaign_rearm.py, which is how a handover silently becomes a no-op. Fetch the
+          # copy that matches this file; fall back to the checkout; announce if neither has it.
+          REARM="$RUNNER_TEMP/campaign_rearm.py"
+          if ! gh api "repos/${{ github.repository }}/contents/tools/campaign_rearm.py?ref=${{ github.sha }}" \
+               --jq '.content' 2>/dev/null | base64 -d > "$REARM" || [ ! -s "$REARM" ]; then
+            if [ -f tools/campaign_rearm.py ]; then
+              cp tools/campaign_rearm.py "$REARM"
+              echo "campaign re-arm: using the copy in the pinned checkout"
+            else
+              echo "campaign re-arm skipped: no campaign_rearm.py at ${{ github.sha }} or in the checkout"
+              echo "::warning::campaign re-arm declined: no campaign_rearm.py to run; the scheduled trigger remains the fallback"
+              exit 0
+            fi
+          fi
+          STAGE_FAILED=
+          if [ "${{ steps.stage.outcome }}" = "failure" ]; then STAGE_FAILED=--stage-failed; fi
+          .venv/bin/python "$REARM" \
+            --report "$OUT/campaign_report.json" \
+            --ref "${{ steps.mode.outputs.ref }}" \
+            --chain-depth "${CHAIN_DEPTH:-0}" \
+            --sleep-cap 1800 \
+            --marker "$OUT/wrapper_failed.json" \
+            ${STAGE_FAILED} \
+            || { echo "campaign re-arm did not run; the scheduled trigger remains the fallback"; \
+                 echo "::warning::campaign re-arm declined: the tool exited non-zero, see its output above"; }

@@ -1,24 +1,21 @@
 # Reporter fix — the campaigns are running; the comment describing them is not
 
-Date: 2026-10-15. Status: **one file to paste, priced `free`; every step below is browser-only — no `git`, no `gh`.**
+Date: 2026-10-15. Status: **two UI edits on `main`, no re-pin, no dispatch, no spend, no shell.**
+Route B (re-pin a campaign's own code) is kept in §6 for anyone who wants it.
 
 ## 1. What is actually wrong
 
-Both pairwise campaigns are alive. Their legs chain, their state artifacts upload,
-their re-arms succeed. What is broken is the **live status comment**, and it is
-broken in three separate ways, all in one file: `tools/campaign_status_sidecar.py`.
+Both pairwise campaigns are alive. Their legs chain, their state artifacts upload, their
+re-arms succeed. What is broken is the **live status comment**, and it is broken in three
+separate ways, all in one file: `tools/campaign_status_sidecar.py`.
 
 | # | Defect | What a reader sees | Why |
 |---|---|---|---|
-| 1 | The compatibility probe is invisible | `Campaign state: paused`, `provider_infrastructure_error_compatibility`, and no explanation | A leg that pauses in the Phase 2 READY probe banks no row and writes no `campaign_progress.json`, so every counter in the comment stays where the last *banking* leg left it |
-| 2 | `Updated` is not the comment's clock | Reasoning-Atria frozen at `Updated: 2026-10-15T05:00:05Z` for ~15 h while legs chained behind it | `Updated` prints the *checkpoint's* `updated_at`. Nothing in the comment proves a reporter ran at all, so "nothing banked" and "the reporter died" are indistinguishable |
-| 3 | The pause reads as terminal | `Campaign state: paused` next to `Leg code: 87f08b5 @ main`, while legs self-chain | The comment reports persisted metadata only; it has no line saying a leg is running right now |
+| 1 | The compatibility probe is invisible | `Campaign state: paused`, `provider_infrastructure_error_compatibility`, and no explanation | A leg that pauses in the Phase 2 READY probe banks no row and writes no `campaign_progress.json`, so every counter stays where the last *banking* leg left it |
+| 2 | `Updated` is not the comment's clock | Reasoning-Atria frozen at `Updated: 2026-10-15T05:00:05Z` for ~15 h while six legs chained behind it | `Updated` prints the *checkpoint's* `updated_at`. Nothing in the body proves a reporter ran, so "nothing banked" and "the reporter died" are indistinguishable |
+| 3 | The pause reads as terminal | `Campaign state: paused` beside `Leg code: 87f08b5 @ main`, while legs self-chain | The comment reports persisted metadata only; it has no line saying a leg is running now |
 
-Defects 1 and 2 are fixed by the file in §3. Defect 3 is wording the same file can
-carry later, and the durable shape — stop making the reporter part of the pin at all —
-is `docs/decisions/2026-10-15-the-reporter-is-not-the-measurement.md`.
-
-Live evidence, both polled at 19:50Z on 2026-10-15. Same code, two symptoms, one cause:
+Live evidence, both polled at 19:50Z on 2026-10-15 — same code, two symptoms, one cause:
 
 | | issue #20 (Atria, pin `3d6e743`) | issue #21 (Mercury, pin `87f08b5`) |
 |---|---|---|
@@ -28,176 +25,145 @@ Live evidence, both polled at 19:50Z on 2026-10-15. Same code, two symptoms, one
 | pause | `provider_infrastructure_error_compatibility` | `infrastructure_error` |
 
 Mercury's clock moves because its legs bank rows and so write a newer checkpoint.
-Atria's does not, because a probe leg banks nothing. Neither comment says why it
-paused, or that a leg is running.
+Atria's does not, because a probe leg banks nothing. Neither comment says why it paused,
+or that a leg is running.
 
-## 2. Why this is free
+## 2. Why this costs nothing, and why it needs no re-pin
 
-`tools/campaign_status_sidecar.py` is **not** in `gate_context.verdict_relevant_files()`.
-Measured on this branch:
+Two measurements, both with the repo's own instruments.
+
+**The reporter is not verdict-relevant.** `tools/campaign_status_sidecar.py` is not in
+`gate_context.verdict_relevant_files()`:
 
 ```
 tools/campaign_status_sidecar.py           False
-tools/campaign_progress.py                 True      # imported by the sidecar, unchanged here
+tools/campaign_progress.py                 True    # imported by the reporter; unchanged here
 tools/campaign_rearm.py                    False
-tools/campaign_supervisor.py               False
 tools/atria_campaign.py                    True
 ```
 
-So a pin whose **only** difference from a campaign's current pin is the reporter moves
-no verdict-producing file, and `tools/campaign_rearm.py` says so itself:
+So moving the reporter cannot re-grade a banked gate row, which is why every price in
+this document is `free` and none of the campaigns' state has to move.
 
-```
-campaign rebase check: `c7b7a66…` -> free at c7b7a66
-campaign rebase check: no verdict-producing file differs, so no banked gate row is re-graded
-```
+**The repo already refreshes a non-measurement tool this way.** The launchers' own
+re-arm step does not run the pin's `tools/campaign_rearm.py`; it fetches it from the ref
+the workflow file came from, under the comment *"The re-arm is operations, not
+measurement, so it runs from the ref this workflow file came [from]"*, with a fail-open
+`cp` of the pinned copy if the fetch fails. The reporter is operations in exactly that
+sense — it renders the checkpoint, it does not produce it — so §4 gives it the same
+treatment. That is the whole change: one step, copied from a step that already ships.
 
-Prices, measured with the repo's own instrument, for the **single-file** change you
-will actually make (`--check-rebase-target <target> --check-rebase-against <pin>`, exit 0):
+## 3. The payloads
 
-| Target tree | Pin | Price | Verdict files re-graded |
-|---|---|---|---|
-| `3d6e743` + reporter (`c7b7a66`) | `3d6e743` | **free** | none |
-| `7eca038` + reporter (`8446d56`) | `7eca038` | **free** | none |
-| `87f08b5` + reporter | `87f08b5` | **free** | none |
-| lineage tip + reporter | `87f08b5` (Mercury's pin) | costly | 4 — `arena/episode.py`, `envs/epistemic_silence/files/core.py`, `envs/epistemic_type_games/files/core.py`, `tools/run_suite.py` |
-| lineage tip + reporter | `3d6e743` (Atria's pin) | costly | same 4 |
+Everything below is on the Arena session branch `arena/70337724-rl-eval-generator`
+(`main` never carried these files). Read every `handoff/…` path here as "on that branch",
+or use the links, which are commit-pinned where the content is frozen:
 
-Read the last two rows carefully: the cost there is the **judge fix** (`truth_correct`)
-that already sits in the lineage tip, not the reporter. Adding the reporter to that tip
-is free; re-pinning a campaign *to* that tip is what re-grades the gate.
+| What | Where | Size |
+|---|---|---|
+| The reporter to paste | https://raw.githubusercontent.com/StrangeTcy/rl_eval_generator/09d82c1eee1dca9f62390f577254f6972a90ed44/handoff/paste/campaign_status_sidecar.py | 747 lines, 35038 bytes, sha256 `dfbd9eb110edcec6…` |
+| Atria launcher with the step | `handoff/paste/reasoning-atria-pairwise-campaign.yml` on the branch | 698 lines, sha256 `0ce85039d0d4bc78…` |
+| Mercury launcher with the step | `handoff/paste/mercury-pairwise-campaign.yml` on the branch | 675 lines, sha256 `5b6c4ebc5928d3ab…` |
+| This document | `handoff/REPORTER-FIX.md` on the branch | — |
 
-At each of the three bases, changing only this one file leaves the base's own
-sidecar-touching tests green — 38 tests across
-`test_campaign_status_sidecar.py`, `test_campaign_status_issue_selection.py`,
-`test_campaign_status_t1_progress.py`, `test_paid_campaign_safety.py`. So the test file
-does **not** have to travel with it.
+Copy from the **raw** link (Ctrl+A, Ctrl+C). On a `blob/` page, selecting all also selects
+the line-number gutter, and pasting that writes `1`, `2`, `3` … into the file — the
+insertion counts in §4 catch it, but copy raw and skip the problem. Or switch the branch
+dropdown from `main` to `arena/70337724-rl-eval-generator` and open `handoff/paste/`.
 
-## 3. The one file, and where it actually lives
-
-**`handoff/` paths in this document do not exist on `main`.** Everything written this
-session sits on the Arena session branch `arena/70337724-rl-eval-generator` (commit
-`09d82c1`, pushed). `main` carries only `handoff/HANDOFF.md` and
-`handoff/handoff-combined.patch`. So read every `handoff/…` path below as "on that
-branch", or just use these links, which are pinned to the commit and cannot drift:
-
-| What | Link |
-|---|---|
-| The file to paste | https://raw.githubusercontent.com/StrangeTcy/rl_eval_generator/09d82c1eee1dca9f62390f577254f6972a90ed44/handoff/paste/campaign_status_sidecar.py |
-| The same file, readable | https://github.com/StrangeTcy/rl_eval_generator/blob/09d82c1eee1dca9f62390f577254f6972a90ed44/handoff/paste/campaign_status_sidecar.py |
-| This document | https://github.com/StrangeTcy/rl_eval_generator/blob/09d82c1eee1dca9f62390f577254f6972a90ed44/handoff/REPORTER-FIX.md |
-
-Copy from the **raw** link (Ctrl+A, Ctrl+C). On the readable `blob/` page, selecting all
-also selects the line-number gutter, and pasting that into the editor writes `1`, `2`,
-`3` … into the file — the "145 additions" check in §4 catches it, but copy raw and skip
-the problem. `Download raw file` from the blob toolbar saves it instead of copying.
-
-The payload:
-
-```
-747 lines, 35038 bytes
-sha256 dfbd9eb110edcec66ac33f016ab587f063d68489675cfac9d2a8ce68cd040cb2
-```
-
-It is byte-identical for all three bases — the reporter never diverged across
-`87f08b5`, `3d6e743` and `7eca038`, so one paste serves any of them. Whichever base
-you paste it onto, the result is **1 file changed, 145 additions(+), 0 deletions(−)**,
-and that number is your verification in §4 step 5.
-
-The three `handoff/reporter-fix-on-*.patch` files are the same change in `git am`
-form, kept for a future session that does have a shell. They are not needed here.
+Each launcher payload is its live counterpart **plus exactly the step in §4.2 and nothing
+else** — 23 insertions, 0 deletions, verified with `diff` against
+`.github/workflows/`. The two launchers are byte-identical to `main`'s copies at the time
+of writing, so a whole-file paste is safe; §4.2 also gives the block if you would rather
+insert it.
 
 ## 4. What to click
 
-### 4.1 Reasoning-Atria (issue #20) — free, about four minutes
+### 4.0 Order matters, and it is the only rule here
 
-1. Open the reporter **at Atria's pin** — this is the file being replaced:
-   `https://github.com/StrangeTcy/rl_eval_generator/blob/3d6e743/tools/campaign_status_sidecar.py`
-2. Click the pencil (edit). In the editor: select all, delete, then paste the whole of
-   the raw payload from §3 (Ctrl+A, Ctrl+C on the raw link).
-3. **Commit changes…** — because you are viewing a commit rather than a branch,
-   GitHub's only offer is *Create a new branch for this commit and start a pull
-   request*. Name it `reporting-fix-atria`, then Propose changes.
-   This step is what guarantees the base: the new branch is `3d6e743` plus your one
-   commit, which is exactly the tree priced `free` above.
-4. **Close the pull request it opens. Do not merge it.** The branch is the artifact;
-   the campaign reads the branch, never the PR.
-5. Verify on
-   `https://github.com/StrangeTcy/rl_eval_generator/compare/3d6e743...reporting-fix-atria?expand=1`
-   — it must read **1 file changed, 145 additions(+), 0 deletions(−)**. Anything else
-   means the paste gained or lost text: don't dispatch, redo step 2.
-6. Copy the 40-character commit SHA shown at the top of that page.
-7. Actions sidebar → **Reasoning-Atria pairwise campaign** → **Run workflow** →
-   Branch: `main`, then fill exactly this:
+**Land 4.1 before 4.2.** `main`'s copy of the reporter is currently *older* than the
+pins' — it is missing 66 lines they carry, including the `infrastructure_unscored`
+handling that Mercury's comment needs for its three closed-unscored `expedition` rows.
+Until 4.1 merges, a launcher that reads from `main` would install that older reporter.
+Between the two merges the campaigns are unaffected (nothing reads `main`'s reporter
+until 4.2 is in), so do 4.1 first and 4.2 a minute later.
 
-   | Field | Value |
-   |---|---|
-   | `ref` | the SHA — required field, and its default is a stale arena branch, so overwrite it |
-   | `rebase_onto_ref` | the same SHA |
-   | `execution_mode` | leave `paid`. The rebase path reads the mode back out of the carried `campaign_intent.json`, so this dropdown can neither promote nor demote what is authorised to bill |
-   | `resume_previous` | leave `true` |
-   | `clear_wrapper_stop` | leave `false` — it lifts a harness-crash stop only, never a compatibility refusal |
-   | `chain_depth` | leave `0` |
-   | `max_tokens_total_override`, `max_api_calls_override` | leave empty |
+### 4.1 Put the reporter on `main` (one paste, one merge)
 
-   Then **Run workflow**.
-8. Within about two minutes of the new leg starting, issue #20 gains the
-   `Comment rendered:` line and the probe section. The pause itself stays until the
-   provider answers the READY probe — that is the standing "leave it probing"
-   decision, and this does not disturb it, cancel a leg, or touch the 170 banked rows.
+1. Open https://github.com/StrangeTcy/rl_eval_generator/blob/main/tools/campaign_status_sidecar.py
+   — `main` is a branch, so the pencil works here (unlike at a pin, which GitHub refuses
+   to edit: *"You must be on a branch to make or propose changes to this file"*).
+2. Pencil → select all → delete → paste the raw payload from §3.
+3. **Commit changes…** → *Create a new branch for this commit and start a pull request* →
+   name it `reporter-heartbeat` → Propose changes → **Merge the pull request**.
+4. Verify before or after merging, on the compare page: **1 file changed, 211
+   additions(+), 6 deletions(−)**. The deletions are the 6 lines of `main`'s older copy
+   that the newer reporter replaces; 145 of the 211 additions are the two fixes, the rest
+   is content `main` was missing from the lineage.
 
-**Let this session verify the branch before you dispatch.** Creating the branch is the
-irreversible-looking step and it is also fully checkable: tell me the branch name (or
-its commit SHA) and I will price it with `campaign_rearm.py` and compare its file
-byte-for-byte against the payload hash in §3 — a `free` price means no banked gate row
-is re-graded. That is the check `git am` would have given you.
+Nothing reads this file yet, so this step is invisible to the campaigns. It is also what
+makes the file discoverable on `main` instead of only on a session branch.
 
-No-paste alternative for steps 1–4: press `.` on the repo page to open github.dev,
-open commit `3d6e743`, create branch `reporting-fix-atria`, then use **Download raw
-file** on the §3 raw link and drag the saved file onto the `tools/` folder, and commit
-from Source Control. Same tree, same price.
+### 4.2 Teach each launcher to read it (two pastes, one merge each)
 
-### 4.2 Mercury (issue #21) — same file, two destinations
+For each of the two workflows, in the GitHub web editor on `main` (Actions sidebar →
+the workflow → the pencil on the file, or open the file and pencil):
 
-**B1 — free interim (reporter only).** Repeat 4.1 starting from
-`https://github.com/StrangeTcy/rl_eval_generator/blob/87f08b5/tools/campaign_status_sidecar.py`,
-branch `reporting-fix-mercury`, and dispatch **Mercury pairwise campaign** with the
-same field values. Price vs `87f08b5`: free. The judge fix stays outstanding, so
-Mercury keeps destroying the ~5 `epistemic_silence` / `epistemic_type_games` rows it
-has not reached yet.
+| Launcher | Path |
+|---|---|
+| Reasoning-Atria pairwise campaign | `.github/workflows/reasoning-atria-pairwise-campaign.yml` |
+| Mercury pairwise campaign | `.github/workflows/mercury-pairwise-campaign.yml` |
 
-**B2 — the re-pin you already authorised (judge fix + reporter).** Open the file on the
-lineage branch instead:
-`https://github.com/StrangeTcy/rl_eval_generator/blob/arena/b060c411-rl-eval-generator/tools/campaign_status_sidecar.py`
-→ pencil → paste → **Commit directly to the `arena/b060c411-rl-eval-generator`
-branch**. No new branch is needed: the lineage tip is this file's base, so the commit
-fast-forwards. If branch protection refuses a direct commit, fall back to the 4.1 flow
-starting from `7eca038` and naming the branch `reporting-fix-mercury`.
+Either paste the whole payload from §3 over the file, or insert this block — the block is
+the entire difference, so both routes end at the same 23-line diff:
 
-Then Actions → **Mercury pairwise campaign** → Run workflow → Branch `main` →
-`ref` and `rebase_onto_ref` = the new lineage tip SHA, `execution_mode` = `paid`,
-everything else default.
+```yaml
+      # The live-status reporter is not the measurement: it only renders the checkpoint the
+      # pinned controller writes, so it is read from main instead of from the pin. This is what
+      # lets a reporting fix reach a running campaign without re-pinning it -- and it is why
+      # `Updated` alone could not be trusted, since the pin's copy froze whenever a leg banked
+      # nothing, which read exactly like a reporter that had died.
+      # Fail-open by construction: if main's copy is missing or does not compile, the pin's copy
+      # runs and the campaign is unaffected. `--out`, `--pin-file`, the reader the sidecar
+      # imports and the interpreter all stay the pin's; the grading digest is computed from a
+      # `git archive` of the revision, so editing this one worktree file cannot move it.
+      - name: Refresh the live-status reporter from main
+        if: steps.mode.outputs.mode != 'none'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REPORTER="$RUNNER_TEMP/campaign_status_sidecar.py"
+          if gh api "repos/${{ github.repository }}/contents/tools/campaign_status_sidecar.py?ref=${{ vars.CAMPAIGN_REPORTING_REF || 'main' }}" --jq '.content' | base64 -d > "$REPORTER" 2>/dev/null && [ -s "$REPORTER" ] && .venv/bin/python -m py_compile "$REPORTER"; then
+            cp "$REPORTER" tools/campaign_status_sidecar.py
+            echo "reporter refreshed from main: $(sha256sum tools/campaign_status_sidecar.py | cut -c1-12)"
+          else
+            echo "reporter stays the pin's copy: main's copy unreadable or not valid Python"
+          fi
+```
 
-The reporter's own delta on that tip is free (`8446d56` vs `7eca038`, measured). What
-you are paying for is the judge fix already in the tip: the 189-row exact-instance gate
-re-graded over the 4 verdict files, with the 371 banked episode rows carried forward.
-`experiments/` is byte-identical pin → target, so provider, model, endpoint, effort,
-ceilings and profile did not move.
+The block goes **immediately before** the step named
+`Run T1 and pairwise campaign with live Issue status` — Ctrl+F that string, and insert
+directly above it. If you paste the whole file instead, skip the search: the step is
+already in place.
 
-## 5. One click is enough — nothing needs cancelling
+Verification, on the commit or pull-request page for each file: **1 file changed, 23
+insertions(+), 0 deletions(−)**. Then merge. Nothing else to change: the two existing
+sidecar invocations keep pointing at `tools/campaign_status_sidecar.py`, so the reporter
+is replaced *in place* and it still imports the pin's own `tools/campaign_progress.py`,
+still writes to the pin's `--out`, and still resolves the pin's `--pin-file`. The state,
+the Issue number and the interpreter never move.
 
-Both launchers set `concurrency: {group: <campaign>, cancel-in-progress: false}`, so a
-dispatch **queues** behind the in-flight leg instead of racing it. When that leg reaches
-its re-arm step, `tools/campaign_rearm.py:other_legs()` excludes only its own run id and
-counts a `queued` sibling as busy (`BUSY_RUN_STATUSES`), so it declines to arm a
-successor: the old chain ends there and the re-pinned leg arms the next one. The chain
-hands over cleanly; two chains never run in parallel.
+### 4.3 Then wait for the next tick — no dispatch, no cancel
 
-For reference, the shell routes (`git am`, `git push`, `gh workflow run`) all return
-**HTTP 403** for this session's credential, which is why the fix is a paste and a
-dropdown rather than a pushed branch.
+`on:` is `workflow_dispatch` plus `schedule: "13,43 * * * *"`, and scheduled runs execute
+the workflow file **from the default branch**, as do the self-dispatched successors. So
+the very next leg of both campaigns picks the step up on its own. Nothing is re-pinned,
+nothing is queued, no state moves, no provider call is made and no banked row is touched.
+Atria keeps probing, as decided; its comment simply starts telling the truth about it.
 
-## 6. What the fixed comment will say
+## 5. What the fixed comment will say
 
 Two facts that were already on the machine and were never in the body:
 
@@ -209,12 +175,57 @@ Two facts that were already on the machine and were never in the body:
 plus, for a leg paused in the probe: the probe's name, its refusal class, its attempt
 count, the age of `compatibility.json`, and an explicit line saying why the episode
 counter cannot move. `Updated` keeps reporting the checkpoint, because that is a real
-fact — it is just no longer the only clock in the comment.
+fact — it is no longer the only clock in the comment.
 
-## 7. After this: make the reporter unpinnable
+## 6. Route B — if you would rather the pin itself carry the reporter
 
-The durable fix is also browser-only, because it is one workflow file: add the
-`reporting_ref` input and the second `actions/checkout@v4` with `path: reporting` from
-`docs/decisions/2026-10-15-the-reporter-is-not-the-measurement.md` §3 to both pairwise
-launchers on `main`, editing them in the same web editor. After that, a reporting fix is
-a dropdown instead of a re-pin — and this document stops being necessary.
+This is the surgical alternative: a **free** re-pin of each campaign to a branch that is
+its own pin plus the reporter. No re-graded rows, but it does move campaign state and it
+does need a dispatch. GitHub cannot edit a file at a commit SHA, so this route runs in
+**github.dev**: open `https://github.dev/StrangeTcy/rl_eval_generator`, Command Palette →
+*Git: Checkout to…* → the pin's full SHA → paste the payload over
+`tools/campaign_status_sidecar.py` → *Git: Create Branch…* → `reporting-fix-atria` →
+Source Control → commit → *Publish Branch*.
+
+Prices, measured with `campaign_rearm.py --check-rebase-target … --check-rebase-against …`
+(exit 0, `handoff/reporter-fix-on-*.patch` carry the same change in `git am` form):
+
+| Target | Pin | Price |
+|---|---|---|
+| `3d6e743` + reporter (`c7b7a66`) | `3d6e743` | **free** — "no verdict-producing file differs, so no banked gate row is re-graded" |
+| `7eca038` + reporter (`8446d56`) | `7eca038` | **free** |
+| `87f08b5` + reporter | `87f08b5` | **free** |
+
+Then dispatch with `ref` and `rebase_onto_ref` both set to the new branch, `resume_previous`
+true, `chain_depth` 0, overrides empty — and mind two field rules that are easy to get
+wrong: `ref` is required and defaults to a stale arena branch, and `execution_mode` cannot
+promote billing on the rebase path because the mode is read back from the carried intent.
+
+One click is enough for the handover: both launchers set
+`concurrency: {group: <campaign>, cancel-in-progress: false}`, so a dispatch queues behind
+the in-flight leg; when that leg reaches its re-arm step, `other_legs()` counts the queued
+sibling as busy and declines to arm a successor, so the chain hands over rather than
+forking.
+
+## 7. What this does not do
+
+* It does not fix either provider problem. Atria still pauses in the Phase 2 READY probe
+  until the provider answers, and Mercury still pauses on `infrastructure_error` with 54
+  infrastructure retries and two rows sitting at their retry bound.
+* It does not fix Mercury's epistemic judge. That is the authorised re-pin to
+  `7eca038340cf8638cd12b159d621406003c05d6b` (or to its reporter-bearing descendant
+  `668dc13f9d5392f3753d95fa87ea71e7902ef9cc`), which re-grades the 189-row gate over 4
+  verdict files and carries the 369-371 banked episode rows forward. Route B's patch for
+  that base is `handoff/reporter-fix-on-lineage-tip-7eca038.patch`, so the paid re-pin can
+  pick the reporter up for free at the same time.
+* It does not re-grade anything, so no banked row is destroyed by doing it.
+
+## 8. Why this is the right shape, not just the cheap one
+
+`docs/decisions/2026-10-15-the-reporter-is-not-the-measurement.md` records the decision:
+reporting must not be part of the pin, because a pin is exactly what a campaign cannot
+change without re-pricing, and that priced a one-line heartbeat as if it were a judge fix.
+The refresh step makes the reporter's home `main` — a ref no campaign pins to — while
+leaving every input that defines the measurement in the pin. `vars.CAMPAIGN_REPORTING_REF`
+is the escape hatch if the reporter ever needs to come from somewhere else; unset or
+unreadable, each leg falls back to its own pinned copy and nothing changes.
