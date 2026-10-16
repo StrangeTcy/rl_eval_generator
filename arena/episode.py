@@ -527,10 +527,11 @@ def run_episode(options: EpisodeOptions) -> dict[str, Any]:
 
         # This is the actual reset the agent will see. The earlier oracle
         # generation is not sufficient unless its judge/workspace bytes match.
-        verify_reset_matches_oracle(
-            oracle, episode_dir, options.env, options.difficulty, options.seed,
-            interventions,
-        )
+        if not compile_only_episode:
+            verify_reset_matches_oracle(
+                oracle, episode_dir, options.env, options.difficulty, options.seed,
+                interventions,
+            )
         agent_info = reset_info.get("agent_image") if isinstance(reset_info.get("agent_image"), dict) else {}
         judge_info = reset_info.get("judge_image") if isinstance(reset_info.get("judge_image"), dict) else {}
         artifacts.update_manifest(
