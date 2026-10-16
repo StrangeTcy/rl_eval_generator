@@ -474,6 +474,7 @@ jobs:
           INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
           GH_TOKEN: ${{ github.token }}
           EXECUTION_MODE: ${{ steps.mode.outputs.execution_mode }}
+          ARENA_ALLOW_COMPILE_ONLY: "1"
         run: |
           set -euo pipefail
           STEP_STARTED=$SECONDS
