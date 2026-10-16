@@ -2,8 +2,10 @@
 
 Queries use the usual modal semantics for K_a. A bundle is a choice of local
 information cells, one per agent; it is possible iff those cells have a common
-world. The independent checker evaluates formulas on the product of nested
-frames; a second strategy enumerates the flattened global model.
+world. Nested bundles are the same check on an inner frame. The independent
+checker evaluates formulas on the product of nested frames; a second strategy
+enumerates the flattened global model. The judge does not call the reference
+certificate helper.
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ CYCLIC_SAT = "cyclic_sat"
 CYCLIC_UNSAT = "cyclic_unsat"
 TRANSPARENT = "transparent"
 OPAQUE = "opaque"
-PUBLIC_KEYS = ("agents", "frames", "levels", "actual", "query", "bundle")
+PUBLIC_KEYS = ("agents", "frames", "levels", "actual", "query", "bundle", "nested_bundle")
 CHECK_NAMES = (
     "local_visible",
     "configured",
@@ -26,8 +28,27 @@ CHECK_NAMES = (
     "assembled_unsat",
     "opaque_twin",
     "order_heldout",
+    "neg_deep",
+    "neg_recursive",
     "deterministic",
 )
+
+POS_PLAIN = "POS-plain"
+POS_RECURSIVE = "POS-recursive"
+NEG_LOCAL = "NEG-local"
+NEG_PAIRWISE = "NEG-pairwise"
+NEG_DEEP = "NEG-deep"
+NEG_RECURSIVE = "NEG-recursive"
+INSTANCE_CLASSES = (
+    POS_PLAIN,
+    POS_RECURSIVE,
+    NEG_LOCAL,
+    NEG_PAIRWISE,
+    NEG_DEEP,
+    NEG_RECURSIVE,
+)
+DEV_SEEDS = range(0, 30)
+HELD_OUT_SEEDS = range(10_000, 10_030)
 
 
 class OracleBudgetExceeded(RuntimeError):
@@ -35,7 +56,13 @@ class OracleBudgetExceeded(RuntimeError):
 
 
 def public_model(model: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: model[key] for key in PUBLIC_KEYS}
+    out = {}
+    for key in PUBLIC_KEYS:
+        if key == "nested_bundle":
+            out[key] = model.get("nested_bundle")
+        else:
+            out[key] = model[key]
+    return out
 
 
 def _tokens(rng: random.Random, n: int, used: set[str]) -> list[str]:
@@ -56,6 +83,47 @@ def _classes(indist: list) -> dict[str, set[str]]:
         for w in block_set:
             cell[w] = set(block_set)
     return cell
+
+
+def cell_of(frame: Mapping[str, Any], agent: str, world: Any) -> set[str]:
+    """Indistinguishability block containing `world`, or empty if locally illegal."""
+    world_s = str(world)
+    worlds = {str(w) for w in frame["worlds"]}
+    if world_s not in worlds:
+        return set()
+    blocks = frame["indist"][agent]
+    for block in blocks:
+        as_set = {str(x) for x in block}
+        if world_s in as_set:
+            return as_set
+    return set()
+
+
+def cells_for_reports(frame: Mapping[str, Any], reports: Mapping[str, Any]) -> list[set[str]]:
+    return [cell_of(frame, agent, world) for agent, world in reports.items()]
+
+
+def kwise_nonempty(cells: list[set[str]], k: int) -> bool:
+    if k <= 0:
+        return True
+    if len(cells) < k:
+        return True
+    for group in itertools.combinations(cells, k):
+        inter = set(group[0])
+        for cell in group[1:]:
+            inter &= cell
+        if not inter:
+            return False
+    return True
+
+
+def intersection_of(cells: list[set[str]]) -> set[str]:
+    if not cells:
+        return set()
+    inter = set(cells[0])
+    for cell in cells[1:]:
+        inter &= cell
+    return inter
 
 
 def generate_model(
@@ -110,7 +178,7 @@ def generate_model(
         query = ["K", "ann", ["K", "bob", "q" if depth > 1 else "p"]]
 
     if regime == CYCLIC_UNSAT:
-        bundle = {"ann": w2, "bob": w0}
+        bundle: Optional[dict[str, str]] = {"ann": w2, "bob": w0}
     elif regime == TREE:
         bundle = None
     else:
@@ -123,6 +191,7 @@ def generate_model(
         "actual": actual,
         "query": query,
         "bundle": bundle,
+        "nested_bundle": None,
         "meta": {"regime": regime, "opacity": opacity, "order": order, "depth": depth},
     }
 
@@ -150,12 +219,23 @@ def relabel_model(model: Mapping[str, Any], seed: int) -> dict[str, Any]:
     actual = []
     for world, level in zip(model["actual"], model["levels"]):
         actual.append(maps[level][world])
-    bundle = None
-    if model.get("bundle"):
-        bundle = {}
-        root_level = model["levels"][0]
-        for agent, world in model["bundle"].items():
-            bundle[agent] = maps[root_level][world]
+
+    def remap_reports(reports: Optional[Mapping[str, Any]], level: str) -> Optional[dict[str, str]]:
+        if not reports:
+            return None
+        mapping = maps[level]
+        out = {}
+        for agent, world in reports.items():
+            world_s = str(world)
+            out[agent] = mapping[world_s] if world_s in mapping else world_s
+        return out
+
+    bundle = remap_reports(model.get("bundle"), model["levels"][0])
+    nested = None
+    if model.get("nested_bundle") and len(model["levels"]) > 1:
+        nested = remap_reports(model["nested_bundle"], model["levels"][1])
+    elif model.get("nested_bundle"):
+        nested = dict(model["nested_bundle"])
     return {
         "agents": list(model["agents"]),
         "frames": frames,
@@ -163,8 +243,27 @@ def relabel_model(model: Mapping[str, Any], seed: int) -> dict[str, Any]:
         "actual": actual,
         "query": copy.deepcopy(model["query"]),
         "bundle": bundle,
+        "nested_bundle": nested,
         "meta": dict(model.get("meta") or {}),
     }
+
+
+def presentation_twin(model: Mapping[str, Any], seed: int) -> dict[str, Any]:
+    """Rename worlds and reorder agent/bundle keys. Verdict must be invariant."""
+    twin = relabel_model(model, seed)
+    rng = random.Random(seed + 7919)
+    agents = list(twin["agents"])
+    rng.shuffle(agents)
+    twin["agents"] = agents
+    if twin.get("bundle"):
+        items = list(twin["bundle"].items())
+        rng.shuffle(items)
+        twin["bundle"] = dict(items)
+    if twin.get("nested_bundle"):
+        items = list(twin["nested_bundle"].items())
+        rng.shuffle(items)
+        twin["nested_bundle"] = dict(items)
+    return twin
 
 
 def example_visible_model() -> dict[str, Any]:
@@ -181,6 +280,7 @@ def example_visible_model() -> dict[str, Any]:
         "actual": ["here"],
         "query": "p",
         "bundle": None,
+        "nested_bundle": None,
     }
 
 
@@ -275,54 +375,199 @@ def flatten_model(model: Mapping[str, Any]) -> dict[str, Any]:
         "actual": [actual],
         "query": copy.deepcopy(model["query"]),
         "bundle": None,
+        "nested_bundle": None,
     }
 
 
-def query_value(model: Mapping[str, Any]) -> bool:
+def query_value(model: Mapping[str, Any], budget: int = 50_000) -> bool:
     chain = tuple(model["actual"])
-    return eval_formula(model, model["query"], chain, [50_000])
+    return eval_formula(model, model["query"], chain, [budget])
+
+
+def _reports_possible(frame: Mapping[str, Any], reports: Optional[Mapping[str, Any]]) -> Optional[bool]:
+    if not reports:
+        return None
+    cells = cells_for_reports(frame, reports)
+    if any(len(cell) == 0 for cell in cells):
+        return False
+    return bool(intersection_of(cells))
 
 
 def bundle_possible(model: Mapping[str, Any]) -> Optional[bool]:
     bundle = model.get("bundle")
-    if not bundle:
+    nested = model.get("nested_bundle")
+    if not bundle and not nested:
         return None
-    root = model["levels"][0]
-    frame = model["frames"][root]
-    cells = []
-    for agent, world in bundle.items():
-        cls = _classes(frame["indist"][agent])
-        cells.append(cls.get(str(world), {str(world)}))
-    if not cells:
+    flags: list[bool] = []
+    if bundle:
+        root = model["levels"][0]
+        outer = _reports_possible(model["frames"][root], bundle)
+        flags.append(bool(outer))
+    if nested:
+        if len(model["levels"]) < 2:
+            flags.append(False)
+        else:
+            inner_level = model["levels"][1]
+            inner = _reports_possible(model["frames"][inner_level], nested)
+            flags.append(bool(inner))
+    return all(flags) if flags else None
+
+
+def task_sat(model: Mapping[str, Any]) -> bool:
+    if not query_value(model):
+        return False
+    possible = bundle_possible(model)
+    if possible is None:
         return True
-    inter = set(cells[0])
-    for cell in cells[1:]:
-        inter &= cell
-    return bool(inter)
+    return bool(possible)
+
+
+def flatten_task_model(model: Mapping[str, Any]) -> dict[str, Any]:
+    """Permissive inner: drop nested frames and nested reports."""
+    outer = model["levels"][0]
+    return {
+        "agents": list(model["agents"]),
+        "frames": {outer: copy.deepcopy(model["frames"][outer])},
+        "levels": [outer],
+        "actual": [model["actual"][0]],
+        "query": copy.deepcopy(model["query"]),
+        "bundle": copy.deepcopy(model.get("bundle")),
+        "nested_bundle": None,
+    }
+
+
+def bounded_task_model(model: Mapping[str, Any], k: int) -> dict[str, Any]:
+    if k <= 0:
+        return flatten_task_model(model)
+    n = min(len(model["levels"]), k)
+    levels = list(model["levels"][:n])
+    foil = {
+        "agents": list(model["agents"]),
+        "frames": {lev: copy.deepcopy(model["frames"][lev]) for lev in levels},
+        "levels": levels,
+        "actual": list(model["actual"][:n]),
+        "query": copy.deepcopy(model["query"]),
+        "bundle": copy.deepcopy(model.get("bundle")),
+        "nested_bundle": None,
+    }
+    if k >= 2:
+        foil["nested_bundle"] = copy.deepcopy(model.get("nested_bundle"))
+    return foil
+
+
+def local_ok(model: Mapping[str, Any]) -> bool:
+    bundle = model.get("bundle")
+    nested = model.get("nested_bundle")
+    if bundle:
+        root = model["frames"][model["levels"][0]]
+        if any(len(c) == 0 for c in cells_for_reports(root, bundle)):
+            return False
+    if nested:
+        if len(model["levels"]) < 2:
+            return False
+        inner = model["frames"][model["levels"][1]]
+        if any(len(c) == 0 for c in cells_for_reports(inner, nested)):
+            return False
+    return True
+
+
+def pairwise_ok(model: Mapping[str, Any]) -> bool:
+    """Phase-0 B1: pairwise compatibility on the *outer* bundle only."""
+    if not local_ok(model):
+        return False
+    bundle = model.get("bundle")
+    if not bundle:
+        return True
+    cells = cells_for_reports(model["frames"][model["levels"][0]], bundle)
+    return kwise_nonempty(cells, 2)
+
+
+def triple_ok(model: Mapping[str, Any]) -> bool:
+    bundle = model.get("bundle")
+    if not bundle:
+        return True
+    cells = cells_for_reports(model["frames"][model["levels"][0]], bundle)
+    return kwise_nonempty(cells, 3)
+
+
+def joint_worlds(model: Mapping[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    outer_j: Optional[str] = None
+    inner_j: Optional[str] = None
+    bundle = model.get("bundle")
+    if bundle:
+        cells = cells_for_reports(model["frames"][model["levels"][0]], bundle)
+        inter = intersection_of(cells)
+        outer_j = sorted(inter)[0] if inter else None
+    nested = model.get("nested_bundle")
+    if nested and len(model["levels"]) > 1:
+        cells = cells_for_reports(model["frames"][model["levels"][1]], nested)
+        inter = intersection_of(cells)
+        inner_j = sorted(inter)[0] if inter else None
+    return outer_j, inner_j
+
+
+def world_in_all_cells(frame: Mapping[str, Any], reports: Mapping[str, Any], world: Any) -> bool:
+    world_s = str(world)
+    if world_s not in {str(w) for w in frame["worlds"]}:
+        return False
+    return all(world_s in cell_of(frame, agent, named) for agent, named in reports.items())
 
 
 def reference_certificate(model: Mapping[str, Any]) -> dict[str, Any]:
     value = query_value(model)
     possible = bundle_possible(model)
-    cert = {"query_value": bool(value)}
-    if possible is not None:
+    cert: dict[str, Any] = {"query_value": bool(value)}
+    if model.get("bundle") is not None or model.get("nested_bundle") is not None:
         cert["bundle_possible"] = bool(possible)
+        if possible:
+            outer_j, inner_j = joint_worlds(model)
+            if outer_j is not None:
+                cert["joint_world"] = outer_j
+            if inner_j is not None:
+                cert["joint_inner"] = inner_j
     return cert
 
 
 def verify_certificate(model: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
+    """Recompute query and bundle from the model; replay joint-world witnesses."""
     if not isinstance(raw, dict):
         return False, "not a dict"
     if "query_value" not in raw:
         return False, "query_value missing"
-    true = reference_certificate(model)
-    if bool(raw["query_value"]) != bool(true["query_value"]):
+    true_q = query_value(model)
+    if len(model["levels"]) == 1:
+        flat_q = query_value(flatten_model(model))
+        if bool(flat_q) != bool(true_q):
+            raise RuntimeError("depth-1 nested evaluator disagrees with flattened evaluator")
+    if bool(raw["query_value"]) != bool(true_q):
         return False, "query_value mismatch"
-    if "bundle_possible" in true:
-        if "bundle_possible" not in raw:
-            return False, "bundle_possible missing"
-        if bool(raw["bundle_possible"]) != bool(true["bundle_possible"]):
-            return False, "bundle_possible mismatch"
+    has_bundle = model.get("bundle") is not None or model.get("nested_bundle") is not None
+    if not has_bundle:
+        return True, "ok"
+    if "bundle_possible" not in raw:
+        return False, "bundle_possible missing"
+    true_b = bool(bundle_possible(model))
+    claimed = bool(raw["bundle_possible"])
+    if claimed != true_b:
+        return False, "bundle_possible mismatch"
+    if not claimed:
+        return True, "ok"
+    bundle = model.get("bundle")
+    if bundle is not None:
+        joint = raw.get("joint_world")
+        if joint is None:
+            return False, "joint_world missing"
+        if not world_in_all_cells(model["frames"][model["levels"][0]], bundle, joint):
+            return False, "joint_world not in every outer cell"
+    nested = model.get("nested_bundle")
+    if nested is not None:
+        if len(model["levels"]) < 2:
+            return False, "nested_bundle without an inner frame"
+        joint_inner = raw.get("joint_inner")
+        if joint_inner is None:
+            return False, "joint_inner missing"
+        if not world_in_all_cells(model["frames"][model["levels"][1]], nested, joint_inner):
+            return False, "joint_inner not in every inner cell"
     return True, "ok"
 
 
@@ -350,7 +595,7 @@ def arm_actual_facts(model: Mapping[str, Any]) -> dict[str, Any]:
         return False
 
     cert = {"query_value": bool(peel(model["query"]))}
-    if model.get("bundle") is not None:
+    if model.get("bundle") is not None or model.get("nested_bundle") is not None:
         cert["bundle_possible"] = True
     return cert
 
@@ -362,6 +607,239 @@ def evaluate_solver(solve_fn: Callable, model: dict[str, Any]) -> bool:
         return False
     ok, _ = verify_certificate(model, raw)
     return ok
+
+
+def _four_world_cover(*, common: bool, seed: int, opacity: str) -> dict[str, Any]:
+    """Four agents. If common, all cells contain w0. If not, every 3-wise is
+    nonempty and the 4-wise intersection is empty."""
+    rng = random.Random(seed)
+    used: set[str] = set()
+    agents = ["ann", "bob", "cara", "dan"]
+    if opacity == TRANSPARENT:
+        worlds = ["w0", "w1", "w2", "w3"]
+    else:
+        worlds = _tokens(rng, 4, used)
+    w0, w1, w2, w3 = worlds
+    ann, bob, cara, dan = agents
+    if common:
+        block = [w0, w1, w2, w3]
+        indist = {agent: [list(block)] for agent in agents}
+        bundle = {agent: w0 for agent in agents}
+    else:
+        indist = {
+            ann: [[w1, w2, w3], [w0]],
+            bob: [[w0, w2, w3], [w1]],
+            cara: [[w0, w1, w3], [w2]],
+            dan: [[w0, w1, w2], [w3]],
+        }
+        bundle = {ann: w1, bob: w0, cara: w0, dan: w0}
+    return {
+        "agents": agents,
+        "frames": {
+            "outer": {
+                "worlds": worlds,
+                "atoms": {"p": [w0]},
+                "indist": indist,
+            }
+        },
+        "levels": ["outer"],
+        "actual": [w0],
+        "query": "p",
+        "bundle": bundle,
+        "nested_bundle": None,
+        "meta": {"class": NEG_DEEP if not common else POS_PLAIN, "opacity": opacity, "seed": seed},
+    }
+
+
+def handwritten_neg_deep() -> dict[str, Any]:
+    return {
+        "agents": ["ann", "bob", "cara", "dan"],
+        "frames": {
+            "outer": {
+                "worlds": ["w0", "w1", "w2", "w3"],
+                "atoms": {"p": ["w0"]},
+                "indist": {
+                    "ann": [["w1", "w2", "w3"], ["w0"]],
+                    "bob": [["w0", "w2", "w3"], ["w1"]],
+                    "cara": [["w0", "w1", "w3"], ["w2"]],
+                    "dan": [["w0", "w1", "w2"], ["w3"]],
+                },
+            }
+        },
+        "levels": ["outer"],
+        "actual": ["w0"],
+        "query": "p",
+        "bundle": {"ann": "w1", "bob": "w0", "cara": "w0", "dan": "w0"},
+        "nested_bundle": None,
+    }
+
+
+def handwritten_neg_recursive() -> dict[str, Any]:
+    return {
+        "agents": ["ann", "bob"],
+        "frames": {
+            "outer": {
+                "worlds": ["w0", "w1", "w2"],
+                "atoms": {"p": ["w0"]},
+                "indist": {
+                    "ann": [["w0", "w1"], ["w2"]],
+                    "bob": [["w0"], ["w1", "w2"]],
+                },
+            },
+            "inner": {
+                "worlds": ["u0", "u1"],
+                "atoms": {"q": ["u0"]},
+                "indist": {
+                    "ann": [["u0"], ["u1"]],
+                    "bob": [["u0"], ["u1"]],
+                },
+            },
+        },
+        "levels": ["outer", "inner"],
+        "actual": ["w0", "u0"],
+        "query": "p",
+        "bundle": {"ann": "w0", "bob": "w1"},
+        "nested_bundle": {"ann": "u0", "bob": "u1"},
+    }
+
+
+def handwritten_pos_recursive() -> dict[str, Any]:
+    return {
+        "agents": ["ann", "bob"],
+        "frames": {
+            "outer": {
+                "worlds": ["w0", "w1", "w2"],
+                "atoms": {"p": ["w0"]},
+                "indist": {
+                    "ann": [["w0", "w1"], ["w2"]],
+                    "bob": [["w0"], ["w1", "w2"]],
+                },
+            },
+            "inner": {
+                "worlds": ["u0", "u1"],
+                "atoms": {"q": ["u0"]},
+                "indist": {
+                    "ann": [["u0"], ["u1"]],
+                    "bob": [["u0", "u1"]],
+                },
+            },
+        },
+        "levels": ["outer", "inner"],
+        "actual": ["w0", "u0"],
+        "query": "q",
+        "bundle": None,
+        "nested_bundle": None,
+    }
+
+
+def flip_neg_recursive(model: Mapping[str, Any]) -> dict[str, Any]:
+    """Minimal task-changing twin: make the inner reports share a world."""
+    foil = copy.deepcopy(model)
+    nested = dict(foil.get("nested_bundle") or {})
+    if not nested or len(foil["levels"]) < 2:
+        raise ValueError("not a nested-bundle instance")
+    inner = foil["frames"][foil["levels"][1]]
+    # Pick a world that sits in the first agent's inner cell, assign it to all.
+    first_agent = next(iter(nested))
+    cell = cell_of(inner, first_agent, nested[first_agent])
+    if not cell:
+        raise ValueError("empty local inner cell")
+    shared = sorted(cell)[0]
+    foil["nested_bundle"] = {agent: shared for agent in nested}
+    meta = dict(foil.get("meta") or {})
+    meta["flipped_from"] = NEG_RECURSIVE
+    foil["meta"] = meta
+    return foil
+
+
+def generate_class(cls: str, seed: int, opacity: str = TRANSPARENT) -> dict[str, Any]:
+    """Seeded instance of a named class. Membership is checked separately."""
+    if cls == POS_PLAIN:
+        if seed % 2 == 0:
+            model = generate_model(
+                depth=1, regime=TREE, opacity=opacity, order=0, seed=seed
+            )
+        else:
+            model = _four_world_cover(common=True, seed=seed, opacity=opacity)
+        model.setdefault("meta", {})["class"] = POS_PLAIN
+        return model
+    if cls == POS_RECURSIVE:
+        model = generate_model(
+            depth=2 + (seed % 2), regime=TREE, opacity=opacity, order=0, seed=seed
+        )
+        model["query"] = "q"
+        model["bundle"] = None
+        model["nested_bundle"] = None
+        model.setdefault("meta", {})["class"] = POS_RECURSIVE
+        return model
+    if cls == NEG_LOCAL:
+        model = generate_model(
+            depth=1, regime=CYCLIC_SAT, opacity=TRANSPARENT, order=0, seed=seed
+        )
+        bundle = dict(model["bundle"])
+        first = model["agents"][0]
+        bundle[first] = "missing_world"
+        model["bundle"] = bundle
+        if opacity == OPAQUE:
+            model = relabel_model(model, seed + 3)
+            # restore a missing-world report after relabel (unmapped token)
+            bundle = dict(model["bundle"])
+            bundle[model["agents"][0]] = "missing_world"
+            model["bundle"] = bundle
+        model.setdefault("meta", {})["class"] = NEG_LOCAL
+        return model
+    if cls == NEG_PAIRWISE:
+        model = generate_model(
+            depth=1, regime=CYCLIC_UNSAT, opacity=opacity, order=0, seed=seed
+        )
+        model.setdefault("meta", {})["class"] = NEG_PAIRWISE
+        return model
+    if cls == NEG_DEEP:
+        model = _four_world_cover(common=False, seed=seed, opacity=opacity)
+        model.setdefault("meta", {})["class"] = NEG_DEEP
+        return model
+    if cls == NEG_RECURSIVE:
+        base = handwritten_neg_recursive()
+        # Vary inner world names / actual via seed while keeping the obstruction.
+        rng = random.Random(seed)
+        model = copy.deepcopy(base)
+        if seed % 3 == 1:
+            model["actual"] = [model["frames"]["outer"]["worlds"][0], "u0"]
+            model["query"] = "p"
+        elif seed % 3 == 2:
+            model["query"] = ["and", "p", ["not", ["K", "ann", "p"]]]
+        if opacity == OPAQUE:
+            model = relabel_model(model, seed + 11)
+        model.setdefault("meta", {})["class"] = NEG_RECURSIVE
+        model["meta"]["seed"] = seed
+        _ = rng
+        return model
+    raise ValueError(f"unknown class {cls}")
+
+
+def classify(model: Mapping[str, Any]) -> Optional[str]:
+    """Membership from structure. Ignores meta['class']."""
+    sat = task_sat(model)
+    flat = task_sat(flatten_task_model(model))
+    loc = local_ok(model)
+    pair = pairwise_ok(model)
+    trip = triple_ok(model)
+    glob = bundle_possible(model)
+    n_agents = len(model["agents"])
+    has_nested = model.get("nested_bundle") is not None
+    if not loc:
+        return NEG_LOCAL
+    if not pair:
+        return NEG_PAIRWISE
+    if loc and pair and trip and glob is False and not has_nested and n_agents >= 4:
+        return NEG_DEEP
+    if loc and pair and (not sat) and flat and has_nested:
+        return NEG_RECURSIVE
+    if sat and (not flat):
+        return POS_RECURSIVE
+    if sat and flat and not has_nested:
+        return POS_PLAIN
+    return None
 
 
 def build_grade_models(
@@ -404,6 +882,8 @@ def build_grade_models(
                 seed=seed + 17,
             ),
         ),
+        ("neg_deep", handwritten_neg_deep()),
+        ("neg_recursive", handwritten_neg_recursive()),
     ]
 
 

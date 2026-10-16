@@ -2,7 +2,8 @@
 
 Each frame lists worlds, atoms, and per-agent indistinguishability blocks.
 A query is an atom, a Boolean combination, or K_agent formula. A bundle is a
-proposed local cell per agent; it is possible only when those cells overlap.
+proposed local cell per agent. This baseline treats every bundle as possible
+and treats K as transparent, which is incorrect in general.
 """
 
 
@@ -10,7 +11,7 @@ class %%MODEL_CLASS%%:
     def solve(self, instance):
         """Return query truth and, if present, bundle possibility.
 
-        {"query_value": bool, "bundle_possible": bool}  # bundle key omitted when bundle is null
+        {"query_value": bool, "bundle_possible": bool}  # bundle key omitted when both bundles are null
         """
         actual = tuple(instance["actual"])
         frames = instance["frames"]
@@ -34,6 +35,6 @@ class %%MODEL_CLASS%%:
             return False
 
         out = {"query_value": bool(peel(instance["query"]))}
-        if instance.get("bundle") is not None:
+        if instance.get("bundle") is not None or instance.get("nested_bundle") is not None:
             out["bundle_possible"] = True
         return out

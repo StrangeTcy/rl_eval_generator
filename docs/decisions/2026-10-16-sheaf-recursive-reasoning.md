@@ -101,6 +101,29 @@ Domain-specific: geometry and sealing (maze), causal mailboxes and mutexes
 No model has been run. Passing the reference solvers shows the judges are
 exact for the supported class.
 
+## Addendum (2026-10-16, necessity pass)
+
+Phase 0 selected `recursive_epistemic_gluing` because pairwise reasoning
+already solved its two-agent bundle negatives (B1 UNSAT accuracy 1.0 on
+the gluing bit). The correspondence row “Two nonempty cells with empty
+intersection” is a pairwise obstruction. The family was then extended
+with:
+
+- four-agent covers whose every 3-wise cell intersection is nonempty
+  while the 4-wise intersection is empty (NEG-deep);
+- nested inner reports whose outer pairwise (and even outer global)
+  intersection is nonempty while the inner product constraint is empty
+  (NEG-recursive);
+- a nested atom `q` whose truth disappears if inner frames are dropped
+  (POS-recursive).
+
+The sheaf-axiom wording in the first section is unchanged: unsat is
+still absence of a global section of the constrained presheaf. See
+`docs/decisions/2026-10-16-epistemic-recursive-contract.md` and
+`docs/audits/2026-10-16-recursive-gluing-necessity-audit.md`.
+
+Maze and distributed families were not modified.
+
 ## Limitations
 
 - Maze holonomy is \(\mathbb{Z}/2\mathbb{Z}\) with simple-edge walks; it is not

@@ -1,12 +1,14 @@
 """Tests for recursive_epistemic_gluing."""
 from __future__ import annotations
 
-import importlib.util
+import ast
 import inspect
+import json
 import re
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -17,10 +19,18 @@ FILES = ROOT / "envs" / "cat_theo" / "recursive_epistemic_gluing" / "files"
 CONFIG = ROOT / "envs" / "cat_theo" / "recursive_epistemic_gluing" / "config.yaml"
 NET_PATH = FILES / "network.py"
 
+BANNED_WORD = re.compile(
+    r"\b(sheaf|presheaf|section|gluing|glue|holonomy|monodromy|"
+    r"cohomology|čech|cech|local[ -]system|fixed[ -]point)\b",
+    re.IGNORECASE,
+)
+
 
 def _load_network():
-    spec = importlib.util.spec_from_file_location("epi_net", NET_PATH)
-    module = importlib.util.module_from_spec(spec)
+    spec = __import__("importlib.util", fromlist=["spec_from_file_location"]).spec_from_file_location(
+        "epi_net", NET_PATH
+    )
+    module = __import__("importlib.util", fromlist=["module_from_spec"]).module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
@@ -59,7 +69,9 @@ def test_config_prompt_and_registry() -> None:
     prompt = (FILES / "prompt.md").read_text(encoding="utf-8").lower()
     for banned in ("sheaf", "presheaf", "holonomy", "čech", "cech", "cohomology"):
         assert banned not in prompt
+    assert BANNED_WORD.search(prompt) is None, BANNED_WORD.search(prompt)
     assert "experiment_arms" not in NET_PATH.read_text(encoding="utf-8")
+    assert "transfer summar" not in prompt
 
 
 def test_actual_p_but_ann_does_not_know_p() -> None:
@@ -136,3 +148,310 @@ def test_generation_and_visible() -> None:
     finally:
         for path in created:
             shutil.rmtree(path, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: thirteen categories (existing tests above stay intact)
+# ---------------------------------------------------------------------------
+
+def _pub_dump(model: dict) -> str:
+    return json.dumps(NET.public_model(model), sort_keys=True, separators=(",", ":"))
+
+
+def test_1_deterministic_generation() -> None:
+    for cls in NET.INSTANCE_CLASSES:
+        a = NET.generate_class(cls, 7, NET.TRANSPARENT)
+        b = NET.generate_class(cls, 7, NET.TRANSPARENT)
+        assert _pub_dump(a) == _pub_dump(b)
+
+
+def test_2_independent_verification_of_reference_witnesses() -> None:
+    for cls in NET.INSTANCE_CLASSES:
+        model = NET.generate_class(cls, 3)
+        cert = NET.reference_certificate(model)
+        ok, reason = NET.verify_certificate(model, cert)
+        assert ok, (cls, reason, cert)
+
+
+def test_3_bounded_exact_judge_on_small_cases() -> None:
+    for seed in range(8):
+        model = NET.generate_model(
+            depth=1, regime=NET.TREE, opacity=NET.TRANSPARENT, order=seed % 2, seed=seed
+        )
+        assert NET.cross_check_flat(model)
+        cert = NET.reference_certificate(model)
+        ok, reason = NET.verify_certificate(model, cert)
+        assert ok, reason
+
+
+def test_4_instance_class_properties_dev_and_heldout() -> None:
+    for cls in NET.INSTANCE_CLASSES:
+        for seed in list(NET.DEV_SEEDS) + list(NET.HELD_OUT_SEEDS):
+            model = NET.generate_class(cls, seed, NET.TRANSPARENT)
+            got = NET.classify(model)
+            assert got == cls, (cls, seed, got, NET.task_sat(model), NET.bundle_possible(model))
+            # membership must ignore meta
+            model["meta"] = {"class": "nope"}
+            assert NET.classify(model) == cls
+
+
+def test_5_handwritten_neg_deep_and_neg_recursive() -> None:
+    deep = NET.handwritten_neg_deep()
+    rec = NET.handwritten_neg_recursive()
+    assert NET.classify(deep) == NET.NEG_DEEP
+    assert NET.classify(rec) == NET.NEG_RECURSIVE
+    assert NET.local_ok(deep) and NET.pairwise_ok(deep) and NET.triple_ok(deep)
+    assert NET.bundle_possible(deep) is False
+    assert NET.task_sat(deep) is False
+    assert NET.local_ok(rec) and NET.pairwise_ok(rec)
+    assert NET.task_sat(rec) is False
+    assert NET.task_sat(NET.flatten_task_model(rec)) is True
+    for model in (deep, rec):
+        cert = NET.reference_certificate(model)
+        ok, reason = NET.verify_certificate(model, cert)
+        assert ok, reason
+        # solver and judge agree
+        assert NET.evaluate_solver(NET.arm_reference, model) is True
+
+
+def test_6_flip_pair_and_presentation_twin() -> None:
+    rec = NET.handwritten_neg_recursive()
+    flipped = NET.flip_neg_recursive(rec)
+    assert NET.task_sat(rec) is False
+    assert NET.task_sat(flipped) is True
+    ok, reason = NET.verify_certificate(flipped, NET.reference_certificate(flipped))
+    assert ok, reason
+    twin = NET.presentation_twin(rec, 21)
+    assert NET.task_sat(twin) is False
+    assert NET.classify(twin) == NET.NEG_RECURSIVE
+    assert twin["frames"][twin["levels"][0]]["worlds"] != rec["frames"]["outer"]["worlds"]
+    ok, reason = NET.verify_certificate(twin, NET.reference_certificate(twin))
+    assert ok, reason
+
+
+def test_7_recursion_necessity_bflat_bk() -> None:
+    rec = NET.handwritten_neg_recursive()
+    pos = NET.handwritten_pos_recursive()
+    assert NET.task_sat(rec) is False
+    assert NET.task_sat(NET.flatten_task_model(rec)) is True
+    assert NET.task_sat(NET.bounded_task_model(rec, 0)) is True
+    assert NET.task_sat(NET.bounded_task_model(rec, 1)) is True
+    assert NET.task_sat(NET.bounded_task_model(rec, 2)) is False
+    assert NET.task_sat(pos) is True
+    assert NET.task_sat(NET.flatten_task_model(pos)) is False
+    assert NET.classify(pos) == NET.POS_RECURSIVE
+
+
+def test_8_local_and_pairwise_of_nontrivial_obstructions() -> None:
+    deep = NET.handwritten_neg_deep()
+    rec = NET.handwritten_neg_recursive()
+    for model in (deep, rec):
+        assert NET.local_ok(model)
+        assert NET.pairwise_ok(model)
+    cells = NET.cells_for_reports(deep["frames"]["outer"], deep["bundle"])
+    assert NET.kwise_nonempty(cells, 2)
+    assert NET.kwise_nonempty(cells, 3)
+    assert not NET.kwise_nonempty(cells, 4)
+
+
+def test_9_correctness_after_renaming_or_reordering() -> None:
+    for cls in NET.INSTANCE_CLASSES:
+        model = NET.generate_class(cls, 5, NET.TRANSPARENT)
+        twin = NET.presentation_twin(model, 99)
+        assert NET.task_sat(model) == NET.task_sat(twin)
+        assert NET.query_value(model) == NET.query_value(twin)
+        assert NET.bundle_possible(model) == NET.bundle_possible(twin)
+        ok, reason = NET.verify_certificate(twin, NET.reference_certificate(twin))
+        assert ok, (cls, reason)
+
+
+def test_10_judge_independence_from_reference_and_metadata() -> None:
+    source = inspect.getsource(NET.verify_certificate)
+    assert "reference_certificate" not in source
+    assert "arm_reference" not in source
+    tree = ast.parse(NET_PATH.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "verify_certificate":
+            body = ast.dump(node)
+            assert "reference_certificate" not in body
+            assert "arm_reference" not in body
+    original_ref = NET.reference_certificate
+    original_arm = NET.arm_reference
+
+    def boom(*_a, **_k):
+        raise AssertionError("reference solver must not be consulted by the judge")
+
+    NET.reference_certificate = boom  # type: ignore[method-assign]
+    NET.arm_reference = boom  # type: ignore[method-assign]
+    try:
+        for maker in (NET.handwritten_neg_deep, NET.handwritten_neg_recursive, NET.example_visible_model):
+            model = maker()
+            cert = original_ref(model)
+            ok, reason = NET.verify_certificate(model, cert)
+            assert ok, reason
+            # hidden meta must not be required
+            model = dict(model)
+            model["meta"] = {"label": "sat"}
+            ok, reason = NET.verify_certificate(model, cert)
+            assert ok, reason
+    finally:
+        NET.reference_certificate = original_ref  # type: ignore[method-assign]
+        NET.arm_reference = original_arm  # type: ignore[method-assign]
+
+
+def test_11_budget_invalid_malformed_overlong() -> None:
+    model = NET.example_visible_model()
+    with pytest.raises(NET.OracleBudgetExceeded):
+        NET.query_value(model, budget=0)
+    assert NET.verify_certificate(model, None)[0] is False
+    assert NET.verify_certificate(model, "unsat")[0] is False
+    assert NET.verify_certificate(model, {})[0] is False
+    assert NET.verify_certificate(model, {"query_value": False})[0] is False
+    deep = NET.handwritten_neg_deep()
+    # SAT claim without a joint world
+    bad = {"query_value": True, "bundle_possible": True}
+    assert NET.verify_certificate(deep, bad)[0] is False
+    # SAT claim with a world not in every cell
+    bad2 = {"query_value": True, "bundle_possible": True, "joint_world": "w0"}
+    assert NET.verify_certificate(deep, bad2)[0] is False
+    rec = NET.handwritten_neg_recursive()
+    bad3 = {
+        "query_value": True,
+        "bundle_possible": True,
+        "joint_world": "w1",
+        "joint_inner": "u0",
+    }
+    assert NET.verify_certificate(rec, bad3)[0] is False
+    # Correct UNSAT claims
+    assert NET.verify_certificate(deep, {"query_value": True, "bundle_possible": False})[0] is True
+    assert NET.verify_certificate(rec, {"query_value": True, "bundle_possible": False})[0] is True
+
+
+def test_12_prompt_lint_after_full_rendering() -> None:
+    created = []
+    try:
+        path = _generate_env("test_epi_prompt_lint", "hard,hard,hard,hard", seed=4)
+        created.append(path)
+        prompt = (path / "agent" / "workspace" / "prompt.md").read_text(encoding="utf-8")
+        assert "%%" not in prompt
+        hit = BANNED_WORD.search(prompt)
+        assert hit is None, hit
+        # Directory-name leak: the source env path contains the stem, the prompt does not.
+        assert "gluing" in str(FILES)
+        assert re.search(r"\bgluing\b", prompt, re.I) is None
+        agent_text = "\n".join(
+            p.read_text(errors="ignore")
+            for p in (path / "agent" / "workspace").rglob("*")
+            if p.is_file()
+        )
+        hit = BANNED_WORD.search(agent_text.lower())
+        assert hit is None, hit
+    finally:
+        for path in created:
+            shutil.rmtree(path, ignore_errors=True)
+
+
+def _features(model: dict) -> tuple:
+    pub = NET.public_model(model)
+    return (
+        len(pub["agents"]),
+        int(pub.get("bundle") is None),
+        int(pub.get("nested_bundle") is None),
+        int(isinstance(pub["query"], str)),
+        len(pub["levels"]),
+        len(pub["frames"][pub["levels"][0]]["worlds"]),
+    )
+
+
+def _baseline_local(model: dict) -> bool:
+    """Phase-0 B0: predict SAT iff every local cell is nonempty. Ignores intersections."""
+    return NET.local_ok(model)
+
+
+def _baseline_pairwise(model: dict) -> bool:
+    """Phase-0 B1: predict SAT iff outer pairwise cells overlap. Ignores 3-wise and nested reports."""
+    return NET.pairwise_ok(model)
+
+
+def test_13_heldout_metrics_and_metadata_probe() -> None:
+    dev = {cls: [NET.generate_class(cls, s) for s in NET.DEV_SEEDS] for cls in NET.INSTANCE_CLASSES}
+    held = {cls: [NET.generate_class(cls, s) for s in NET.HELD_OUT_SEEDS] for cls in NET.INSTANCE_CLASSES}
+
+    per_class = {}
+    for cls, rows in held.items():
+        truth = [NET.task_sat(m) for m in rows]
+        b0 = [_baseline_local(m) for m in rows]  # local-only predicts SAT iff local_ok
+        b1 = [_baseline_pairwise(m) for m in rows]
+        bflat = [NET.task_sat(NET.flatten_task_model(m)) for m in rows]
+        bk0 = [NET.task_sat(NET.bounded_task_model(m, 0)) for m in rows]
+        bk1 = [NET.task_sat(NET.bounded_task_model(m, 1)) for m in rows]
+        bk2 = [NET.task_sat(NET.bounded_task_model(m, 2)) for m in rows]
+        maj = Counter(truth).most_common(1)[0][0]
+        majority = [maj] * len(truth)
+
+        def acc(pred):
+            return sum(int(t == p) for t, p in zip(truth, pred)) / len(truth)
+
+        per_class[cls] = {
+            "n": len(rows),
+            "sat": sum(truth),
+            "B0_local": acc(b0),
+            "B1_pairwise": acc(b1),
+            "Bflat": acc(bflat),
+            "Bk0": acc(bk0),
+            "Bk1": acc(bk1),
+            "Bk2": acc(bk2),
+            "majority": acc(majority),
+        }
+        # Every claimed hard class defeats the shortcut it is designed to defeat.
+        if cls == NET.NEG_DEEP:
+            assert acc(b1) == 0.0
+            assert all(NET.pairwise_ok(m) for m in rows)
+            assert all(NET.task_sat(m) is False for m in rows)
+        if cls == NET.NEG_RECURSIVE:
+            assert acc(bflat) == 0.0
+            assert all(NET.task_sat(NET.flatten_task_model(m)) for m in rows)
+        if cls == NET.POS_RECURSIVE:
+            assert acc(bflat) == 0.0
+        if cls == NET.NEG_PAIRWISE:
+            assert acc(b1) == 1.0  # pairwise correctly predicts UNSAT
+        if cls == NET.NEG_LOCAL:
+            assert acc(b0) == 1.0
+
+    # Balanced overall: 30 POS-plain + 30 POS-recursive + 15 of each NEG.
+    balanced = []
+    balanced += [(m, True) for m in held[NET.POS_PLAIN]]
+    balanced += [(m, True) for m in held[NET.POS_RECURSIVE]]
+    for cls in (NET.NEG_LOCAL, NET.NEG_PAIRWISE, NET.NEG_DEEP, NET.NEG_RECURSIVE):
+        balanced += [(m, False) for m in held[cls][:15]]
+    y = [NET.task_sat(m) for m, _ in balanced]
+    assert sum(y) == 60 and len(y) - sum(y) == 60
+
+    # Metadata-only: majority SAT per public feature tuple, trained on dev.
+    votes: dict[tuple, Counter] = {}
+    for cls, rows in dev.items():
+        for model in rows:
+            votes.setdefault(_features(model), Counter())[NET.task_sat(model)] += 1
+    lookup = {feat: counts.most_common(1)[0][0] for feat, counts in votes.items()}
+    default = Counter(NET.task_sat(m) for rows in dev.values() for m in rows).most_common(1)[0][0]
+    meta_pred = [lookup.get(_features(m), default) for m, _ in balanced]
+    meta_acc = sum(int(t == p) for t, p in zip(y, meta_pred)) / len(y)
+    per_class["balanced_heldout"] = {
+        "n": len(y),
+        "sat": sum(y),
+        "unsat": len(y) - sum(y),
+        "majority_constant": sum(int(t == False) for t in y) / len(y),  # majority on this split is SAT? 60/60
+        "metadata_acc": meta_acc,
+        "Bflat_acc": sum(
+            int(NET.task_sat(m) == NET.task_sat(NET.flatten_task_model(m))) for m, _ in balanced
+        )
+        / len(y),
+        "B1_acc": sum(int(NET.task_sat(m) == _baseline_pairwise(m)) for m, _ in balanced) / len(y),
+    }
+    # Honest record: metadata may do well; do not tweak features to force failure.
+    assert 0.0 <= meta_acc <= 1.0
+    report = ROOT / "docs" / "audits" / "2026-10-16-epistemic-heldout-metrics.json"
+    report.write_text(json.dumps(per_class, indent=2) + "\n", encoding="utf-8")
+    assert per_class[NET.NEG_DEEP]["B1_pairwise"] == 0.0
+    assert per_class[NET.NEG_RECURSIVE]["Bflat"] == 0.0
+    assert per_class[NET.POS_RECURSIVE]["Bflat"] == 0.0

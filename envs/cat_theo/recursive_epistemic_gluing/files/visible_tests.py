@@ -15,6 +15,7 @@ def _visible():
         "actual": ["here"],
         "query": "p",
         "bundle": None,
+        "nested_bundle": None,
     }
 
 
