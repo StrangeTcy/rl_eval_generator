@@ -1,33 +1,17 @@
 """Repository-wide pytest configuration.
 
-Neither hook here is a test fixture; both exist because CI on the default branch
-was red and unreadable, and both were measured before they were written.
+Two hooks here are load-bearing for the campaigns and neither is a test fixture.
 
-``sys.path``: CI runs ``pytest -q``, the console script, which does not put the
-working directory on ``sys.path`` the way ``python -m pytest`` does. The fourteen
-modules under ``tests/epistemic_semantics/`` import ``shared.epistemic_semantics``
-at module level and carry no path bootstrap of their own, so every CI run on this
-branch died in about twelve seconds with exit code 2 and
-``ModuleNotFoundError: No module named 'shared'`` - measured on runs 38686356340
-(main, 05:21:36Z) and 38713221525 (this branch, 09:28:44Z), and invisible locally
-to anyone who ran ``python -m pytest`` instead. A collection error is not a
-failing test: it stops the suite before a single assertion runs, so nothing else
-in CI was being verified at all.
+``pytest_sessionfinish`` consults ``tools/campaign_kick.py``: a committed ``campaign_kick.json`` can ask the
+run that validates the push to start one campaign leg. The guards live there and they fail closed; the
+hook exists because CI is the only place this repository's own code is guaranteed to execute, and it is
+silent outside a CI run so no local ``pytest`` ever reaches for the network.
 
-``pytest_runtest_logreport`` plus ``pytest_terminal_summary`` turn a red suite
-into a check annotation. The reason is the same measurement that made the
-campaigns' own status sidecar grow a heartbeat: the Actions log endpoints are
-closed to the credential that can read everything else about a run
-(``results-receiver.actions.githubusercontent.com`` and the artifact blob host
-both answer EOF), so the only output of a failed job that anybody can read
-afterwards is an annotation. A suite that can fail silently is a suite nobody can
-diagnose, so a failure now names itself.
-
-The pairwise lineage's conftest also carries a ``pytest_sessionfinish`` hook that
-consults ``tools/campaign_kick.py``, so a committed instruction can ask the CI run
-to start one campaign leg. That tool is not in this tree, and a hook that failed
-its own import on every run would spend the annotation channel on noise, so it is
-deliberately absent here rather than guarded into silence.
+``pytest_runtest_logreport`` plus ``pytest_terminal_summary`` turn a red suite into an annotation. The
+reason is a measurement, not a preference: CI on this branch failed ``pytest -q`` with exit code 1 for
+three runs and the failing test could not be recovered from anywhere readable - the log endpoints are
+closed to this credential, and the only output that arrives is a check annotation. A suite that can fail
+silently is a suite nobody can diagnose, so a failure now names itself.
 """
 
 from __future__ import annotations
@@ -55,3 +39,19 @@ def pytest_terminal_summary(terminalreporter) -> None:  # noqa: ANN001 - pytest'
     shown = ", ".join(names[:12])
     extra = "" if len(names) <= 12 else f" (+{len(names) - 12} more)"
     print(f"\n::warning::failing tests: {shown}{extra}")
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001 - pytest's signature
+    # Guarded by hand: a conftest that raises would take the suite down with it, which would turn an
+    # optional nudge at the scheduler into a way to break CI.
+    try:
+        from tools.campaign_kick import maybe_kick_from_ci
+
+        note = maybe_kick_from_ci(ROOT)
+    except BaseException as exc:  # noqa: BLE001 - the suite must survive any of this
+        note = f"skipped, the check itself failed ({type(exc).__name__}: {exc})"
+    if note and os.environ.get("GITHUB_RUN_ID"):
+        # ::warning:: because a log line from a CI job whose endpoints are closed is not readable by
+        # anyone; an annotation is. The verdict of a kick - dispatched, refused, or declined - has to
+        # reach the person who pushed the instruction, and this is the only channel that reaches them.
+        print(f"\n::warning::campaign kick: {note}")

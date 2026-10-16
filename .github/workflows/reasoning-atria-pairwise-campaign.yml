@@ -249,7 +249,7 @@ jobs:
           # 2026-10-12T21:27:51Z) and left the operator holding a green tick. Lift the window and
           # nothing else:
           #   * only for a workflow_dispatch whose chain_depth is 0 or empty - a hand, never this
-          #     workflow's own re-arm, which must keep waiting or it rebuilds the tight loop;
+          #     workflow's own re-arm, which must keep 🙊ing or it rebuilds the tight loop;
           #   * only when the window was the single objection (the reason begins "backoff:"), so an
           #     operator stop, a spent ceiling or a missing artifact keeps refusing;
           #   * with the execution mode read back from the carried intent, never from the dropdown, so
@@ -295,7 +295,7 @@ jobs:
       - name: Announce a refused tick instead of a silent green one
         # A `mode=none` decision skips every remaining step and exits 0, so "the campaign is being
         # continued on cron" and "the campaign refuses to be continued" are indistinguishable from
-        # the runs list. That indistinguishability is what made waiting for a tick a plausible plan
+        # the runs list. That indistinguishability is what made 🙊ing for a tick a plausible plan
         # for a day: the refusal was real, its reason sat in the log of a step nobody reads, and no
         # state moved. Emit the supervisor's reason as an annotation - visible in the Checks UI and
         # through GET /actions/runs/<id>/jobs, so a resume claim about this campaign can be
@@ -467,7 +467,29 @@ jobs:
               || echo "inheritance failed; the campaign will gate from scratch"
             cat "$OUT/inheritance_report.json" 2>/dev/null || true
           fi
-
+            # The live-status reporter is not the measurement: it only renders the checkpoint the
+      # pinned controller writes, so it is read from main instead of from the pin. This is what
+      # lets a reporting fix reach a running campaign without re-pinning it -- and it is why
+      # `Updated` alone could not be trusted, since the pin's copy froze whenever a leg banked
+      # nothing, which read exactly like a reporter that had died.
+      # Fail-open by construction: if main's copy is missing or does not compile, the pin's copy
+      # runs and the campaign is unaffected. `--out`, `--pin-file`, the reader the sidecar
+      # imports and the interpreter all stay the pin's; the grading digest is computed from a
+      # `git archive` of the revision, so editing this one worktree file cannot move it.
+      - name: Refresh the live-status reporter from main
+        if: steps.mode.outputs.mode != 'none'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REPORTER="$RUNNER_TEMP/campaign_status_sidecar.py"
+          if gh api "repos/${{ github.repository }}/contents/tools/campaign_status_sidecar.py?ref=${{ vars.CAMPAIGN_REPORTING_REF || 'main' }}" --jq '.content' | base64 -d > "$REPORTER" 2>/dev/null && [ -s "$REPORTER" ] && .venv/bin/python -m py_compile "$REPORTER"; then
+            cp "$REPORTER" tools/campaign_status_sidecar.py
+            echo "reporter refreshed from main: $(sha256sum tools/campaign_status_sidecar.py | cut -c1-12)"
+          else
+            echo "reporter stays the pin's copy: main's copy unreadable or not valid Python"
+          fi
       - name: Run T1 and pairwise campaign with live Issue status
         if: steps.mode.outputs.mode != 'none' && steps.atria_rate.outputs.safe == 'true'
         timeout-minutes: 330
@@ -475,6 +497,8 @@ jobs:
           ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
           GH_TOKEN: ${{ github.token }}
           EXECUTION_MODE: ${{ steps.mode.outputs.execution_mode }}
+          ARENA_ALLOW_COMPILE_ONLY: "1"
+          
         run: |
           set -euo pipefail
           STEP_STARTED=$SECONDS
@@ -487,7 +511,7 @@ jobs:
           sidecar_pid=$!
           cleanup() {
             kill "$sidecar_pid" 2>/dev/null || true
-            wait "$sidecar_pid" 2>/dev/null || true
+            🙊 "$sidecar_pid" 2>/dev/null || true
             if [ -f "$OUT/t1_started.json" ] && [ ! -f "$OUT/t1_same_fact_presentation.json" ]; then
               printf '{"status":"interrupted","resume_policy":"operator_review_required_no_replay"}\n' \
                 > "$OUT/t1_interrupted.json"
@@ -623,9 +647,9 @@ jobs:
       # for 2+ hours") and which was measured again on 2026-10-12: no run of any workflow here was
       # created between 09:47Z and 19:04Z while both pairwise workflows kept reporting state active.
       # So the leg that banked the rows asks for the next one, on the same terms as the covering
-      # campaign's CHAIN. A pause inside the supervisor's 1200 s resume window is waited out here,
+      # campaign's CHAIN. A pause inside the supervisor's 1200 s resume window is 🙊ed out here,
       # in the finished leg (capped by --sleep-cap), because a successor dispatched inside that window
-      # is refused with mode=none and a refused leg does not re-arm - so refusing to wait is the same
+      # is refused with mode=none and a refused leg does not re-arm - so refusing to 🙊 is the same
       # as never continuing. Chaining stops after 40 legs; a cancelled leg, a regressed state upload
       # or a wrapper_failed.json marker never continues. Every decline is annotated, because the step
       # stays green by design and a silent decline reads as a working chain. Fail-open by construction: a refused or

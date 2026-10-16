@@ -1,0 +1,167 @@
+# Comprehensive campaign: strength-2 covering array over every axis, the uniform
+# difficulty ladder (all axes easy / all medium / all hard), and the declared
+# interventions of the four environments that implement them.
+#
+# Matrix size is not hand-tuned: 496 vectors at seed 0 (358 pairwise + 138
+# intervention twins), 269 of them in environments with an exact-instance oracle
+# reference and therefore owing the gate.
+#
+# The physical-attempt ceiling is the controller's own bound, 6 + N x max_steps
+# x (1 + invalid_retries) x (1 + max_retries) = 6 + 496 x 20 x 2 x 6 = 119,046,
+# sized on the FULL plan rather than the post-preflight count so the guard cannot
+# fire on how many twin cases verification drops. It is a bound, not a bill. The ceilings below follow from that
+# count via the repo's own per-case estimate (run_suite._estimated_case_budget:
+# 40 calls / 327,680 tokens per case) - 496 x 40 = 19,840 calls rounded up to
+# 21,200 for invalid-retry headroom, and 136,000,000 tokens = 0.84 x the
+# worst-case product, the same fraction the covering profile used. Changing the
+# matrix means recomputing both numbers, or the campaign spends its tick refusing
+# to start.
+#
+# Intervention cases are billed only after a provider-free twin check: the
+# controller runs tools/twin_preflight.py and writes $OUT/twin_preflight.json
+# before anything touches a provider. Policy is bill_verified_only, i.e. a twin
+# whose bytes did not prove the declared equivalence is dropped and named in the
+# report rather than billed - "the model did not move" and "the overlay did
+# nothing" are the same bytes, and only one of them is a result.
+#
+# Measured on this manifest: 138 intervention twins -> 79 pass, 33 fail, 26
+# unverified, whole preflight ~20s. The 26 are not all the overlay's fault: the
+# checker refuses to normalize the generated ENV_NAME instance label, so a
+# rename-only twin differs in exactly that line. Once that normalization is
+# fixed, flip matrix.twin_verification to strict and nothing unverified is billable.
+#
+# T1 same_fact_presentation runs first, from its own unchanged profile: it is the
+# epistemic-process-control measurement, and its report is stored beside the
+# campaign state. Interrupted T1 calls are not automatically replayed because the
+# probe has no trial ledger.
+name: reasoning_atria_pairwise_campaign
+provider: atria
+api_base: https://discovery-api.intern-ai.org.cn/v1
+model: Atria-Dawn-Preview
+api_key_env: ATRIA_API_KEY
+wire_api: responses
+reasoning_mode: controlled_responses_reasoning_effort_high
+reasoning_effort: high
+stream: false
+request_extra: {}
+concurrency: 1
+rate_limit:
+  documented_requests_per_minute: 60
+  min_interval_seconds: 1.1
+quota_ceiling_tokens: null
+matrix:
+  mode: pairwise
+  seeds: [0]
+  interventions: true
+  twin_verification: bill_verified_only
+resilience:
+  provider_outage_patience_seconds: 3600
+  provider_outage_backoff_seconds: 60
+unreferenced_compile_only: true
+manual_gate_blocked_exclusions:
+  reason: known_gate_blocked_calibration_failures
+  disposition: omitted_before_provider_access
+  provenance:
+    github_actions_run_id: 36346941741
+    github_actions_run_url: https://github.com/StrangeTcy/rl_eval_generator/actions/runs/36346941741
+    calibration_issue: https://github.com/StrangeTcy/rl_eval_generator/issues/1
+    pairwise_confirmation_run:
+      github_actions_run_id: 38094366275
+      github_actions_run_url: https://github.com/StrangeTcy/rl_eval_generator/actions/runs/38094366275
+  cases:
+    - case_id: glyph__architecture=easy_optimizer=hard_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_exists_per_environment_not_per_vector
+    - case_id: glyph__architecture=easy_optimizer=medium_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_exists_per_environment_not_per_vector
+    - case_id: moco__naming=hard_distractors=easy_queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0
+      calibration_class: oracle_assumes_easy_layout
+    - case_id: moco__naming=medium_distractors=easy_queue_math=easy_temperature=easy_visible_tests=easy_symptom_mask=easy__seed-0
+      calibration_class: oracle_assumes_easy_layout
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=easy_visible_tests=easy_data_clue=easy_symptom_mask=hard__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=easy_symptom_mask=easy__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    # Measured on the strength-2 pairwise plan by Actions run 38094366275 (Mercury, 2026-10-11),
+    # the campaign these omissions unblock. All three vectors have optimizer=easy, so the
+    # reference patch reaches them - what fails is the grading, not the matcher:
+    #   reference_does_not_solve_its_own_instance - Adam lr=1e-3 plus the wider classifier and
+    #     EPOCHS=18 does not move the judge's `optimization_progressed` check on this vector, so
+    #     the best-known fix leaves the episode unsolved and no paid answer could be certified.
+    #   negative_control_is_not_a_negative_control - the deliberately weak SGD lr=1e-4 control
+    #     PASSES on this vector, so the case cannot distinguish a right answer from a wrong one.
+    # Both classes already exist above, recorded for the covering plan: this list names specific
+    # vectors, and the pairwise matrix enumerates different ones, so the covering calibration
+    # could not cover them.
+    #
+    # Each vector is omitted in all three of its forms (base, __visible_proxy__, __terminology__).
+    # The proxy and terminology twins were reported failing and unreported-but-adjacent
+    # respectively, and the defect is in the instance rather than in how it is presented: leaving
+    # a renamed twin billable while omitting its base would grade the twin against a reference
+    # already known not to solve the underlying case.
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=hard_data_clue=medium_symptom_mask=medium__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=hard_data_clue=medium_symptom_mask=medium__visible_proxy__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=hard_visible_tests=hard_data_clue=medium_symptom_mask=medium__terminology__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=medium_visible_tests=medium_data_clue=hard_symptom_mask=hard__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=medium_visible_tests=medium_data_clue=hard_symptom_mask=hard__visible_proxy__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=easy_optimizer=easy_red_herring=medium_visible_tests=medium_data_clue=hard_symptom_mask=hard__terminology__seed-0
+      calibration_class: reference_does_not_solve_its_own_instance
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=hard_symptom_mask=easy__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=hard_symptom_mask=easy__visible_proxy__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    - case_id: glyph__architecture=hard_optimizer=easy_red_herring=hard_visible_tests=easy_data_clue=hard_symptom_mask=easy__terminology__seed-0
+      calibration_class: negative_control_is_not_a_negative_control
+    # 5 case(s) of this profile, measured by tools/instance_oracle_preflight.py:
+    #   reference_fix_already_present_at_symptom_mask_hard
+    #   symptom_mask=hard leaves the cache offset unmasked, so the pristine instance already returns
+    #   `self.tokens_seen` - the very line the reference introduces. There is nothing to certify
+    #   and tools/instance_oracle_gate.py:_rope now says so by axis instead of reporting a needle
+    #   count.
+    - case_id: rope__paper_clarity=easy_implementation_style=easy_notation_mismatch=easy_visible_tests=medium_hidden_context=medium_interaction_depth=medium_investigation_difficulty=hard_symptom_mask=hard__seed-0
+      calibration_class: reference_fix_already_present_at_symptom_mask_hard
+    - case_id: rope__paper_clarity=easy_implementation_style=hard_notation_mismatch=medium_visible_tests=easy_hidden_context=hard_interaction_depth=medium_investigation_difficulty=easy_symptom_mask=hard__seed-0
+      calibration_class: reference_fix_already_present_at_symptom_mask_hard
+    - case_id: rope__paper_clarity=hard_implementation_style=hard_notation_mismatch=hard_visible_tests=hard_hidden_context=hard_interaction_depth=hard_investigation_difficulty=hard_symptom_mask=hard__seed-0
+      calibration_class: reference_fix_already_present_at_symptom_mask_hard
+    - case_id: rope__paper_clarity=medium_implementation_style=hard_notation_mismatch=easy_visible_tests=medium_hidden_context=hard_interaction_depth=easy_investigation_difficulty=medium_symptom_mask=hard__seed-0
+      calibration_class: reference_fix_already_present_at_symptom_mask_hard
+    - case_id: rope__paper_clarity=medium_implementation_style=medium_notation_mismatch=medium_visible_tests=easy_hidden_context=easy_interaction_depth=easy_investigation_difficulty=hard_symptom_mask=hard__seed-0
+      calibration_class: reference_fix_already_present_at_symptom_mask_hard
+# Per-controller invocation ceiling matches the 330-minute live workflow step.
+# This exceeds the 108-minute worst-case atomic gate row, even after a full T1
+# probe. The scheduled supervisor resumes the full campaign across checkpoints.
+campaign_job_seconds: 19800
+limits:
+  max_steps: 20
+  max_tokens: 8192
+  invalid_retries: 1
+  max_retries: 5
+  max_http_attempts: 119046
+  max_api_calls: 21200
+  max_tokens_total: 136000000
+  floor_effect_after: 0
+  sandbox: docker
+research_context:
+  family: epistemic_process_control
+  lineage:
+    from: deception
+    to: epistemic_process_control
+    first_step: same_fact_presentation
+  t1_profile: experiments/t1_reasoning_atria.yaml
+  endpoint_contract:
+    diagnostic_choices: per_arm_menu_choices_and_matched_difference
+    inquiry_regret: not_measurable_single_turn
+    elicited_belief: per_arm_posterior_fraction_and_matched_delta
+    belief_correctness: per_case_exact_posterior_match_not_calibration
+    calibration_curve: unavailable_no_population_metric
+    terminal_outcome: per_arm_answer_and_correctness
+    recovery: not_measurable_single_turn
+    missingness: not_measurable_or_unavailable_never_zero_filled
+    aggregation: separate_endpoint_channels_no_composite

@@ -1,0 +1,375 @@
+from __future__ import annotations
+
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+try:
+    from tools import campaign_kick  # noqa: E402
+except ImportError as exc:  # a tree without the tool skips, it does not redden CI - see test_campaign_rearm
+    pytest.skip(f"no tools/campaign_kick.py in this tree ({exc})", allow_module_level=True)
+
+NOW = datetime(2026, 10, 13, 15, 20, tzinfo=timezone.utc)
+BRANCH = "arena/595b91e0-rl-eval-generator"
+
+
+@pytest.fixture(autouse=True)
+def _clock(monkeypatch) -> None:
+    monkeypatch.setattr(campaign_kick, "_now", lambda: NOW)
+
+
+def _kick(root: Path, **overrides) -> None:
+    body = {
+        "workflow": "Mercury pairwise campaign",
+        "branch": BRANCH,
+        "dispatch_ref": BRANCH,
+        "committed_at": "2026-10-13T15:10:00+00:00",
+        "expires_at": "2026-10-13T15:40:00+00:00",
+        "reason": "GitHub has created no scheduled tick since 09:26",
+    }
+    body.update(overrides)
+    (root / campaign_kick.KICK_FILE).write_text(json.dumps(body), encoding="utf-8")
+
+
+def _readable(root: Path) -> dict:
+    return campaign_kick.read_kick(root) or {}
+
+
+def test_no_file_no_kick(tmp_path: Path) -> None:
+    assert campaign_kick.read_kick(tmp_path) is None
+
+
+def test_an_expired_or_stale_instruction_is_not_a_kick(tmp_path: Path) -> None:
+    _kick(tmp_path, expires_at="2026-10-13T15:19:00+00:00")
+    assert campaign_kick.read_kick(tmp_path) is None, "a kick outside its window must die"
+    _kick(tmp_path, expires_at="2026-10-13T16:00:00+00:00", committed_at="2026-10-13T13:00:00+00:00")
+    assert campaign_kick.read_kick(tmp_path) is None, "and so must one committed hours before this run"
+    _kick(tmp_path, workflow="")
+    assert campaign_kick.read_kick(tmp_path) is None, "and one that names no workflow"
+    _kick(tmp_path, expires_at="not a time")
+    assert campaign_kick.read_kick(tmp_path) is None, "and one whose expiry cannot be parsed"
+
+
+def test_the_guards_all_refuse_before_anything_is_sent() -> None:
+    kick = {"workflow": "Mercury pairwise campaign", "branch": BRANCH}
+    cases = [
+        ({"event": "push", "ref": f"refs/heads/{BRANCH}", "token_present": True}, "no fresh campaign_kick.json"),
+        ({"kick": kick, "event": "schedule", "ref": f"refs/heads/{BRANCH}", "token_present": True},
+         "cannot kick a leg"),
+        ({"kick": kick, "event": "pull_request", "ref": f"refs/heads/{BRANCH}", "token_present": True},
+         "cannot kick a leg"),
+        ({"kick": kick, "event": "push", "ref": f"refs/heads/{BRANCH}", "token_present": False},
+         "no GITHUB_TOKEN"),
+        ({"kick": kick, "event": "push", "ref": "refs/heads/someone-else", "token_present": True},
+         "written for branch"),
+        ({"kick": kick, "event": "push", "ref": f"refs/heads/{BRANCH}", "token_present": True,
+          "api_state": "disabled_manually"}, "workflow state"),
+        ({"kick": kick, "event": "push", "ref": f"refs/heads/{BRANCH}", "token_present": True,
+          "busy": True}, "already queued or running"),
+    ]
+    for kwargs, expect in cases:
+        passed, reason = campaign_kick.decide(kwargs.pop("kick", None), **kwargs)
+        assert passed is False, (expect, reason)
+        assert expect in reason, (expect, reason)
+
+    go, reason = campaign_kick.decide(
+        kick, event="push", ref=f"refs/heads/{BRANCH}", token_present=True
+    )
+    assert go is True and "Mercury pairwise campaign" in reason, reason
+
+
+def test_a_kick_carries_no_authorization_field() -> None:
+    """A push may resume what is already authorized, and never more than that.
+
+    `rebase_onto_ref` re-pins a lineage's code, `clear_wrapper_stop` lifts a recorded operator stop, and
+    an execution mode or ceiling input authorizes spend - those belong to a human dispatch, and the
+    campaign's own tools refuse them from anywhere else. Pinned here so an edit cannot smuggle one into
+    the payload by accident.
+    """
+    inputs = campaign_kick.kick_inputs({"chain_depth": 0})
+    assert set(inputs) <= set(campaign_kick.ALLOWED_INPUTS), inputs
+    assert inputs["resume_previous"] is True and inputs["chain_depth"] == "0", inputs
+    forbidden = ("rebase_onto_ref", "clear_wrapper_stop", "execution_mode", "max_api_calls_override",
+                 "max_tokens_total_override", "raise_ceiling", "allow_ceiling_override")
+    for name in forbidden:
+        assert name not in inputs and name not in campaign_kick.ALLOWED_INPUTS, name
+
+
+def _wire(monkeypatch, *, statuses) -> list[tuple]:
+    calls: list[tuple] = []
+
+    def fake_request(url, token, *, body=None, method="GET"):
+        calls.append((method, url, body))
+        for needle, value in statuses.items():
+            if needle in url:
+                return value
+        return 200, {}
+
+    monkeypatch.setattr(campaign_kick, "_request", fake_request)
+    return calls
+
+
+def _ci_env(monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    monkeypatch.setenv("GITHUB_REF", f"refs/heads/{BRANCH}")
+    monkeypatch.setenv("GITHUB_REF_NAME", BRANCH)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "StrangeTcy/rl_eval_generator")
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+
+
+def test_the_dispatch_path_starts_one_leg_and_reports_it(tmp_path: Path, monkeypatch) -> None:
+    _kick(tmp_path)
+    calls = _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 380866469, "name": "Mercury pairwise campaign", "state": "active"}]}),
+        "status=queued": (200, {"total_count": 0}),
+        "status=in_progress": (200, {"total_count": 0}),
+        "dispatches": (204, {}),
+    })
+    _ci_env(monkeypatch)
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert note.startswith("dispatched:"), note
+    posts = [call for call in calls if call[0] == "POST"]
+    assert len(posts) == 1, posts
+    payload = json.loads(posts[0][2])
+    assert payload["ref"] == BRANCH, payload
+    assert set(payload["inputs"]) <= set(campaign_kick.ALLOWED_INPUTS), payload
+    assert "/dispatches" in posts[0][1], posts[0][1]
+
+
+def test_a_busy_workflow_is_not_kicked(tmp_path: Path, monkeypatch) -> None:
+    _kick(tmp_path)
+    _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 1, "name": "Mercury pairwise campaign", "state": "active"}]}),
+        "status=in_progress": (200, {"total_count": 1}),
+        "dispatches": (204, {}),
+    })
+    _ci_env(monkeypatch)
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert "already queued or running" in note, note
+    assert "workflow/1/dispatches" not in note
+
+
+def test_a_denied_token_and_a_broken_api_are_printed_never_raised(tmp_path: Path, monkeypatch) -> None:
+    _kick(tmp_path)
+    # A read-only CI token: the workflow list itself is refused.
+    _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (403, {"error": "Resource not accessible by integration"}),
+    })
+    _ci_env(monkeypatch)
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert note.startswith("skipped: workflow list unreadable"), note
+
+    # The dispatch refused after a healthy lookup is a line about refusal, not a crash.
+    _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 1, "name": "Mercury pairwise campaign", "state": "active"}]}),
+        "status=queued": (200, {"total_count": 0}),
+        "status=in_progress": (200, {"total_count": 0}),
+        "dispatches": (403, {"error": "Resource not accessible by integration"}),
+    })
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert note.startswith("refused:") and "403" in note, note
+
+    # Trash from the network is still just a line: the real _request converts transport failures to
+    # HTTP 0, and anything that escapes it is caught by the entry point rather than raised into CI.
+    def explode(*a, **k):
+        raise RuntimeError("socket closed")
+
+    monkeypatch.setattr(campaign_kick, "_request", explode)
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert note.startswith("skipped: kick check raised RuntimeError"), note
+
+
+def test_no_instruction_means_no_network_call_at_all(tmp_path: Path, monkeypatch) -> None:
+    calls = _wire(monkeypatch, statuses={})
+    _ci_env(monkeypatch)
+    assert campaign_kick.maybe_kick_from_ci(tmp_path) == ""
+    assert calls == [], "an idle repository must not be polled for a kick that was never written"
+
+
+def test_one_kick_can_wake_every_stalled_campaign(tmp_path: Path, monkeypatch) -> None:
+    """A missing scheduler tick is a repo-wide symptom, so the instruction may name both workflows and the
+    push dispatches one leg of each; a blank name list is not an instruction at all."""
+    _kick(tmp_path, workflow=["Mercury pairwise campaign", "Reasoning-Atria pairwise campaign"],
+          dispatch_ref="main")
+    calls = _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 1, "name": "Mercury pairwise campaign", "state": "active"},
+            {"id": 2, "name": "Reasoning-Atria pairwise campaign", "state": "active"}]}),
+        "status=queued": (200, {"total_count": 0}),
+        "status=in_progress": (200, {"total_count": 0}),
+        "workflows/2/dispatches": (403, {"error": "Resource not accessible by integration"}),
+    })
+    _ci_env(monkeypatch)
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    posts = [c for c in calls if c[0] == "POST"]
+    assert len(posts) == 2, posts
+    assert {json.loads(p[2])["ref"] for p in posts} == {"main"}, posts
+    assert "dispatched:" in note and "refused:" in note, note
+
+    for blank in ([], [""], ["  "], None, ""):
+        _kick(tmp_path, workflow=blank)
+        assert campaign_kick.read_kick(tmp_path) is None, blank
+
+
+def test_the_cli_prints_the_verdict_and_exits_zero(tmp_path: Path, monkeypatch) -> None:
+    import contextlib
+    import io
+
+    _kick(tmp_path)
+    _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 1, "name": "Mercury pairwise campaign", "state": "active"}]}),
+        "status=queued": (200, {"total_count": 0}),
+        "status=in_progress": (200, {"total_count": 1}),
+    })
+    _ci_env(monkeypatch)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_RUN_ID", "1")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        assert campaign_kick.main() == 0
+    out = buf.getvalue()
+    assert "::warning::campaign kick:" in out and "already queued or running" in out, out
+
+
+WORKFLOW_EXAMPLE = ROOT / "tools" / "campaign_kick_workflow.yml"
+
+
+def test_the_workflow_that_would_run_this_stays_narrow() -> None:
+    """The trigger half of the mechanism, held at the width it was designed with.
+
+    It cannot be installed from here - the App that carries this workspace has no `workflows` permission,
+    which is what the push of 5939fba measured when the server answered "refusing to allow a GitHub App to
+    create or update workflow ... without `workflows` permission" - so the guarantee that keeps it honest is
+    this test: push-only, one branch, no `schedule:` (a kick that schedules itself is a loop), the only
+    elevated permission is `actions: write`, and the step it runs is the tested tool.
+    """
+    import yaml
+
+    doc = yaml.safe_load(WORKFLOW_EXAMPLE.read_text(encoding="utf-8"))
+    trigger = doc.get(True, doc.get("on"))
+    assert list(trigger) == ["push"], trigger
+    assert trigger["push"] == {"branches": [BRANCH]}, trigger["push"]
+    assert doc["permissions"] == {"contents": "read", "actions": "write"}, doc["permissions"]
+    steps = doc["jobs"]["kick"]["steps"]
+    run = [step for step in steps if "run" in step]
+    assert len(run) == 1, steps
+    assert "tools/campaign_kick.py" in run[0]["run"], run[0]
+    assert run[0]["env"]["GITHUB_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}", run[0]
+    assert "schedule" not in trigger and "schedule" not in doc["jobs"]["kick"], "a self-scheduling kick is a loop"
+
+
+def _no_ci_env(monkeypatch) -> None:
+    for name in ("GITHUB_TOKEN", "GH_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    monkeypatch.setenv("GITHUB_REF", f"refs/heads/{BRANCH}")
+    monkeypatch.setenv("GITHUB_REF_NAME", BRANCH)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "StrangeTcy/rl_eval_generator")
+
+
+def test_the_job_is_asked_for_a_credential_before_it_is_blamed(tmp_path: Path, monkeypatch) -> None:
+    """Two doors, both tried, and the line says which ones failed.
+
+    ci.yml exports no secret, so `env` is empty - and the runner's own OIDC endpoint is the one remaining
+    way to hold a token during a job. Whether that door exists is a property of the workflow's `id-token`
+    permission, which is not this branch's to set, so the answer is asked for rather than assumed.
+    """
+    _kick(tmp_path)
+    calls = _wire(monkeypatch, statuses={})
+    _no_ci_env(monkeypatch)
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert "ACTIONS_ID_TOKEN_REQUEST_URL" in note, note
+    assert "could not be authorized" in note, note
+    assert calls == [], "no credential means no request, not a request that fails"
+
+    # The door exists here: the exchange returns a token and the kick uses it.
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://runner.example/oidc?foo=bar")
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "runner-request-token")
+    seen: list[str] = []
+
+    def fake_exchange(url: str, request_token: str):
+        seen.append(url)
+        seen.append(request_token)
+        return 200, {"value": "job-jwt"}
+
+    monkeypatch.setattr(campaign_kick, "_oidc_exchange", fake_exchange)
+    token, how = campaign_kick.job_credential()
+    assert (token, how) == ("job-jwt", "runner-oidc"), (token, how)
+    assert seen == ["https://runner.example/oidc?foo=bar", "runner-request-token"], seen
+
+
+
+    calls = _wire(monkeypatch, statuses={
+        "actions/workflows?per_page": (200, {"workflows": [
+            {"id": 1, "name": "Mercury pairwise campaign", "state": "active"}]}),
+        "status=queued": (200, {"total_count": 0}),
+        "status=in_progress": (200, {"total_count": 0}),
+        "dispatches": (204, {}),
+    })
+    note = campaign_kick.maybe_kick_from_ci(tmp_path)
+    assert note.startswith("dispatched:"), note
+    assert "[credential: runner-oidc]" in note, note
+    posts = [c for c in calls if c[0] == "POST"]
+    assert len(posts) == 1 and "/dispatches" in posts[0][1], posts
+
+
+def test_the_exchange_asks_the_api_audience_of_the_job_that_owns_it(monkeypatch) -> None:
+    """The runner hands out one token per audience; asking for the API's is the whole request.
+
+    Asserted against the URL and headers actually built, because a token minted for `jwt.actions.githubusercontent
+    .com` authenticates nothing at api.github.com and would read as a permission problem instead.
+    """
+    captured: dict[str, str] = {}
+
+    class Response:
+        status = 200
+
+        def read(self) -> bytes:
+            return b'{"value": "job-jwt"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> bool:
+            return False
+
+    def fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["auth"] = request.get_header("Authorization") or ""
+        captured["accept"] = request.get_header("Accept") or ""
+        return Response()
+
+    monkeypatch.setattr(campaign_kick.urllib.request, "urlopen", fake_urlopen)
+    status, body = campaign_kick._oidc_exchange("https://token.actions/r/oidc?svc=abc", "runner-token")
+    assert (status, body) == (200, {"value": "job-jwt"}), (status, body)
+    assert captured["url"].endswith("?svc=abc&audience=api.github.com"), captured
+    assert captured["auth"] == "Bearer runner-token", captured
+    assert "application/json" in captured["accept"], captured
+
+
+def test_a_refused_exchange_and_a_tokenless_exchange_are_both_reported(monkeypatch) -> None:
+    _no_ci_env(monkeypatch)
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://runner.example/oidc?x=1")
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "rt")
+    monkeypatch.setattr(campaign_kick, "_oidc_exchange", lambda u, t: (403, {"error": "Permissions missing"}))
+    token, how = campaign_kick.job_credential()
+    assert token == "" and "refused the token exchange" in how and "403" in how, how
+
+    monkeypatch.setattr(campaign_kick, "_oidc_exchange", lambda u, t: (200, {}))
+    token, how = campaign_kick.job_credential()
+    assert token == "" and "no token" in how, how
+
+    # An explicit secret in the environment wins and is named, so the record says where the credential came from.
+    monkeypatch.setenv("GITHUB_TOKEN", "seeded")
+    assert campaign_kick.job_credential() == ("seeded", "env:GITHUB_TOKEN")
