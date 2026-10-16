@@ -110,7 +110,7 @@ def _gate_case_fits_remaining_wall(
 
 
 def _sleep(seconds: float) -> None:
-    """Indirection so tests can observe provider-outage backoff without waiting."""
+    """Indirection so tests can observe provider-outage backoff without 🙊ing."""
     time.sleep(seconds)
 
 
@@ -395,7 +395,7 @@ def _load_checkpoint(
                     # A hand-started leg whose code is a descendant of the ledger's own commit needs
                     # no extra flag to be trusted with the move; the ancestry is the authority, and
                     # `--rebase-intent` exists for the case where a launcher cannot say it. Measured
-                    # reason this matters: run 28 (38335486606, 02:08:46Z, 2m29s) reached the
+                    # reason this 👹: run 28 (38335486606, 02:08:46Z, 2m29s) reached the
                     # controller without the flag, refused this pair, and wrote a fourth marker - a
                     # dispatch that selects a ref but not the acknowledgement cannot tell the two
                     # apart from the run page, which is how the loop kept turning.
@@ -1178,7 +1178,7 @@ def run_suite(
     retry_case_id: str | None = None
     case_attempts_spent = 0
     case_try_count = 0
-    outage_waited = 0.0
+    outage_🙊ed = 0.0
     outage_retries = 0
     while case_index < len(cases):
         case = cases[case_index]
@@ -1462,6 +1462,7 @@ def run_suite(
                 "stdout_tail": stdout,
                 "stderr_tail": stderr,
             }
+            
         except subprocess.TimeoutExpired:
             if timeout_limited_by_dispatch_wall:
                 # This is not a Docker/judge failure: the job's remaining
@@ -1506,7 +1507,7 @@ def run_suite(
             result.get("status") == "paused_provider_error"
             and provider_outage_patience_seconds > 0
         ):
-            # Resilient-campaign mode: a provider outage is waited out inside
+            # Resilient-campaign mode: a provider outage is 🙊ed out inside
             # the run with exponential backoff instead of pausing the suite,
             # bounded by the patience window, the remaining wall budget, and
             # the remaining global HTTP-attempt budget.
@@ -1520,7 +1521,7 @@ def run_suite(
                 provider_outage_backoff_seconds * (2 ** (case_try_count - 1)),
                 600.0,
             )
-            remaining_patience = provider_outage_patience_seconds - outage_waited
+            remaining_patience = provider_outage_patience_seconds - outage_🙊ed
             wall_left = (
                 max_wall_seconds - (time.monotonic() - started)
                 if max_wall_seconds is not None
