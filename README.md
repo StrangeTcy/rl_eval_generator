@@ -10,7 +10,7 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
 
 *   **Research-Style ML Debugging:** `glyph`, `batchnorm_ema`, `moco`
 *   **Paper-to-Code & Stateful Investigation:** `rope`
-*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (22 environments)
+*   **Compositional & Category-Theoretic Reasoning:** `cat_theo/*` (26 environments)
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
 *   **Latent Substrate & Weird Machine Discovery:** `weird_machine/*` (6 environments)
     > *These tasks evaluate whether agents can recognize and exploit latent computational power in substrates whose surface semantics present them as non-programming artifacts.*
@@ -134,7 +134,7 @@ Axes:
 
 ### Category-Theoretic Compositional Environments (`envs/cat_theo/`)
 
-A specialized suite of 22 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
+A specialized suite of 26 environments targeting compositional reasoning, algebraic invariants, and structural properties of ML systems. **These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.** The judges in these tasks enforce strict algebraic and category-theoretic laws under procedural variation rather than checking simple outputs:
 
 *   **Core Category Theory Tasks:**
     1. `tensor_functor`: Refactoring rigid tensor operations into coordinate-free functors commuting with `torch.vmap` and `grad`.
@@ -165,6 +165,10 @@ A specialized suite of 22 environments targeting compositional reasoning, algebr
     20. `recursive_maze_gluing`: Nested tiles with explicit routes; local corridors can be walkable while orientation and sealing rules block a global walk.
     21. `recursive_distributed_gluing`: Nested workers with messages and a mutex; a valid solution is a completing schedule, not a recursive numeric result.
     22. `recursive_epistemic_gluing`: Nested finite Kripke frames; knowledge is evaluated on observation partitions, and local cells may fail to overlap.
+    23. `recursive_holonomy_gluing`: Finite multiplicative, affine, and permutation maps on nested modules; a state must return to itself after the listed cycle.
+    24. `recursive_compiler_bootstrap`: A tiny arithmetic language and stack bytecode; local compile stages can be correct while a claimed path decoder is not.
+    25. `recursive_error_correcting_codes`: Linear block codes over a prime field; local kernels can be nonempty while stacked parity and glue have no solution.
+    26. `recursive_coarse_graining`: Exact integer spin tables; compose child boundary tables and test doubling fixed points.
 
 ### Latent Substrate & Weird Machine Environments (`envs/weird_machine/`)
 

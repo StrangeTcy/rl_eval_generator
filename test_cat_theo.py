@@ -29,9 +29,13 @@ envs = [
     ("recursive_maze_gluing", "easy,easy,easy,easy"),
     ("recursive_distributed_gluing", "easy,easy,easy"),
     ("recursive_epistemic_gluing", "easy,easy,easy,easy"),
+    ("recursive_holonomy_gluing", "easy,easy,easy,easy"),
+    ("recursive_compiler_bootstrap", "easy,easy,easy"),
+    ("recursive_error_correcting_codes", "easy,easy,easy"),
+    ("recursive_coarse_graining", "easy,easy,easy"),
 ]
 
-print("Testing generation and compilation of all 22 Category Theory environments...\n")
+print("Testing generation and compilation of all 26 Category Theory environments...\n")
 
 failed = False
 for env, diff in envs:

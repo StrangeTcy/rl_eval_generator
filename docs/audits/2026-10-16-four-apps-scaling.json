@@ -1,0 +1,44 @@
+[
+  {
+    "env": "holonomy",
+    "depth": 1,
+    "public_bytes": 348,
+    "expanded_maps": 3,
+    "expanded_bytes": 25
+  },
+  {
+    "env": "holonomy",
+    "depth": 2,
+    "public_bytes": 348,
+    "expanded_maps": 3,
+    "expanded_bytes": 25
+  },
+  {
+    "env": "holonomy",
+    "depth": 3,
+    "public_bytes": 355,
+    "expanded_maps": 4,
+    "expanded_bytes": 33
+  },
+  {
+    "env": "codes",
+    "depth": 1,
+    "public_bytes": 470,
+    "blocks": 3,
+    "enumerate": 15625
+  },
+  {
+    "env": "codes",
+    "depth": 2,
+    "public_bytes": 470,
+    "blocks": 3,
+    "enumerate": 15625
+  },
+  {
+    "env": "codes",
+    "depth": 3,
+    "public_bytes": 470,
+    "blocks": 3,
+    "enumerate": 15625
+  }
+]
