@@ -299,6 +299,229 @@ def test_10_judge_independence_from_reference_and_metadata() -> None:
         NET.arm_reference = original_arm  # type: ignore[method-assign]
 
 
+def test_certificate_rejects_truthy_non_booleans() -> None:
+    """Regression: bool("false") is True; certificates must carry real bools."""
+    true_model = NET.example_visible_model()
+    assert NET.query_value(true_model) is True
+    ok, reason = NET.verify_certificate(true_model, {"query_value": "false"})
+    assert ok is False, reason
+    assert "bool" in reason
+
+    false_model = NET.generate_model(
+        depth=1, regime=NET.TREE, opacity=NET.TRANSPARENT, order=1, seed=0
+    )
+    assert NET.query_value(false_model) is False
+    assert NET.verify_certificate(false_model, {"query_value": False})[0] is True
+    assert NET.verify_certificate(false_model, {"query_value": True})[0] is False
+    assert NET.verify_certificate(false_model, {"query_value": "true"})[0] is False
+    assert NET.verify_certificate(false_model, {"query_value": "false"})[0] is False
+    assert NET.verify_certificate(false_model, {"query_value": 0})[0] is False
+    assert NET.verify_certificate(false_model, {"query_value": 1})[0] is False
+    assert NET.verify_certificate(false_model, {"query_value": None})[0] is False
+    assert NET.verify_certificate(false_model, {"query_value": []})[0] is False
+    assert NET.verify_certificate(false_model, {"query_value": {}})[0] is False
+
+    assert NET.verify_certificate(true_model, {"query_value": True})[0] is True
+    assert NET.verify_certificate(true_model, {"query_value": False})[0] is False
+    assert NET.verify_certificate(true_model, {"query_value": "true"})[0] is False
+    assert NET.verify_certificate(true_model, {"query_value": 1})[0] is False
+    assert NET.verify_certificate(true_model, {"query_value": 0})[0] is False
+    assert NET.verify_certificate(true_model, {"query_value": None})[0] is False
+    assert NET.verify_certificate(true_model, {"query_value": ["query_value"]})[0] is False
+
+    sat_bundle = NET.generate_model(
+        depth=1, regime=NET.CYCLIC_SAT, opacity=NET.TRANSPARENT, order=0, seed=1
+    )
+    unsat_bundle = NET.handwritten_neg_deep()
+    assert NET.bundle_possible(sat_bundle) is True
+    assert NET.bundle_possible(unsat_bundle) is False
+    joint, _ = NET.joint_worlds(sat_bundle)
+    good_sat = {"query_value": True, "bundle_possible": True, "joint_world": joint}
+    assert NET.verify_certificate(sat_bundle, good_sat)[0] is True
+    # Truthy non-bool must not pass even when it matches the correct answer.
+    assert NET.verify_certificate(
+        sat_bundle, {"query_value": True, "bundle_possible": "true", "joint_world": joint}
+    )[0] is False
+    assert NET.verify_certificate(
+        sat_bundle, {"query_value": True, "bundle_possible": 1, "joint_world": joint}
+    )[0] is False
+    assert NET.verify_certificate(sat_bundle, {"query_value": True})[0] is False  # missing
+    assert NET.verify_certificate(
+        unsat_bundle, {"query_value": True, "bundle_possible": False}
+    )[0] is True
+    assert NET.verify_certificate(
+        unsat_bundle, {"query_value": True, "bundle_possible": 0}
+    )[0] is False
+    assert NET.verify_certificate(
+        unsat_bundle, {"query_value": True, "bundle_possible": "false"}
+    )[0] is False
+    assert NET.verify_certificate(
+        unsat_bundle, {"query_value": True, "bundle_possible": None}
+    )[0] is False
+    assert NET.verify_certificate(
+        unsat_bundle, {"query_value": True, "bundle_possible": []}
+    )[0] is False
+    rec = NET.handwritten_neg_recursive()
+    assert NET.verify_certificate(rec, {"query_value": True, "bundle_possible": False})[0] is True
+    assert NET.verify_certificate(rec, {"query_value": True, "bundle_possible": 0})[0] is False
+
+
+def _imported_solver_modules(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    # Judge templates contain %%PLACEHOLDER%%; strip those so AST parse works.
+    text = re.sub(r"%%[A-Z0-9_]+%%", "0", text)
+    tree = ast.parse(text)
+    hits = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "solver" or alias.name.startswith("solver."):
+                    hits.append(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            if mod == "solver" or mod.startswith("solver."):
+                hits.append(mod)
+            if any(alias.name == "solver" for alias in node.names):
+                hits.append("from ... import solver")
+    return hits
+
+
+def test_checker_does_not_invoke_candidate_solver() -> None:
+    """Trusted oracles may be shared; the evaluated candidate solver must not be."""
+    import types
+
+    assert _imported_solver_modules(NET_PATH) == []
+    assert _imported_solver_modules(FILES / "judge.py") == []
+
+    class BoomSolver(types.ModuleType):
+        def __getattr__(self, name: str) -> None:
+            raise AssertionError(f"candidate solver consulted for {name}")
+
+        def solve(self, *_a, **_k):
+            raise AssertionError("candidate solver.solve called")
+
+    previous = sys.modules.get("solver")
+    sys.modules["solver"] = BoomSolver("solver")
+    try:
+        true_model = NET.example_visible_model()
+        ok, reason = NET.verify_certificate(true_model, {"query_value": True})
+        assert ok, reason
+        ok, reason = NET.verify_certificate(true_model, {"query_value": "false"})
+        assert ok is False
+        unsat = NET.handwritten_neg_deep()
+        ok, reason = NET.verify_certificate(
+            unsat, {"query_value": True, "bundle_possible": False}
+        )
+        assert ok, reason
+    finally:
+        if previous is None:
+            sys.modules.pop("solver", None)
+        else:
+            sys.modules["solver"] = previous
+
+
+def test_query_cross_checked_against_flattened_worlds() -> None:
+    models = [
+        NET.example_visible_model(),
+        NET.handwritten_neg_deep(),
+        NET.handwritten_neg_recursive(),
+        NET.handwritten_pos_recursive(),
+    ]
+    for cls in NET.INSTANCE_CLASSES:
+        for seed in range(6):
+            models.append(NET.generate_class(cls, seed, NET.TRANSPARENT))
+    for depth in (1, 2):
+        for regime in (NET.TREE, NET.CYCLIC_SAT, NET.CYCLIC_UNSAT):
+            for order in (0, 1, 2):
+                models.append(
+                    NET.generate_model(
+                        depth=depth,
+                        regime=regime,
+                        opacity=NET.TRANSPARENT,
+                        order=order,
+                        seed=depth * 10 + order,
+                    )
+                )
+    assert len(models) >= 40
+    for model in models:
+        nested = NET.query_value(model)
+        flat = NET.query_value(NET.flatten_model(model))
+        assert nested is flat
+        assert NET.cross_check_flat(model) is True
+
+
+def _independent_reports_possible(frame: dict, reports: dict | None) -> bool | None:
+    if not reports:
+        return None
+    cells = []
+    worlds = {str(w) for w in frame["worlds"]}
+    for agent, world in reports.items():
+        named = str(world)
+        if named not in worlds:
+            cells.append(set())
+            continue
+        cell = set()
+        for block in frame["indist"][agent]:
+            block_set = {str(x) for x in block}
+            if named in block_set:
+                cell = block_set
+                break
+        cells.append(cell)
+    if any(len(c) == 0 for c in cells):
+        return False
+    inter = set(cells[0])
+    for cell in cells[1:]:
+        inter &= cell
+    return bool(inter)
+
+
+def test_bundle_verified_by_independent_cell_intersection() -> None:
+    models = [
+        NET.handwritten_neg_deep(),
+        NET.handwritten_neg_recursive(),
+        NET.generate_model(
+            depth=1, regime=NET.CYCLIC_SAT, opacity=NET.TRANSPARENT, order=0, seed=1
+        ),
+        NET.generate_model(
+            depth=1, regime=NET.CYCLIC_UNSAT, opacity=NET.TRANSPARENT, order=0, seed=1
+        ),
+        NET.generate_class(NET.POS_PLAIN, 1),
+        NET.generate_class(NET.NEG_PAIRWISE, 2),
+        NET.generate_class(NET.NEG_DEEP, 3),
+        NET.generate_class(NET.NEG_RECURSIVE, 4),
+        NET.generate_class(NET.NEG_LOCAL, 5),
+    ]
+    for model in models:
+        outer = model["frames"][model["levels"][0]]
+        outer_ok = _independent_reports_possible(outer, model.get("bundle"))
+        inner_ok: bool | None = None
+        if model.get("nested_bundle"):
+            if len(model["levels"]) < 2:
+                inner_ok = False
+            else:
+                inner = model["frames"][model["levels"][1]]
+                inner_ok = _independent_reports_possible(inner, model["nested_bundle"])
+        flags = [flag for flag in (outer_ok, inner_ok) if flag is not None]
+        expected = None if not flags else all(flags)
+        assert NET.bundle_possible(model) is expected
+        if expected is None:
+            continue
+        cert: dict = {"query_value": bool(NET.query_value(model)), "bundle_possible": bool(expected)}
+        if expected:
+            joint, inner_j = NET.joint_worlds(model)
+            if joint is not None:
+                cert["joint_world"] = joint
+            if inner_j is not None:
+                cert["joint_inner"] = inner_j
+        ok, reason = NET.verify_certificate(model, cert)
+        assert ok, (reason, cert, expected)
+        # Falsy/truthy coercions that match expected still fail.
+        coerced = 1 if expected else 0
+        bad = dict(cert)
+        bad["bundle_possible"] = coerced
+        assert NET.verify_certificate(model, bad)[0] is False
+
+
 def test_11_budget_invalid_malformed_overlong() -> None:
     model = NET.example_visible_model()
     with pytest.raises(NET.OracleBudgetExceeded):

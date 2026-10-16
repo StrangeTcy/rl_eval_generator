@@ -513,6 +513,16 @@ def world_in_all_cells(frame: Mapping[str, Any], reports: Mapping[str, Any], wor
     return all(world_s in cell_of(frame, agent, named) for agent, named in reports.items())
 
 
+def _require_bool(raw: Mapping[str, Any], key: str) -> tuple[Optional[bool], str]:
+    """Reject truthy non-booleans. `bool("false")` is True; that is not a Boolean."""
+    if key not in raw:
+        return None, f"{key} missing"
+    value = raw[key]
+    if type(value) is not bool:
+        return None, f"{key} must be a bool, got {type(value).__name__}"
+    return value, ""
+
+
 def reference_certificate(model: Mapping[str, Any]) -> dict[str, Any]:
     value = query_value(model)
     possible = bundle_possible(model)
@@ -529,28 +539,37 @@ def reference_certificate(model: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def verify_certificate(model: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
-    """Recompute query and bundle from the model; replay joint-world witnesses."""
+    """Recompute query and bundle from the model; replay joint-world witnesses.
+
+    Boolean fields are checked by type (`type(v) is bool`), not by truthiness.
+    Trusted oracles used here: `query_value`, `flatten_model` (depth 1), and
+    cell intersection via `bundle_possible` / `world_in_all_cells`. This is
+    not the evaluated candidate solver.
+    """
     if not isinstance(raw, dict):
         return False, "not a dict"
-    if "query_value" not in raw:
-        return False, "query_value missing"
+    claimed_q, err = _require_bool(raw, "query_value")
+    if err:
+        return False, err
     true_q = query_value(model)
     if len(model["levels"]) == 1:
         flat_q = query_value(flatten_model(model))
-        if bool(flat_q) != bool(true_q):
+        if flat_q is not true_q:
             raise RuntimeError("depth-1 nested evaluator disagrees with flattened evaluator")
-    if bool(raw["query_value"]) != bool(true_q):
+    if claimed_q is not true_q:
         return False, "query_value mismatch"
     has_bundle = model.get("bundle") is not None or model.get("nested_bundle") is not None
     if not has_bundle:
         return True, "ok"
-    if "bundle_possible" not in raw:
-        return False, "bundle_possible missing"
-    true_b = bool(bundle_possible(model))
-    claimed = bool(raw["bundle_possible"])
-    if claimed != true_b:
+    claimed_b, err = _require_bool(raw, "bundle_possible")
+    if err:
+        return False, err
+    true_b = bundle_possible(model)
+    if true_b is None:
+        return False, "bundle_possible missing from the instance"
+    if claimed_b is not true_b:
         return False, "bundle_possible mismatch"
-    if not claimed:
+    if not claimed_b:
         return True, "ok"
     bundle = model.get("bundle")
     if bundle is not None:

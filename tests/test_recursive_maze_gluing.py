@@ -120,6 +120,106 @@ def test_oracle_independent() -> None:
     assert NET.evaluate_solver(lambda _m: {"status": "unsat"}, NET.example_visible_maze()) is False
 
 
+def _exhausted_depth_fixture() -> dict:
+    """Schema-valid maze whose child tile has shafts, entered with remaining=0.
+
+    Generator instances never put shafts on a remaining=0 tile (crypt/pit are
+    leaves). The public maze schema still allows a shaft whose child itself
+    has shafts; with depth=1 that child is entered at remaining=0.
+    """
+    return {
+        "root": "keep",
+        "depth": 1,
+        "tiles": {
+            "keep": {
+                "rooms": ["in", "shaft", "out"],
+                "entrance": "in",
+                "exit": "out",
+                "edges": [
+                    {"from": "in", "to": "shaft", "flip": 0},
+                    {"from": "shaft", "to": "out", "flip": 0},
+                ],
+                "shafts": [{"from": "shaft", "return": "shaft", "child": "cellar", "flip": 0}],
+            },
+            "cellar": {
+                "rooms": ["a", "b"],
+                "entrance": "a",
+                "exit": "b",
+                "edges": [{"from": "a", "to": "b", "flip": 0}],
+                "shafts": [{"from": "a", "return": "a", "child": "pit", "flip": 0}],
+            },
+            "pit": {
+                "rooms": ["x", "y"],
+                "entrance": "x",
+                "exit": "y",
+                "edges": [{"from": "x", "to": "y", "flip": 0}],
+                "shafts": [],
+            },
+        },
+        "start_orientation": 0,
+        "goal_orientation": 0,
+        "nesting": {},
+    }
+
+
+def test_replay_rejects_descend_when_nesting_depth_exhausted() -> None:
+    maze = _exhausted_depth_fixture()
+    illegal = [
+        {"op": "move", "to": "shaft"},
+        {"op": "descend", "child": "cellar"},
+        {"op": "descend", "child": "pit"},
+        {"op": "move", "to": "y"},
+        {"op": "ascend"},
+        {"op": "move", "to": "b"},
+        {"op": "ascend"},
+        {"op": "move", "to": "out"},
+    ]
+    legal = [
+        {"op": "move", "to": "shaft"},
+        {"op": "descend", "child": "cellar"},
+        {"op": "move", "to": "b"},
+        {"op": "ascend"},
+        {"op": "move", "to": "out"},
+    ]
+    ok, reason = NET.replay_route(maze, illegal)
+    assert ok is False
+    assert "nesting depth exhausted" in reason
+    ok, reason = NET.replay_route(maze, legal)
+    assert ok, reason
+    assert NET.maze_satisfiable(maze) is True
+    assert NET.verify_certificate(maze, {"status": "sat", "steps": illegal})[0] is False
+    assert NET.verify_certificate(maze, {"status": "sat", "steps": legal})[0] is True
+    # BFS must not offer descend at remaining=0.
+    cellar_state = (
+        (("keep", 1), ("cellar", 0)),
+        "a",
+        0,
+        True,
+        frozenset(),
+    )
+    ops = [action["op"] for _nxt, action in NET._neighbours(maze, cellar_state)]
+    assert "descend" not in ops
+
+
+def test_generated_routes_remain_accepted_after_depth_guard() -> None:
+    for depth in (1, 2, 3):
+        for regime in (NET.TREE, NET.CYCLIC_SAT):
+            maze = NET.generate_maze(
+                depth=depth,
+                regime=regime,
+                opacity=NET.TRANSPARENT,
+                ambiguity=NET.CLEAN,
+                seed=depth,
+            )
+            cert = NET.reference_certificate(maze)
+            if cert["status"] != "sat":
+                continue
+            ok, reason = NET.replay_route(maze, cert["steps"])
+            assert ok, (depth, regime, reason)
+            ok, reason = NET.verify_certificate(maze, cert)
+            assert ok, reason
+
+
 def test_generation_and_visible() -> None:
     created = []
     try:

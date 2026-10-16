@@ -261,6 +261,8 @@ def replay_route(maze: Mapping[str, Any], steps: list, max_steps: int = 10_000) 
             room = dest
             orient ^= int(found["flip"])
         elif op == "descend":
+            if remaining < 1:
+                return False, f"step {i}: nesting depth exhausted"
             requested = raw.get("child")
             shaft = None
             for cand in tile.get("shafts") or []:
