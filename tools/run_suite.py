@@ -1540,10 +1540,10 @@ def run_suite(
                 and (budget_left is None or budget_left >= 1)
             ):
                 case_attempts_spent += raw_try_attempts
-                outage_waited += backoff
+                outage_🙊ed += backoff
                 outage_retries += 1
                 checkpoint["provider_outage"] = {
-                    "waited_seconds": round(outage_waited, 1),
+                    "🙊ed_seconds": round(outage_🙊ed, 1),
                     "retries": outage_retries,
                     "last_backoff_seconds": round(backoff, 1),
                     "last_case_id": case_id,
@@ -1566,7 +1566,7 @@ def run_suite(
             else "behavioral_reference"
         )
         if result.get("status") != "paused_provider_error":
-            outage_waited = 0.0
+            outage_🙊ed = 0.0
             outage_retries = 0
         if not reasoning_effort and _is_zero_score(result):
             checkpoint["floor_effect_streak"] = int(checkpoint.get("floor_effect_streak", 0) or 0) + 1
