@@ -1,0 +1,19 @@
+diff --git a/tools/run_suite.py b/tools/run_suite.py
+index e528d92..c78a0ff 100644
+--- a/tools/run_suite.py
++++ b/tools/run_suite.py
+@@ -1462,6 +1462,14 @@ def run_suite(
+                 "stdout_tail": stdout,
+                 "stderr_tail": stderr,
+             }
++            # The message above is a *class*, and the class is ambiguous: a container that died
++            # on one case and a provider that answered nobody look identical from here, yet they
++            # call for opposite responses - bound the case, or wait for the harness. Preserve what
++            # the episode actually said, so the distinction is made on evidence instead of guessed.
++            # Agent-free and redacted: this field rides the state artifact and the status comment.
++            result["harness_returncode"] = process.returncode
++            result["harness_stderr_tail"] = _redact(process.stderr or "", secret)[-400:]
++            result["harness_stdout_tail"] = _redact(process.stdout or "", secret)[-400:]
+         except subprocess.TimeoutExpired:
+             if timeout_limited_by_dispatch_wall:
+                 # This is not a Docker/judge failure: the job's remaining
