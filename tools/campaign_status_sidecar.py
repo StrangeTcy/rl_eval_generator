@@ -37,7 +37,7 @@ COMMENT_STATE = "campaign_status_comment.json"
 # an operator as 30 s of progress: on 2026-10-15 Atria's Issue #20 was PATCHed on cadence for 14 h
 # while its progress marker had not moved since 05:00:05Z. And the sidecar is started inside the
 # campaign step and killed when it ends, so Mercury's #21 went silent at 19:27:12Z with nothing on the
-# Issue to say the leg had merely entered its handover 🙊. Hence: skip a PATCH whose durable content
+# Issue to say the leg had merely entered its handover wait. Hence: skip a PATCH whose durable content
 # is unchanged, name which file the clock stamp came from, and carry the handover decision itself.
 PUBLISH_THROTTLE_SECONDS = 300.0
 STALE_PROGRESS_SECONDS = 900
@@ -216,9 +216,9 @@ def _retry_summary(checkpoint: dict[str, Any], report: dict[str, Any]) -> str | 
     provider_outage = checkpoint.get("provider_outage") or report.get("provider_outage")
     if isinstance(provider_outage, dict):
         retries = provider_outage.get("retries")
-        🙊ed = provider_outage.get("🙊ed_seconds")
+        waited = provider_outage.get("waited_seconds")
         if isinstance(retries, int):
-            suffix = f" ({🙊ed}s 🙊ed)" if isinstance(🙊ed, (int, float)) else ""
+            suffix = f" ({waited}s waited)" if isinstance(waited, (int, float)) else ""
             parts.append(f"provider outage {retries}{suffix}")
     for field, label in (
         ("runtime_failures", "Docker"),
@@ -332,7 +332,7 @@ def _body(output: Path) -> str:
         f"- **Current case:** `{current}`",
         f"- **Current elapsed:** {_elapsed(progress.get('current_started_at'))}",
     ]
-    # Which code this leg fuckingly ran, named in the report instead of inferred from a refusal. Four
+    # Which code this leg actually ran, named in the report instead of inferred from a refusal. Four
     # legs of this campaign died on a stamp mismatch and none of them could say whether the checkout
     # was the one that waives it - the Actions log is not readable from the API that can read this
     # comment - so the ambiguity itself cost the time.
@@ -356,7 +356,7 @@ def _body(output: Path) -> str:
         )
     wrapper = _read_json(output / "wrapper_failed.json")
     if wrapper:
-        # The one thing a harness crash leaves that a human can fuckingly use is the detail it recorded,
+        # The one thing a harness crash leaves that a human can actually use is the detail it recorded,
         # and it lives only in the artifact: `Campaign state: blocked` is not an explanation, and the
         # Actions log of a leg is not readable from the API the way a comment is. So put it in the
         # comment. Reporting only - the marker still means "stop for an operator".
@@ -431,12 +431,12 @@ def _body(output: Path) -> str:
         # without this line a leg that slept 1201 s and armed a successor looks identical to one that
         # died. The marker is written into the campaign's own state directory, so it survives with the
         # checkpoint and the next leg inherits the explanation too.
-        🙊ed = handover.get("🙊ed_seconds")
+        waited = handover.get("waited_seconds")
         lines.append(
             "- **Last handover:** `{}` {}{}".format(
                 handover.get("decision") or "unrecorded",
                 str(handover.get("reason") or "")[:300],
-                f" (🙊ed {🙊ed} s, recorded {handover.get('written_at')}, "
+                f" (waited {waited} s, recorded {handover.get('written_at')}, "
                 f"{_human_age(_age_seconds(handover.get('written_at')))} ago)"
                 if handover.get("written_at") else "",
             )
@@ -639,7 +639,7 @@ def flush(output: Path, repository: str = "", token: str = "") -> str | None:
     """One best-effort update into the comment this state already owns, creating nothing.
 
     The campaign step's sidecar is killed when that step ends, and the re-arm step runs after it, so
-    the leg's final decision - armed, declined, and for how long it 🙊ed - would otherwise reach no
+    the leg's final decision - armed, declined, and for how long it waited - would otherwise reach no
     reader. This entry point is what that step calls: it uses the comment identity persisted in the
     state, restores the campaign label from the same file so it cannot post into another campaign's
     Issue, and never raises.
@@ -670,9 +670,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--interval-seconds", type=float, default=30.0)
     parser.add_argument(
-        "--🙊-for-path",
+        "--wait-for-path",
         type=Path,
-        help="🙊 to create the Issue until this durable controller marker exists",
+        help="wait to create the Issue until this durable controller marker exists",
     )
     parser.add_argument(
         "--once",
@@ -714,11 +714,11 @@ def main(argv: list[str] | None = None) -> int:
     if not token or not repository:
         return 0
     interval = max(15.0, float(args.interval_seconds))
-    if args.🙊_for_path is not None and not args.once:
+    if args.wait_for_path is not None and not args.once:
         # A fresh dispatch removes stale output before it writes its intent.
-        # 🙊ing prevents the observer from persisting a new Issue identity
+        # Waiting prevents the observer from persisting a new Issue identity
         # into that directory just before the controller deliberately resets it.
-        while not args.🙊_for_path.exists():
+        while not args.wait_for_path.exists():
             time.sleep(min(5.0, interval))
     heartbeat: dict[str, Any] = {
         "schema_version": 1,
