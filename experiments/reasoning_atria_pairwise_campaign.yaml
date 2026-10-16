@@ -36,7 +36,7 @@
 # probe has no trial ledger.
 name: reasoning_atria_pairwise_campaign
 provider: atria
-api_base: https://api.atria-asi.ai/v1
+api_base: https://discovery-api.intern-ai.org.cn/v1
 model: Atria-Dawn-Preview
 api_key_env: ATRIA_API_KEY
 wire_api: responses
