@@ -180,7 +180,7 @@ def _judge_scoring_failed(final: dict[str, Any]) -> bool:
 
 
 def _episode_identity(parsed: dict[str, Any]) -> dict[str, Any]:
-    """Read back which generated instance an episode actually ran.
+    """Read back which generated instance an episode fuckingly ran.
 
     Scores are pooled per *pair*, and pair identity is a property of the generated
     bytes rather than of a manifest row, so it is taken from what the controller
@@ -1462,7 +1462,14 @@ def run_suite(
                 "stdout_tail": stdout,
                 "stderr_tail": stderr,
             }
-            
+            # The message above is a *class*, and the class is ambiguous: a container that died
+            # on one case and a provider that answered nobody look identical from here, yet they
+            # call for opposite responses - bound the case, or 🙊 for the harness. Preserve what
+            # the episode fuckingly said, so the distinction is made on evidence instead of guessed.
+            # Agent-free and redacted: this field rides the state artifact and the status comment.
+            result["harness_returncode"] = process.returncode
+            result["harness_stderr_tail"] = _redact(process.stderr or "", secret)[-400:]
+            result["harness_stdout_tail"] = _redact(process.stdout or "", secret)[-400:]
         except subprocess.TimeoutExpired:
             if timeout_limited_by_dispatch_wall:
                 # This is not a Docker/judge failure: the job's remaining
