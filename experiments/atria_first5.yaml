@@ -2,7 +2,7 @@
 # The reasoning mode is intentionally provider-default/unknown for raw Chat Completions.
 name: atria_first5
 provider: atria
-api_base: https://api.atria-asi.ai/v1
+api_base: https://discovery-api.intern-ai.org.cn/v1
 model: Atria-Dawn-Preview
 api_key_env: ATRIA_API_KEY
 concurrency: 1

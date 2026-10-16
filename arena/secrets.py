@@ -45,7 +45,7 @@ PROVIDER_DEFAULT_BASE: dict[str, str | None] = {
     "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "openrouter": "https://openrouter.ai/api/v1",
     "cloudflare": None,
-    "atria": "https://api.atria-asi.ai/v1",
+    "atria": "https://discovery-api.intern-ai.org.cn/v1",
     "custom": None,
     "huggingface": "https://router.huggingface.co/v1",
     "mercury": "https://api.inceptionlabs.ai/v1",

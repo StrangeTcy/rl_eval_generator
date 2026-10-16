@@ -5,7 +5,7 @@
 # epistemic-process-control measurement is T1 same_fact_presentation.
 name: reasoning_atria_covering_campaign
 provider: atria
-api_base: https://api.atria-asi.ai/v1
+api_base: https://discovery-api.intern-ai.org.cn/v1
 model: Atria-Dawn-Preview
 api_key_env: ATRIA_API_KEY
 wire_api: responses

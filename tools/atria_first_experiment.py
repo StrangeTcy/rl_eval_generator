@@ -38,7 +38,7 @@ from tools.suite_inventory import _load_yaml  # noqa: E402
 
 PROFILE_DEFAULT = ROOT / "experiments" / "atria_first5.yaml"
 APPROVED_MODEL = "Atria-Dawn-Preview"
-APPROVED_BASE = "https://api.atria-asi.ai/v1"
+APPROVED_BASE = "https://discovery-api.intern-ai.org.cn/v1"
 RATE_INTERVAL_SECONDS = 1.1
 EXPECTED_LIMITS = {
     "max_steps": 20,
