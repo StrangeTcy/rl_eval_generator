@@ -6,7 +6,9 @@ Two regions in series compose by T12[L, R] = sum_m T1[L, m] * T2[m, R].
 All arithmetic is exact integer arithmetic. A table is a fixed point of
 block-doubling when compose(T, T) equals T entrywise.
 
-The oracle recomputes tables from the listed weights. It is not a CSP.
+This is a 2-spin nonnegative integer toy, not a lattice model and not a
+physical renormalization-group claim. The oracle recomputes tables from the
+listed weights. It is not a CSP.
 """
 from __future__ import annotations
 
@@ -98,24 +100,45 @@ def _non_fp_weights() -> list[list[list[int]]]:
     return w
 
 
+def _series_tree(names: list[str]) -> dict[str, Any]:
+    node: dict[str, Any] = {"kind": "leaf", "name": names[0]}
+    for nm in names[1:]:
+        node = {
+            "kind": "series",
+            "left": node,
+            "right": {"kind": "leaf", "name": nm},
+        }
+    return node
+
+
+def _region_names(n: int) -> list[str]:
+    if n == 1:
+        return ["leaf"]
+    if n == 2:
+        return ["left", "right"]
+    return [f"r{i}" for i in range(n)]
+
+
 def generate_instance(*, depth: int, regime: str, representation: str, seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
+    requested = int(depth)
+    if requested < 1:
+        raise ValueError("depth must be >= 1")
     if regime in (DIRECT, FLAT):
-        leaf = _fp_weights() if regime == DIRECT else _non_fp_weights()
-        regions = {"leaf": {"weights": leaf}}
+        # One region. Depth does not add a forest the oracle cannot evaluate.
+        n = 1
+        w = _fp_weights() if regime == DIRECT else _non_fp_weights()
+        names = ["leaf"]
+        regions = {"leaf": {"weights": w}}
         tree = {"kind": "leaf", "name": "leaf"}
-        depth_used = 1
         expect_fixed = regime == DIRECT
-    elif regime == RECURSIVE:
-        regions = {"left": {"weights": _fp_weights()}, "right": {"weights": _fp_weights()}}
-        tree = {"kind": "series", "left": {"kind": "leaf", "name": "left"}, "right": {"kind": "leaf", "name": "right"}}
-        depth_used = max(depth, 2)
-        expect_fixed = True  # compose of fp projector is fp
     else:
-        regions = {"left": {"weights": _non_fp_weights()}, "right": {"weights": _non_fp_weights()}}
-        tree = {"kind": "series", "left": {"kind": "leaf", "name": "left"}, "right": {"kind": "leaf", "name": "right"}}
-        depth_used = max(depth, 2)
-        expect_fixed = False
+        n = requested
+        names = _region_names(n)
+        wsrc = _fp_weights() if regime == RECURSIVE else _non_fp_weights()
+        regions = {nm: {"weights": copy.deepcopy(wsrc)} for nm in names}
+        tree = _series_tree(names) if n >= 2 else {"kind": "leaf", "name": names[0]}
+        expect_fixed = regime == RECURSIVE
 
     label_perm = [0, 1]
     if representation == INFERRED:
@@ -129,7 +152,7 @@ def generate_instance(*, depth: int, regime: str, representation: str, seed: int
         "tree": tree,
         "calibration": calibration,
         "representation": representation,
-        "depth": depth_used,
+        "depth": n,
         "label_perm": label_perm,
         "meta": {"regime": regime, "seed": seed, "expect_fixed": expect_fixed},
     }

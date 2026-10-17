@@ -1,0 +1,92 @@
+[
+  {
+    "env": "holonomy",
+    "depth": 1,
+    "public_bytes": 284,
+    "cycle_len": 2,
+    "recorded_depth": 1
+  },
+  {
+    "env": "holonomy",
+    "depth": 2,
+    "public_bytes": 343,
+    "cycle_len": 3,
+    "recorded_depth": 2
+  },
+  {
+    "env": "holonomy",
+    "depth": 3,
+    "public_bytes": 351,
+    "cycle_len": 4,
+    "recorded_depth": 3
+  },
+  {
+    "env": "codes",
+    "depth": 1,
+    "public_bytes": 229,
+    "blocks": 1,
+    "enumerate": 25,
+    "recorded_depth": 1
+  },
+  {
+    "env": "codes",
+    "depth": 2,
+    "public_bytes": 387,
+    "blocks": 2,
+    "enumerate": 625,
+    "recorded_depth": 2
+  },
+  {
+    "env": "codes",
+    "depth": 3,
+    "public_bytes": 509,
+    "blocks": 3,
+    "enumerate": 15625,
+    "recorded_depth": 3
+  },
+  {
+    "env": "compiler",
+    "depth": 1,
+    "public_bytes": 488,
+    "n_programs": 6,
+    "program_height": 1,
+    "recorded_depth": 1
+  },
+  {
+    "env": "compiler",
+    "depth": 2,
+    "public_bytes": 610,
+    "n_programs": 6,
+    "program_height": 2,
+    "recorded_depth": 2
+  },
+  {
+    "env": "compiler",
+    "depth": 3,
+    "public_bytes": 610,
+    "n_programs": 6,
+    "program_height": 2,
+    "recorded_depth": 2
+  },
+  {
+    "env": "coarse",
+    "depth": 1,
+    "public_bytes": 222,
+    "n_regions": 1,
+    "recorded_depth": 1
+  },
+  {
+    "env": "coarse",
+    "depth": 2,
+    "public_bytes": 354,
+    "n_regions": 2,
+    "recorded_depth": 2
+  },
+  {
+    "env": "coarse",
+    "depth": 3,
+    "public_bytes": 470,
+    "n_regions": 3,
+    "recorded_depth": 3
+  }
+]

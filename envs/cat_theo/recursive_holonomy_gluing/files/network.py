@@ -6,9 +6,9 @@ permutation). A parent transition is the composition of its children's
 transitions. A cycle is compatible when some state returns to itself after
 every map in documented order.
 
-Raw point-assignments glue uniquely. Constrained transitions need not have a
+Raw point-assignments extend uniquely. Constrained transitions need not have a
 state that survives the cycle: that is an empty solution set, not a failure of
-the unrestricted sheaf axiom.
+unique extension for unconstrained points.
 
 This module is the trusted oracle. It does not import the candidate solver.
 """
@@ -187,46 +187,30 @@ def generate_instance(
         PERM: perm_spec([1, 0, 2, 3] if modulus == 4 else list(domain)),
     }[family]
 
-    leaf_map = identity
-    root_extra = identity
-    sat = True
+    depth_used = int(depth)
+    if depth_used < 1:
+        raise ValueError("depth must be >= 1")
+
+    # `depth` is the number of leaf-map applications in the cycle. DIRECT/FLAT
+    # are the identity cycle of that length (SAT). RECURSIVE adds a still-SAT
+    # extra factor; REC_COMP adds a derangement/translation with no returning
+    # state. Recorded depth is the value used to build the cycle, never lifted.
+    maps: dict[str, Any] = {"leaf": identity}
     if regime in (DIRECT, FLAT):
-        depth_used = 1
-        if regime == FLAT:
-            # three maps in a cycle; SAT uses sat_twist as one factor that still has a fp
-            leaf_map = sat_twist if family != MUL else mul_spec(1)
-            root_extra = identity
-            sat = True
-        else:
-            leaf_map = identity
-            sat = True
+        cycle = ["leaf"] * depth_used
+        root = "leaf"
     elif regime == RECURSIVE:
-        depth_used = max(depth, 2)
-        leaf_map = identity
-        root_extra = sat_twist if family != MUL else identity
-        sat = True
-    else:  # REC_COMP: each child has a fixed state, the nested cycle does not
-        depth_used = max(depth, 2)
-        leaf_map = identity
-        root_extra = twist
-        sat = False
-
-    modules = {
-        "leaf": {"ports": ["in", "out"], "child": None},
-        "node": {"ports": ["in", "out"], "child": "leaf"},
-    }
-    root = "leaf" if depth_used == 1 else "node"
-    maps = {"leaf": leaf_map, "node_extra": root_extra}
-
-    # Cycle: apply leaf (depth times if nested) then node_extra.
-    cycle = []
-    if root == "leaf":
-        cycle = ["leaf"]
-        if regime == FLAT:
-            cycle = ["leaf", "leaf", "node_extra"]
-            maps["node_extra"] = identity
-    else:
+        maps["node_extra"] = sat_twist if family != MUL else identity
         cycle = ["leaf"] * depth_used + ["node_extra"]
+        root = "node" if depth_used >= 2 else "leaf"
+    else:
+        maps["node_extra"] = twist
+        cycle = ["leaf"] * depth_used + ["node_extra"]
+        root = "node" if depth_used >= 2 else "leaf"
+
+    modules = {"leaf": {"ports": ["in", "out"], "child": None}}
+    if root == "node":
+        modules["node"] = {"ports": ["in", "out"], "child": "leaf"}
 
     expanded = [copy.deepcopy(maps[name]) for name in cycle]
     composite = compose_specs(family, expanded, modulus)

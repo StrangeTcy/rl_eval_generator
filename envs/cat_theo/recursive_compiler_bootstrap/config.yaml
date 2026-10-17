@@ -1,6 +1,6 @@
 axes:
   - id: recursive_depth
-    description: "Number of compiler/recode stages on the bootstrap path"
+    description: "Program-tree height of a bounded add-grammar over {0,1,2}, capped at 2. Recorded depth is that height. Stage count is the bootstrap_regime, not this axis."
     class: "task"
     levels:
       easy:

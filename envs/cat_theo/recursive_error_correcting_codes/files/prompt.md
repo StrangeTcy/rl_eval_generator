@@ -7,8 +7,8 @@ Implement `%%MODEL_CLASS%%.solve` in `%%MODEL_FILE%%`.
 - `modulus`: a prime `p`. All arithmetic is modulo `p`.
 - `blocks`: each block has `length` and a parity-check matrix `H`. A vector
   `v` is a local codeword iff `H v = 0` (matrix-vector product over the field).
-- `glues`: each glue `{left: [block, index], right: [block, index], scale}`
-  requires `visible_left[index] = scale * visible_right[index] (mod p)`.
+- `glues`: overlap constraints `{left: [block, index], right: [block, index], scale}`
+  requiring `visible_left[index] = scale * visible_right[index] (mod p)`.
 - `parent_check`: `{vars: [[block, index], ...], row: [...], rhs: r}` requires
   the dot product of `row` with those visible symbols to equal `rhs`.
 - `calibration`: sample local codewords per block.

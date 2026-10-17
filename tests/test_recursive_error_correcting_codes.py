@@ -108,6 +108,20 @@ def test_generation_visible() -> None:
             shutil.rmtree(path, ignore_errors=True)
 
 
+def test_depth_is_block_count() -> None:
+    for depth in (1, 2, 3):
+        inst = NET.generate_instance(depth=depth, regime=NET.REC_COMP, representation=NET.REVEALED, seed=0)
+        assert inst["depth"] == depth
+        assert len(inst["blocks"]) == depth
+        pub = NET.public_instance(inst)
+        assert pub["depth"] == depth
+        assert "meta" not in pub
+        inf = NET.generate_instance(depth=depth, regime=NET.REC_COMP, representation=NET.INFERRED, seed=0)
+        pub_i = NET.public_instance(inf)
+        assert "perms" not in pub_i
+        assert "meta" not in pub_i
+
+
 def test_heldout() -> None:
     n_unsat = 0
     for seed in range(10_000, 10_006):

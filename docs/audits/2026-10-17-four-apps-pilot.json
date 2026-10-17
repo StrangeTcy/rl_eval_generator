@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-17",
+  "status": "unmeasured",
+  "paid_fallback": false,
+  "blocker": "No provider credentials in this sandbox (no GROQ_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY, ATRIA_API_KEY, HF_TOKEN, INCEPTION_API_KEY, NVIDIA_API_KEY, CF_API_TOKEN, or secret_key.json). tools/provider_preflight.py with no --provider selected zero profiles and made no network call. No free endpoint was verified. No model episode was run.",
+  "environments": [
+    "recursive_holonomy_gluing",
+    "recursive_compiler_bootstrap",
+    "recursive_error_correcting_codes",
+    "recursive_coarse_graining"
+  ],
+  "what_unit_tests_are_not": "Generator/oracle correctness and shortcut-baseline regressions are not model structural reasoning and are not benchmark validity.",
+  "runnable_when_credentials_exist": {
+    "preflight": "python tools/provider_preflight.py --out runs/provider_preflight.json",
+    "inventory": "python tools/suite_inventory.py --out runs/four-apps-suite.json --matrix covering --seeds 0 --dry-run",
+    "filter": "Keep only the four environment names listed above from the inventory (the inventory tool expands the whole registry).",
+    "dry_run": "python tools/run_suite.py --manifest runs/four-apps-suite.json --provider <name> --model <id> --max-cases 4 --dry-run",
+    "pilot": "Same command without --dry-run only after preflight reports a reachable provider and the operator has confirmed the endpoint is no-cost. Do not use a paid fallback."
+  }
+}

@@ -1,6 +1,6 @@
 axes:
   - id: recursive_depth
-    description: "Nesting of child code blocks inside a parent block"
+    description: "Number of length-2 parity-check blocks. Recorded depth equals the number of blocks built."
     class: "task"
     levels:
       easy:
@@ -11,7 +11,7 @@ axes:
         "%%DEPTH%%": "3"
 
   - id: code_regime
-    description: "Single block, recursively glued blocks with a solution, or glued blocks whose parent parity has none"
+    description: "direct/flat: independent blocks, SAT parent. recursive: cycle glues, SAT parent. recursive_composition: cycle glues (or a conflicting extra parity at depth 1), unsat parent. SAT polarity is the regime."
     class: "task"
     levels:
       easy:

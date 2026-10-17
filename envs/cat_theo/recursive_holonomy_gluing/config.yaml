@@ -1,6 +1,6 @@
 axes:
   - id: recursive_depth
-    description: "How many child maps are composed into a parent map"
+    description: "Cycle length: number of leaf-map applications. Recorded depth equals this value; it is not silently raised."
     class: "task"
     levels:
       easy:
@@ -22,7 +22,7 @@ axes:
         "%%FAMILY%%": "permutation"
 
   - id: cycle_regime
-    description: "Direct identity, recursive composition that still has a returning state, or a nested cycle with none"
+    description: "direct/flat: identity cycle of the given length (SAT). recursive: extra SAT factor. recursive_composition: extra factor with no returning state. SAT polarity is the regime, not the depth."
     class: "task"
     levels:
       easy:

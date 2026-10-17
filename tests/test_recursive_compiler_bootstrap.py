@@ -109,6 +109,28 @@ def test_generation_visible_prompt() -> None:
             shutil.rmtree(path, ignore_errors=True)
 
 
+def test_programs_sampled_from_bounded_grammar() -> None:
+    pool = {json.dumps(p) for p in NET.grammar_pool(2)}
+    seen: list[list] = []
+    for seed in range(8):
+        inst = NET.generate_instance(depth=2, regime=NET.RECURSIVE, representation=NET.REVEALED, seed=seed)
+        assert inst["depth"] == inst["program_height"] == 2
+        assert len(inst["programs"]) == NET.PROGRAM_SAMPLE
+        assert all(json.dumps(p) in pool for p in inst["programs"])
+        seen.append(inst["programs"])
+    assert any(seen[0] != other for other in seen[1:])
+    capped = NET.generate_instance(depth=3, regime=NET.REC_COMP, representation=NET.INFERRED, seed=0)
+    assert capped["depth"] == capped["program_height"] == 2
+    pub = NET.public_instance(capped)
+    assert "encodings" not in pub
+    assert "meta" not in pub
+    assert all("perm" not in st for st in pub["stages"])
+    rev = NET.public_instance(
+        NET.generate_instance(depth=2, regime=NET.REC_COMP, representation=NET.REVEALED, seed=0)
+    )
+    assert "encodings" in rev
+
+
 def test_heldout_local_baseline_misses_path_obstruction() -> None:
     rows = []
     for seed in range(10_000, 10_008):

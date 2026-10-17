@@ -1,6 +1,6 @@
 axes:
   - id: recursive_depth
-    description: "How many child regions are composed into a parent boundary table"
+    description: "For recursive regimes, the number of series-composed 2-spin regions (recorded depth). direct/flat always build one region and record depth 1. This is a 2-spin integer toy."
     class: "task"
     levels:
       easy:
@@ -11,7 +11,7 @@ axes:
         "%%DEPTH%%": "3"
 
   - id: scale_regime
-    description: "Single region, series composition that is a doubling fixed point, or series composition that is not"
+    description: "direct: one projector region (fixed). flat: one all-ones region (not fixed). recursive: series of projectors (fixed). recursive_composition: series of all-ones (not fixed). SAT polarity is the regime."
     class: "task"
     levels:
       easy:

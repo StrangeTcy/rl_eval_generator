@@ -1,4 +1,4 @@
-"""Weak baseline: first region's table, claim a fixed point."""
+"""Weak baseline: first region's table, always claim fixed=True."""
 
 
 class %%MODEL_CLASS%%:

@@ -8,7 +8,7 @@ program set. A bootstrap claim names a decoder for a composed path; it can
 fail observational equivalence even when each stage is locally correct
 relative to its own encoding.
 
-This is not a holonomy/CSP solver: the oracle executes programs.
+The oracle executes programs. It is not a CSP solver.
 """
 from __future__ import annotations
 
@@ -24,6 +24,9 @@ REC_COMP = "recursive_composition"
 REVEALED = "revealed"
 INFERRED = "inferred"
 OPCODES = ("push", "add", "halt")
+PROGRAM_SAMPLE = 6
+MAX_PROGRAM_HEIGHT = 2
+GRAMMAR_CONSTANTS = (0, 1, 2)
 PUBLIC_KEYS = (
     "modulus",
     "programs",
@@ -31,6 +34,8 @@ PUBLIC_KEYS = (
     "claimed_decoder",
     "calibration",
     "representation",
+    "depth",
+    "program_height",
 )
 CHECK_NAMES = (
     "local_visible",
@@ -128,16 +133,44 @@ def permute_encoding(base: Mapping[str, int], perm: Mapping[int, int]) -> dict[s
 
 
 def public_instance(inst: Mapping[str, Any]) -> dict[str, Any]:
-    out = {key: copy.deepcopy(inst[key]) for key in PUBLIC_KEYS}
+    out = {key: copy.deepcopy(inst[key]) for key in PUBLIC_KEYS if key in inst}
     if inst.get("representation") == REVEALED:
         out["encodings"] = copy.deepcopy(inst["encodings"])
+    else:
+        # Recode permutations reconstruct from encodings; do not leak them when
+        # encodings themselves are hidden.
+        out["stages"] = [
+            {k: copy.deepcopy(v) for k, v in st.items() if k != "perm"}
+            for st in (out.get("stages") or [])
+        ]
     return out
+
+
+def grammar_pool(height: int, constants: tuple[int, ...] = GRAMMAR_CONSTANTS) -> list[Any]:
+    """Finite add-grammar: constants, then `add(expr, c)` layered up to `height`."""
+    height = max(0, int(height))
+    layer: list[Any] = [int(c) for c in constants]
+    pool: list[Any] = list(layer)
+    for _ in range(height):
+        nxt = [["add", copy.deepcopy(expr), int(c)] for expr in layer for c in constants]
+        pool.extend(nxt)
+        layer = nxt
+    return pool
+
+
+def sample_programs(rng: random.Random, height: int, k: int = PROGRAM_SAMPLE) -> list[Any]:
+    pool = grammar_pool(height)
+    idxs = list(range(len(pool)))
+    rng.shuffle(idxs)
+    take = min(int(k), len(pool))
+    return [copy.deepcopy(pool[i]) for i in idxs[:take]]
 
 
 def generate_instance(*, depth: int, regime: str, representation: str, seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
     modulus = 5
-    programs = [0, 1, 2, ["add", 1, 2], ["add", ["add", 1, 0], 3], ["add", 4, 4]]
+    height = min(max(int(depth), 1), MAX_PROGRAM_HEIGHT)
+    programs = sample_programs(rng, height)
     identity = {"push": 0, "add": 1, "halt": 2}
     recode = {0: 2, 1: 0, 2: 1}  # permutation of opcode ids
     composed = permute_encoding(identity, recode)
@@ -148,7 +181,6 @@ def generate_instance(*, depth: int, regime: str, representation: str, seed: int
         encodings = {"front": identity}
         stages = [{"name": "front", "kind": "compile"}]
         claimed = invert_encoding(identity)
-        depth_used = 1
     elif regime == RECURSIVE:
         encodings = {"front": identity, "recode": composed}
         stages = [
@@ -156,7 +188,6 @@ def generate_instance(*, depth: int, regime: str, representation: str, seed: int
             {"name": "recode", "kind": "recode", "perm": dict(recode)},
         ]
         claimed = invert_encoding(composed)
-        depth_used = max(depth, 2)
     else:
         encodings = {"front": identity, "recode": composed}
         stages = [
@@ -164,15 +195,12 @@ def generate_instance(*, depth: int, regime: str, representation: str, seed: int
             {"name": "recode", "kind": "recode", "perm": dict(recode)},
         ]
         claimed = invert_encoding(wrong)
-        depth_used = max(depth, 2)
 
+    last = stages[-1]["name"]
     calibration = []
     for expr in programs[:3]:
         ops = finalize(compile_source(expr))
-        encoded = encode_ops(ops, encodings[stages[-1]["name"] if regime != DIRECT else "front"])
-        if regime in (RECURSIVE, REC_COMP):
-            ops = finalize(compile_source(expr))
-            encoded = encode_ops(ops, encodings["recode"])
+        encoded = encode_ops(ops, encodings[last])
         calibration.append({"source": expr, "bytes": encoded})
 
     return {
@@ -183,8 +211,9 @@ def generate_instance(*, depth: int, regime: str, representation: str, seed: int
         "calibration": calibration,
         "representation": representation,
         "encodings": encodings,
-        "depth": depth_used,
-        "meta": {"regime": regime, "seed": seed},
+        "depth": height,
+        "program_height": height,
+        "meta": {"regime": regime, "seed": seed, "requested_depth": int(depth)},
     }
 
 

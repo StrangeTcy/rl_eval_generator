@@ -84,45 +84,41 @@ def public_instance(inst: Mapping[str, Any]) -> dict[str, Any]:
 def generate_instance(*, depth: int, regime: str, representation: str, seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
     p = 5
-    # Three length-2 blocks, local check [1,1] · v = 0
-    blocks = {
-        "A": {"length": 2, "H": [[1, 1]]},
-        "B": {"length": 2, "H": [[1, 1]]},
-        "C": {"length": 2, "H": [[1, 1]]},
-    }
-    # Glue: a1=b0, b1=c0, c1=a0  (identity perms on those coordinates)
-    glues = [
-        {"left": ["A", 1], "right": ["B", 0], "scale": 1},
-        {"left": ["B", 1], "right": ["C", 0], "scale": 1},
-        {"left": ["C", 1], "right": ["A", 0], "scale": 1},
-    ]
-    # Parent parity on (a0,b0,c0)
+    n = int(depth)
+    if n < 1:
+        raise ValueError("depth must be >= 1")
+    # One length-2 block per depth unit. Local check [1,1] · v = 0.
+    names = [chr(ord("A") + i) for i in range(n)]
+    blocks = {nm: {"length": 2, "H": [[1, 1]]} for nm in names}
+    glues: list[dict[str, Any]] = []
+    if regime in (RECURSIVE, REC_COMP) and n >= 2:
+        for i in range(n - 1):
+            glues.append({"left": [names[i], 1], "right": [names[i + 1], 0], "scale": 1})
+        glues.append({"left": [names[-1], 1], "right": [names[0], 0], "scale": 1})
+    parent_vars = [[nm, 0] for nm in names]
     if regime == REC_COMP:
-        parent_check = {"vars": [["A", 0], ["B", 0], ["C", 0]], "row": [1, 1, 1], "rhs": 1}
-        depth_used = max(depth, 2)
-    elif regime == DIRECT:
-        blocks = {"A": {"length": 2, "H": [[1, 1]]}}
-        glues = []
-        parent_check = {"vars": [["A", 0], ["A", 1]], "row": [1, 1], "rhs": 0}
-        depth_used = 1
+        if n == 1:
+            parent_check = {"vars": [["A", 0], ["A", 1]], "row": [1, 1], "rhs": 1}
+        else:
+            parent_check = {"vars": parent_vars, "row": [1] * n, "rhs": 1}
     else:
-        parent_check = {"vars": [["A", 0], ["B", 0], ["C", 0]], "row": [1, 1, 1], "rhs": 0}
-        depth_used = max(depth, 1 if regime == FLAT else 2)
+        if regime == DIRECT and n == 1:
+            parent_check = {"vars": [["A", 0], ["A", 1]], "row": [1, 1], "rhs": 0}
+        else:
+            parent_check = {"vars": parent_vars, "row": [1] * n, "rhs": 0}
+        if regime in (DIRECT, FLAT):
+            glues = []
 
     perms = {name: list(range(spec["length"])) for name, spec in blocks.items()}
-    if representation == INFERRED and len(blocks) > 1:
-        # nontrivial perm on B
-        perms["B"] = [1, 0]
-        # calibration: two known valid local words for B in *visible* order
-        # After perm, coordinates swap; glue still uses original indices in the secret frame.
-        # Keep glues in secret coordinates; calibration shows visible labels.
+    if representation == INFERRED and n > 1:
+        perms[names[1]] = [1, 0]
+    _ = rng  # seed reserved for future sampled checks; perms are deterministic
     calibration = {}
     for name, spec in blocks.items():
         words = []
         for x in range(p):
             vec = [0] * spec["length"]
             vec[0] = x
-            # satisfy H v = 0: for [1,1], v1 = -v0
             if spec["length"] == 2 and spec["H"] == [[1, 1]]:
                 vec[1] = (-x) % p
             words.append(vec)
@@ -134,7 +130,7 @@ def generate_instance(*, depth: int, regime: str, representation: str, seed: int
         "parent_check": parent_check,
         "calibration": calibration,
         "representation": representation,
-        "depth": depth_used,
+        "depth": n,
         "perms": perms,
         "meta": {"regime": regime, "seed": seed},
     }

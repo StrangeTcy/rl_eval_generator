@@ -148,6 +148,25 @@ def test_generation_and_visible_and_prompt_lint() -> None:
             shutil.rmtree(path, ignore_errors=True)
 
 
+def test_depth_recorded_equals_cycle_leaf_count() -> None:
+    for depth in (1, 2, 3):
+        inst = NET.generate_instance(
+            depth=depth, family=NET.MUL, regime=NET.REC_COMP, representation=NET.REVEALED, seed=0
+        )
+        assert inst["depth"] == depth
+        assert inst["cycle"].count("leaf") == depth
+        pub = NET.public_instance(inst)
+        assert pub["depth"] == depth
+        assert "meta" not in pub
+        inf = NET.generate_instance(
+            depth=depth, family=NET.MUL, regime=NET.REC_COMP, representation=NET.INFERRED, seed=0
+        )
+        pub_i = NET.public_instance(inf)
+        assert "maps" not in pub_i
+        assert "expanded" not in pub_i
+        assert "meta" not in pub_i
+
+
 def test_heldout_baselines_recorded() -> None:
     rows = []
     for seed in range(10_000, 10_012):

@@ -25,8 +25,13 @@ instruction. A **decoder** is the inverse map id → name.
 ## Input
 
 - `modulus`, `programs`: the finite set of source programs the claim is about.
-- `stages`: ordered path. `"compile"` then optional `"recode"` with a
-  permutation of opcode ids.
+  Programs are sampled from the grammar of constants `{0,1,2}` and nested
+  `add`, with tree height at most `program_height` (also recorded as `depth`,
+  at most 2). The claim is only about this listed set, not every expression
+  of that height.
+- `stages`: ordered path. `"compile"` then optional `"recode"`. When
+  `representation` is `"revealed"`, a recode stage includes its opcode-id
+  permutation; otherwise recover encodings from `calibration`.
 - `claimed_decoder`: map from opcode id to name for the **last** stage's
   encoding.
 - `calibration`: a few `{source, bytes}` pairs produced by that last encoding.

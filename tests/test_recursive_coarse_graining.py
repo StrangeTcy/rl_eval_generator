@@ -116,6 +116,21 @@ def test_generation_visible() -> None:
             shutil.rmtree(path, ignore_errors=True)
 
 
+def test_depth_is_series_region_count() -> None:
+    rec = NET.generate_instance(depth=3, regime=NET.RECURSIVE, representation=NET.REVEALED, seed=0)
+    assert rec["depth"] == 3
+    assert len(rec["regions"]) == 3
+    assert NET.true_table_and_fixed(rec)[1] is True
+    direct = NET.generate_instance(depth=3, regime=NET.DIRECT, representation=NET.REVEALED, seed=0)
+    assert direct["depth"] == 1
+    assert len(direct["regions"]) == 1
+    inf = NET.public_instance(
+        NET.generate_instance(depth=2, regime=NET.REC_COMP, representation=NET.INFERRED, seed=0)
+    )
+    assert "label_perm" not in inf
+    assert "meta" not in inf
+
+
 def test_heldout() -> None:
     n = 0
     for seed in range(10_000, 10_006):

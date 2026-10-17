@@ -22,7 +22,7 @@ If `representation` is `"revealed"`, `label_perm` is a permutation `π` of
 `{0,1}` applied to the **root** table by `T'[π[L]][π[R]] = T[L][R]`. If it is
 absent, `π` is the identity.
 
-A table is a **doubling fixed point** when composing it with itself (the same
+A table is **stable under doubling** when composing it with itself (the same
 series rule) yields the same four integers.
 
 ## Output
