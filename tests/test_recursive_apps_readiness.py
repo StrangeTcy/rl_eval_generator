@@ -3,6 +3,10 @@
 Passing these tests is generator/oracle correctness and shortcut resistance.
 It is not a model-performance result and does not make the suite a validated
 benchmark.
+
+`flat` is a generator branch (a Python constant). It is not a config level and
+cannot be selected by `generate_env.py --difficulty` or `tools/suite_inventory.py`.
+Public-instance loops may still exercise it as a tested generator branch.
 """
 from __future__ import annotations
 
@@ -16,8 +20,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.suite_inventory import _difficulty_vectors, _validate_axes  # noqa: E402
+
+AGENT_FILES = ("prompt.md", "solver.py", "visible_tests.py")
 
 AGENT_BANNED = (
     "sheaf",
@@ -37,8 +49,32 @@ AGENT_BANNED = (
     "fixed point",
 )
 
+# Judge-only substitutions and bookkeeping that must not appear in agent files.
+JUDGE_ONLY_MARKERS = (
+    "REGIME =",
+    "PASS_THRESHOLD",
+    "PARTIAL_THRESHOLD",
+    "expect_fixed",
+    "\"composite\"",
+)
+
 NEVER_PUBLIC_KEYS = {"meta", "composite", "expect_fixed", "sat"}
 HIDDEN_WHEN_INFERRED = {"maps", "expanded", "encodings", "perms", "label_perm"}
+
+ENVS = (
+    "recursive_holonomy_gluing",
+    "recursive_compiler_bootstrap",
+    "recursive_error_correcting_codes",
+    "recursive_coarse_graining",
+)
+SELECTABLE_REGIMES = ("direct", "recursive", "recursive_composition")
+SELECTABLE_REPS = ("revealed", "inferred")
+REGIME_AXIS_IDS = {
+    "recursive_holonomy_gluing": "cycle_regime",
+    "recursive_compiler_bootstrap": "bootstrap_regime",
+    "recursive_error_correcting_codes": "code_regime",
+    "recursive_coarse_graining": "scale_regime",
+}
 
 
 def _load(env: str, mod_name: str):
@@ -53,6 +89,45 @@ HOL = _load("recursive_holonomy_gluing", "hol_ready")
 CMP = _load("recursive_compiler_bootstrap", "cmp_ready")
 COD = _load("recursive_error_correcting_codes", "cod_ready")
 CRS = _load("recursive_coarse_graining", "crs_ready")
+
+
+def _config(env: str) -> dict[str, Any]:
+    path = ROOT / "envs" / "cat_theo" / env / "config.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    return data
+
+
+def _level_for_value(axis: dict[str, Any], value: str) -> str:
+    for level, mapping in axis["levels"].items():
+        if any(str(item) == value for item in mapping.values()):
+            return str(level)
+    raise AssertionError(f"axis {axis['id']!r} has no level whose substitutions include {value!r}")
+
+
+def _difficulty_for(env: str, regime: str, representation: str) -> str:
+    """Valid --difficulty vector that selects this regime × representation."""
+    parts: list[str] = []
+    for axis in _config(env)["axes"]:
+        axis_id = axis["id"]
+        if axis_id == REGIME_AXIS_IDS[env]:
+            parts.append(_level_for_value(axis, regime))
+        elif axis_id == "representation":
+            parts.append(_level_for_value(axis, representation))
+        else:
+            parts.append("easy")
+    return ",".join(parts)
+
+
+def _workspace_cases() -> list[tuple[str, str, str, str, str]]:
+    cases: list[tuple[str, str, str, str, str]] = []
+    for env in ENVS:
+        for regime in SELECTABLE_REGIMES:
+            for representation in SELECTABLE_REPS:
+                difficulty = _difficulty_for(env, regime, representation)
+                folder = f"test_ws_{env}_{regime}_{representation}"
+                cases.append((env, difficulty, folder, regime, representation))
+    return cases
 
 
 def _keys(obj: Any) -> set[str]:
@@ -148,31 +223,150 @@ def test_coarse_public_payload_strips_secrets() -> None:
 
 
 @pytest.mark.parametrize(
-    "env,difficulty,folder",
-    [
-        ("recursive_holonomy_gluing", "easy,easy,easy,easy", "test_ready_hol"),
-        ("recursive_compiler_bootstrap", "easy,easy,easy", "test_ready_cmp"),
-        ("recursive_error_correcting_codes", "easy,easy,easy", "test_ready_cod"),
-        ("recursive_coarse_graining", "easy,easy,easy", "test_ready_crs"),
-    ],
+    "env,difficulty,folder,regime,representation",
+    _workspace_cases(),
+    ids=[f"{env}-{regime}-{representation}" for env, _, _, regime, representation in _workspace_cases()],
 )
-def test_agent_workspace_has_no_theory_leaks(env: str, difficulty: str, folder: str) -> None:
+def test_agent_workspace_has_no_theory_leaks(
+    env: str, difficulty: str, folder: str, regime: str, representation: str
+) -> None:
+    """Every runner-selectable regime × representation, not just all-easy."""
     path = _generate_env(env, folder, difficulty, seed=1)
     try:
         workspace = path / "agent" / "workspace"
         assert workspace.is_dir()
         assert not (workspace / "generation.json").exists()
-        blob = "\n".join(
-            p.read_text(encoding="utf-8", errors="ignore")
-            for p in workspace.rglob("*")
-            if p.is_file()
-        ).lower()
-        assert not re.findall(r"%%[A-Z0-9_]+%%", blob)
-        for banned in AGENT_BANNED:
-            assert banned not in blob, banned
-        assert env not in blob
+        present = {p.name for p in workspace.iterdir() if p.is_file()}
+        assert present == set(AGENT_FILES), present
+
+        judge_text = (path / "judge" / "judge.py").read_text(encoding="utf-8")
+        assert f'REGIME = "{regime}"' in judge_text
+        assert f'REPRESENTATION = "{representation}"' in judge_text
+
+        for name in AGENT_FILES:
+            text = (workspace / name).read_text(encoding="utf-8")
+            assert not re.findall(r"%%[A-Z0-9_]+%%", text), name
+            lower = text.lower()
+            for banned in AGENT_BANNED:
+                assert banned not in lower, f"{name}: {banned}"
+            for marker in JUDGE_ONLY_MARKERS:
+                assert marker not in text, f"{name}: {marker}"
+            assert env not in text
+        # prompt.md may describe the inferred/revealed *modes*; it must not
+        # name the selected regime or ship a hidden verdict for this case.
+        prompt = (workspace / "prompt.md").read_text(encoding="utf-8")
+        assert "unsat because" not in prompt.lower()
+        assert "the answer is" not in prompt.lower()
+        assert regime not in prompt if regime == "recursive_composition" else True
     finally:
         shutil.rmtree(path, ignore_errors=True)
+
+
+def test_flat_is_not_selectable_through_config_or_inventory() -> None:
+    for env in ENVS:
+        config = _config(env)
+        axis = next(a for a in config["axes"] if a["id"] == REGIME_AXIS_IDS[env])
+        assert set(axis["levels"]) == {"easy", "medium", "hard"}
+        substituted = [str(v) for mapping in axis["levels"].values() for v in mapping.values()]
+        assert "flat" not in substituted
+        assert set(substituted) == set(SELECTABLE_REGIMES)
+
+        axes, issues = _validate_axes(config, ROOT / "envs" / "cat_theo" / env / "config.yaml")
+        assert issues == []
+        for matrix in ("representative", "covering", "all"):
+            vectors = _difficulty_vectors(axes, matrix, ["easy", "medium", "hard"])
+            for vector in vectors:
+                assert vector[REGIME_AXIS_IDS[env]] in {"easy", "medium", "hard"}
+                assert "flat" not in vector.values()
+
+    hol_axes = 4
+    bad = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "generate_env.py"),
+            "--env",
+            "recursive_holonomy_gluing",
+            "--name",
+            "test_ws_flat_rejected",
+            "--difficulty",
+            "easy,easy,flat,easy",
+            "--seed",
+            "0",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    assert bad.returncode != 0
+    blob = bad.stdout + bad.stderr
+    assert "not valid" in blob
+    assert hol_axes == 4
+    shutil.rmtree(ROOT / "test_ws_flat_rejected", ignore_errors=True)
+
+
+def test_flat_generator_branch_is_not_the_runner_control() -> None:
+    """Calling generate_instance(..., regime='flat') still works; the runner cannot."""
+    hol_d = HOL.generate_instance(
+        depth=2, family=HOL.MUL, regime=HOL.DIRECT, representation=HOL.REVEALED, seed=0
+    )
+    hol_f = HOL.generate_instance(
+        depth=2, family=HOL.MUL, regime=HOL.FLAT, representation=HOL.REVEALED, seed=0
+    )
+    assert HOL.instance_satisfiable(hol_d) is HOL.instance_satisfiable(hol_f) is True
+    assert hol_d["cycle"] == hol_f["cycle"]
+
+    cmp_d = CMP.generate_instance(depth=2, regime=CMP.DIRECT, representation=CMP.REVEALED, seed=0)
+    cmp_f = CMP.generate_instance(depth=2, regime=CMP.FLAT, representation=CMP.REVEALED, seed=0)
+    assert CMP.claim_holds(cmp_d) is CMP.claim_holds(cmp_f) is True
+    assert [st["kind"] for st in cmp_d["stages"]] == [st["kind"] for st in cmp_f["stages"]]
+
+    cod_d = COD.generate_instance(depth=2, regime=COD.DIRECT, representation=COD.REVEALED, seed=0)
+    cod_f = COD.generate_instance(depth=2, regime=COD.FLAT, representation=COD.REVEALED, seed=0)
+    assert COD.stacked_satisfiable(cod_d) is COD.stacked_satisfiable(cod_f) is True
+    assert cod_d["glues"] == cod_f["glues"] == []
+
+    crs_d = CRS.generate_instance(depth=2, regime=CRS.DIRECT, representation=CRS.REVEALED, seed=0)
+    crs_f = CRS.generate_instance(depth=2, regime=CRS.FLAT, representation=CRS.REVEALED, seed=0)
+    assert CRS.true_table_and_fixed(crs_d)[1] is True
+    assert CRS.true_table_and_fixed(crs_f)[1] is False
+    assert crs_d["depth"] == crs_f["depth"] == 1
+
+
+def test_selectable_regime_polarities() -> None:
+    """Oracle polarity of the three runner-selectable regimes (not `flat`)."""
+    hol = {
+        r: HOL.instance_satisfiable(
+            HOL.generate_instance(
+                depth=2, family=HOL.MUL, regime=r, representation=HOL.REVEALED, seed=0
+            )
+        )
+        for r in SELECTABLE_REGIMES
+    }
+    assert hol == {"direct": True, "recursive": True, "recursive_composition": False}
+
+    cmp = {
+        r: CMP.claim_holds(
+            CMP.generate_instance(depth=2, regime=r, representation=CMP.REVEALED, seed=0)
+        )
+        for r in SELECTABLE_REGIMES
+    }
+    assert cmp == {"direct": True, "recursive": True, "recursive_composition": False}
+
+    cod = {
+        r: COD.stacked_satisfiable(
+            COD.generate_instance(depth=2, regime=r, representation=COD.REVEALED, seed=0)
+        )
+        for r in SELECTABLE_REGIMES
+    }
+    assert cod == {"direct": True, "recursive": True, "recursive_composition": False}
+
+    crs = {
+        r: CRS.true_table_and_fixed(
+            CRS.generate_instance(depth=2, regime=r, representation=CRS.REVEALED, seed=0)
+        )[1]
+        for r in SELECTABLE_REGIMES
+    }
+    assert crs == {"direct": True, "recursive": True, "recursive_composition": False}
 
 
 def test_shortcut_zero_reference_one_on_d_class() -> None:

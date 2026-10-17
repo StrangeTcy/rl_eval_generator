@@ -11,7 +11,7 @@ axes:
         "%%DEPTH%%": "3"
 
   - id: bootstrap_regime
-    description: "Single compile, a recoding path whose decoder matches, or a recoding path whose claimed decoder does not"
+    description: "Selectable levels: direct (single compile, claim holds), recursive (recode path whose claimed decoder matches), recursive_composition (same recode path whose claimed decoder does not). A generator `flat` branch exists and matches direct; it is not a config level."
     class: "task"
     levels:
       easy:

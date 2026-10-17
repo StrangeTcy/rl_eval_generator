@@ -1,6 +1,6 @@
 axes:
   - id: recursive_depth
-    description: "For recursive regimes, the number of series-composed 2-spin regions (recorded depth). direct/flat always build one region and record depth 1. This is a 2-spin integer toy."
+    description: "For recursive and recursive_composition, the number of series-composed 2-spin regions (recorded depth). Selectable direct always builds one region and records depth 1. This is a 2-spin integer toy."
     class: "task"
     levels:
       easy:
@@ -11,7 +11,7 @@ axes:
         "%%DEPTH%%": "3"
 
   - id: scale_regime
-    description: "direct: one projector region (fixed). flat: one all-ones region (not fixed). recursive: series of projectors (fixed). recursive_composition: series of all-ones (not fixed). SAT polarity is the regime."
+    description: "Selectable levels: direct (one projector region, fixed), recursive (series of projectors, fixed), recursive_composition (series of all-ones, not fixed). SAT polarity is the regime. A generator `flat` branch (one all-ones region) is not a config level."
     class: "task"
     levels:
       easy:

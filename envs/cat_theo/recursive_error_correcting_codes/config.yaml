@@ -11,7 +11,7 @@ axes:
         "%%DEPTH%%": "3"
 
   - id: code_regime
-    description: "direct/flat: independent blocks, SAT parent. recursive: cycle glues, SAT parent. recursive_composition: cycle glues (or a conflicting extra parity at depth 1), unsat parent. SAT polarity is the regime."
+    description: "Selectable levels: direct (independent blocks, SAT parent), recursive (cycle overlaps, SAT parent), recursive_composition (cycle overlaps, unsat parent). SAT polarity is the regime. A generator `flat` branch exists and matches direct; it is not a config level."
     class: "task"
     levels:
       easy:

@@ -22,7 +22,7 @@ axes:
         "%%FAMILY%%": "permutation"
 
   - id: cycle_regime
-    description: "direct/flat: identity cycle of the given length (SAT). recursive: extra SAT factor. recursive_composition: extra factor with no returning state. SAT polarity is the regime, not the depth."
+    description: "Selectable levels: direct (identity cycle, SAT), recursive (extra SAT factor), recursive_composition (extra factor with no returning state). SAT polarity is the regime, not the depth. A generator `flat` branch exists and matches direct; it is not a config level."
     class: "task"
     levels:
       easy:
