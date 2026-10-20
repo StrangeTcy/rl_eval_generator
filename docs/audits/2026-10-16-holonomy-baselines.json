@@ -1,0 +1,6 @@
+{
+  "n": 12,
+  "truth_unsat": 12,
+  "local_only_unsat_acc": 0.0,
+  "reference_acc": 1.0
+}
