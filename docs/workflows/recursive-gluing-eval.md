@@ -47,10 +47,20 @@ construction. Four shards of the pairwise design are 19 cases / 15,000 s each.
 
 ## Deploying
 
-The workflow file is **not** deployed by this change. The App behind this
-checkout has no `workflows` permission, so a push that creates
-`.github/workflows/**` is refused; that is why the file is authored here with the
-`.yml.example` suffix. `docs/workflows/recursive-gluing-eval.yml.example` is
+The workflow file is **not** deployed by this change, and the reason is
+measured, not assumed. The App behind this checkout has no `workflows`
+permission: a push from this branch that touched `.github/workflows/**` was
+rejected with
+
+```
+! [remote rejected] HEAD -> arena/aa22370a-rl-eval-generator
+  (refusing to allow a GitHub App to create or update workflow
+   `.github/workflows/mercury-pairwise-campaign.yml` without `workflows` permission)
+```
+
+The same rejection applies to the workflow-token repair carried in
+`docs/audits/2026-10-20-workflow-token-repair.md`. Everything under
+`docs/workflows/` is therefore authored with the `.yml.example` suffix. `docs/workflows/recursive-gluing-eval.yml.example` is
 byte-identical to what must be committed at:
 
 ```
