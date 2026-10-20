@@ -2,7 +2,7 @@
 
 Date: 2026-10-20
 Branch: `arena/aa22370a-rl-eval-generator`
-Commits: `7d3d18e` (implementation), `f849375` (report), `72ef31c` (workflow `set -e` fix, HEAD) on top of base `bd19804`.
+Commit: the tip of `arena/aa22370a-rl-eval-generator` (three commits on top of `bd19804`: `7d3d18e` implementation, `f849375` report, `72ef31c` workflow `set -e` fix, plus the commit that adds this file). Use `git log --oneline -5` for the exact tip.
 Remote: pushed to `origin/arena/aa22370a-rl-eval-generator`
 
 Compare: <https://github.com/StrangeTcy/rl_eval_generator/compare/bd19804...arena/aa22370a-rl-eval-generator>
