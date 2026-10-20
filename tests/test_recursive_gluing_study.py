@@ -557,6 +557,20 @@ def test_workflow_example_is_manual_dispatch_only() -> None:
     for step in job["steps"]:
         script = step.get("run") or ""
         assert "secrets." not in script, f"secret referenced from a shell step: {step.get('name')}"
+    for step in job["steps"]:
+        script = step.get("run") or ""
+        # `set -e` plus `[ -n "$X" ] && args+=(...)` aborts the step whenever the
+        # optional input is empty: the optional argument must be added in an if.
+        assert "] && " not in script, f"{step.get('name')}: set -e would abort on an empty optional input"
+    # Every shell step must parse: a workflow file is only half-validated by YAML.
+    import subprocess
+
+    for step in job["steps"]:
+        script = step.get("run")
+        if not script:
+            continue
+        parsed = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        assert parsed.returncode == 0, f"{step.get('name')}: {parsed.stderr}"
     provider_step = next(
         step for step in job["steps"] if step.get("name", "").startswith("Live evaluation")
     )

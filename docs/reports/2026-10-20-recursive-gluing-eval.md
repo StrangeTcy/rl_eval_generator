@@ -2,7 +2,7 @@
 
 Date: 2026-10-20
 Branch: `arena/aa22370a-rl-eval-generator`
-Commit: `7d3d18e` (base `bd19804`)
+Commits: `7d3d18e` (implementation) and `f849375` (report) on top of base `bd19804`; the workflow-script fix below lands as a further commit on the same branch.
 Remote: pushed to `origin/arena/aa22370a-rl-eval-generator`
 
 Compare: <https://github.com/StrangeTcy/rl_eval_generator/compare/bd19804...arena/aa22370a-rl-eval-generator>
@@ -84,7 +84,7 @@ checkpoint instead of being killed).
 | `... run --execution-mode gates_only` (family) | exit 0, **76/76 instances passed**, `provider_calls: 0` |
 | `... plan --scope family --shard-count 4 --shard-index 0..3` | 19 cases / 15,000 s each; union = the 76 full ids, disjoint, deterministic |
 | `python tools/judge_preflight.py` (via `generate_env.py`) | all nine recursive judges pass; one deferred script each |
-| `python -m pytest tests/test_recursive_gluing_study.py -q` | **16 passed** |
+| `python -m pytest tests/test_recursive_gluing_study.py -q` | **16 passed** (includes a `bash -n` parse of every workflow shell step) |
 | `python -m pytest tests/test_recursive_*.py -q` | **171 passed** |
 
 Each gate row grades the exact instance the episode would run, four ways: an

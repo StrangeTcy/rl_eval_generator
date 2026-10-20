@@ -238,10 +238,10 @@ jobs:
             --shard-count "$SHARD_COUNT"
             --out "$PLAN_DIR"
           )
-          [ -n "$MATRIX" ] && PLAN_ARGS+=(--matrix "$MATRIX")
-          [ -n "$SEEDS" ] && PLAN_ARGS+=(--seeds "$SEEDS")
-          [ -n "$API_BASE" ] && PLAN_ARGS+=(--api-base "$API_BASE")
-          [ -n "$REASONING_EFFORT" ] && PLAN_ARGS+=(--reasoning-effort "$REASONING_EFFORT")
+          if [ -n "$MATRIX" ]; then PLAN_ARGS+=(--matrix "$MATRIX"); fi
+          if [ -n "$SEEDS" ]; then PLAN_ARGS+=(--seeds "$SEEDS"); fi
+          if [ -n "$API_BASE" ]; then PLAN_ARGS+=(--api-base "$API_BASE"); fi
+          if [ -n "$REASONING_EFFORT" ]; then PLAN_ARGS+=(--reasoning-effort "$REASONING_EFFORT"); fi
           # Fail-closed: a plan that does not fit the declared ceilings exits 2
           # and this step stops before the gate, let alone a provider call.
           python tools/recursive_gluing_study.py plan "${PLAN_ARGS[@]}"
@@ -283,8 +283,8 @@ jobs:
             --max-tokens "$MAX_TOKENS"
             --gate-context-sha "${{ steps.code.outputs.sha }}"
           )
-          [ -n "$API_BASE" ] && RUN_ARGS+=(--api-base "$API_BASE")
-          [ -n "$REASONING_EFFORT" ] && RUN_ARGS+=(--reasoning-effort "$REASONING_EFFORT")
+          if [ -n "$API_BASE" ]; then RUN_ARGS+=(--api-base "$API_BASE"); fi
+          if [ -n "$REASONING_EFFORT" ]; then RUN_ARGS+=(--reasoning-effort "$REASONING_EFFORT"); fi
           # A non-zero exit here means the provider-free gate itself is unhappy
           # (an exact-instance oracle did not discriminate, or the judge
           # preflight refused the code). Nothing below may proceed.
@@ -328,8 +328,8 @@ jobs:
             --max-tokens "$MAX_TOKENS"
             --gate-context-sha "${{ steps.code.outputs.sha }}"
           )
-          [ -n "$API_BASE" ] && LIVE_ARGS+=(--api-base "$API_BASE")
-          [ -n "$REASONING_EFFORT" ] && LIVE_ARGS+=(--reasoning-effort "$REASONING_EFFORT")
+          if [ -n "$API_BASE" ]; then LIVE_ARGS+=(--api-base "$API_BASE"); fi
+          if [ -n "$REASONING_EFFORT" ]; then LIVE_ARGS+=(--reasoning-effort "$REASONING_EFFORT"); fi
           set +e
           python tools/recursive_gluing_study.py run "${LIVE_ARGS[@]}"
           STATUS=$?
