@@ -106,6 +106,8 @@ changed: no retry, no ceiling raise, and no resubmission of a paused case.
 | `python -m pytest tests/test_recursive_gluing_study.py -q` | 31 passed (10 new: 8 diagnosis cases, the Actions-only annotation gate, and the annotated refusal path) |
 | `python tools/recursive_gluing_study.py diagnose --run-out <synthetic paused checkpoint> --github` | exit 0; `::error title=Recursive gluing http_attempt_budget (provider_error)::…` plus evidence and next step; the credential-shaped token in the log is `[REDACTED]` |
 | `python -m pytest tests/test_recursive_gluing_study.py -q -k workflow` | passes, including `bash -n` on every shell step and the active/example workflow equality |
+| `GITHUB_ACTIONS=true python -m pytest tests/test_recursive_gluing_study.py -q` | 31 passed: the Actions-only annotation does not leak into a test's output |
+| `python -m pytest -q` (whole suite) | 7 failures, and the same 7 at `6901858` in a clean worktree: campaign plan case counts (`test_inherit_campaign_state`, `test_observational_equivalence_check`) and the pairwise profile ceilings. None touch the study; CI's `pytest -q` step is red on `main` for the same reason. |
 
 No live model call was made. No ceiling, shard or gate parameter was changed.
 
