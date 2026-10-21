@@ -338,6 +338,26 @@ def _request_id(headers: Mapping[str, str], data: Mapping[str, Any]) -> str | No
     return str(value) if value is not None else None
 
 
+def _is_retryable_internal_api_error(data: Mapping[str, Any]) -> bool:
+    """Recognize explicit transient API-gateway failures without retrying auth/quota.
+
+    Some OpenAI-compatible gateways return ``{"error":{"type":"api_error",
+    "code":"internal","message":"fetch failed"}}`` as JSON instead of an
+    HTTP 5xx. Treat only that explicit internal-error class as transient; invalid
+    credentials, insufficient quota, and malformed requests remain non-retryable.
+    """
+
+    error_value = data.get("error")
+    if not isinstance(error_value, Mapping):
+        return False
+    error_type = str(error_value.get("type", "")).strip().lower()
+    error_code = str(error_value.get("code", "")).strip().lower()
+    message = str(error_value.get("message", "")).strip().lower()
+    return error_type == "api_error" and (
+        error_code == "internal" or message == "fetch failed"
+    )
+
+
 def _validate_request_extra(extra: Mapping[str, Any] | None) -> dict[str, Any]:
     if extra is None:
         return {}
@@ -653,6 +673,47 @@ class ProviderClient:
                         response_headers=response_headers,
                         attempts=attempt_number,
                     )
+                if isinstance(data.get("error"), dict):
+                    request_id = _request_id(response_headers, data)
+                    retryable = (
+                        response_status_code not in {401, 402, 403}
+                        and _is_retryable_internal_api_error(data)
+                    )
+                    failure = ProviderAttempt(
+                        attempted_at=utc_now(),
+                        status_code=response_status_code,
+                        error_type="api_error",
+                        body=_redact_text(response_body, self.api_key),
+                        request_id=request_id,
+                        retryable=retryable,
+                        attempt=attempt_number,
+                        elapsed_ms=max(0, int(round((time.monotonic() - started) * 1000))),
+                        response_headers=response_headers,
+                    )
+                    self._record_failure(failure)
+                    if (
+                        retryable
+                        and attempt_number <= self.max_retries
+                        and (
+                            self.max_http_attempts is None
+                            or self.http_attempts_used < self.max_http_attempts
+                        )
+                    ):
+                        self.last_retry_count += 1
+                        self._backoff(
+                            attempt_number,
+                            self._retry_after_seconds(raw_response_headers),
+                        )
+                        continue
+                    raise ProviderError(
+                        "Provider returned an API error",
+                        status_code=response_status_code,
+                        body=failure.body,
+                        request_id=request_id,
+                        response_headers=response_headers,
+                        retryable=retryable,
+                        attempts=attempt_number,
+                    )
                 choices = data.get("choices")
                 if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
                     request_id = _request_id(response_headers, data)
@@ -717,7 +778,11 @@ class ProviderClient:
                 self._observe_rate_limit_headers(raw_error_headers, status_code=status)
                 safe_headers = _safe_headers(raw_error_headers, self.api_key)
                 request_id = _request_id(safe_headers, {})
-                retryable = status in {429, 503, 504}
+                # Retry only rate limiting and server-side transient failures.
+                # Authentication/quota (401/402/403) and client errors remain
+                # non-retryable. Include 500/502 for gateways that surface an
+                # upstream ``fetch failed`` as a conventional server response.
+                retryable = status in {429, 500, 502, 503, 504}
                 elapsed_ms = max(0, int(round((time.monotonic() - started) * 1000)))
                 failure = ProviderAttempt(
                     attempted_at=utc_now(),
