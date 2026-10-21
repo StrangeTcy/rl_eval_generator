@@ -51,6 +51,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from arena.secrets import provider_environment_name  # noqa: E402
 from tools import recursive_references  # noqa: E402
 from tools.suite_inventory import (  # noqa: E402
     _case_id,
@@ -96,6 +97,8 @@ MATRICES_BY_SCOPE: dict[str, tuple[str, ...]] = {
 EXECUTION_MODES: tuple[str, ...] = ("plan_only", "gates_only", "live")
 PROVIDERS: tuple[str, ...] = (
     "agentrouter",
+    "yepapi",
+    "synapse_garden",
     "atria",
     "mercury",
     "groq",
@@ -705,8 +708,15 @@ def build_plan(
         raise StudyError("a single exact model id is required (no whitespace, no catalogue lookup)")
     if wire_api not in {"chat_completions", "responses"}:
         raise StudyError("wire_api must be 'chat_completions' or 'responses'")
-    if provider == "agentrouter" and wire_api != "chat_completions":
-        raise StudyError("AgentRouter is configured for the OpenAI-compatible chat_completions API")
+    chat_only_providers = {
+        "agentrouter": "AgentRouter",
+        "yepapi": "YepAPI",
+        "synapse_garden": "Synapse Garden",
+    }
+    if provider in chat_only_providers and wire_api != "chat_completions":
+        raise StudyError(
+            f"{chat_only_providers[provider]} is configured for the OpenAI-compatible chat_completions API"
+        )
     if reasoning_effort is not None:
         if reasoning_effort not in {"minimal", "low", "medium", "high", "xhigh"}:
             raise StudyError(f"unsupported reasoning_effort {reasoning_effort!r}")
@@ -1171,7 +1181,7 @@ def run_study(
     provider: str,
     model: str,
     output_dir: Path,
-    api_key_env: str = "SUITE_API_KEY",
+    api_key_env: str | None = None,
     api_base: str | None = None,
     wire_api: str = "chat_completions",
     reasoning_effort: str | None = None,
@@ -1245,6 +1255,7 @@ def run_study(
         excluded=list(study.get("excluded_environments") or []),
         shard=study.get("shard") or {"index": 0, "count": 1},
     )
+    selected_api_key_env = api_key_env or provider_environment_name(provider)
     if runner is None:
         from tools.run_suite import run_suite as runner
     checkpoint = runner(
@@ -1252,7 +1263,7 @@ def run_study(
         output_dir=Path(output_dir),
         provider=provider,
         model=model,
-        api_key_env=api_key_env,
+        api_key_env=selected_api_key_env,
         api_base=api_base,
         sandbox="docker",
         max_steps=max_steps,
@@ -1878,7 +1889,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--execution-mode", choices=("gates_only", "live"), required=True)
     run_parser.add_argument("--provider", choices=PROVIDERS, required=True)
     run_parser.add_argument("--model", required=True)
-    run_parser.add_argument("--api-key-env", default="SUITE_API_KEY")
+    run_parser.add_argument("--api-key-env", default=None)
     run_parser.add_argument("--api-base", default=None)
     run_parser.add_argument("--wire-api", choices=("chat_completions", "responses"), default="chat_completions")
     run_parser.add_argument("--reasoning-effort", default=None)

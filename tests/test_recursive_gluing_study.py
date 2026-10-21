@@ -335,7 +335,7 @@ def test_run_forwards_ceilings_and_gate_leg_verbatim(execution_mode, stop_after_
     assert result["checkpoint"]["paused"] is False
     assert captured["stop_after_gates"] is stop_after_gates
     assert captured["sandbox"] == "docker"
-    assert captured["api_key_env"] == "SUITE_API_KEY", "a credential value must never be passed"
+    assert captured["api_key_env"] == "ATRIA_API_KEY", "record the selected key env name, never its value"
     for key, value in ceilings.items():
         assert captured[key] == value, f"{key} must not be adjusted"
     # A ceiling below the plan is refused here too, before the controller runs.

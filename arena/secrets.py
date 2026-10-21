@@ -29,6 +29,8 @@ PROVIDER_ENV: dict[str, tuple[str, ...]] = {
     "nvidia": ("NVIDIA_API_KEY",),
     "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
     "openrouter": ("OPENROUTER_API_KEY",),
+    "yepapi": ("YEPAPI_KEY",),
+    "synapse_garden": ("SYNAPSE_API_KEY",),
     # AgentRouter's documented aliases; see https://agentrouter.org/docs/claude-code.html.
     "agentrouter": (
         "AGENTROUTER_API_KEY",
@@ -51,6 +53,8 @@ PROVIDER_DEFAULT_BASE: dict[str, str | None] = {
     "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "openrouter": "https://openrouter.ai/api/v1",
     "agentrouter": "https://agentrouter.org/v1",
+    "yepapi": "https://api.yepapi.com/v1/ai",
+    "synapse_garden": "https://synapse.garden/api/v1",
     "cloudflare": None,
     "atria": "https://api.atria-asi.ai/v1",
     "custom": None,
