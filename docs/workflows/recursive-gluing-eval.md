@@ -125,17 +125,17 @@ Reference docs: [YepAPI Chat Completions](https://docs.yepapi.com/ai-models/chat
    `api_base` blank (the documented `co.agentrouter.org` URL is now the default).
    Review the plan and budget in the job summary/artifact. This mode makes no
    model call.
-3. Only after confirming the API-key secret is valid, run a bounded live pilot:
-   use the same provider, model, scope and protocol; choose `execution_mode=live`
-   and set `shard_count=18` with one `shard_index` from `0` through `17` to
-   isolate a single case. For the standard diagnostic caps (`max_steps=24`,
-   `max_tokens=4096`), set `max_api_calls=72`, `max_tokens_total=294912`, and
-   `max_wall_seconds=4200` for that one-case shard. Inspect the result artifact
-   and account usage before starting the rest of the campaign.
+3. For a bounded first-class-provider pilot, keep `scope=diagnostic`, set
+   `seeds=0`, `shard_count=8`, `shard_index=0`, `max_steps=1`,
+   `max_tokens=256`, `max_api_calls=6`, `max_tokens_total=1536`, and
+   `max_wall_seconds=4800`. These select the two-case shard. Even on workflow
+   revisions without a `max_http_attempts` input, the study controller applies
+   a six-request HTTP-attempt backstop for YepAPI and Synapse Garden, including
+   retries. Inspect responses and provider usage before expanding.
 4. The full diagnostic run is 18 cases. Review the plan's maximum calls and
-   tokens and set ceilings explicitly before authorizing it. For a family
-   pairwise rerun, use four separate live dispatches with `scope=family`,
-   `matrix=pairwise`, `shard_count=4`, and `shard_index=0`, `1`, `2`, and `3`.
+   tokens and deliberately raise ceilings before authorizing a broader run. For
+   a family pairwise rerun, use separate live dispatches with `scope=family`,
+   `matrix=pairwise`, and explicit shard and budget values.
 5. Open the run's **Summary** for identity, plan and outcome. Download the
    `recursive-gluing-results-...` artifact for the checkpoint and reports
    (`report/results.json`, `report/results.csv`, and `report/summary.md`).

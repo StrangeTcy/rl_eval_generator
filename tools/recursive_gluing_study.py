@@ -119,6 +119,10 @@ ESTIMATED_SECONDS_PER_CASE = 600
 MINIMUM_SECONDS_PER_CASE = 120
 GATE_RESERVE_SECONDS = 3600
 MAX_FAMILY_CASES = 400
+# Keep the first live attempt for the two newly integrated providers bounded
+# even when an older workflow dispatch does not expose the physical-attempt
+# input. Operators may deliberately raise this in a later, reviewed campaign.
+DEFAULT_FIRST_CLASS_PROVIDER_HTTP_ATTEMPTS = 6
 # A hosted Actions job is capped at six hours; the controller must stop well
 # before that so its checkpoint and artifacts are uploaded rather than deleted
 # with the worker.  This is a hard plan ceiling, not a provider limit.
@@ -1255,6 +1259,11 @@ def run_study(
         excluded=list(study.get("excluded_environments") or []),
         shard=study.get("shard") or {"index": 0, "count": 1},
     )
+    # Older active workflow revisions do not expose a physical HTTP-attempt
+    # input. Keep these first-class providers bounded anyway; a caller can
+    # deliberately override the default after the initial pilot is reviewed.
+    if max_http_attempts is None and provider.strip().lower() in {"yepapi", "synapse_garden"}:
+        max_http_attempts = DEFAULT_FIRST_CLASS_PROVIDER_HTTP_ATTEMPTS
     selected_api_key_env = api_key_env or provider_environment_name(provider)
     if runner is None:
         from tools.run_suite import run_suite as runner

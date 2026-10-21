@@ -81,6 +81,162 @@ def test_request_extra_still_cannot_override_protected_max_tokens():
         _body("mercury", request_extra={"max_tokens": 10})
 
 
+def test_chat_retries_explicit_internal_fetch_failure_within_attempt_cap():
+    transient = {
+        "error": {
+            "message": "fetch failed",
+            "type": "api_error",
+            "code": "internal",
+            "param": None,
+        }
+    }
+    success = {
+        "model": "openai/gpt-6.1-sol",
+        "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+    }
+
+    class _QueueOpener:
+        def __init__(self):
+            self.payloads = [transient, success]
+            self.calls = 0
+
+        def __call__(self, req, timeout=None):
+            self.calls += 1
+            return _FakeResponse(self.payloads.pop(0))
+
+    opener = _QueueOpener()
+    client = ProviderClient(
+        "synapse_garden",
+        "offline-test-key",
+        opener=opener,
+        max_retries=3,
+        max_http_attempts=2,
+        backoff_base=0,
+        jitter=0,
+        sleep=lambda _seconds: None,
+    )
+    completion = client.complete(
+        model="openai/gpt-6.1-sol",
+        messages=[{"role": "user", "content": "offline"}],
+        max_tokens=256,
+        temperature=0.0,
+    )
+
+    assert completion.content == "ok"
+    assert opener.calls == 2
+    assert client.last_http_attempts == 2
+    assert client.last_retry_count == 1
+    assert client.last_attempt_logs[0]["error_type"] == "api_error"
+    assert client.last_attempt_logs[0]["retryable"] is True
+
+
+def test_chat_does_not_retry_quota_errors():
+    quota_error = {
+        "error": {
+            "message": "insufficient quota",
+            "type": "insufficient_quota",
+            "code": "insufficient_quota",
+        }
+    }
+
+    class _QueueOpener:
+        calls = 0
+
+        def __call__(self, req, timeout=None):
+            self.calls += 1
+            return _FakeResponse(quota_error)
+
+    opener = _QueueOpener()
+    client = ProviderClient(
+        "synapse_garden",
+        "offline-test-key",
+        opener=opener,
+        max_retries=3,
+        backoff_base=0,
+        jitter=0,
+        sleep=lambda _seconds: None,
+    )
+    from arena.providers import ProviderError
+
+    with pytest.raises(ProviderError) as exc:
+        client.complete(
+            model="openai/gpt-6.1-sol",
+            messages=[{"role": "user", "content": "offline"}],
+            max_tokens=256,
+            temperature=0.0,
+        )
+    assert opener.calls == 1
+    assert client.last_http_attempts == 1
+    assert exc.value.retryable is False
+
+
+def test_chat_retries_http_500_but_not_payment_or_auth_errors():
+    from io import BytesIO
+    from urllib.error import HTTPError
+    from arena.providers import ProviderError
+
+    success = {
+        "model": "openai/gpt-6.1-sol",
+        "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+    }
+
+    class _ServerErrorThenSuccess:
+        calls = 0
+
+        def __call__(self, req, timeout=None):
+            self.calls += 1
+            if self.calls == 1:
+                raise HTTPError(
+                    req.full_url, 500, "upstream fetch failed", {},
+                    BytesIO(b'{"error":{"message":"fetch failed","type":"api_error","code":"internal"}}'),
+                )
+            return _FakeResponse(success)
+
+    opener = _ServerErrorThenSuccess()
+    client = ProviderClient(
+        "synapse_garden", "offline-test-key", opener=opener, max_retries=1,
+        max_http_attempts=2, backoff_base=0, jitter=0, sleep=lambda _seconds: None,
+    )
+    completion = client.complete(
+        model="openai/gpt-6.1-sol",
+        messages=[{"role": "user", "content": "offline"}],
+        max_tokens=256,
+        temperature=0.0,
+    )
+    assert completion.content == "ok"
+    assert opener.calls == 2
+    assert client.last_http_attempts == 2
+
+    for status in (401, 402):
+        class _NonRetryableError:
+            calls = 0
+
+            def __call__(self, req, timeout=None):
+                self.calls += 1
+                raise HTTPError(
+                    req.full_url, status, "auth or quota denied", {},
+                    BytesIO(b'{"error":{"message":"denied"}}'),
+                )
+
+        opener = _NonRetryableError()
+        client = ProviderClient(
+            "synapse_garden", "offline-test-key", opener=opener, max_retries=3,
+            backoff_base=0, jitter=0, sleep=lambda _seconds: None,
+        )
+        with pytest.raises(ProviderError) as exc:
+            client.complete(
+                model="openai/gpt-6.1-sol",
+                messages=[{"role": "user", "content": "offline"}],
+                max_tokens=256,
+                temperature=0.0,
+            )
+        assert opener.calls == 1
+        assert client.last_http_attempts == 1
+        assert exc.value.retryable is False
+
+
 # --- Responses-API surface (Atria controlled reasoning) -----------------
 
 

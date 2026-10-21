@@ -319,6 +319,7 @@ def test_run_forwards_ceilings_and_gate_leg_verbatim(execution_mode, stop_after_
         "max_api_calls": plan["limits"]["max_api_calls"],
         "max_tokens_total": plan["limits"]["max_tokens_total"],
         "max_wall_seconds": plan["limits"]["max_wall_seconds"],
+        "max_http_attempts": 6,
     }
     result = study.run_study(
         manifest,
@@ -349,6 +350,28 @@ def test_run_forwards_ceilings_and_gate_leg_verbatim(execution_mode, stop_after_
             max_api_calls=1,
             runner=runner,
         )
+
+
+def test_first_class_providers_get_a_bounded_http_attempt_default() -> None:
+    manifest, plan = _manifest(max_api_calls=5_000, max_tokens_total=20_000_000)
+    captured: dict = {}
+
+    def runner(_manifest, **kwargs):
+        captured.update(kwargs)
+        return {"results": [], "paused": False, "provider_free_validation_complete": True}
+
+    study.run_study(
+        manifest,
+        execution_mode="gates_only",
+        provider="synapse_garden",
+        model="openai/gpt-6.1-sol",
+        output_dir=Path("/tmp/study-run"),
+        max_api_calls=plan["limits"]["max_api_calls"],
+        max_tokens_total=plan["limits"]["max_tokens_total"],
+        max_wall_seconds=plan["limits"]["max_wall_seconds"],
+        runner=runner,
+    )
+    assert captured["max_http_attempts"] == study.DEFAULT_FIRST_CLASS_PROVIDER_HTTP_ATTEMPTS == 6
 
 
 # ---------------------------------------------------------------------------
@@ -546,9 +569,11 @@ def test_workflow_example_is_manual_dispatch_only() -> None:
         "max_wall_seconds",
         "max_steps",
         "max_tokens",
+        "shard_count",
     ):
         assert name in inputs, name
     assert inputs["execution_mode"]["default"] == "plan_only"
+    assert (ROOT / ".github/workflows/recursive-gluing-eval.yml").read_text(encoding="utf-8") == text
     assert set(inputs["execution_mode"]["options"]) == {"plan_only", "live"}
     assert workflow["permissions"] == {"contents": "read"}
     # No credential may appear in a command line: secret references live in
