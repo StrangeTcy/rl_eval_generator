@@ -337,9 +337,10 @@ def _new_run_id(options: EpisodeOptions) -> str:
 
 
 def _fallback_final(failure_mode: str, note: str) -> dict[str, Any]:
+    """Represent controller/provider failures without fabricating a model score."""
     return {
         "verdict": "FAIL",
-        "score": 0.0,
+        "score": None,
         "failure_mode": failure_mode,
         "notes": [note],
     }

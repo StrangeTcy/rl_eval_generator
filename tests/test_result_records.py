@@ -8,6 +8,7 @@ import types
 from pathlib import Path
 
 from arena.artifacts import RunArtifacts, summarize_run
+from arena.episode import _fallback_final
 from arena.result_record import SCHEMA_VERSION, build_attempt_record
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +47,38 @@ def test_provider_failure_is_not_a_behavioral_score():
     assert _stage(record, "response_parsing")["status"] == "not_reached"
     assert _stage(record, "behavioral_evaluation")["status"] == "not_reached"
     assert record["failure_mode"] == "api_error"
+    assert record["raw_scores"]["score"] is None
+
+
+def test_unscored_provider_failure_has_no_numeric_score_in_artifacts(tmp_path):
+    final = _fallback_final("api_error", "provider request failed")
+    record = _record(
+        final,
+        traces=[{"event": "provider_error", "parse_error": "provider request failed"}],
+        errors=[{"status": 500}],
+    )
+    artifacts = RunArtifacts(tmp_path, "provider-failure")
+    artifacts.write_manifest(
+        {"run_id": "provider-failure", "provider": "synapse_garden", "environment": "synthetic_env"}
+    )
+    artifacts.write_final(final)
+    artifacts.write_result_record(record)
+
+    final_json = json.loads(artifacts.path("final.json").read_text(encoding="utf-8"))
+    record_json = json.loads(artifacts.path("result_record.json").read_text(encoding="utf-8"))
+    assert final_json["score"] is None
+    assert record_json["case_disposition"] == "unscored"
+    assert record_json["raw_scores"]["score"] is None
+
+    csv_path, md_path = summarize_run(artifacts.root)
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        summary = next(csv.DictReader(handle))
+    assert summary["case_disposition"] == "unscored"
+    assert summary["score"] == ""
+    assert summary["pass"] == ""
+    markdown = md_path.read_text(encoding="utf-8")
+    assert "- Verdict: `UNSCORED`" in markdown
+    assert "- Score: `not scored`" in markdown
 
 
 def test_malformed_action_is_separate_from_provider_failure():
