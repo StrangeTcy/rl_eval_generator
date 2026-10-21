@@ -362,8 +362,10 @@ def summarize_run(run_dir: Path) -> tuple[Path, Path]:
     rewards = [row.get("reward") for row in turns if isinstance(row.get("reward"), (int, float))]
     invalid = sum(1 for row in turns if row.get("parse_error") or row.get("parsed_action") is None)
     latency = [row.get("latency_ms") for row in turns if isinstance(row.get("latency_ms"), (int, float))]
-    score = final.get("score", final.get("final_reward"))
-    score_value = float(score) if isinstance(score, (int, float)) else 0.0
+    has_result_record = bool(result_record)
+    is_scored = not has_result_record or result_record.get("case_disposition") == "scored"
+    score = final.get("score", final.get("final_reward")) if is_scored else None
+    score_value = float(score) if isinstance(score, (int, float)) and not isinstance(score, bool) else 0.0
     output_tokens = usage_totals.get("completion_tokens", usage_totals.get("output_tokens"))
     input_tokens = usage_totals.get("prompt_tokens", usage_totals.get("input_tokens"))
     total_latency = sum(latency) if latency else 0.0
@@ -384,7 +386,7 @@ def summarize_run(run_dir: Path) -> tuple[Path, Path]:
         "sandbox": manifest.get("sandbox"),
         "turns": len(turns),
         "score": score,
-        "pass": final.get("verdict") == "PASS",
+        "pass": (final.get("verdict") == "PASS") if is_scored else None,
         "invalid_action_rate": invalid / len(turns) if turns else 0.0,
         "mean_latency_ms": sum(latency) / len(latency) if latency else None,
         "total_reward": sum(rewards) if rewards else 0.0,
@@ -415,8 +417,8 @@ def summarize_run(run_dir: Path) -> tuple[Path, Path]:
         f"- Stage statuses: `{row['stage_statuses']}`",
         f"- Seed: `{row['seed']}`",
         f"- Sandbox: `{row['sandbox']}`",
-        f"- Verdict: `{final.get('verdict', 'UNKNOWN')}`",
-        f"- Score: `{row['score']}`",
+        f"- Verdict: `{final.get('verdict', 'UNKNOWN') if is_scored else 'UNSCORED'}`",
+        f"- Score: `{row['score'] if row['score'] is not None else 'not scored'}`",
         "",
         "## Metrics",
         "",

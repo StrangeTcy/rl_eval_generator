@@ -365,6 +365,12 @@ def build_attempt_record(
         "metrics",
     )
     raw_scores = {key: deepcopy(final[key]) for key in score_keys if key in final}
+    if disposition != "scored":
+        # Keep non-scored outcomes explicit, but never let fallback placeholders
+        # masquerade as measured performance in downstream aggregations.
+        for key in ("score", "raw_accuracy", "accuracy_bin"):
+            if key in raw_scores:
+                raw_scores[key] = None
     notes = final.get("notes")
     diagnostics = {
         "notes": deepcopy(notes) if isinstance(notes, list) else [],
@@ -387,8 +393,8 @@ def build_attempt_record(
         "failure_mode": final.get("failure_mode"),
         "judge_guarantee": judge_guarantee,
         "stages": stages,
-        # Copy raw score/check fields verbatim. No normalization or conflict
-        # resolution is performed here.
+        # Preserve raw score/check fields, but null numeric score fields unless
+        # the behavioral evaluator actually emitted a scored outcome.
         "raw_scores": raw_scores,
         "diagnostics": diagnostics,
     }
