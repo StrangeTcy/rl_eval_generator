@@ -49,6 +49,8 @@ on:
         type: choice
         options:
           - agentrouter
+          - yepapi
+          - synapse_garden
           - atria
           - mercury
           - groq
@@ -59,7 +61,7 @@ on:
           - custom
         default: agentrouter
       model:
-        description: "Exact AgentRouter model ID from your account roster (e.g. gpt-6-astra); no aliases."
+        description: "Exact model ID: YepAPI=openai/gpt-6-astra; Synapse Garden=openai/gpt-6.1-sol; no aliases."
         required: true
         type: string
       matrix:
@@ -298,6 +300,8 @@ jobs:
           AGENTROUTER_API_KEY: ${{ secrets.AGENTROUTER_API_KEY }}
           AGENT_ROUTER_API_KEY: ${{ secrets.AGENT_ROUTER_API_KEY }}
           AGENTROUTER_API_TOKEN: ${{ secrets.AGENTROUTER_API_TOKEN }}
+          YEPAPI_KEY: ${{ secrets.YEPAPI_KEY }}
+          SYNAPSE_API_KEY: ${{ secrets.SYNAPSE_API_KEY }}
           ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
           INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
           MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
