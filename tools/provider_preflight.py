@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from arena.providers import open_no_redirect, require_https  # noqa: E402
+from arena.providers import open_no_redirect, provider_auth_headers, require_https  # noqa: E402
 from arena.secrets import load_secret_config, redact_text, resolve_provider  # noqa: E402
 
 
@@ -31,7 +31,7 @@ def _models_url(base: str) -> str:
 
 def _headers(provider: str, key: str) -> dict[str, str]:
     value = {
-        "Authorization": f"Bearer {key}",
+        **provider_auth_headers(provider, key),
         "Accept": "application/json",
         "Content-Type": "application/json",
     }

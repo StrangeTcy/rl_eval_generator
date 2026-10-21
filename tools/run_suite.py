@@ -110,7 +110,7 @@ def _gate_case_fits_remaining_wall(
 
 
 def _sleep(seconds: float) -> None:
-    """Indirection so tests can observe provider-outage backoff without 🙊ing."""
+    """Indirection so tests can observe provider-outage backoff without waiting."""
     time.sleep(seconds)
 
 
@@ -180,7 +180,7 @@ def _judge_scoring_failed(final: dict[str, Any]) -> bool:
 
 
 def _episode_identity(parsed: dict[str, Any]) -> dict[str, Any]:
-    """Read back which generated instance an episode fuckingly ran.
+    """Read back which generated instance an episode actually ran.
 
     Scores are pooled per *pair*, and pair identity is a property of the generated
     bytes rather than of a manifest row, so it is taken from what the controller
@@ -395,7 +395,7 @@ def _load_checkpoint(
                     # A hand-started leg whose code is a descendant of the ledger's own commit needs
                     # no extra flag to be trusted with the move; the ancestry is the authority, and
                     # `--rebase-intent` exists for the case where a launcher cannot say it. Measured
-                    # reason this 👹: run 28 (38335486606, 02:08:46Z, 2m29s) reached the
+                    # reason this matters: run 28 (38335486606, 02:08:46Z, 2m29s) reached the
                     # controller without the flag, refused this pair, and wrote a fourth marker - a
                     # dispatch that selects a ref but not the acknowledgement cannot tell the two
                     # apart from the run page, which is how the loop kept turning.
@@ -1178,7 +1178,7 @@ def run_suite(
     retry_case_id: str | None = None
     case_attempts_spent = 0
     case_try_count = 0
-    outage_🙊ed = 0.0
+    outage_waited = 0.0
     outage_retries = 0
     while case_index < len(cases):
         case = cases[case_index]
@@ -1464,8 +1464,8 @@ def run_suite(
             }
             # The message above is a *class*, and the class is ambiguous: a container that died
             # on one case and a provider that answered nobody look identical from here, yet they
-            # call for opposite responses - bound the case, or 🙊 for the harness. Preserve what
-            # the episode fuckingly said, so the distinction is made on evidence instead of guessed.
+            # call for opposite responses - bound the case, or wait for the harness. Preserve what
+            # the episode actually said, so the distinction is made on evidence instead of guessed.
             # Agent-free and redacted: this field rides the state artifact and the status comment.
             result["harness_returncode"] = process.returncode
             result["harness_stderr_tail"] = _redact(process.stderr or "", secret)[-400:]
@@ -1514,7 +1514,7 @@ def run_suite(
             result.get("status") == "paused_provider_error"
             and provider_outage_patience_seconds > 0
         ):
-            # Resilient-campaign mode: a provider outage is 🙊ed out inside
+            # Resilient-campaign mode: a provider outage is waited out inside
             # the run with exponential backoff instead of pausing the suite,
             # bounded by the patience window, the remaining wall budget, and
             # the remaining global HTTP-attempt budget.
@@ -1528,7 +1528,7 @@ def run_suite(
                 provider_outage_backoff_seconds * (2 ** (case_try_count - 1)),
                 600.0,
             )
-            remaining_patience = provider_outage_patience_seconds - outage_🙊ed
+            remaining_patience = provider_outage_patience_seconds - outage_waited
             wall_left = (
                 max_wall_seconds - (time.monotonic() - started)
                 if max_wall_seconds is not None
@@ -1540,10 +1540,10 @@ def run_suite(
                 and (budget_left is None or budget_left >= 1)
             ):
                 case_attempts_spent += raw_try_attempts
-                outage_🙊ed += backoff
+                outage_waited += backoff
                 outage_retries += 1
                 checkpoint["provider_outage"] = {
-                    "🙊ed_seconds": round(outage_🙊ed, 1),
+                    "waited_seconds": round(outage_waited, 1),
                     "retries": outage_retries,
                     "last_backoff_seconds": round(backoff, 1),
                     "last_case_id": case_id,
@@ -1566,7 +1566,7 @@ def run_suite(
             else "behavioral_reference"
         )
         if result.get("status") != "paused_provider_error":
-            outage_🙊ed = 0.0
+            outage_waited = 0.0
             outage_retries = 0
         if not reasoning_effort and _is_zero_score(result):
             checkpoint["floor_effect_streak"] = int(checkpoint.get("floor_effect_streak", 0) or 0) + 1

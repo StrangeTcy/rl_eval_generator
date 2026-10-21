@@ -165,6 +165,20 @@ def _safe_headers(
     }
 
 
+def provider_auth_headers(provider: str, api_key: str) -> dict[str, str]:
+    """Return the provider-specific API-key header for OpenAI-compatible APIs.
+
+    Authentication policy lives here so normal requests and provider preflight
+    use identical rules. Most providers use Bearer auth; YepAPI specifies the
+    dedicated ``x-api-key`` header.
+    """
+
+    normalized = provider.strip().lower()
+    if normalized == "yepapi":
+        return {"x-api-key": api_key}
+    return {"Authorization": f"Bearer {api_key}"}
+
+
 def resolve_credentials(
     provider: str,
     *,
@@ -411,7 +425,7 @@ class ProviderClient:
 
     def headers(self) -> dict[str, str]:
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            **provider_auth_headers(self.provider, self.api_key),
             "Content-Type": "application/json",
         }
         if self.provider == "openrouter":
@@ -856,6 +870,8 @@ class ProviderClient:
         and usage from ``input_tokens``/``output_tokens``.
         """
 
+        if self.provider in {"yepapi", "synapse_garden"}:
+            raise ValueError(f"{self.provider} supports Chat Completions only")
         _validate_request_extra(request_extra)
         url = responses_url(self.api_base)
         payload: dict[str, Any] = {"model": model, "input": input_text, "stream": False}
@@ -1000,5 +1016,6 @@ __all__ = [
     "provider_metadata",
     "require_https",
     "resolve_api_base",
+    "provider_auth_headers",
     "resolve_credentials",
 ]

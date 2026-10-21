@@ -33,6 +33,17 @@ environments:
   sheaf_invariant_gluing: envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml
   sheaf_physical_constraints: envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml
 
+  # Recursive local-to-global gluing
+  recursive_gluing: envs/cat_theo/recursive_gluing/config.yaml
+  recursive_gluing_discovery: envs/cat_theo/recursive_gluing_discovery/config.yaml
+  recursive_maze_gluing: envs/cat_theo/recursive_maze_gluing/config.yaml
+  recursive_distributed_gluing: envs/cat_theo/recursive_distributed_gluing/config.yaml
+  recursive_epistemic_gluing: envs/cat_theo/recursive_epistemic_gluing/config.yaml
+  recursive_holonomy_gluing: envs/cat_theo/recursive_holonomy_gluing/config.yaml
+  recursive_compiler_bootstrap: envs/cat_theo/recursive_compiler_bootstrap/config.yaml
+  recursive_error_correcting_codes: envs/cat_theo/recursive_error_correcting_codes/config.yaml
+  recursive_coarse_graining: envs/cat_theo/recursive_coarse_graining/config.yaml
+
   # Epistemic reasoning games
   epistemic_games: envs/epistemic_games/config.yaml
   epistemic_announcements: envs/epistemic_announcements/config.yaml
