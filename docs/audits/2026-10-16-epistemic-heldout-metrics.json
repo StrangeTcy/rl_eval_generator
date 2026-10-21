@@ -1,0 +1,77 @@
+{
+  "POS-plain": {
+    "n": 30,
+    "sat": 30,
+    "B0_local": 1.0,
+    "B1_pairwise": 1.0,
+    "Bflat": 1.0,
+    "Bk0": 1.0,
+    "Bk1": 1.0,
+    "Bk2": 1.0,
+    "majority": 1.0
+  },
+  "POS-recursive": {
+    "n": 30,
+    "sat": 30,
+    "B0_local": 1.0,
+    "B1_pairwise": 1.0,
+    "Bflat": 0.0,
+    "Bk0": 0.0,
+    "Bk1": 0.0,
+    "Bk2": 1.0,
+    "majority": 1.0
+  },
+  "NEG-local": {
+    "n": 30,
+    "sat": 0,
+    "B0_local": 1.0,
+    "B1_pairwise": 1.0,
+    "Bflat": 1.0,
+    "Bk0": 1.0,
+    "Bk1": 1.0,
+    "Bk2": 1.0,
+    "majority": 1.0
+  },
+  "NEG-pairwise": {
+    "n": 30,
+    "sat": 0,
+    "B0_local": 0.0,
+    "B1_pairwise": 1.0,
+    "Bflat": 1.0,
+    "Bk0": 1.0,
+    "Bk1": 1.0,
+    "Bk2": 1.0,
+    "majority": 1.0
+  },
+  "NEG-deep": {
+    "n": 30,
+    "sat": 0,
+    "B0_local": 0.0,
+    "B1_pairwise": 0.0,
+    "Bflat": 1.0,
+    "Bk0": 1.0,
+    "Bk1": 1.0,
+    "Bk2": 1.0,
+    "majority": 1.0
+  },
+  "NEG-recursive": {
+    "n": 30,
+    "sat": 0,
+    "B0_local": 0.0,
+    "B1_pairwise": 0.0,
+    "Bflat": 0.0,
+    "Bk0": 0.0,
+    "Bk1": 0.0,
+    "Bk2": 1.0,
+    "majority": 1.0
+  },
+  "balanced_heldout": {
+    "n": 120,
+    "sat": 60,
+    "unsat": 60,
+    "majority_constant": 0.5,
+    "metadata_acc": 0.875,
+    "Bflat_acc": 0.625,
+    "B1_acc": 0.75
+  }
+}

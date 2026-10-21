@@ -1,0 +1,386 @@
+# Copy this reviewed workflow to .github/workflows/recursive-gluing-eval.yml
+# when ready to activate the updated study. GitHub does not execute this docs copy.
+#
+# What this dispatch does, in order, and what it never does:
+#   1. `plan`   - provider-free. Builds the filtered manifest and the budget plan
+#                 for the requested scope/matrix/seeds/shard and prints the case
+#                 count and the worst-case ceiling arithmetic before any call.
+#   2. `gate`   - provider-free. Runs the controller in `gates_only` mode: the
+#                 exact-instance oracle gate and the behavioural preflight. Its
+#                 checkpoint lives in runs/recursive_gluing_study and the live
+#                 step below resumes that same directory, so the gate rows are
+#                 reused instead of re-derived.
+#   3. `live`   - only when execution_mode=live. Re-runs the same gate
+#                 (cheaply, from the checkpoint) and stops before provider
+#                 access if it fails; then runs the suite with the operator's
+#                 explicit ceilings. Ceilings are passed through verbatim: this
+#                 workflow never raises one, and it never retries past a
+#                 quota/auth failure (the controller pauses the run instead).
+#   4. `report` - JSON + CSV + Markdown built from the checkpoint, always, so a
+#                 paused or partially failed run still produces a report.
+#
+# One dispatch = one provider/model pair. The workflow is `workflow_dispatch`
+# only: no schedule, no repository_dispatch, no self-re-arm, so nothing here can
+# spend money without a human pressing the button.
+name: Recursive gluing frontier evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "diagnostic = the two primary conditions; family = all eight gate-certifiable members (holonomy remains excluded)"
+        required: true
+        type: choice
+        options:
+          - diagnostic
+          - family
+        default: diagnostic
+      execution_mode:
+        description: "plan_only = compute and print the plan, make no model call; live = actually evaluate"
+        required: true
+        type: choice
+        options:
+          - plan_only
+          - live
+        default: plan_only
+      provider:
+        description: "Model provider. AgentRouter is the intended default; select another only deliberately."
+        required: true
+        type: choice
+        options:
+          - agentrouter
+          - atria
+          - mercury
+          - groq
+          - nvidia
+          - gemini
+          - openrouter
+          - cloudflare
+          - custom
+        default: agentrouter
+      model:
+        description: "Exact AgentRouter model ID from your account roster (e.g. gpt-6-astra); no aliases."
+        required: true
+        type: string
+      matrix:
+        description: "diagnostic (default) for scope=diagnostic; pairwise / covering / representative for scope=family. pairwise is the strength-2 default and the only design that exposes every axis interaction."
+        required: false
+        type: string
+        default: ""
+      seeds:
+        description: "Comma-separated fixed seeds. Empty = the scope default (diagnostic 0,1; family 0). Recorded in the manifest, never resampled."
+        required: false
+        type: string
+        default: ""
+      max_api_calls:
+        description: "Hard ceiling on provider HTTP calls for this dispatch."
+        required: true
+        type: string
+        default: "2000"
+      max_tokens_total:
+        description: "Hard ceiling on total tokens for this dispatch."
+        required: true
+        type: string
+        default: "8000000"
+      max_wall_seconds:
+        description: "Hard ceiling on the controller's wall clock (max 21000)."
+        required: true
+        type: string
+        default: "14400"
+      max_steps:
+        description: "Per-episode step cap handed to the controller."
+        required: true
+        type: string
+        default: "24"
+      max_tokens:
+        description: "Per-response token cap handed to the controller."
+        required: true
+        type: string
+        default: "4096"
+      wire_api:
+        description: "Provider wire protocol. Use responses for Atria reasoning models; chat_completions otherwise."
+        required: true
+        type: choice
+        options:
+          - chat_completions
+          - responses
+        default: chat_completions
+      reasoning_effort:
+        description: "Optional reasoning effort, passed through unchanged. Empty = do not send the parameter."
+        required: false
+        type: string
+        default: ""
+      api_base:
+        description: "Optional OpenAI-compatible base URL override. Empty = the provider's pinned default."
+        required: false
+        type: string
+        default: ""
+      shard_index:
+        description: "0-based shard index for a whole-family rerun that does not fit one dispatch's wall ceiling."
+        required: true
+        type: string
+        default: "0"
+      shard_count:
+        description: "Number of shards the case list was split into. 1 = no sharding."
+        required: true
+        type: string
+        default: "1"
+
+permissions:
+  contents: read
+
+# Two dispatches for the same provider/model would double-bill the same cases and
+# race on nothing shared, so keep the queue serial and never cancel a paid run.
+concurrency:
+  group: recursive-gluing-eval-${{ inputs.provider }}-${{ inputs.model }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      SCOPE: ${{ inputs.scope }}
+      EXECUTION_MODE: ${{ inputs.execution_mode }}
+      PROVIDER: ${{ inputs.provider }}
+      MODEL: ${{ inputs.model }}
+      MATRIX: ${{ inputs.matrix }}
+      SEEDS: ${{ inputs.seeds }}
+      MAX_API_CALLS: ${{ inputs.max_api_calls }}
+      MAX_TOKENS_TOTAL: ${{ inputs.max_tokens_total }}
+      MAX_WALL_SECONDS: ${{ inputs.max_wall_seconds }}
+      MAX_STEPS: ${{ inputs.max_steps }}
+      MAX_TOKENS: ${{ inputs.max_tokens }}
+      WIRE_API: ${{ inputs.wire_api }}
+      REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+      API_BASE: ${{ inputs.api_base }}
+      SHARD_INDEX: ${{ inputs.shard_index }}
+      SHARD_COUNT: ${{ inputs.shard_count }}
+      PLAN_DIR: runs/recursive_gluing_plan
+      RUN_DIR: runs/recursive_gluing_study
+    steps:
+      - name: Check out the dispatched ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Resolve and record the code identity
+        id: code
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "commit_sha=$SHA"
+            echo "workflow_ref=${{ github.workflow_ref }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "actor=${{ github.actor }}"
+            echo "scope=$SCOPE execution_mode=$EXECUTION_MODE provider=$PROVIDER model=$MODEL"
+            echo "matrix=${MATRIX:-<scope default>} seeds=${SEEDS:-<scope default>}"
+            echo "wire_api=$WIRE_API reasoning_effort=${REASONING_EFFORT:-<unset>}"
+            echo "ceilings calls=$MAX_API_CALLS tokens=$MAX_TOKENS_TOTAL wall=$MAX_WALL_SECONDS"
+            echo "per-episode max_steps=$MAX_STEPS max_tokens=$MAX_TOKENS"
+            echo "shard=$SHARD_INDEX/$SHARD_COUNT"
+          } | tee runs-identity.txt
+          {
+            echo "## Recursive gluing evaluation"
+            echo ""
+            echo '```'
+            cat runs-identity.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install controller dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          # The judges compile the submitted solver twice through torch.save /
+          # torch.load; the pinned CPU wheel keeps the gate deterministic.
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
+          python -m pip install jinja2
+
+      - name: Refuse a ref that predates the gate or the study profile
+        run: |
+          set -euo pipefail
+          for path in tools/instance_oracle_gate.py tools/oracle_preflight.py \
+                      tools/recursive_gluing_study.py tools/recursive_references.py; do
+            test -f "$path" || { echo "::error::$path is missing at ${{ steps.code.outputs.sha }}; this ref cannot run the gated study"; exit 1; }
+          done
+
+      - name: Plan (provider-free) - case count and budget before any call
+        run: |
+          set -euo pipefail
+          PLAN_ARGS=(
+            --scope "$SCOPE"
+            --execution-mode "$EXECUTION_MODE"
+            --provider "$PROVIDER"
+            --model "$MODEL"
+            --wire-api "$WIRE_API"
+            --max-api-calls "$MAX_API_CALLS"
+            --max-tokens-total "$MAX_TOKENS_TOTAL"
+            --max-wall-seconds "$MAX_WALL_SECONDS"
+            --max-steps "$MAX_STEPS"
+            --max-tokens "$MAX_TOKENS"
+            --shard-index "$SHARD_INDEX"
+            --shard-count "$SHARD_COUNT"
+            --out "$PLAN_DIR"
+          )
+          if [ -n "$MATRIX" ]; then PLAN_ARGS+=(--matrix "$MATRIX"); fi
+          if [ -n "$SEEDS" ]; then PLAN_ARGS+=(--seeds "$SEEDS"); fi
+          if [ -n "$API_BASE" ]; then PLAN_ARGS+=(--api-base "$API_BASE"); fi
+          if [ -n "$REASONING_EFFORT" ]; then PLAN_ARGS+=(--reasoning-effort "$REASONING_EFFORT"); fi
+          # Fail-closed: a plan that does not fit the declared ceilings exits 2
+          # and this step stops before the gate, let alone a provider call.
+          python tools/recursive_gluing_study.py plan "${PLAN_ARGS[@]}"
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib
+          plan = json.loads(pathlib.Path("runs/recursive_gluing_plan/plan.json").read_text())
+          worst = plan.get("worst_case") or {}
+          print("### Plan (provider-free)")
+          print()
+          print(f"- cases: **{plan['case_count']}** - scope `{plan['scope']}`, matrix `{plan['matrix']}`, "
+                f"seeds {plan['seeds']}, shard {plan.get('shard')}")
+          print(f"- worst case against the declared ceilings: {worst}")
+          print(f"- within every ceiling: {plan.get('within_limits')}")
+          print()
+          print("| check | ok | detail |")
+          print("| --- | --- | --- |")
+          for check in plan.get("checks") or []:
+              print(f"| {check['name']} | {check['ok']} | {check['detail']} |")
+          for warning in plan.get("warnings") or []:
+              print()
+              print(f"**warning**: {warning}")
+          PY
+
+      - name: Gates (provider-free) - exact-instance oracles and behavioural preflight
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUN_DIR"
+          RUN_ARGS=(
+            --manifest "$PLAN_DIR/study_manifest.json"
+            --out "$RUN_DIR"
+            --execution-mode gates_only
+            --provider "$PROVIDER"
+            --model "$MODEL"
+            --wire-api "$WIRE_API"
+            --max-api-calls "$MAX_API_CALLS"
+            --max-tokens-total "$MAX_TOKENS_TOTAL"
+            --max-wall-seconds "$MAX_WALL_SECONDS"
+            --max-steps "$MAX_STEPS"
+            --max-tokens "$MAX_TOKENS"
+            --gate-context-sha "${{ steps.code.outputs.sha }}"
+          )
+          if [ -n "$API_BASE" ]; then RUN_ARGS+=(--api-base "$API_BASE"); fi
+          if [ -n "$REASONING_EFFORT" ]; then RUN_ARGS+=(--reasoning-effort "$REASONING_EFFORT"); fi
+          # A non-zero exit here means the provider-free gate itself is unhappy
+          # (an exact-instance oracle did not discriminate, or the judge
+          # preflight refused the code). Nothing below may proceed.
+          python tools/recursive_gluing_study.py run "${RUN_ARGS[@]}"
+
+      - name: Live evaluation (only when explicitly dispatched as live)
+        if: inputs.execution_mode == 'live'
+        env:
+          # Host-only credentials. Each name is the first entry of
+          # arena/secrets.py PROVIDER_ENV for its provider, or an accepted alias;
+          # env_runner.py and arena/episode.py strip every name matching
+          # *API_KEY* / *_TOKEN from the agent and judge environments, and no
+          # value is ever written to a command line, a log, or an artifact. An
+          # unset secret resolves to an empty string and the controller fails
+          # closed with a missing-credential error instead of calling out.
+          AGENTROUTER_API_KEY: ${{ secrets.AGENTROUTER_API_KEY }}
+          AGENT_ROUTER_API_KEY: ${{ secrets.AGENT_ROUTER_API_KEY }}
+          AGENTROUTER_API_TOKEN: ${{ secrets.AGENTROUTER_API_TOKEN }}
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+          INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
+          MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          set -euo pipefail
+          # The live leg resumes the gate checkpoint in $RUN_DIR: the gate rows
+          # are reused, and a manifest or grading-context change is refused
+          # rather than silently re-gated.
+          LIVE_ARGS=(
+            --manifest "$PLAN_DIR/study_manifest.json"
+            --out "$RUN_DIR"
+            --execution-mode live
+            --provider "$PROVIDER"
+            --model "$MODEL"
+            --wire-api "$WIRE_API"
+            --max-api-calls "$MAX_API_CALLS"
+            --max-tokens-total "$MAX_TOKENS_TOTAL"
+            --max-wall-seconds "$MAX_WALL_SECONDS"
+            --max-steps "$MAX_STEPS"
+            --max-tokens "$MAX_TOKENS"
+            --gate-context-sha "${{ steps.code.outputs.sha }}"
+          )
+          if [ -n "$API_BASE" ]; then LIVE_ARGS+=(--api-base "$API_BASE"); fi
+          if [ -n "$REASONING_EFFORT" ]; then LIVE_ARGS+=(--reasoning-effort "$REASONING_EFFORT"); fi
+          set +e
+          python tools/recursive_gluing_study.py run "${LIVE_ARGS[@]}"
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            # 3 = the controller paused (ceiling reached, provider quota/auth
+            # failure, infrastructure error). The report step still runs, and
+            # this job must not report success: no automatic retry, no ceiling
+            # bump, no resubmission of the paused cases.
+            echo "::error::the controller paused or failed with exit code $STATUS; see runs/recursive_gluing_study/suite_checkpoint.json pause_reason"
+            exit "$STATUS"
+          fi
+          # 3 is the controller's "paused" exit code (ceiling, quota, auth,
+          # infrastructure): the report below still runs, and the run is not a
+          # success. 0 means every requested case has a disposition.
+
+      - name: Report (JSON + CSV + Markdown)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUN_DIR/suite_checkpoint.json" ]; then
+            echo "no checkpoint: the gate did not produce one, so there is nothing to report"
+            exit 0
+          fi
+          python tools/recursive_gluing_study.py report \
+            --manifest "$PLAN_DIR/study_manifest.json" \
+            --run-out "$RUN_DIR" \
+            --out "$RUN_DIR/report"
+
+      - name: Summarise the outcome
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f "$RUN_DIR/report/summary.md" ]; then
+            cat "$RUN_DIR/report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recursive-gluing-plan-${{ inputs.scope }}-${{ github.run_id }}
+          path: runs/recursive_gluing_plan
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recursive-gluing-results-${{ inputs.scope }}-${{ inputs.provider }}-shard${{ inputs.shard_index }}-${{ github.run_id }}
+          path: |
+            runs/recursive_gluing_study
+            runs-identity.txt
+          retention-days: 30
+          if-no-files-found: warn

@@ -29,6 +29,12 @@ PROVIDER_ENV: dict[str, tuple[str, ...]] = {
     "nvidia": ("NVIDIA_API_KEY",),
     "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
     "openrouter": ("OPENROUTER_API_KEY",),
+    # AgentRouter's documented aliases; see https://agentrouter.org/docs/claude-code.html.
+    "agentrouter": (
+        "AGENTROUTER_API_KEY",
+        "AGENT_ROUTER_API_KEY",
+        "AGENTROUTER_API_TOKEN",
+    ),
     "cloudflare": ("CF_API_TOKEN",),
     "atria": ("ATRIA_API_KEY",),
     "custom": ("API_KEY",),
@@ -44,6 +50,7 @@ PROVIDER_DEFAULT_BASE: dict[str, str | None] = {
     "nvidia": "https://integrate.api.nvidia.com/v1",
     "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "openrouter": "https://openrouter.ai/api/v1",
+    "agentrouter": "https://agentrouter.org/v1",
     "cloudflare": None,
     "atria": "https://api.atria-asi.ai/v1",
     "custom": None,

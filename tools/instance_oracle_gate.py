@@ -568,6 +568,16 @@ REFERENCES: dict[str, tuple[Callable[..., None], str] | tuple[Callable[..., None
     "ci_dependency_graph": (_ci, "randomized_scheduling", _ci_transcription),
 }
 
+# The recursive local-to-global family keeps its references beside the study
+# profile (tools/recursive_references.py) instead of inlining them here: the
+# correct patch is the environment's own oracle and the wrong patch is its own
+# naive baseline, so the two stay reviewable in one place.  Environments without
+# a reference stay absent from this mapping, and run_suite refuses to spend on
+# them (see tools/recursive_gluing_study.py for the recorded exclusion).
+from tools.recursive_references import references as _recursive_references  # noqa: E402
+
+REFERENCES.update(_recursive_references())
+
 
 def _instance_hash(state: dict[str, Any]) -> str:
     digest = hashlib.sha256()
