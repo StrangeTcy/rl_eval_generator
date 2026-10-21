@@ -1,11 +1,5 @@
-# Manual-copy example only. Do not commit this file under .github/workflows/.
-# Copy it to .github/workflows/recursive-gluing-eval.yml after review.
-#
-# Why this file cannot deploy itself: the checkout that produced the study
-# profile (tools/recursive_gluing_study.py) is an Arena session branch, and the
-# GitHub App behind it has no `workflows` permission, so a push that creates
-# .github/workflows/** is refused. Exactly one manual copy is therefore still
-# outstanding; see docs/workflows/recursive-gluing-eval.md ("Deploying").
+# Copy this reviewed workflow to .github/workflows/recursive-gluing-eval.yml
+# when ready to activate the updated study. GitHub does not execute this docs copy.
 #
 # What this dispatch does, in order, and what it never does:
 #   1. `plan`   - provider-free. Builds the filtered manifest and the budget plan
@@ -34,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "diagnostic = the two primary conditions; family = all six gate-certifiable members"
+        description: "diagnostic = the two primary conditions; family = all eight gate-certifiable members (holonomy remains excluded)"
         required: true
         type: choice
         options:
@@ -50,10 +44,11 @@ on:
           - live
         default: plan_only
       provider:
-        description: "Provider key; must match arena/secrets.py PROVIDER_ENV"
+        description: "Model provider. AgentRouter is the intended default; select another only deliberately."
         required: true
         type: choice
         options:
+          - agentrouter
           - atria
           - mercury
           - groq
@@ -62,9 +57,9 @@ on:
           - openrouter
           - cloudflare
           - custom
-        default: atria
+        default: agentrouter
       model:
-        description: "Exact provider model id, e.g. atria-dawn-preview. Never a glob or an alias."
+        description: "Exact AgentRouter model ID from your account roster (e.g. gpt-6-astra); no aliases."
         required: true
         type: string
       matrix:
@@ -96,7 +91,7 @@ on:
         description: "Per-episode step cap handed to the controller."
         required: true
         type: string
-        default: "40"
+        default: "24"
       max_tokens:
         description: "Per-response token cap handed to the controller."
         required: true
@@ -300,6 +295,9 @@ jobs:
           # value is ever written to a command line, a log, or an artifact. An
           # unset secret resolves to an empty string and the controller fails
           # closed with a missing-credential error instead of calling out.
+          AGENTROUTER_API_KEY: ${{ secrets.AGENTROUTER_API_KEY }}
+          AGENT_ROUTER_API_KEY: ${{ secrets.AGENT_ROUTER_API_KEY }}
+          AGENTROUTER_API_TOKEN: ${{ secrets.AGENTROUTER_API_TOKEN }}
           ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
           INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
           MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
