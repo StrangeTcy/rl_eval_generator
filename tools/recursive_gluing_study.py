@@ -119,10 +119,19 @@ ESTIMATED_SECONDS_PER_CASE = 600
 MINIMUM_SECONDS_PER_CASE = 120
 GATE_RESERVE_SECONDS = 3600
 MAX_FAMILY_CASES = 400
-# Keep the first live attempt for the two newly integrated providers bounded
-# even when an older workflow dispatch does not expose the physical-attempt
-# input. Operators may deliberately raise this in a later, reviewed campaign.
-DEFAULT_FIRST_CLASS_PROVIDER_HTTP_ATTEMPTS = 6
+# The controller's per-logical-call retry allowance (``tools/run_suite.py``).
+# This profile must mirror it to derive its physical-attempt budget honestly.
+DEFAULT_MAX_RETRIES = 3
+# The controller's ``--max-http-attempts`` is a *global* budget of physical HTTP
+# requests, not a per-call retry cap: ``arena/providers.py`` raises
+# ``Provider HTTP attempt budget exhausted`` once the counter is spent, the
+# episode is recorded as ``paused_provider_error``, and the dispatch pauses.
+# A small absolute default is therefore not a "bounded first attempt", it is a
+# guaranteed mid-episode pause: an earlier revision pinned this to 6, which a
+# live diagnostic dispatch (run 39580706886, synapse_garden) exhausted inside
+# its first episode after 91s.  The default is now derived from the operator's
+# own declared logical ceiling and retry allowance, printed in the plan before
+# any call, and can be given explicitly (``--max-http-attempts``) instead.
 # A hosted Actions job is capped at six hours; the controller must stop well
 # before that so its checkpoint and artifacts are uploaded rather than deleted
 # with the worker.  This is a hard plan ceiling, not a provider limit.
@@ -666,6 +675,27 @@ def case_budget(max_steps: int, max_tokens: int, invalid_retries: int) -> tuple[
     return calls, calls * max_tokens
 
 
+def derived_http_attempts(max_api_calls: int, max_retries: int = DEFAULT_MAX_RETRIES) -> int:
+    """Default physical HTTP-attempt budget for one dispatch.
+
+    ``tools/run_suite.py`` counts *physical* attempts globally, and
+    ``arena/providers.py`` stops the episode the moment that budget is spent.
+    The budget therefore has to scale with the operator's own logical ceiling:
+    every planned logical call may legitimately need one attempt, and each may
+    retry up to ``max_retries`` times before it is written down as a provider
+    failure.  Deriving it here keeps one dispatch from pausing mid-episode on a
+    budget that was never part of the declared plan, while still bounding the
+    physical requests to ``max_api_calls * (1 + max_retries)`` - a number the
+    plan prints before the first call.
+    """
+
+    if max_api_calls < 1:
+        raise StudyError("max_api_calls must be positive")
+    if max_retries < 0:
+        raise StudyError("max_retries must not be negative")
+    return int(max_api_calls) * (1 + int(max_retries))
+
+
 def build_plan(
     cases: Sequence[Mapping[str, Any]],
     *,
@@ -685,6 +715,8 @@ def build_plan(
     invalid_retries: int = DEFAULT_INVALID_RETRIES,
     excluded: Sequence[Mapping[str, Any]] = (),
     shard: Mapping[str, int] | None = None,
+    max_http_attempts: int | None = None,
+    max_retries: int = DEFAULT_MAX_RETRIES,
 ) -> dict[str, Any]:
     """Provider-free plan: case count, selection, and worst-case budget."""
 
@@ -740,6 +772,10 @@ def build_plan(
     calls, tokens = case_budget(max_steps, max_tokens, invalid_retries)
     worst_calls = calls * len(cases)
     worst_tokens = tokens * len(cases)
+    derived_attempts = derived_http_attempts(max_api_calls, max_retries)
+    http_attempts = int(max_http_attempts) if max_http_attempts is not None else derived_attempts
+    if http_attempts < 1:
+        raise StudyError("max_http_attempts must be positive when provided")
     minimum_wall = MINIMUM_SECONDS_PER_CASE * len(cases) + (GATE_RESERVE_SECONDS if scope == "family" else 0)
     estimated_wall = ESTIMATED_SECONDS_PER_CASE * len(cases) + GATE_RESERVE_SECONDS
     checks = [
@@ -764,6 +800,21 @@ def build_plan(
             "detail": (
                 f"ceiling {int(max_wall_seconds)}s vs minimum {int(minimum_wall)}s "
                 f"(estimate {int(estimated_wall)}s)"
+            ),
+        },
+        {
+            "name": "max_http_attempts",
+            "ok": http_attempts >= worst_calls,
+            "detail": (
+                f"physical attempt budget {http_attempts} "
+                + (
+                    f"(explicit) vs {worst_calls} planned logical calls"
+                    if max_http_attempts is not None
+                    else f"(derived: max_api_calls {max_api_calls} x (1 + max_retries {max_retries}) = "
+                    f"{derived_attempts}) vs {worst_calls} planned logical calls"
+                )
+                + "; the controller pauses the episode as soon as this global budget is "
+                "spent, so a budget below the plan guarantees a mid-run pause"
             ),
         },
         {
@@ -817,10 +868,17 @@ def build_plan(
             "max_api_calls": max_api_calls,
             "max_tokens_total": max_tokens_total,
             "max_wall_seconds": max_wall_seconds,
+            "max_retries": max_retries,
+            "max_http_attempts": http_attempts,
+            "max_http_attempts_source": (
+                "explicit" if max_http_attempts is not None else "derived"
+            ),
         },
         "worst_case": {
             "api_calls": worst_calls,
             "output_tokens": worst_tokens,
+            "http_attempts": worst_calls,
+            "http_attempts_upper_bound": worst_calls * (1 + max_retries),
             "estimated_wall_seconds": estimated_wall,
             "minimum_wall_seconds": minimum_wall,
         },
@@ -909,6 +967,8 @@ def build_study_manifest(
     max_steps: int = DEFAULT_MAX_STEPS,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     invalid_retries: int = DEFAULT_INVALID_RETRIES,
+    max_http_attempts: int | None = None,
+    max_retries: int = DEFAULT_MAX_RETRIES,
     shard_index: int = 0,
     shard_count: int = 1,
     root: Path = ROOT,
@@ -975,6 +1035,8 @@ def build_study_manifest(
         invalid_retries=invalid_retries,
         excluded=excluded,
         shard={"index": shard_index, "count": shard_count},
+        max_http_attempts=max_http_attempts,
+        max_retries=max_retries,
     )
 
     live_environments = sorted({str(case["environment"]) for case in cases})
@@ -1117,6 +1179,11 @@ def plan_markdown(manifest: Mapping[str, Any], plan: Mapping[str, Any]) -> str:
         f"- Wall clock: estimate **{int(plan['worst_case']['estimated_wall_seconds'])} s**, "
         f"minimum accepted **{int(plan['worst_case']['minimum_wall_seconds'])} s** "
         f"(ceiling {int(plan['limits']['max_wall_seconds'])} s)",
+        f"- Physical HTTP attempts: **{plan['limits']['max_http_attempts']}** "
+        f"({plan['limits']['max_http_attempts_source']}, from "
+        f"max_api_calls x (1 + max_retries {plan['limits']['max_retries']})) - the controller "
+        "counts every physical request against this one global budget and pauses the episode "
+        "when it is spent, so it is never set below the planned logical calls",
         "",
         "A ceiling is enforced by the controller; it is not a label. The plan fails closed",
         "when it does not fit, and this profile has no compile-only path.",
@@ -1238,6 +1305,12 @@ def run_study(
         max_tokens_total = limits.get("max_tokens_total")
     if max_wall_seconds is None:
         max_wall_seconds = limits.get("max_wall_seconds")
+    # The manifest carries the plan this dispatch was authorised to spend; its
+    # physical HTTP-attempt budget is part of that record.  Falling back to it
+    # (before build_plan re-derives one) is what keeps a live leg inside the
+    # budget printed by the provider-free plan step, including an explicit one.
+    if max_http_attempts is None:
+        max_http_attempts = limits.get("max_http_attempts")
     if not max_api_calls or not max_tokens_total or not max_wall_seconds:
         raise StudyError("explicit max_api_calls, max_tokens_total and max_wall_seconds are required")
     plan = build_plan(
@@ -1258,12 +1331,23 @@ def run_study(
         invalid_retries=invalid_retries,
         excluded=list(study.get("excluded_environments") or []),
         shard=study.get("shard") or {"index": 0, "count": 1},
+        max_http_attempts=max_http_attempts,
+        max_retries=max_retries,
     )
-    # Older active workflow revisions do not expose a physical HTTP-attempt
-    # input. Keep these first-class providers bounded anyway; a caller can
-    # deliberately override the default after the initial pilot is reviewed.
-    if max_http_attempts is None and provider.strip().lower() in {"yepapi", "synapse_garden"}:
-        max_http_attempts = DEFAULT_FIRST_CLASS_PROVIDER_HTTP_ATTEMPTS
+    # The controller's physical HTTP-attempt budget is global, and spending it
+    # pauses the episode as a provider failure.  Take the budget from the plan,
+    # which derives it from the operator's own ceilings for every provider
+    # (never a smaller, provider-specific default - that is what paused run
+    # 39580706886 inside its first episode) and already refused any value that
+    # does not cover the planned logical calls.
+    if max_http_attempts is None:
+        max_http_attempts = int(plan["limits"]["max_http_attempts"])
+    if int(max_http_attempts) < int(plan["worst_case"]["api_calls"]):
+        raise StudyError(
+            "refusing to run: max_http_attempts "
+            f"{int(max_http_attempts)} is below the {int(plan['worst_case']['api_calls'])} "
+            "planned logical calls, so the controller would pause mid-episode"
+        )
     selected_api_key_env = api_key_env or provider_environment_name(provider)
     if runner is None:
         from tools.run_suite import run_suite as runner
@@ -1587,6 +1671,26 @@ def build_report(
     manifest_cases = [str(case.get("case_id")) for case in cases]
     extra_rows = sorted(set(rows) - set(manifest_cases))
     run = checkpoint.get("run") if isinstance(checkpoint.get("run"), Mapping) else {}
+    # A paused dispatch must be legible from the report alone: the controller's
+    # pause reason and the rows that never became scores are the first thing a
+    # reader needs, and the run logs are not part of the artifact.
+    paused_case_errors = [
+        {
+            "case_id": entry["case_id"],
+            "status": (rows.get(entry["case_id"]) or {}).get("status"),
+            "error": entry["error"],
+        }
+        for entry in case_rows
+        if entry["outcome"]
+        in {
+            OUTCOME_PROVIDER,
+            OUTCOME_INFRASTRUCTURE,
+            OUTCOME_MISSING,
+            OUTCOME_ORACLE,
+            OUTCOME_TIMEOUT,
+        }
+        and (entry["error"] or entry["outcome"] in {OUTCOME_PROVIDER, OUTCOME_INFRASTRUCTURE})
+    ]
     return {
         "schema_version": 1,
         "profile": {"name": PROFILE_NAME, "version": PROFILE_VERSION},
@@ -1620,6 +1724,10 @@ def build_report(
             "estimated_total_output_tokens": run.get("estimated_total_output_tokens"),
             "paused": bool(checkpoint.get("paused")),
             "pause_reason": checkpoint.get("pause_reason"),
+            "recorded_case_count": len(rows),
+            "planned_case_count": len(cases),
+            "unscored_cases": checkpoint.get("unscored_cases") or {},
+            "paused_case_errors": paused_case_errors,
             "gate_context_sha": (checkpoint.get("instance_gate") or {}).get("gate_context_sha"),
             "provider_free_validation_complete": checkpoint.get("provider_free_validation_complete"),
             "shards": checkpoint.get("shards") or [],
@@ -1756,6 +1864,28 @@ def report_markdown(report: Mapping[str, Any]) -> str:
         f"`{report['gate']['instance_coverage_complete']}`",
         "- **Aggregation:** none across conditions (counts are reported per condition)",
         "",
+    ]
+    if run.get("paused") or run.get("pause_reason"):
+        lines += [
+            f"## Run status: PAUSED (`{run.get('pause_reason')}`)",
+            "",
+            f"- Cases recorded: {run.get('recorded_case_count')} of {run.get('planned_case_count')}",
+            f"- Physical HTTP attempt budget: {run.get('limits', {}).get('max_http_attempts')}",
+            "",
+            "A pause is not a model result. The rows below were not scored; the",
+            "controller stopped on its own budget or on a provider/infrastructure",
+            "failure, and the remaining cases are `missing_result`.",
+            "",
+        ]
+        if run.get("paused_case_errors"):
+            lines += ["| case | status | error |", "|---|---|---|"]
+            for entry in run["paused_case_errors"]:
+                error = str(entry.get("error") or "").replace("|", "\\|").replace("\n", " ")
+                lines.append(f"| `{entry.get('case_id')}` | `{entry.get('status')}` | {error or '-'} |")
+        else:
+            lines.append("- No case row carries an error; the pause happened before the first case.")
+        lines.append("")
+    lines += [
         "## Outcomes by condition",
         "",
         "| condition | cases | validated success | scored failure | wrong decision | malformed | provider | infra | gate | timeout | missing |",
@@ -1887,6 +2017,16 @@ def build_parser() -> argparse.ArgumentParser:
     plan_parser.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     plan_parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     plan_parser.add_argument("--invalid-retries", type=int, default=DEFAULT_INVALID_RETRIES)
+    plan_parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES)
+    plan_parser.add_argument(
+        "--max-http-attempts",
+        type=int,
+        default=None,
+        help=(
+            "global physical HTTP-attempt budget; empty derives max_api_calls x (1 + max_retries), "
+            "which is the only default that cannot pause an episode mid-plan"
+        ),
+    )
     plan_parser.add_argument("--shard-index", type=int, default=0)
     plan_parser.add_argument("--shard-count", type=int, default=1)
     plan_parser.add_argument("--created-at", default=None, help=argparse.SUPPRESS)
@@ -1909,7 +2049,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     run_parser.add_argument("--invalid-retries", type=int, default=DEFAULT_INVALID_RETRIES)
     run_parser.add_argument("--temperature", type=float, default=0.0)
-    run_parser.add_argument("--max-retries", type=int, default=3)
+    run_parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES)
     run_parser.add_argument("--max-http-attempts", type=int, default=None)
     run_parser.add_argument("--provider-min-interval-seconds", type=float, default=0.0)
     run_parser.add_argument("--gate-context-sha", default=None)
@@ -1949,6 +2089,8 @@ def main(argv: list[str] | None = None) -> int:
                 max_steps=args.max_steps,
                 max_tokens=args.max_tokens,
                 invalid_retries=args.invalid_retries,
+                max_http_attempts=args.max_http_attempts,
+                max_retries=args.max_retries,
                 shard_index=args.shard_index,
                 shard_count=args.shard_count,
                 created_at=args.created_at,
