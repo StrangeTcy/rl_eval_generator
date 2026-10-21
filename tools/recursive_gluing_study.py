@@ -21,7 +21,11 @@ controller: ``plan`` builds a deterministic, *filtered* manifest and a
 provider-free budget plan, and ``run`` forwards to :func:`tools.run_suite.run_suite`
 with the operator's explicit ceilings.  ``report`` turns the controller's
 checkpoint into machine-readable JSON/CSV plus a readable summary, keeping every
-environment, diagnostic factor and hidden check separate.
+environment, diagnostic factor and hidden check separate.  ``diagnose`` names
+*why* a leg paused - credential, quota, rate limit, model id, endpoint, the
+physical-attempt budget, a declared ceiling, the floor effect or the harness -
+and emits GitHub annotations, so a failed dispatch is legible from the run page
+instead of from an artifact zip that a reader may not be able to download.
 
 Fail-closed rules (all provider-free):
 
@@ -42,6 +46,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -1535,6 +1540,12 @@ def _merge_checkpoints(checkpoints: Sequence[Mapping[str, Any]]) -> dict[str, An
         for key in ("paused", "pause_reason", "provider_free_validation_complete"):
             if key not in merged and key in checkpoint:
                 merged[key] = checkpoint[key]
+        # Physical HTTP attempts are a global counter per leg; a diagnosis that
+        # says "0 attempts" and one that says "6" are different failures, so the
+        # merged checkpoint must not lose the number.
+        merged["http_attempts_total"] = int(merged.get("http_attempts_total", 0) or 0) + int(
+            checkpoint.get("http_attempts_total", 0) or 0
+        )
     merged["conflicting_case_ids"] = conflicts
     if checkpoints:
         merged["run"] = dict(checkpoints[0].get("run") or {})
@@ -1724,6 +1735,8 @@ def build_report(
             "estimated_total_output_tokens": run.get("estimated_total_output_tokens"),
             "paused": bool(checkpoint.get("paused")),
             "pause_reason": checkpoint.get("pause_reason"),
+            # A pause is only legible if its cause is named, not just its class.
+            "pause_diagnosis": diagnose_pause(checkpoint, manifest=manifest),
             "recorded_case_count": len(rows),
             "planned_case_count": len(cases),
             "unscored_cases": checkpoint.get("unscored_cases") or {},
@@ -1884,6 +1897,10 @@ def report_markdown(report: Mapping[str, Any]) -> str:
                 lines.append(f"| `{entry.get('case_id')}` | `{entry.get('status')}` | {error or '-'} |")
         else:
             lines.append("- No case row carries an error; the pause happened before the first case.")
+        diagnosis = run.get("pause_diagnosis") or {}
+        if diagnosis:
+            lines.append("")
+            lines.append(diagnosis_markdown(diagnosis).rstrip())
         lines.append("")
     lines += [
         "## Outcomes by condition",
@@ -1949,6 +1966,366 @@ def report_markdown(report: Mapping[str, Any]) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Pause diagnosis: the reason has to be readable without the artifact
+# ---------------------------------------------------------------------------
+#
+# Run 39580706886 paused at exit 3 and the only record of *why* was
+# `runs/recursive_gluing_study/suite_checkpoint.json`, inside a zip that the
+# GitHub UI only serves to a signed-in browser.  The follow-up dispatch
+# (39586680263) paused the same way, so the first diagnosis could not even be
+# confirmed: a provider-free reader of the run page sees ``Process completed
+# with exit code 3`` and nothing else.
+#
+# Everything below is provider-free and reads only what the controller already
+# wrote.  It turns a checkpoint into (a) a named cause, (b) the controller's own
+# words for it, and (c) GitHub annotation lines, which are visible on the run
+# page without downloading anything and without a login.
+
+#: ``(code, pattern, cause)`` in match order: the most specific cause wins.
+#: These are *readings of the controller's recorded text*, never a new failure
+#: taxonomy: an unmatched provider error stays ``provider_error_unclassified``
+#: rather than being forced into a bucket.
+PAUSE_SIGNATURES: tuple[tuple[str, str, str], ...] = (
+    (
+        "http_attempt_budget",
+        r"attempt budget exhausted",
+        "the controller's global physical HTTP-attempt budget was spent inside the leg",
+    ),
+    (
+        "credential_rejected",
+        r"invalid api key|incorrect api key|unauthorized|\b401\b|authentication (?:failed|error)|permission denied",
+        "the endpoint rejected the credential; a retry cannot fix it - replace the repository secret",
+    ),
+    (
+        "quota_exhausted",
+        r"insufficient_quota|\bquota\b|\bcredit\b|billing|payment required|\b402\b",
+        "the account has no usable allowance left; a retry cannot succeed until it is restored",
+    ),
+    (
+        "rate_limited",
+        r"\b429\b|rate[ _-]?limit|too many requests",
+        "the endpoint rate limited the account; wait before re-dispatching, do not raise ceilings",
+    ),
+    (
+        "model_not_served",
+        r"model_not_found|unknown model|model not found|does not exist|\b404\b",
+        "the endpoint does not serve this model id to this account",
+    ),
+    (
+        "endpoint_unreachable",
+        r"timed out|timeout|connection (?:reset|refused|aborted)|ssl|name or service not known|"
+        r"temporary failure in name resolution|econn",
+        "no usable response came back from the endpoint",
+    ),
+)
+
+#: Pause reasons the controller writes for its own declared ceilings.  These
+#: are the operator's arithmetic, not a provider fault.
+CEILING_PAUSE_REASONS: dict[str, str] = {
+    "max_wall_seconds": "the dispatch wall ceiling was reached",
+    "max_api_calls": "the declared logical API-call ceiling was reached",
+    "max_tokens_total": "the declared total-token ceiling was reached",
+    "max_output_tokens": "the declared output-token ceiling was reached",
+    "max_http_attempts": "the declared physical HTTP-attempt ceiling was reached",
+}
+
+PAUSE_NEXT_STEPS: dict[str, str] = {
+    "credential_rejected": "Replace the provider secret, then re-dispatch the same case list; do not retry the same key.",
+    "quota_exhausted": "Restore the account's allowance, then re-dispatch; the ceiling was not the cause.",
+    "rate_limited": "Wait for the endpoint's window, then re-dispatch a smaller shard; do not raise the ceilings.",
+    "model_not_served": "Dispatch a model id the account's own catalog lists for this endpoint.",
+    "endpoint_unreachable": "Check the endpoint and base URL before spending another dispatch.",
+    "http_attempt_budget": "Re-plan: the physical HTTP-attempt budget must cover the planned logical calls.",
+    "provider_error_unclassified": "Read the evidence above; the controller's text does not name a known cause.",
+    "floor_effect": "Three consecutive cases scored zero without reasoning enabled. This is a study result to look at, not a provider fault: read the scored rows before spending more calls.",
+    "harness_failure": "The provider is not implicated. Inspect the episode harness and judge before re-dispatching.",
+    "ceiling_reached": "The leg stopped on the operator's own ceiling. Re-dispatch deliberately with a larger ceiling or a smaller shard.",
+    "complete": "No pause: every requested case has a disposition.",
+    "no_checkpoint": "The leg failed before the controller wrote a checkpoint; the step log is the only record.",
+}
+
+PAUSE_HEADLINES: dict[str, str] = {
+    "credential_rejected": "the provider rejected the credential",
+    "quota_exhausted": "the provider account is out of allowance",
+    "rate_limited": "the provider rate limited the leg",
+    "model_not_served": "the model id is not served to this account",
+    "endpoint_unreachable": "the provider endpoint did not answer",
+    "http_attempt_budget": "the physical HTTP-attempt budget was spent",
+    "provider_error_unclassified": "the provider failed and the reason is not named in the controller's text",
+    "floor_effect": "three consecutive zero-scored cases",
+    "harness_failure": "the episode harness or judge failed, not the provider",
+    "ceiling_reached": "a declared ceiling stopped the leg",
+    "complete": "the dispatch completed",
+    "no_checkpoint": "no checkpoint was written",
+}
+
+_SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"sk-[A-Za-z0-9_-]{8,}"),
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"),
+    re.compile(r"(?i)\b(?:api[_-]?key|authorization|token)\b\s*[:=]\s*[^\s,;]+"),
+)
+
+EVIDENCE_LIMIT = 240
+EVIDENCE_MAX_ITEMS = 4
+ANNOTATION_MESSAGE_LIMIT = 900
+
+
+def _scrub_evidence(text: Any) -> str:
+    """One line, no secret-shaped token, bounded.  Never raises."""
+    value = str(text or "").replace("\r", " ").replace("\n", " ")
+    for pattern in _SECRET_PATTERNS:
+        value = pattern.sub("[REDACTED]", value)
+    value = " ".join(value.split())
+    if len(value) > EVIDENCE_LIMIT:
+        value = value[: EVIDENCE_LIMIT - 1].rstrip() + "…"
+    return value
+
+
+def _failure_rows(checkpoint: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    rows = [row for row in checkpoint.get("results") or [] if isinstance(row, Mapping)]
+    flagged = [
+        row
+        for row in rows
+        if str(row.get("status") or "")
+        in {"paused_provider_error", "infrastructure_error", "infrastructure_unscored"}
+    ]
+    return flagged or [row for row in rows if row.get("error")][-1:]
+
+
+def _tail_evidence(row: Mapping[str, Any]) -> list[str]:
+    """The controller's own last words for a failed case, marker lines first."""
+    chunks = [str(row.get(key) or "") for key in ("stdout_tail", "stderr_tail")]
+    lines: list[str] = []
+    for chunk in chunks:
+        for raw in chunk.splitlines():
+            line = _scrub_evidence(raw)
+            if line and line not in lines:
+                lines.append(line)
+    if not lines:
+        return []
+    # Lines that name a known cause are worth more than the last line of a stack
+    # trace, but the tail is kept as a fallback so an unknown cause is still read.
+    named = [line for line in lines if _signature_code(line) is not None]
+    selected = named[:2] if named else []
+    for line in reversed(lines):
+        if len(selected) >= EVIDENCE_MAX_ITEMS:
+            break
+        if line not in selected:
+            selected.append(line)
+    return selected[:EVIDENCE_MAX_ITEMS]
+
+
+def _signature_code(text: str) -> str | None:
+    for code, pattern, _cause in PAUSE_SIGNATURES:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return code
+    return None
+
+
+def diagnose_pause(
+    checkpoint: Mapping[str, Any] | None,
+    *,
+    manifest: Mapping[str, Any] | None = None,
+    exit_status: int | None = None,
+) -> dict[str, Any]:
+    """Name why a dispatch stopped, from the checkpoint alone.
+
+    The result is deliberately conservative: ``code`` is one of the pinned
+    names in :data:`PAUSE_HEADLINES`, and ``evidence`` quotes the controller
+    rather than paraphrasing it, so a reader can disagree with the reading.
+    """
+    if not checkpoint:
+        cause = "the controller never wrote a checkpoint for this leg"
+        next_step = PAUSE_NEXT_STEPS["no_checkpoint"]
+        if exit_status == 2:
+            # The study's own refusal path (``main``'s exit 2): a missing or
+            # renamed credential is the common one, and it happens before any
+            # controller exists, so there is nothing else to read.
+            cause = (
+                "the study refused the dispatch before the controller ran (exit 2): "
+                "a missing or renamed provider secret, a manifest the gate refuses, "
+                "or a ceiling the plan does not cover; the step log carries the exact message"
+            )
+            next_step = (
+                "Read the study's error line in this step's log, fix that input, "
+                "and re-dispatch; no provider call was made."
+            )
+        return {
+            "paused": False,
+            "pause_reason": None,
+            "code": "no_checkpoint",
+            "headline": PAUSE_HEADLINES["no_checkpoint"],
+            "cause": cause,
+            "next_step": next_step,
+            "evidence": [],
+            "recorded_case_count": 0,
+            "planned_case_count": len((manifest or {}).get("cases") or []) or None,
+            "http_attempts_used": None,
+        }
+    paused = bool(checkpoint.get("paused"))
+    pause_reason = checkpoint.get("pause_reason")
+    rows = [row for row in checkpoint.get("results") or [] if isinstance(row, Mapping)]
+    flagged = _failure_rows(checkpoint) if paused else []
+
+    evidence: list[str] = []
+    for row in flagged[:2]:
+        summary = (
+            f"case {row.get('case_id')} status={row.get('status')}"
+            f" elapsed={row.get('elapsed_seconds')}s"
+            f" http_attempts={row.get('http_attempts')}"
+        )
+        if row.get("error"):
+            summary += f" error={_scrub_evidence(row.get('error'))}"
+        evidence.append(summary)
+    for row in flagged[-1:]:
+        evidence.extend(_tail_evidence(row))
+    evidence = [item for item in evidence if item][:EVIDENCE_MAX_ITEMS]
+    http_attempts = checkpoint.get("http_attempts_total")
+    if http_attempts is None:
+        reported = [row.get("http_attempts") for row in rows if isinstance(row.get("http_attempts"), int)]
+        http_attempts = sum(reported) if reported else None
+
+    if not paused:
+        code = "complete"
+        cause = "the checkpoint records no pause"
+    elif str(pause_reason) in CEILING_PAUSE_REASONS:
+        code = "ceiling_reached"
+        cause = CEILING_PAUSE_REASONS[str(pause_reason)]
+    elif pause_reason == "floor_effect":
+        code = "floor_effect"
+        cause = "three consecutive zero-scored cases without reasoning enabled"
+    elif pause_reason == "infrastructure_error":
+        code = "harness_failure"
+        cause = "the episode harness, judge or sandbox failed before a score could exist"
+    else:
+        # Only the controller's *transcript* is scanned.  A row's `error` field
+        # is this harness's own class ("provider or quota failure detected"),
+        # not the provider's words: matching on it would label every provider
+        # failure a quota failure, which is exactly the guess this replaces.
+        haystack = " ".join(
+            [str(pause_reason or "")]
+            + [
+                str(row.get(key) or "")
+                for row in flagged
+                for key in ("stdout_tail", "stderr_tail", "harness_stdout_tail", "harness_stderr_tail")
+            ]
+        )
+        code = _signature_code(haystack) or (
+            "provider_error_unclassified" if pause_reason == "provider_error" else str(pause_reason or "unknown")
+        )
+        cause = next(
+            (cause for candidate, _pattern, cause in PAUSE_SIGNATURES if candidate == code),
+            "the checkpoint names a pause reason this profile does not classify",
+        )
+
+    return {
+        "paused": paused,
+        "pause_reason": pause_reason,
+        "code": code,
+        "headline": PAUSE_HEADLINES.get(code, str(pause_reason or "unknown")),
+        "cause": cause,
+        "next_step": PAUSE_NEXT_STEPS.get(code, PAUSE_NEXT_STEPS["provider_error_unclassified"]),
+        "evidence": evidence,
+        "recorded_case_count": len(rows),
+        "planned_case_count": len((manifest or {}).get("cases") or []) or None,
+        "http_attempts_used": http_attempts,
+    }
+
+
+def diagnosis_markdown(diagnosis: Mapping[str, Any]) -> str:
+    lines = [
+        f"## Pause diagnosis: `{diagnosis['code']}`",
+        "",
+        f"- **Pause reason:** `{diagnosis.get('pause_reason')}`",
+        f"- **Reading:** {diagnosis.get('headline')} — {diagnosis.get('cause')}",
+        f"- **Cases recorded:** {diagnosis.get('recorded_case_count')}"
+        + (
+            f" of {diagnosis.get('planned_case_count')}"
+            if diagnosis.get("planned_case_count")
+            else ""
+        ),
+        f"- **Physical HTTP attempts used:** {diagnosis.get('http_attempts_used')}",
+        "",
+    ]
+    if diagnosis.get("evidence"):
+        lines += ["The controller's own words:", ""]
+        lines += [f"- `{item}`" for item in diagnosis["evidence"]]
+        lines.append("")
+    lines += [f"**Next step:** {diagnosis.get('next_step')}", ""]
+    return "\n".join(lines)
+
+
+def _annotation_escape(text: str, *, title: bool = False) -> str:
+    value = str(text).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    if title:
+        value = value.replace(",", "%2C").replace(":", "%3A")
+    if len(value) > ANNOTATION_MESSAGE_LIMIT:
+        value = value[: ANNOTATION_MESSAGE_LIMIT - 1] + "…"
+    return value
+
+
+def github_annotations(diagnosis: Mapping[str, Any]) -> list[str]:
+    """``::error::``/``::notice::`` lines that carry the diagnosis on the run page.
+
+    A failed step's annotations are rendered publicly on GitHub, so this is the
+    one channel that does not require the artifact, the log, or a login.
+    """
+    if not diagnosis.get("paused") and diagnosis.get("code") != "no_checkpoint":
+        return []
+    severity = "error" if diagnosis["code"] != "floor_effect" else "warning"
+    title = _annotation_escape(
+        f"Recursive gluing {diagnosis['code']} ({diagnosis.get('pause_reason') or 'no checkpoint'})",
+        title=True,
+    )
+    detail = (
+        f"{diagnosis.get('headline')}: {diagnosis.get('cause')}; "
+        f"cases recorded {diagnosis.get('recorded_case_count')}"
+        + (
+            f"/{diagnosis.get('planned_case_count')}"
+            if diagnosis.get("planned_case_count")
+            else ""
+        )
+        + f"; http_attempts={diagnosis.get('http_attempts_used')}"
+    )
+    if diagnosis.get("evidence"):
+        detail += " | evidence: " + " | ".join(str(item) for item in diagnosis["evidence"][:2])
+    lines = [f"::{severity} title={title}::{_annotation_escape(detail)}"]
+    if diagnosis.get("evidence"):
+        remainder = " | ".join(str(item) for item in diagnosis["evidence"][2:])
+        if remainder:
+            lines.append(f"::{severity} title={title}::remaining evidence: {_annotation_escape(remainder)}")
+    lines.append(
+        f"::notice title={title}::next step: {_annotation_escape(diagnosis.get('next_step'))}"
+    )
+    return lines
+
+
+def in_github_actions() -> bool:
+    return os.environ.get("GITHUB_ACTIONS", "").strip().lower() == "true"
+
+
+def emit_pause_annotations(
+    diagnosis: Mapping[str, Any],
+    *,
+    stream: Any = None,
+) -> bool:
+    """Write workflow commands for a pause when this process runs inside Actions.
+
+    The live step needs no workflow change for this. The runner parses every
+    line a step writes to stdout - including lines written by a child process -
+    so ``run`` carries its own diagnosis onto the run page, which is the only
+    channel that works when the artifact or the log cannot be fetched. Outside
+    Actions nothing is printed, so a CLI or a test never sees workflow commands.
+    """
+    if not in_github_actions():
+        return False
+    lines = github_annotations(diagnosis)
+    for line in lines:
+        print(line, file=stream or sys.stdout, flush=True)
+    return bool(lines)
 
 
 def write_report_artifacts(out_dir: Path, report: Mapping[str, Any]) -> dict[str, str]:
@@ -2066,6 +2443,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report_parser.add_argument("--out", type=Path, required=True)
     report_parser.add_argument("--root", type=Path, default=ROOT)
+
+    diagnose_parser = sub.add_parser(
+        "diagnose",
+        help="name why a leg paused, from its checkpoint; no provider call, no artifact download",
+    )
+    diagnose_parser.add_argument(
+        "--run-out",
+        type=Path,
+        action="append",
+        required=True,
+        help="controller output directory; repeat for one entry per shard",
+    )
+    diagnose_parser.add_argument("--manifest", type=Path, default=None)
+    diagnose_parser.add_argument("--out", type=Path, default=None, help="optional JSON output path")
+    diagnose_parser.add_argument(
+        "--github",
+        action="store_true",
+        help="print ::error::/::notice:: annotations and append the Markdown to $GITHUB_STEP_SUMMARY",
+    )
+    diagnose_parser.add_argument(
+        "--exit-status",
+        type=int,
+        default=None,
+        help="the exit status of the leg being diagnosed; 2 names the study's own refusal path",
+    )
+    diagnose_parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
     return parser
 
 
@@ -2127,6 +2530,10 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
             )
             checkpoint = result["checkpoint"]
+            diagnosis = diagnose_pause(checkpoint, manifest=manifest)
+            # Inside Actions this is what makes the pause readable from the run
+            # page: the checkpoint itself only exists inside an artifact.
+            emit_pause_annotations(diagnosis)
             print(
                 json.dumps(
                     {
@@ -2138,6 +2545,9 @@ def main(argv: list[str] | None = None) -> int:
                         "recorded_cases": len(checkpoint.get("results") or []),
                         "paused": bool(checkpoint.get("paused")),
                         "pause_reason": checkpoint.get("pause_reason"),
+                        # The same reading the run page and the report carry,
+                        # so the step log has it as well.
+                        "pause_diagnosis": diagnosis,
                     },
                     indent=2,
                 )
@@ -2167,9 +2577,44 @@ def main(argv: list[str] | None = None) -> int:
             paths = write_report_artifacts(args.out, report)
             print(json.dumps({"paths": paths, "cases": report["manifest"]["case_count"]}, indent=2))
             return 0
+        if args.command == "diagnose":
+            manifest = _read_json(args.manifest) if args.manifest else {}
+            checkpoints = [
+                _read_json(path / "suite_checkpoint.json") for path in list(args.run_out)
+            ]
+            present = [checkpoint for checkpoint in checkpoints if checkpoint]
+            diagnosis = diagnose_pause(
+                _merge_checkpoints(present) if present else None,
+                manifest=manifest or None,
+                exit_status=args.exit_status,
+            )
+            if args.out:
+                _write_json(args.out, diagnosis)
+            markdown = diagnosis_markdown(diagnosis)
+            if args.github:
+                # Annotations only: the job summary is written by the report
+                # step (which reads this same checkpoint), so a failure does not
+                # print the diagnosis twice on one page.
+                for line in github_annotations(diagnosis):
+                    print(line)
+            if args.format == "json":
+                print(json.dumps(diagnosis, indent=2))
+            else:
+                print(markdown)
+            # A diagnosis is a report about the failure, never a failure of its
+            # own: it must not mask the controller's exit status in the caller.
+            return 0
         raise StudyError(f"unknown command {args.command!r}")
     except (OSError, ValueError, StudyError) as exc:
         print(f"recursive-gluing study failed: {exc}", file=sys.stderr)
+        if in_github_actions():
+            # Exit 2 is usually a missing or renamed provider secret, and it
+            # happens before any checkpoint exists: annotate it too, or the run
+            # page shows only a red step.
+            print(
+                "::error title=Recursive gluing study refused the dispatch::"
+                + _annotation_escape(str(exc))
+            )
         return 2
 
 
