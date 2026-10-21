@@ -319,7 +319,7 @@ def test_run_forwards_ceilings_and_gate_leg_verbatim(execution_mode, stop_after_
         "max_api_calls": plan["limits"]["max_api_calls"],
         "max_tokens_total": plan["limits"]["max_tokens_total"],
         "max_wall_seconds": plan["limits"]["max_wall_seconds"],
-        "max_http_attempts": 6,
+        "max_http_attempts": plan["limits"]["max_http_attempts"],
     }
     result = study.run_study(
         manifest,
@@ -352,7 +352,14 @@ def test_run_forwards_ceilings_and_gate_leg_verbatim(execution_mode, stop_after_
         )
 
 
-def test_first_class_providers_get_a_bounded_http_attempt_default() -> None:
+def test_http_attempt_budget_is_derived_from_the_declared_ceiling() -> None:
+    """A fixed tiny physical-attempt cap is a guaranteed mid-episode pause.
+
+    Run 39580706886 (synapse_garden, live diagnostic) paused after 91s because
+    the profile pinned the controller's *global* physical HTTP-attempt budget to
+    6 while the plan declared 1,296 logical calls.  The budget must therefore
+    scale with the operator's own ceiling, and be visible in the plan.
+    """
     manifest, plan = _manifest(max_api_calls=5_000, max_tokens_total=20_000_000)
     captured: dict = {}
 
@@ -371,7 +378,126 @@ def test_first_class_providers_get_a_bounded_http_attempt_default() -> None:
         max_wall_seconds=plan["limits"]["max_wall_seconds"],
         runner=runner,
     )
-    assert captured["max_http_attempts"] == study.DEFAULT_FIRST_CLASS_PROVIDER_HTTP_ATTEMPTS == 6
+    expected = plan["limits"]["max_api_calls"] * (1 + study.DEFAULT_MAX_RETRIES)
+    assert captured["max_http_attempts"] == expected
+    assert plan["limits"]["max_http_attempts"] == expected
+    assert plan["limits"]["max_http_attempts_source"] == "derived"
+    assert plan["limits"]["max_http_attempts"] >= plan["worst_case"]["api_calls"]
+    check = next(c for c in plan["checks"] if c["name"] == "max_http_attempts")
+    assert check["ok"] is True
+
+
+def test_every_provider_gets_the_derived_budget_not_a_provider_specific_one() -> None:
+    manifest, plan = _manifest(max_api_calls=5_000, max_tokens_total=20_000_000)
+    forwarded = {}
+
+    def recording_runner(provider: str):
+        def runner(_manifest, **kwargs):
+            forwarded[provider] = kwargs["max_http_attempts"]
+            return {"results": [], "paused": False, "provider_free_validation_complete": True}
+
+        return runner
+
+    for provider, model in (("atria", "atria-dawn-preview"), ("synapse_garden", "openai/gpt-6.1-sol")):
+        study.run_study(
+            manifest,
+            execution_mode="gates_only",
+            provider=provider,
+            model=model,
+            output_dir=Path("/tmp/study-run"),
+            max_api_calls=plan["limits"]["max_api_calls"],
+            max_tokens_total=plan["limits"]["max_tokens_total"],
+            max_wall_seconds=plan["limits"]["max_wall_seconds"],
+            runner=recording_runner(provider),
+        )
+    assert forwarded == {
+        "atria": plan["limits"]["max_http_attempts"],
+        "synapse_garden": plan["limits"]["max_http_attempts"],
+    }
+
+
+def test_an_http_attempt_budget_below_the_plan_is_refused_provider_free() -> None:
+    with pytest.raises(study.StudyError) as excinfo:
+        _manifest(max_http_attempts=6)
+    assert "max_http_attempts" in str(excinfo.value)
+
+    manifest, _plan = _manifest(max_api_calls=5_000, max_tokens_total=20_000_000)
+    calls: list[dict] = []
+
+    def runner(_manifest, **kwargs):  # pragma: no cover - must never run
+        calls.append(kwargs)
+        raise AssertionError("the controller must not be constructed")
+
+    with pytest.raises(study.StudyError) as excinfo:
+        study.run_study(
+            manifest,
+            execution_mode="live",
+            provider="synapse_garden",
+            model="openai/gpt-6.1-sol",
+            output_dir=Path("/tmp/should-not-exist"),
+            max_http_attempts=6,
+            runner=runner,
+        )
+    assert "max_http_attempts" in str(excinfo.value)
+    assert calls == []
+
+
+def test_an_explicit_http_attempt_budget_is_forwarded_verbatim() -> None:
+    manifest, plan = _manifest(
+        max_api_calls=5_000, max_tokens_total=20_000_000, max_http_attempts=4_000
+    )
+    captured: dict = {}
+
+    def runner(_manifest, **kwargs):
+        captured.update(kwargs)
+        return {"results": [], "paused": False, "provider_free_validation_complete": True}
+
+    study.run_study(
+        manifest,
+        execution_mode="live",
+        provider="synapse_garden",
+        model="openai/gpt-6.1-sol",
+        output_dir=Path("/tmp/study-run"),
+        max_api_calls=plan["limits"]["max_api_calls"],
+        max_tokens_total=plan["limits"]["max_tokens_total"],
+        max_wall_seconds=plan["limits"]["max_wall_seconds"],
+        runner=runner,
+    )
+    assert plan["limits"]["max_http_attempts"] == 4_000
+    assert plan["limits"]["max_http_attempts_source"] == "explicit"
+    assert captured["max_http_attempts"] == 4_000
+
+
+def test_a_paused_dispatch_is_legible_from_the_report_alone() -> None:
+    """Run 39580706886 failed with exit 3 and its summary said nothing about it.
+
+    A paused leg is not a result, but its reason and the rows that never became
+    scores have to be in the artifact: the run log is not uploaded.
+    """
+    manifest, _plan = _manifest()
+    case_id = manifest["cases"][0]["case_id"]
+    checkpoint = {
+        "run": {"provider": "synapse_garden", "model": "openai/gpt-6.1-sol",
+                "limits": {"max_http_attempts": 6}},
+        "paused": True,
+        "pause_reason": "provider_error",
+        "results": [
+            {
+                "case_id": case_id,
+                "status": "paused_provider_error",
+                "error": "Provider HTTP attempt budget exhausted",
+            }
+        ],
+    }
+    report = study.build_report(manifest, checkpoint)
+    assert report["run"]["paused"] is True
+    assert report["run"]["pause_reason"] == "provider_error"
+    assert report["run"]["paused_case_errors"][0]["case_id"] == case_id
+    assert report["run"]["paused_case_errors"][0]["error"].startswith("Provider HTTP attempt budget")
+    markdown = study.report_markdown(report)
+    assert "PAUSED (`provider_error`)" in markdown
+    assert "Provider HTTP attempt budget exhausted" in markdown
+    assert "`missing_result`" in markdown
 
 
 # ---------------------------------------------------------------------------

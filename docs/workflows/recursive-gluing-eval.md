@@ -42,6 +42,30 @@ The wall estimate is a ceiling, not a forecast: `cases × 600 s + 3600 s` of
 gate reserve. A GitHub job may run at most six hours, so the pairwise family
 run is split into four disjoint shards of 19 cases / 15,000 s each.
 
+### Physical HTTP-attempt budget
+
+`--max-http-attempts` is not a per-call retry cap. `tools/run_suite.py` counts
+every **physical** request in one dispatch against a single global budget, and
+`arena/providers.py` stops the episode with `Provider HTTP attempt budget
+exhausted` the moment it is spent; the leg is then recorded as
+`paused_provider_error` and the dispatch exits 3. Because that budget is
+consumed by ordinary successful calls, it must scale with the plan:
+
+* with no explicit value the study derives it as
+  `max_api_calls × (1 + max_retries)`, i.e. 8000 for the diagnostic dispatch
+  (`max_api_calls=2000`, `max_retries=3`) against 1296 planned logical calls;
+* the plan prints the number it will use, its source, and refuses any value
+  below the planned logical call count before a single request is made;
+* `plan`/`run` accept `--max-http-attempts` directly; an explicit value is
+  forwarded verbatim and is never raised.
+
+Run [39580706886](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/39580706886)
+is why this section exists: a `synapse_garden` live diagnostic dispatch paused
+after 91 s with a fixed six-request backstop, which is roughly one episode's
+first six calls. A fixed small number is not a bounded pilot; it is a
+guaranteed mid-episode pause. Use the small-ceiling recipe in step 3 below to
+bound a pilot instead, and read `pause_reason` in the report or checkpoint.
+
 ## Deployment status
 
 The workflow source is in `docs/workflows/recursive-gluing-eval.yml.example`.
@@ -128,15 +152,17 @@ Reference docs: [YepAPI Chat Completions](https://docs.yepapi.com/ai-models/chat
 3. For a bounded first-class-provider pilot, keep `scope=diagnostic`, set
    `seeds=0`, `shard_count=8`, `shard_index=0`, `max_steps=1`,
    `max_tokens=256`, `max_api_calls=6`, `max_tokens_total=1536`, and
-   `max_wall_seconds=4800`. These select the two-case shard. Even on workflow
-   revisions without a `max_http_attempts` input, the study controller applies
-   a six-request HTTP-attempt backstop for YepAPI and Synapse Garden, including
-   retries. Inspect responses and provider usage before expanding.
+   `max_wall_seconds=4800`. These select the two-case shard and derive a
+   24-request physical budget for 6 planned calls. Inspect responses and
+   provider usage before expanding.
 4. The full diagnostic run is 18 cases. Review the plan's maximum calls and
    tokens and deliberately raise ceilings before authorizing a broader run. For
    a family pairwise rerun, use separate live dispatches with `scope=family`,
    `matrix=pairwise`, and explicit shard and budget values.
-5. Open the run's **Summary** for identity, plan and outcome. Download the
+5. Open the run's **Summary** for identity, plan and outcome. A paused leg is
+   called out there by the report step with its `pause_reason`, and
+   `report/summary.md` lists every row that never became a score together with
+   the controller's own error text. Download the
    `recursive-gluing-results-...` artifact for the checkpoint and reports
    (`report/results.json`, `report/results.csv`, and `report/summary.md`).
 
