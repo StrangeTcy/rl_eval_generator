@@ -109,3 +109,12 @@ confirm the diagnosis, re-dispatch the same scope/provider/model with
 summary will name the reason (`provider_error` with the controller's error text
 distinguishes a rejected credential from any budget). No automatic retry, no
 ceiling raise, and no re-arming were added by this change.
+
+**Update, 2026-10-21 (run 39586680263).** That re-dispatch happened, on the
+commit carrying this fix, and it paused again after 85 s with exit 3 - see
+`docs/reports/2026-10-21-recursive-gluing-second-pause-unread.md`. With the
+derived 8,000-attempt budget in place, the six-request backstop cannot be what
+stopped it, so the "six calls of ~15 s" reading above was an inference rather
+than a confirmation. The diagnosis in this change set (`diagnose`, plus
+GitHub annotations on the failed step) exists so the next pause is readable
+from the run page without downloading the artifact.

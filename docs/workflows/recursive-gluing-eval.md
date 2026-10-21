@@ -7,7 +7,7 @@ The reviewed source is staged at `docs/workflows/recursive-gluing-eval.yml.examp
 | File | Role |
 | --- | --- |
 | `docs/workflows/recursive-gluing-eval.yml.example` | Copyable workflow: manual dispatch only, no schedule, one provider/model pair per dispatch. |
-| `tools/recursive_gluing_study.py` | `plan` / `run` / `report` for the study. Builds a filtered manifest and provider-free budget plan, forwards live execution to `tools/run_suite.py`, and turns the checkpoint into JSON + CSV + Markdown. |
+| `tools/recursive_gluing_study.py` | `plan` / `run` / `report` / `diagnose` for the study. Builds a filtered manifest and provider-free budget plan, forwards live execution to `tools/run_suite.py`, turns the checkpoint into JSON + CSV + Markdown, and names a pause's cause as a GitHub annotation. |
 | `tools/recursive_references.py` | Host-side correct/wrong patch pairs for the exact-instance gate. Never part of the agent-facing tree. |
 | `docs/decisions/2026-10-16-sheaf-recursive-reasoning.md` | Why the family exists and what the diagnostic matrix is testing. |
 
@@ -65,6 +65,61 @@ after 91 s with a fixed six-request backstop, which is roughly one episode's
 first six calls. A fixed small number is not a bounded pilot; it is a
 guaranteed mid-episode pause. Use the small-ceiling recipe in step 3 below to
 bound a pilot instead, and read `pause_reason` in the report or checkpoint.
+
+## Reading a pause without the artifact
+
+Exit 3 is the controller's *paused* code, not a study error, and until this
+change the only record of *why* was `runs/recursive_gluing_study/suite_checkpoint.json`
+inside the `recursive-gluing-results-...` zip. Two live dispatches stopped that
+way - [39580706886](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/39580706886)
+after 91 s and [39586680263](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/39586680263)
+after 85 s - and neither reason could be read without that download, so the
+first diagnosis stayed an inference.
+
+`tools/recursive_gluing_study.py run` now diagnoses its own pause. When
+`GITHUB_ACTIONS=true` - which every Actions step sets - it prints workflow
+commands for the failed step before it returns exit 3:
+
+```
+::error title=Recursive gluing credential_rejected (provider_error)::...
+::notice title=Recursive gluing credential_rejected (provider_error)::next step: ...
+```
+
+The runner parses a child process's stdout, so this needs no workflow change
+(and this session's GitHub App cannot write `.github/workflows/**`; see
+`docs/audits/2026-10-20-workflow-token-repair.md`). Annotations render on the
+public run page, so the cause no longer requires the artifact, the log, or a
+signed-in session. Exit 2 - usually a missing or renamed secret - is annotated
+too, because it happens before any checkpoint exists. The same reading appears
+in `report/summary.md`, in `report/results.json` under `run.pause_diagnosis`,
+and in the `run` command's stdout.
+
+| Diagnosis code | What the controller's own text says |
+| --- | --- |
+| `credential_rejected` | HTTP 401 / "Invalid API Key" / authentication failure |
+| `quota_exhausted` | `insufficient_quota`, billing, credit |
+| `rate_limited` | HTTP 429 / rate limit / too many requests |
+| `model_not_served` | 404 / model_not_found / unknown model |
+| `endpoint_unreachable` | timeouts, connection reset/refused, TLS or DNS failure |
+| `http_attempt_budget` | "Provider HTTP attempt budget exhausted" |
+| `floor_effect` | three consecutive zero-scored cases without reasoning enabled |
+| `harness_failure` | judge/controller/sandbox failed before a score existed |
+| `ceiling_reached` | `max_wall_seconds`, `max_api_calls`, `max_tokens_total`, `max_output_tokens`, `max_http_attempts` |
+| `provider_error_unclassified` | the pause names no known cause; the quoted evidence is all there is |
+| `no_checkpoint` | the leg failed before a checkpoint existed |
+
+Only the controller's transcript (`stdout_tail`/`stderr_tail`) is matched, never
+this harness's own generic `error` string, so a provider failure is not
+relabelled a quota failure. Every quoted line is length-bounded and scrubbed of
+credential-shaped tokens before it reaches an annotation.
+
+The same reading is available locally, provider-free, from a downloaded
+checkpoint:
+
+```bash
+python tools/recursive_gluing_study.py diagnose --run-out path/to/recursive_gluing_study
+python tools/recursive_gluing_study.py diagnose --run-out ... --format json
+```
 
 ## Deployment status
 
@@ -160,11 +215,13 @@ Reference docs: [YepAPI Chat Completions](https://docs.yepapi.com/ai-models/chat
    a family pairwise rerun, use separate live dispatches with `scope=family`,
    `matrix=pairwise`, and explicit shard and budget values.
 5. Open the run's **Summary** for identity, plan and outcome. A paused leg is
-   called out there by the report step with its `pause_reason`, and
-   `report/summary.md` lists every row that never became a score together with
-   the controller's own error text. Download the
-   `recursive-gluing-results-...` artifact for the checkpoint and reports
-   (`report/results.json`, `report/results.csv`, and `report/summary.md`).
+   called out by the report step with its `pause_reason` and its named
+   diagnosis, and `report/summary.md` lists every row that never became a score
+   together with the controller's own error text. The failed live step also
+   carries the diagnosis as an annotation, so the cause is readable before any
+   download. Download the `recursive-gluing-results-...` artifact for the
+   checkpoint and reports (`report/results.json`, `report/results.csv`, and
+   `report/summary.md`).
 
 Each shard is a separate artifact; duplicate grading is reported, not silently
 averaged.

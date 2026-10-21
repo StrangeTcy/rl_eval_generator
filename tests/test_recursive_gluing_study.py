@@ -27,7 +27,10 @@ depends on and that a careless edit would quietly remove:
     banned vocabulary and do not leak the judge's hidden check names.
 
 An eleventh test pins the manual-copy workflow contract, because the workflow
-file is the only artefact that cannot be produced by this checkout.
+file is the only artefact that cannot be produced by this checkout, and a
+twelfth pins the pause diagnosis: a stopped leg has to name its own cause on
+the run page, because two live dispatches (39580706886, 39586680263) could not
+be read at all - their only record was a checkpoint inside an artifact zip.
 """
 from __future__ import annotations
 
@@ -737,3 +740,204 @@ def test_workflow_example_is_manual_dispatch_only() -> None:
     assert ".github/workflows/recursive-gluing-eval.yml" in deployment
     assert "docs/workflows/recursive-gluing-eval.yml.example" in deployment
     assert "manual" in deployment.lower()
+
+
+# ---------------------------------------------------------------------------
+# 12. A pause names its own cause on the run page, not only in the artifact
+# ---------------------------------------------------------------------------
+
+
+def _paused_row(**overrides):
+    row = {
+        "case_id": "recursive_gluing__depth=hard__seed-0",
+        "status": "paused_provider_error",
+        "error": "provider or quota failure detected; resume only after checking the account",
+        "failure_mode": "api_error",
+        "elapsed_seconds": 71.0,
+        "http_attempts": 4,
+        "stdout_tail": "",
+        "stderr_tail": "",
+    }
+    row.update(overrides)
+    return row
+
+
+def _paused_checkpoint(*rows, **overrides):
+    checkpoint = {
+        "run": {"provider": "synapse_garden", "model": "openai/gpt-6.1-sol"},
+        "paused": True,
+        "pause_reason": "provider_error",
+        "http_attempts_total": sum(int(row.get("http_attempts") or 0) for row in rows),
+        "results": list(rows),
+    }
+    checkpoint.update(overrides)
+    return checkpoint
+
+
+def test_diagnosis_names_a_credential_rejection_and_redacts_the_secret() -> None:
+    """Run 39586680263's pause was only readable inside the artifact zip.
+
+    The diagnosis has to name the cause from the checkpoint and never print a
+    credential back out, because annotations are public on the run page.
+    """
+    secret = "sk-live-abcdefghijklmnopqrstuvwxyz"
+    checkpoint = _paused_checkpoint(
+        _paused_row(
+            stdout_tail=(
+                "provider client: attempt 1 failed\n"
+                f"ProviderError: HTTP 401 Invalid API Key! (key={secret})\n"
+            )
+        )
+    )
+    diagnosis = study.diagnose_pause(checkpoint)
+    assert diagnosis["paused"] is True
+    assert diagnosis["code"] == "credential_rejected"
+    assert diagnosis["http_attempts_used"] == 4
+    assert any("401" in item for item in diagnosis["evidence"])
+    annotations = study.github_annotations(diagnosis)
+    assert annotations and annotations[0].startswith("::error title=")
+    assert "credential_rejected" in annotations[0]
+    assert any(line.startswith("::notice title=") for line in annotations)
+    rendered = "\n".join(annotations) + "\n" + study.diagnosis_markdown(diagnosis)
+    assert secret not in rendered
+    assert "[REDACTED]" in rendered
+    for line in annotations:
+        assert "\n" not in line
+        assert len(line) <= study.ANNOTATION_MESSAGE_LIMIT + 200
+
+
+def test_diagnosis_names_the_physical_budget_before_generic_provider_error() -> None:
+    checkpoint = _paused_checkpoint(
+        _paused_row(status="paused_provider_error", stderr_tail="Provider HTTP attempt budget exhausted\n")
+    )
+    diagnosis = study.diagnose_pause(checkpoint)
+    assert diagnosis["code"] == "http_attempt_budget"
+    assert "budget" in diagnosis["cause"]
+
+
+def test_diagnosis_does_not_invent_a_cause_it_cannot_read() -> None:
+    checkpoint = _paused_checkpoint(_paused_row(stdout_tail="something entirely unexpected\n"))
+    diagnosis = study.diagnose_pause(checkpoint)
+    assert diagnosis["code"] == "provider_error_unclassified"
+    assert "does not name" in diagnosis["next_step"] or "does not name" in diagnosis["headline"]
+
+
+def test_diagnosis_of_a_completed_leg_is_not_a_pause() -> None:
+    diagnosis = study.diagnose_pause({"paused": False, "results": []}, manifest={"cases": [{}]})
+    assert diagnosis["paused"] is False
+    assert diagnosis["code"] == "complete"
+    assert study.github_annotations(diagnosis) == []
+
+
+def test_diagnosis_of_a_refused_dispatch_names_the_credential_path() -> None:
+    """Exit 2 is the study's own refusal (usually a missing secret): no checkpoint."""
+    diagnosis = study.diagnose_pause(None, manifest={"cases": [{}] * 18}, exit_status=2)
+    assert diagnosis["code"] == "no_checkpoint"
+    assert "provider secret" in diagnosis["cause"]
+    assert diagnosis["planned_case_count"] == 18
+    annotations = study.github_annotations(diagnosis)
+    assert annotations[0].startswith("::error title=")
+
+
+def test_diagnosis_of_a_floor_effect_pause_is_a_warning_not_a_failure() -> None:
+    checkpoint = _paused_checkpoint(
+        _paused_row(status="scored", error=None, verdict="FAIL", score=0.0),
+        pause_reason="floor_effect",
+        floor_effect=True,
+    )
+    diagnosis = study.diagnose_pause(checkpoint)
+    assert diagnosis["code"] == "floor_effect"
+    assert study.github_annotations(diagnosis)[0].startswith("::warning title=")
+
+
+def test_report_prints_the_pause_diagnosis(tmp_path: Path) -> None:
+    manifest, _plan = _manifest()
+    case_id = manifest["cases"][0]["case_id"]
+    checkpoint = _paused_checkpoint(
+        _paused_row(case_id=case_id, stderr_tail="HTTP 429 Too Many Requests\n")
+    )
+    report = study.build_report(manifest, checkpoint)
+    assert report["run"]["pause_diagnosis"]["code"] == "rate_limited"
+    markdown = study.report_markdown(report)
+    assert "Pause diagnosis: `rate_limited`" in markdown
+    assert "Provider rate limited" in markdown or "rate limited" in markdown
+    assert "Next step:" in markdown
+
+
+def test_diagnose_command_is_provider_free_and_never_masks_the_leg(tmp_path: Path, capsys) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "suite_checkpoint.json").write_text(
+        json.dumps(
+            _paused_checkpoint(
+                _paused_row(stderr_tail="Provider HTTP attempt budget exhausted\n")
+            )
+        ),
+        encoding="utf-8",
+    )
+    status = study.main(
+        [
+            "diagnose",
+            "--run-out",
+            str(run_dir),
+            "--exit-status",
+            "3",
+            "--github",
+            "--out",
+            str(tmp_path / "pause.json"),
+        ]
+    )
+    # A diagnosis reports the failure; it must never become one and mask the
+    # controller's exit status in the caller.
+    assert status == 0
+    printed = capsys.readouterr().out
+    assert "::error title=" in printed
+    assert "http_attempt_budget" in printed
+    assert "## Pause diagnosis: `http_attempt_budget`" in printed
+    written = json.loads((tmp_path / "pause.json").read_text(encoding="utf-8"))
+    assert written["code"] == "http_attempt_budget"
+
+
+def test_the_run_command_carries_its_pause_onto_the_run_page(monkeypatch, capsys) -> None:
+    """The runner parses a child process's stdout, so no workflow edit is needed.
+
+    This session's GitHub App cannot write `.github/workflows/**` (see
+    `docs/audits/2026-10-20-workflow-token-repair.md`), so the annotation has to
+    come from the study command itself.
+    """
+    diagnosis = study.diagnose_pause(
+        _paused_checkpoint(_paused_row(stderr_tail="HTTP 429 Too Many Requests\n"))
+    )
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    assert study.emit_pause_annotations(diagnosis) is False
+    assert capsys.readouterr().out == "", "a CLI or a test must never see workflow commands"
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    assert study.emit_pause_annotations(diagnosis) is True
+    printed = capsys.readouterr().out
+    assert printed.startswith("::error title=")
+    assert "rate_limited" in printed
+
+
+def test_a_refused_dispatch_is_annotated_inside_actions(monkeypatch, capsys, tmp_path: Path) -> None:
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text("{}", encoding="utf-8")
+    status = study.main(
+        [
+            "run",
+            "--manifest",
+            str(manifest),
+            "--out",
+            str(tmp_path / "out"),
+            "--execution-mode",
+            "gates_only",
+            "--provider",
+            "synapse_garden",
+            "--model",
+            "openai/gpt-6.1-sol",
+        ]
+    )
+    assert status == 2
+    captured = capsys.readouterr()
+    assert "::error title=Recursive gluing study refused the dispatch::" in captured.out
+    assert "no study block" in captured.err
