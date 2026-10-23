@@ -1,0 +1,41 @@
+{
+  "provider": "atria",
+  "model": "Atria-Dawn-Preview",
+  "wire_api": "responses",
+  "reasoning_effort": "high",
+  "environment": "recursive_gluing_discovery",
+  "difficulty": "hard,hard,hard,hard,hard",
+  "seed": 1,
+  "request_body_seen_by_transport": {
+    "model": "Atria-Dawn-Preview",
+    "reasoning": {
+      "effort": "high"
+    },
+    "max_output_tokens": 1024,
+    "input_is_messages": true
+  },
+  "transport_calls": 2,
+  "run_dir": "/home/user/rl_eval_generator/runs/pilot_offline_wiring/atria/recursive_gluing_discovery-20261023T081213Z-326be2f4",
+  "verdict": "PASS",
+  "score": 1.0,
+  "failure_mode": "pass",
+  "checks": {
+    "patch_found": true,
+    "patch_valid": true,
+    "sources_valid": true,
+    "training_completed": false,
+    "artifact_found": false,
+    "hidden_metric_passed": true,
+    "anti_gaming_passed": true,
+    "required_multifile_edit": true,
+    "local_visible": true,
+    "configured": true,
+    "assembled_sat": true,
+    "assembled_unsat": true,
+    "opaque_twin": true,
+    "decoy_heldout": true,
+    "heldout_twist": true,
+    "deterministic": true
+  },
+  "note": "offline transport stub answering with the host oracle reference; NOT a model result"
+}

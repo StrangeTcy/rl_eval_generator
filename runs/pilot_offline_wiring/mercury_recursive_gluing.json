@@ -1,0 +1,43 @@
+{
+  "provider": "mercury",
+  "model": "mercury-2.5",
+  "wire_api": "chat_completions",
+  "reasoning_effort": "high",
+  "environment": "recursive_gluing",
+  "difficulty": "hard,hard,hard,hard",
+  "seed": 1,
+  "request_body_seen_by_transport": {
+    "model": "mercury-2.5",
+    "max_completion_tokens": 1024,
+    "request_extra": {
+      "reasoning_effort": "high"
+    },
+    "temperature": 0.0
+  },
+  "transport_calls": 2,
+  "run_dir": "/home/user/rl_eval_generator/runs/pilot_offline_wiring/mercury/recursive_gluing-20261023T081204Z-3d976c27",
+  "verdict": "PASS",
+  "score": 1.0,
+  "failure_mode": "pass",
+  "checks": {
+    "patch_found": true,
+    "patch_valid": true,
+    "sources_valid": true,
+    "training_completed": false,
+    "artifact_found": false,
+    "hidden_metric_passed": true,
+    "anti_gaming_passed": true,
+    "required_multifile_edit": true,
+    "local_path_sat": true,
+    "configured": true,
+    "solvable_cycle": true,
+    "obstructed_cycle": true,
+    "nested_recursive": true,
+    "cyclic_sat_generated": true,
+    "cyclic_unsat_generated": true,
+    "relabel_twin": true,
+    "heldout_large": true,
+    "deterministic": true
+  },
+  "note": "offline transport stub answering with the host oracle reference; NOT a model result"
+}
