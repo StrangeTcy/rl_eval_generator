@@ -7,6 +7,7 @@ The reviewed source is staged at `docs/workflows/recursive-gluing-eval.yml.examp
 | File | Role |
 | --- | --- |
 | `docs/workflows/recursive-gluing-eval.yml.example` | Copyable workflow: manual dispatch only, no schedule, one provider/model pair per dispatch. |
+| `docs/workflows/recursive-gluing-reasoning-pilot.yml.example` | Copyable workflow for the first reasoning-model pilot. Two providers, one frozen two-case slice, every ceiling a constant. See [Reasoning pilot](#reasoning-pilot-atria--mercury). |
 | `tools/recursive_gluing_study.py` | `plan` / `run` / `report` / `diagnose` for the study. Builds a filtered manifest and provider-free budget plan, forwards live execution to `tools/run_suite.py`, turns the checkpoint into JSON + CSV + Markdown, and names a pause's cause as a GitHub annotation. |
 | `tools/recursive_references.py` | Host-side correct/wrong patch pairs for the exact-instance gate. Never part of the agent-facing tree. |
 | `docs/decisions/2026-10-16-sheaf-recursive-reasoning.md` | Why the family exists and what the diagnostic matrix is testing. |
@@ -120,6 +121,58 @@ checkpoint:
 python tools/recursive_gluing_study.py diagnose --run-out path/to/recursive_gluing_study
 python tools/recursive_gluing_study.py diagnose --run-out ... --format json
 ```
+
+## Reasoning pilot (Atria / Mercury)
+
+The first controlled-reasoning attempt uses its own small wrapper so it cannot be
+dispatched with a drifted configuration:
+`docs/workflows/recursive-gluing-reasoning-pilot.yml.example`, copied to
+`.github/workflows/recursive-gluing-reasoning-pilot.yml` (GitHub executes only
+the copy under `.github/workflows`; this session's integration token cannot write
+that path, so the copy is a manual step).
+
+| Provider | Model | Wire API | Reasoning effort | Credential secret | Endpoint |
+| --- | --- | --- | --- | --- | --- |
+| `atria` | `Atria-Dawn-Preview` | `responses` | `high` | `ATRIA_API_KEY` | `https://api.atria-asi.ai/v1` |
+| `mercury` | `mercury-2.5` | `chat_completions` | `high` | `INCEPTION_API_KEY` (alias `MERCURY_API_KEY`) | `https://api.inceptionlabs.ai/v1` |
+
+Atria's effort is the Responses-API nested field `reasoning: {effort: high}`;
+Mercury's is the flat Chat Completions field `reasoning_effort: high`. The
+workflow derives model, wire, effort, credential name and endpoint from the
+`provider` input, so a mismatched combination cannot be dispatched.
+
+### Frozen slice and budget (constants in the workflow, not inputs)
+
+| Quantity | Value |
+| --- | --- |
+| scope / seeds | `diagnostic` / `1` |
+| cases | 2 - one per primary environment, `max_depth_unsat_stability_seed` |
+| case ids | `recursive_gluing__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard__seed-1`<br>`recursive_gluing_discovery__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard_structural_ambiguity=hard__seed-1` |
+| per episode | `max_steps=8`, `max_tokens=1024`, `invalid_retries=2` |
+| logical API calls | 48 (24 per case) |
+| output tokens | 49,152 |
+| physical HTTP attempts | 192 (48 × (1 + 3 controller retries), derived) |
+| wall clock | 4,800 s |
+
+### Dispatching the pilot
+
+1. Copy `docs/workflows/recursive-gluing-reasoning-pilot.yml.example` to
+   `.github/workflows/recursive-gluing-reasoning-pilot.yml` on the study branch
+   and commit it. Confirm `ATRIA_API_KEY` and/or `INCEPTION_API_KEY` exist under
+   **Settings → Secrets and variables → Actions** (values are never readable
+   again, and no step prints them).
+2. **Actions → Recursive gluing reasoning pilot (Atria / Mercury) → Run
+   workflow**, branch = the study branch, `provider=atria`, `execution_mode=plan_only`.
+   This runs the plan and the exact-instance gate and makes no model call.
+3. Re-dispatch with `execution_mode=live`, `provider=atria`. Then repeat 2-3 with
+   `provider=mercury`. One dispatch bills one provider; the two runs share the
+   same case ids so their outcomes stay comparable.
+4. Read the job summary: identity, plan, gate result, then either a scored row per
+   case or a named pause. A missing secret exits 2 before any request; a rejected
+   key, quota failure or ceiling stop exits 3 and is annotated with its diagnosis.
+
+Do not widen this workflow after a successful pilot: a broader campaign is the
+`recursive-gluing-eval.yml` dispatch, with ceilings chosen deliberately there.
 
 ## Deployment status
 

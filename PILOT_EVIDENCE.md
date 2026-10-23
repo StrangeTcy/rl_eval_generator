@@ -193,6 +193,37 @@ ceiling, or falling back to Astra/Fable/AgentRouter/YepAPI/Synapse Garden.
 
 ## 5. Reproduce
 
+### 5.0 Dispatchable pilot (for a run I cannot start from here)
+
+This sandbox's GitHub token is a GitHub App installation token with **no OAuth
+scopes** (`X-OAuth-Scopes:` empty), and both `POST …/actions/workflows/<id>/dispatches`
+and `GET …/actions/secrets` answer `403 Resource not accessible by integration`,
+retried and reconfirmed on 2026-10-23. It also cannot write `.github/workflows/**`.
+So the live leg has to be your manual dispatch, which matches how workflows are
+deployed here (reviewed copy in `docs/`, hand-copied to `.github/workflows/`).
+
+Prepared for exactly that: **`docs/workflows/recursive-gluing-reasoning-pilot.yml.example`**
+(a `workflow_dispatch`-only pilot wrapper, test-locked by
+`test_reasoning_pilot_workflow_pins_the_frozen_slice_and_its_ceilings`).
+
+What it pins, so no dispatch can drift from this report:
+
+| Element | Value | Why |
+|---|---|---|
+| inputs | only `provider` (`atria`/`mercury`) and `execution_mode` (`plan_only`/`live`) | a ceiling or a case count is not dispatchable, so the pilot cannot become a campaign |
+| model / wire / effort | derived from `provider` (`Atria-Dawn-Preview`+`responses`+`high`; `mercury-2.5`+`chat_completions`+`high`) | the mismatched pairs are unrepresentable, and the study refuses them provider-free anyway |
+| slice | `scope=diagnostic`, `seeds=1` → the same two case ids | comparable across providers |
+| ceilings | 48 calls, 49 152 tokens, 4 800 s, 8 steps, 1 024 tokens/response, 2 invalid retries, 192 physical attempts (derived) | identical to §2 |
+| credential | `ATRIA_API_KEY` / `INCEPTION_API_KEY` (alias `MERCURY_API_KEY`) exposed only on the live step; the step refuses before the first call if the selected one is absent | a missing secret is a dispatch problem, exit 2, never a model result |
+
+To run it: copy the file to `.github/workflows/recursive-gluing-reasoning-pilot.yml`
+on this branch, commit, then dispatch `provider=atria, execution_mode=plan_only`
+(provider-free), then `execution_mode=live`; repeat for `mercury`. The job summary
+prints identity → plan → gate → per-case outcome or a named pause. Full click-path
+in `docs/workflows/recursive-gluing-eval.md` → *Reasoning pilot (Atria / Mercury)*.
+
+### 5.1 Provider-free validation on any host
+
 Provider-free (works anywhere with Python + PyYAML + torch):
 
 ```bash
@@ -216,9 +247,12 @@ python runs/pilot_offline_wiring/verify_wiring.py --provider atria   --environme
 python runs/pilot_offline_wiring/verify_wiring.py --provider mercury --environment recursive_gluing
 ```
 
-Bounded live pilot — to be run **where `ATRIA_API_KEY` / `INCEPTION_API_KEY` exist and the
-provider is reachable** (GitHub Actions dispatch, one provider per dispatch, or a host with
-egress). Nothing below raises a ceiling:
+### 5.2 Bounded live pilot
+
+To be run **where `ATRIA_API_KEY` / `INCEPTION_API_KEY` exist and the provider is reachable**
+(GitHub Actions dispatch, one provider per dispatch, or a host with egress). Nothing below
+raises a ceiling. The workflow form (§5.0) is preferred because its ceilings cannot be
+mistyped; the raw dispatch form is:
 
 ```bash
 gh workflow run "Recursive gluing frontier evaluation" --ref <ref-with-this-commit> \
@@ -280,6 +314,9 @@ runs/pilot_gate_mercury.json              # exact-instance gate, 2 cases
 runs/pilot_preflight.json                 # credential probe (sanitized)
 runs/pilot_blocker.json                   # exact first-failing-layer evidence
 runs/pilot_offline_wiring/                # transport-stub controller→judge wiring check (+ run dirs)
+docs/workflows/recursive-gluing-reasoning-pilot.yml.example   # dispatchable pilot, frozen slice
+docs/workflows/recursive-gluing-eval.md   # how to copy and dispatch it
+tests/test_recursive_gluing_study.py      # locks the pilot workflow's contract
 PILOT_EVIDENCE.md                         # this report
 ```
 

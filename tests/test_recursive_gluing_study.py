@@ -743,6 +743,129 @@ def test_workflow_example_is_manual_dispatch_only() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 11b. The reasoning pilot cannot be dispatched with a drifted configuration
+# ---------------------------------------------------------------------------
+
+
+def _pilot_workflow() -> dict:
+    path = ROOT / "docs" / "workflows" / "recursive-gluing-reasoning-pilot.yml.example"
+    assert path.is_file(), "the copyable pilot workflow must live in docs/workflows"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_reasoning_pilot_workflow_pins_the_frozen_slice_and_its_ceilings() -> None:
+    """A pilot dispatch may choose the provider and whether to spend; nothing else.
+
+    The first Atria/Mercury run is a bounded verification, not a campaign. If the
+    ceilings or the case slice were inputs, one tired dispatch could turn it into
+    an 18-case spend; if the model/wire/effort were typed, one typo could send
+    Atria's reasoning effort down Chat Completions (where it has no effect) or
+    Mercury's flat field down the Responses wire. Both are made unrepresentable:
+    the two approved triples are derived from ``provider``, and every limit is a
+    constant. This test is the contract, not a style check.
+    """
+
+    workflow = _pilot_workflow()
+    triggers = workflow[True] if True in workflow else workflow["on"]
+    assert set(triggers) == {"workflow_dispatch"}, "no schedule, no push, no self-dispatch"
+    assert workflow["permissions"] == {"contents": "read"}
+
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    # Exactly two dimensions: which provider, and whether to spend at all.
+    assert set(inputs) == {"provider", "execution_mode"}
+    assert set(inputs["provider"]["options"]) == {"atria", "mercury"}
+    assert inputs["execution_mode"]["default"] == "plan_only"
+    assert set(inputs["execution_mode"]["options"]) == {"plan_only", "live"}
+    assert not [name for name in inputs if name.startswith("max_")], (
+        "a ceiling must not be a dispatch input: this workflow may not raise one"
+    )
+    assert "model" not in inputs and "wire_api" not in inputs, (
+        "model and wire API are derived from the provider so they cannot disagree"
+    )
+
+    job = workflow["jobs"]["evaluate"]
+    env = job["env"]
+    assert env["SCOPE"] == "diagnostic"
+    assert env["SEEDS"] == "1"
+    for name, value in {
+        "MAX_API_CALLS": "48",
+        "MAX_TOKENS_TOTAL": "49152",
+        "MAX_WALL_SECONDS": "4800",
+        "MAX_STEPS": "8",
+        "MAX_TOKENS": "1024",
+        "INVALID_RETRIES": "2",
+    }.items():
+        assert env[name] == value, f"{name} drifted from the frozen pilot ceiling"
+
+    # The two approved triples, and only those, are produced by the resolver.
+    resolver = next(step for step in job["steps"] if step.get("id") == "profile")
+    script = resolver["run"]
+    assert 'MODEL="Atria-Dawn-Preview"' in script
+    assert "mercury-2.5" in script
+    assert script.count('REASONING_EFFORT="high"') == 2
+    assert script.count('WIRE_API="responses"') == 1
+    assert script.count('WIRE_API="chat_completions"') == 1
+    assert 'KEY_ENV="ATRIA_API_KEY"' in script
+    assert 'KEY_ENV="INCEPTION_API_KEY"' in script
+
+    # Those triples are exactly what the study accepts; a swapped pair is refused
+    # provider-free, so the workflow cannot silently buy an uncontrolled run.
+    case = {"case_id": "pilot", "environment": "recursive_gluing",
+            "difficulty": "hard", "seed": 1}
+    for provider, model, wire_api in (
+        ("atria", "Atria-Dawn-Preview", "responses"),
+        ("mercury", "mercury-2.5", "chat_completions"),
+    ):
+        plan = study.build_plan(
+            [case], scope="diagnostic", matrix="diagnostic", seeds=[1],
+            provider=provider, model=model, api_base=None, wire_api=wire_api,
+            reasoning_effort="high", max_api_calls=48, max_tokens_total=49_152,
+            max_wall_seconds=4_800, max_steps=8, max_tokens=1_024,
+        )
+        assert plan["within_limits"] is True
+        assert plan["limits"]["max_http_attempts"] == 192
+        with pytest.raises(study.StudyError):
+            study.build_plan(
+                [case], scope="diagnostic", matrix="diagnostic", seeds=[1],
+                provider=provider, model=model, api_base=None,
+                wire_api="chat_completions" if wire_api == "responses" else "responses",
+                reasoning_effort="high", max_api_calls=48, max_tokens_total=49_152,
+                max_wall_seconds=4_800, max_steps=8, max_tokens=1_024,
+            )
+
+    # A credential is never referenced from a shell step, and only the two
+    # providers' names are exposed to the one step that needs them.
+    for step in job["steps"]:
+        assert "secrets." not in (step.get("run") or ""), step.get("name")
+        assert "] && " not in (step.get("run") or ""), (
+            f"{step.get('name')}: set -e would abort on an empty optional input"
+        )
+    live = next(step for step in job["steps"] if step.get("name", "").startswith("Live pilot"))
+    assert live["if"] == "inputs.execution_mode == 'live'"
+    assert set(live["env"]) == {"ATRIA_API_KEY", "INCEPTION_API_KEY", "MERCURY_API_KEY"}
+    assert '--api-key-env "$KEY_ENV"' in live["run"]
+    # No re-implementation of the harness, and no automatic retry of a paired call.
+    for step in job["steps"]:
+        script = step.get("run") or ""
+        assert "tools/run_suite.py" not in script
+        assert "env_runner" not in script
+        assert "--auto" not in script
+
+    import subprocess
+
+    for step in job["steps"]:
+        body = step.get("run")
+        if not body:
+            continue
+        parsed = subprocess.run(["bash", "-n"], input=body, text=True, capture_output=True)
+        assert parsed.returncode == 0, f"{step.get('name')}: {parsed.stderr}"
+
+    note = (ROOT / "docs" / "workflows" / "recursive-gluing-eval.md").read_text(encoding="utf-8")
+    assert "docs/workflows/recursive-gluing-reasoning-pilot.yml.example" in note
+    assert ".github/workflows/recursive-gluing-reasoning-pilot.yml" in note
+
+
+# ---------------------------------------------------------------------------
 # 12. A pause names its own cause on the run page, not only in the artifact
 # ---------------------------------------------------------------------------
 
