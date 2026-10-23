@@ -386,3 +386,121 @@ def test_responses_raises_a_diagnostic_error_when_reasoning_ate_the_budget():
     assert "no text" in message
     assert "incomplete" in message          # status surfaced for diagnosis
     assert "max_output_tokens" in message   # the truncation hint is in the log
+
+
+# --- Responses-API budget and attempt accounting (Atria) ------------------
+
+
+def test_responses_counts_physical_attempts_and_records_them():
+    """The global HTTP-attempt budget must bound the Responses wire too.
+
+    ``complete`` enforces ``max_http_attempts`` and fills ``last_attempt_logs``;
+    ``complete_responses`` is the same client against a different endpoint, so a
+    dispatch that declared a physical-attempt ceiling has to see the same
+    accounting on the Atria path or the controller's trace reports zero
+    attempts for a request that really happened.
+    """
+
+    class _Success:
+        def __call__(self, req, timeout=None):
+            return _FakeResponsesResponse(
+                {
+                    "model": "Atria-Dawn-Preview",
+                    "status": "completed",
+                    "output": [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}],
+                    "usage": {"input_tokens": 3, "output_tokens": 2},
+                }
+            )
+
+    client = ProviderClient(
+        "atria", "test-key-not-a-real-secret", opener=_Success(), max_http_attempts=4
+    )
+    completion = client.complete_responses("hi", model="Atria-Dawn-Preview", reasoning_effort="high")
+    assert completion.content == "ok"
+    assert client.http_attempts_used == 1
+    assert client.last_http_attempts == 1
+    assert client.last_attempt_logs[-1]["error_type"] == "success"
+    assert client.last_attempt_logs[-1]["status_code"] == 200
+
+
+def test_responses_retries_are_logged_and_counted():
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    class _ServerErrorThenSuccess:
+        calls = 0
+
+        def __call__(self, req, timeout=None):
+            self.calls += 1
+            if self.calls == 1:
+                raise HTTPError(
+                    req.full_url, 500, "upstream fetch failed", {},
+                    BytesIO(b'{"error":{"message":"fetch failed","type":"api_error","code":"internal"}}'),
+                )
+            return _FakeResponsesResponse(
+                {
+                    "model": "Atria-Dawn-Preview",
+                    "status": "completed",
+                    "output": [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}],
+                    "usage": {"input_tokens": 3, "output_tokens": 2},
+                }
+            )
+
+    opener = _ServerErrorThenSuccess()
+    client = ProviderClient(
+        "atria", "test-key-not-a-real-secret", opener=opener, max_retries=2,
+        max_http_attempts=4, backoff_base=0, jitter=0, sleep=lambda _seconds: None,
+    )
+    completion = client.complete_responses("hi", model="Atria-Dawn-Preview", reasoning_effort="high")
+    assert completion.content == "ok"
+    assert opener.calls == 2
+    assert client.last_http_attempts == 2
+    assert client.last_retry_count == 1
+    assert client.last_attempt_logs[0]["status_code"] == 500
+    assert client.last_attempt_logs[0]["retryable"] is True
+    assert client.last_attempt_logs[-1]["error_type"] == "success"
+
+
+def test_responses_stops_retrying_when_the_physical_budget_is_spent():
+    from io import BytesIO
+    from urllib.error import HTTPError
+    from arena.providers import ProviderError
+
+    class _AlwaysServerError:
+        calls = 0
+
+        def __call__(self, req, timeout=None):
+            self.calls += 1
+            raise HTTPError(
+                req.full_url, 429, "rate limited", {"Retry-After": "0"},
+                BytesIO(b'{"error":{"message":"rate limited","type":"rate_limit"}}'),
+            )
+
+    opener = _AlwaysServerError()
+    client = ProviderClient(
+        "atria", "test-key-not-a-real-secret", opener=opener, max_retries=5,
+        max_http_attempts=2, backoff_base=0, jitter=0, sleep=lambda _seconds: None,
+    )
+    with pytest.raises(ProviderError) as exc:
+        client.complete_responses("hi", model="Atria-Dawn-Preview", reasoning_effort="high")
+    # Two physical attempts were authorised; the client must not issue a third.
+    assert opener.calls == 2
+    assert client.http_attempts_used == 2
+    assert exc.value.retryable is True
+    assert exc.value.status_code == 429
+
+
+def test_responses_refuses_a_request_once_the_budget_is_already_spent():
+    from arena.providers import ProviderError
+
+    client = ProviderClient(
+        "atria", "test-key-not-a-real-secret",
+        opener=lambda req, timeout=None: pytest.fail("no request may be issued"),
+        max_http_attempts=1,
+    )
+    client.http_attempts_used = 1
+    with pytest.raises(ProviderError) as exc:
+        client.complete_responses("hi", model="Atria-Dawn-Preview", reasoning_effort="high")
+    assert "attempt budget exhausted" in str(exc.value)
+    assert exc.value.retryable is False
+    assert client.last_attempt_logs[-1]["error_type"] == "attempt_budget_exhausted"
