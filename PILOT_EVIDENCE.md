@@ -426,6 +426,58 @@ What the run *did* establish, and what it did not:
   submission was graded, so there is no accuracy figure, no PASS/FAIL on the
   hidden checks, and no valid comparison with any other model.
 
+### 5.0.6 Result: reasoning Mercury passed both conditions (run 40074836918)
+
+`main@ece8ea2` (the two-number budget edit) + pilot workflow #6, `provider=mercury`,
+`execution_mode=live`, 3 m 28 s, exit 0, no pause:
+
+| condition | case | outcome | verdict | score | hidden checks |
+|---|---|---|---|---|---|
+| `expanded_control` | `recursive_gluing__…hard…__seed-1` | `validated_success` | PASS | **1.0** | 10/10 |
+| `recursive_discovery` | `recursive_gluing_discovery__…hard…__seed-1` | `validated_success` | PASS | **1.0** | 8/8 |
+
+`trusted_score` 1.0 in both; the decision checks (`obstructed_cycle`,
+`cyclic_unsat_generated`, `assembled_unsat`, `opaque_twin`, `decoy_heldout`) all
+passed, i.e. Mercury got the hidden satisfiability question right *and* produced a
+certificate the judge could replay. Discovery is the harder arm: depth 12,
+`summary_cells=98`, `unfolded_occurrences=8191`.
+
+The two entries the report lists as failed checks - `artifact_found` and
+`training_completed` - are **not** in either environment's `CHECK_NAMES` (10 and 8
+respectively). They are `base_result()` scaffolding defaults for environments that
+train a model, which this family does not. That is why the metrics read
+`passed_hidden_checks` 10/10 and 8/8 while the table shows 12 and 10 rows, and why
+the gate's own oracle reference produced the same two `false` entries at PASS 1.0.
+There are no real failures.
+
+Interpretation, bounded by n=1 per condition: the 1024-token hypothesis was
+correct - at 1024 both submissions were rejected before grading, at 4096 both
+graded 1.0 - and reasoning Mercury (`mercury-2.5`, `chat_completions`,
+`reasoning_effort: high`) solves the maximum-depth cell of both primary
+conditions on the held-out stability seed. This is a bounded verification, not a
+pass rate, and it is not a comparison against Atria, which remains unattempted.
+
+### 5.0.7 Workflow fix: the advertised endpoint is now the transmitted one
+
+The pilot workflow resolved `API_BASE` per provider and printed it in the
+identity block, but never passed `--api-base` to the study: plan, gates and live
+all relied on the credential resolver's pinned defaults. Harmless while the
+defaults match - misleading the day a provider moves its base, because the run
+record would claim an override that was never sent. Now:
+
+* `PLAN_ARGS+=(--api-base "$API_BASE")`, `RUN_ARGS+=(--api-base "$API_BASE")`
+  (gates) and `--api-base "$API_BASE"` in `LIVE_ARGS`;
+* `test_reasoning_pilot_passes_the_endpoint_it_advertises` fails if any
+  provider-touching step omits it, or if a third endpoint appears without its own
+  passthrough;
+* the step-execution test now asserts the generated `plan.json` carries
+  `api_base == "https://api.atria-asi.ai/v1"`, so the identity line and the
+  request cannot drift apart again.
+
+Verified by running the real steps locally: plan `api_base` set, gates green with
+both cases certified, and the live argv carrying
+`--api-key-env ATRIA_API_KEY --api-base https://api.atria-asi.ai/v1`.
+
 ### 5.1 Provider-free validation on any host
 
 Provider-free (works anywhere with Python + PyYAML + torch):

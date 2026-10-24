@@ -925,6 +925,8 @@ def test_reasoning_pilot_steps_run_in_order_under_set_u(tmp_path: Path) -> None:
     assert recorded["wire_api"] == "responses"
     assert recorded["reasoning_effort"] == "high"
     assert recorded["limits"]["max_http_attempts"] == 192
+    # The identity block prints the endpoint; the plan must transmit the same one.
+    assert recorded["api_base"] == "https://api.atria-asi.ai/v1"
 
 
 # ---------------------------------------------------------------------------
@@ -936,6 +938,39 @@ def _pilot_workflow() -> dict:
     path = ROOT / "docs" / "workflows" / "recursive-gluing-reasoning-pilot.yml.example"
     assert path.is_file(), "the copyable pilot workflow must live in docs/workflows"
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_reasoning_pilot_passes_the_endpoint_it_advertises() -> None:
+    """The identity block must not describe a request the workflow never sends.
+
+    The resolver exported API_BASE and the identity line printed it, but no study
+    invocation consumed it: `--api-base` was absent from the plan, gates and live
+    commands. That was invisible only because arena/secrets.py happens to pin the
+    same two bases. The day a provider moves its endpoint, the run record would
+    claim an override that was never transmitted.
+    """
+
+    workflow = _pilot_workflow()
+    steps = workflow["jobs"]["evaluate"]["steps"]
+    # Only the subcommands that talk to a provider endpoint. `report` and
+    # `diagnose` are provider-free and take no --api-base by design, and the ref
+    # guard merely lists the file as a required path.
+    touching_provider = [step for step in steps if (step.get("name") or "").startswith(
+        ("Plan (provider-free)", "Gates (provider-free)", "Live pilot")
+    )]
+    assert len(touching_provider) == 3, "expected plan, gates and live steps"
+    invocations = [(step["name"], step["run"]) for step in touching_provider]
+    for name, body in invocations:
+        assert '--api-base "$API_BASE"' in body, (
+            f"{name} invokes the study without passing the endpoint the identity block prints"
+        )
+    # And the value itself is the verified endpoint for each approved provider.
+    resolver = next(step for step in steps if step.get("id") == "profile")["run"]
+    assert 'API_BASE="https://api.atria-asi.ai/v1"' in resolver
+    assert 'API_BASE="https://api.inceptionlabs.ai/v1"' in resolver
+    # Nothing may advertise a base it does not also pass: one assignment per
+    # approved provider, and no third endpoint without its own passthrough.
+    assert resolver.count('API_BASE="') == 2, "a third endpoint would need its own passthrough"
 
 
 def test_reasoning_pilot_workflow_pins_the_frozen_slice_and_its_ceilings() -> None:

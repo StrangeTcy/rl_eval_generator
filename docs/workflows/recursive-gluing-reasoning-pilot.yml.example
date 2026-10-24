@@ -173,6 +173,11 @@ jobs:
             --out "$PLAN_DIR"
           )
           if [ -n "$MATRIX" ]; then PLAN_ARGS+=(--matrix "$MATRIX"); fi
+          # The endpoint recorded in the identity block must be the endpoint the
+          # request actually uses. The credential resolver already pins these
+          # bases, so omitting this only mattered on the day a provider moved its
+          # base - when the record would have claimed an override never sent.
+          PLAN_ARGS+=(--api-base "$API_BASE")
           # Fail-closed: a plan that does not fit the frozen ceilings exits 2 here,
           # before the gate and long before any provider call.
           python tools/recursive_gluing_study.py plan "${PLAN_ARGS[@]}"
@@ -211,6 +216,7 @@ jobs:
             --invalid-retries "$INVALID_RETRIES"
             --gate-context-sha "${{ github.sha }}"
           )
+          RUN_ARGS+=(--api-base "$API_BASE")
           python tools/recursive_gluing_study.py run "${RUN_ARGS[@]}"
 
       - name: Live pilot (only when explicitly dispatched as live)
@@ -254,6 +260,7 @@ jobs:
             --wire-api "$WIRE_API"
             --reasoning-effort "$REASONING_EFFORT"
             --api-key-env "$KEY_ENV"
+            --api-base "$API_BASE"
             --max-api-calls "$MAX_API_CALLS"
             --max-tokens-total "$MAX_TOKENS_TOTAL"
             --max-wall-seconds "$MAX_WALL_SECONDS"
