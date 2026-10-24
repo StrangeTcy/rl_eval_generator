@@ -269,6 +269,50 @@ run --manifest …/study_manifest.json --out … --execution-mode live --provide
     --gate-context-sha <sha>
 ```
 
+### 5.0.2 Run result: 40068694722 (`main@71f1289`, atria, live) — credential rejected
+
+First run that reached the provider. Plan ✓, Gates ✓ (both cases certified), Live ✗
+with exit 3 = the controller's *paused* code. Read from the check-run annotations
+(the artifact zip and job logs are on `blob.core.windows.net`, which this sandbox
+cannot reach):
+
+```
+title: Recursive gluing credential_rejected (provider_error)
+the provider rejected the credential: the endpoint rejected the credential;
+a retry cannot fix it - replace the repository secret
+case recursive_gluing__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard__seed-1
+  status=paused_provider_error elapsed=82.514s http_attempts=0
+body: {"error":{"message":"Invalid API key.","type":"atria_api_error","code":"invalid_api_key"}}
+next step: Replace the provider secret, then re-dispatch the same case list; do not retry the same key.
+```
+
+Reading:
+
+* The credential **is configured** — the workflow's presence guard passed and a
+  request reached Atria, which answered with its own `atria_api_error` body. So
+  this is a *rejected* key (401-equivalent), not a missing secret (which would
+  exit 2 before any call) and not a quota, rate-limit, model-ID, endpoint or
+  protocol problem.
+* Request shaping was therefore exercised end to end: the Responses call was
+  built and transmitted. What failed is only its authorization.
+* `http_attempts=0` is the *old* accounting: `main@71f1289` is `9c3ce41` + the
+  workflow file, i.e. it predates this branch's `complete_responses` fix. The
+  request did happen (Atria answered it); only the counter was not updated.
+* `max_http_attempts: 96` in the episode manifest is correct and not a reduced
+  ceiling: `run_suite` leases `min(global_remaining, per_case_calls × (retries+1))`
+  = `min(192, 24 × 4)` = 96 to each case subprocess. The dispatch-wide budget the
+  plan printed (192) was never at risk: 1 attempt was used.
+* 1 of 2 cases has a disposition (`paused_provider_error`); the second was never
+  attempted because the controller pauses the leg on a provider failure.
+
+**Classification: provider/credential failure. Not a model result, not a scored
+zero, not an UNSAT decision.** Per the pilot contract no retry of the same key was
+attempted, no ceiling was raised, and no fallback provider was substituted.
+
+Outstanding non-blocking note: `main` does not carry this branch's
+`arena/providers.py` accounting fix, so attempt counts on `main` runs read 0.
+Merging the branch (or dispatching from it) fixes the reporting, not the auth.
+
 ### 5.1 Provider-free validation on any host
 
 Provider-free (works anywhere with Python + PyYAML + torch):
