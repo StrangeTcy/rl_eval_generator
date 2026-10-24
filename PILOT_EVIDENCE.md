@@ -313,6 +313,31 @@ Outstanding non-blocking note: `main` does not carry this branch's
 `arena/providers.py` accounting fix, so attempt counts on `main` runs read 0.
 Merging the branch (or dispatching from it) fixes the reporting, not the auth.
 
+### 5.0.3 The Atria credential is now rejected - and it demonstrably worked last week
+
+No key handling was needed to establish this; the repository's own campaign state
+is the evidence. The same secret name (`ATRIA_API_KEY`) is mapped in every Atria
+workflow (`.github/workflows/reasoning-atria-*.yml`, `atria-campaign.yml`,
+`atria-first5.yml`), so the pilot is not using a different or misnamed secret.
+
+| Campaign status issue | Recorded state | When |
+|---|---|---|
+| #20 Reasoning-Atria pairwise | **415 / 416 episodes checkpointed**, paused only on `max_tokens_total`; gate 189/189; 1 provider-outage retry | 2026-10-17T15:54Z |
+| #21 Mercury pairwise | **416 / 416 episodes**, campaign `completed`; infrastructure retries only, no auth failures | 2026-10-16T11:27Z |
+
+So on 2026-10-17 Atria-Dawn-Preview over `/v1/responses` with nested
+`reasoning:{effort}` accepted this repository's credential and produced scored
+episodes at scale. On 2026-10-24 the same secret returns Atria's own
+`{"code":"invalid_api_key"}` (run 40068694722). The harness, endpoint, protocol,
+model id and secret mapping are therefore unchanged and provably working; the
+**credential's validity is what changed** between those dates (rotation,
+revocation, expiry, or a dashboard token pasted instead of an API key). Only the
+repository owner can act on that.
+
+Consequence for this pilot, per its own contract: do not retry the same key, do
+not raise a ceiling, do not substitute another provider to manufacture a result.
+The remaining path to a scored episode is the other approved provider.
+
 ### 5.1 Provider-free validation on any host
 
 Provider-free (works anywhere with Python + PyYAML + torch):
