@@ -3,27 +3,35 @@
 Date started 2026-10-23, result recorded 2026-10-24.
 Branch `arena/192dc25c-rl-eval-generator` (base `9c3ce418`) is merged as `main@27dfab0`;
 the endpoint-passthrough follow-up is on `arena/4576ee5f-rl-eval-generator`.
-Code commits: `eba18e2`, `8e54007` (failure-mode classification), `81aa127` (endpoint passthrough).
+Code commits: `eba18e2`, `8e54007` (failure-mode classification), `81aa127` (endpoint
+passthrough), `2af93c1` (token-plan endpoint), `3afa1e3` (preflight step secrets).
 
-**Outcome in one line: reasoning Mercury (`mercury-2.5`, `chat_completions`,
-`reasoning_effort: high`) completed the bounded two-case pilot and was graded
-`validated_success`, score 1.0, under the exact-instance oracle gate in both primary
-conditions (run 40074836918, `main@ece8ea2`; hidden checks 10/10 and 8/8). The two
-earlier ungraded rows in run 40070994013 were a consequence of the 1,024-token
-per-response cap, not of the model, and the report that called them scored model
-failures was misreading a case-sensitive failure mode (fixed in `8e54007`).
-Reasoning Atria could not be attempted, and the reason was that the pilot called the
-wrong Atria host: `api.atria-asi.ai` (website API, allowance exhausted 2026-10-13)
-instead of the research token-plan host `discovery-api.intern-ai.org.cn`, where the
-scored Atria campaign sends its traffic and where `Atria-Dawn` is free. Four earlier
-readings of that 401 - rotation, quota, wrong secret, unresolved - were all wrong;
-the endpoint is corrected and pinned by a test (section 5.0.3).**
+**Outcome in one line: both approved providers completed the bounded two-case pilot
+and were graded `validated_success`, score 1.0, under the exact-instance oracle gate
+in both primary conditions - reasoning Mercury (`mercury-2.5`, `chat_completions`,
+`reasoning_effort: high`, run 40074836918) and reasoning Atria
+(`Atria-Dawn-Preview`, `responses`, nested `reasoning: {effort: high}`, run
+40084623031 over `discovery-api.intern-ai.org.cn`), each 10/10 and 8/8 hidden
+checks (section 5.0.8).**
+
+Atria's path to that result was not blocked by its model, its key or any code: the
+pilot had been pointed at `api.atria-asi.ai`, the website API whose allowance is
+exhausted, instead of the research token-plan host where the scored Atria campaign
+sends its traffic. Four earlier readings of that 401 - a rotated credential, an
+exhausted quota, a mismatched secret, an unresolved cause - were all wrong, and are
+recorded as such in 5.0.3, because reading the working configuration first is the step
+that should have preceded every one of them.
+
+The two earlier ungraded rows in run 40070994013 were a consequence of the
+1,024-token per-response cap rather than of the model, and the report that called
+them scored model failures was misreading a case-sensitive failure mode (fixed in
+`8e54007`).
 
 Everything establishable provider-free was run and is recorded below: the plan, the
 exact-instance gate, the credential/endpoint probe, a controller-command audit, and an
-offline end-to-end run of the real controller + judge with a stubbed transport. The Atria
-blocker is the first failing layer - authorization - not a code defect; the Mercury result
-is a real graded model result, n=1 per condition, not a pass rate.
+offline end-to-end run of the real controller + judge with a stubbed transport. The
+result is four graded dispositions at n=1 per condition per provider - not a pass
+rate, and not a provider ranking.
 
 ---
 
@@ -392,10 +400,8 @@ job **success**, `results-atria` **92.7 KB**, `plan-atria` 4.34 KB.
 
 So Atria ran for twelve minutes against `discovery-api.intern-ai.org.cn` and the
 controller did not pause: exit 0 means both planned cases have a disposition. The
-per-case verdict is not in this document yet - it lives in the run's Summary and the
-artifact, neither reachable from here - so the outcome class is recorded, not read,
-exactly as with run 40070994013. What the duration and artifact size do *not* prove
-is grading; that inference is what produced the wrong labels last time.
+per-case verdict was read from the run summary afterwards, and it is graded:
+**both conditions `validated_success`, PASS, score 1.0** - see section 5.0.8.
 
 **A defect this run exposed, in the diagnostic built to prevent defects.** The
 `Credential preflight` step announced `ATRIA_API_KEY is empty` and exited 6 without
@@ -543,6 +549,42 @@ record would claim an override that was never sent. Now:
 Verified by running the real steps locally: plan `api_base` set, gates green with
 both cases certified, and the live argv carrying
 `--api-key-env ATRIA_API_KEY --api-base https://api.atria-asi.ai/v1`.
+
+### 5.0.8 Both approved providers graded 1.0 on both conditions
+
+With the endpoint corrected, Atria's first live dispatch reached the judge and was
+graded. It is the same two cases, the same seed, the same gate as the Mercury run.
+
+| provider / wire / effort | condition | outcome | verdict | score | hidden checks |
+|---|---|---|---|---|---|
+| atria / `responses` / high | `expanded_control` | `validated_success` | PASS | **1.0** | 10/10 |
+| atria / `responses` / high | `recursive_discovery` | `validated_success` | PASS | **1.0** | 8/8 |
+| mercury / `chat_completions` / high | `expanded_control` | `validated_success` | PASS | 1.0 | 10/10 |
+| mercury / `chat_completions` / high | `recursive_discovery` | `validated_success` | PASS | 1.0 | 8/8 |
+
+Both runs: `trusted_score` 1.0, gate `instance_coverage_complete: true`, 2 cases,
+8 steps, all decision checks passed (`obstructed_cycle`, `cyclic_unsat_generated`,
+`assembled_unsat`, `opaque_twin`, `decoy_heldout`). The `artifact_found` and
+`training_completed` entries are `base_result()` scaffolding absent from both
+`CHECK_NAMES` lists, which is why the judge metrics read 10/10 and 8/8 while the
+tables show 12 and 10 rows - the gate's own oracle reference scores them identically
+at PASS 1.0.
+
+The two providers produced **identical** judge metrics - same Cartesian sizes, same
+`summary_cells=98`, same `unfolded_occurrences=8191`, same depth 12 on discovery.
+That is expected here rather than suspicious: the case ids are fixed by the seed and
+the matrix, so both models faced byte-identical instances, and the judged artifact is
+a certificate the environment can re-derive, not free text. The judge is not blind to
+the submission - the same gate scores `no_op` 0.0 and `plausible_wrong` 0.166667 on
+these instances, and `patch_valid` / `sources_valid` / `deterministic` are
+submission-dependent checks that fail for a wrong certificate. Two capable models
+both finding the correct certificate on a deterministic task is the ordinary
+outcome, not evidence that the score ignores the model.
+
+**Bounded, as scoped.** One case per condition per provider, seed 1, maximum-depth
+cell. This is four graded dispositions, not a pass rate, not a provider comparison
+(n=1 cannot order two models), and nothing here licenses the full 18-case campaign.
+Atria's blocker was never the model: it was the wrong host (5.0.3).
 
 ### 5.1 Provider-free validation on any host
 
