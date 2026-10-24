@@ -1,19 +1,26 @@
 # Reasoning Atria / Mercury on the recursive-gluing study — bounded pilot attempt
 
-Date: 2026-10-23
-Branch: `arena/192dc25c-rl-eval-generator` (base `9c3ce418`)
-Code commit: `eba18e2` (`providers: enforce the physical HTTP-attempt budget on the Responses wire`)
+Date started 2026-10-23, result recorded 2026-10-24.
+Branch `arena/192dc25c-rl-eval-generator` (base `9c3ce418`) is merged as `main@27dfab0`;
+the endpoint-passthrough follow-up is on `arena/4576ee5f-rl-eval-generator`.
+Code commits: `eba18e2`, `8e54007` (failure-mode classification), `81aa127` (endpoint passthrough).
 
-**Outcome in one line: reasoning Mercury completed a bounded two-case episode through the
-existing controller and the independent judge, but neither submission was graded — the
-judge rejected both before running its hidden checks — so there is no accuracy figure yet,
-and the run's own summary mislabelled those ungraded rows as scored model failures (fixed
-in `8e54007`). Reasoning Atria could not be attempted because its credential is now
-rejected (`invalid_api_key`); it worked on 2026-10-17.**
-Everything that can be established provider-free was run and is recorded below: the plan,
-the exact-instance gate, the credential/endpoint probe, a controller-command audit, and an
-offline end-to-end run of the real controller + judge with a stubbed transport. The blocker
-is the *first* failing layer — a missing credential — not a code defect.
+**Outcome in one line: reasoning Mercury (`mercury-2.5`, `chat_completions`,
+`reasoning_effort: high`) completed the bounded two-case pilot and was graded
+`validated_success`, score 1.0, under the exact-instance oracle gate in both primary
+conditions (run 40074836918, `main@ece8ea2`; hidden checks 10/10 and 8/8). The two
+earlier ungraded rows in run 40070994013 were a consequence of the 1,024-token
+per-response cap, not of the model, and the report that called them scored model
+failures was misreading a case-sensitive failure mode (fixed in `8e54007`).
+Reasoning Atria could not be attempted: its request is rejected with
+`401 invalid_api_key`, and the account also has zero remaining quota - two
+independent blockers, neither of which is a code or protocol defect (section 5.0.3).**
+
+Everything establishable provider-free was run and is recorded below: the plan, the
+exact-instance gate, the credential/endpoint probe, a controller-command audit, and an
+offline end-to-end run of the real controller + judge with a stubbed transport. The Atria
+blocker is the first failing layer - authorization - not a code defect; the Mercury result
+is a real graded model result, n=1 per condition, not a pass rate.
 
 ---
 
@@ -316,52 +323,76 @@ Outstanding non-blocking note: `main` does not carry this branch's
 `arena/providers.py` accounting fix, so attempt counts on `main` runs read 0.
 Merging the branch (or dispatching from it) fixes the reporting, not the auth.
 
-### 5.0.3 Correction: the Atria key is valid - the account is out of quota
+### 5.0.3 What the Atria failure is - and what it is not
 
-An earlier reading of this section concluded that "the credential's validity is
-what changed" and that the key needed rotating. **That was wrong**, and the
-provider console disproves it. The account holds exactly one API key:
+Two readings of the single live failure (run 40068694722, `main@71f1289`) have now
+been tried and one of them withdrawn. Recording the shape of the mistake, because
+the same trap is available on any auth-shaped error.
 
-| field | value |
+**What the endpoint returned** (check-run annotation, the only reachable copy):
+
+```
+title: Recursive gluing credential_rejected (provider_error)
+case  recursive_gluing__recursive_depth=hard_state_space=hard_gluing_rule=... seed-1
+      status=paused_provider_error elapsed=82.514s http_attempts=0
+body: {"error":{"message":"Invalid API key.","type":"atria_api_error",
+                "code":"invalid_api_key"}}
+```
+
+**What the provider documents** (`https://api.atria-asi.ai/docs`, "Common status
+codes"):
+
+| status | documented meaning |
 |---|---|
-| key | `rl_eval`, created 2026-09-24, status **Active** |
-| settled calls | 9,436 |
-| billed tokens | 3,559,108 lifetime |
-| last settled use | **2026-10-13 09:56** (Europe/Moscow) |
-| tokens remaining | **0** - total quota used 100% |
-| usage, last 7 days | none |
+| `401` | The API key is invalid or revoked |
+| `429` | Rate limit exceeded **or quota exhausted** |
+| `5xx` | Service temporarily unavailable |
 
-The key was never revoked (revoked keys would still be listed), so there is no
-other candidate for the Actions secret and nothing to rotate. What the console
-shows instead is an account whose quota is exhausted: 3.56 M tokens billed
-against a fully consumed allowance, with the meter stopping on 2026-10-13 - the
-same boundary after which every Atria attempt in this repository has failed.
+**What the console shows** (account `Gabriel Newman`, 2026-10-24): exactly one key,
+`rl_eval`, created 2026-09-24, status **Active**, 9,436 settled calls, 3,559,108
+billed tokens, last settled use **2026-10-13 09:56**; tokens remaining **0**,
+quota 100% used, no usage in the last 7 days. The page states it includes revoked
+keys, so no second or revoked key exists that the Actions secret could be holding.
 
-The pilot's own failure (`credential_rejected` / `{"code":"invalid_api_key"}`,
-run 40068694722) is therefore an auth-shaped refusal from a key that has nowhere
-to bill, not evidence of a malformed, revoked or mis-pasted secret. The two
-readings are not distinguishable from the response body alone, which is why the
-distinction was worth checking in the console rather than asserting.
+**The two readings.**
 
-Residual uncertainty, stated rather than smoothed over: campaign issue #20 records
-**415/416 episodes** with its last write on 2026-10-17, while the meter settles
-nothing after 2026-10-13. Either that checkpoint reflects traffic that was
-reserved before the allowance ran out, or settlement lags the call. A single
-minimal credentialed request would separate the two readings; it is not worth a
-key change, and it is not required for anything this pilot still owes.
+* *Quota.* The account has a zero balance. That is real, independently confirmed
+  by the console, and it will block any future call. But the provider documents the
+  quota-exhausted path as **429**, and the endpoint answered with an
+  `invalid_api_key` body. A zero balance does not produce that error, so quota does
+  **not** explain this failure; it explains the *next* one.
+* *Key value.* `401 invalid_api_key` is what the provider says an invalid or
+  revoked key returns. The console's only key is Active, so if the Actions secret
+  held that key's current value the request would have authorised and then hit
+  quota. It did not. The secret therefore most likely holds something other than
+  the current `rl_eval` value - a truncated paste, a value from before a rotation,
+  or a console session token rather than an `atr_...` API key. The key is not
+  invalid; **the secret's value does not match the key.**
 
-Consequence for the pilot, unchanged in effect but for a different reason: Atria
-cannot produce a scored episode while the account has no remaining quota, and
-restoring quota (Duanyan Token Plan, or the provider's token-request form) is
-outside this task's contract - no top-ups, no new accounts, no provider
-substitution. **Atria stays unattempted and is recorded as blocked-by-quota, not
-as a credential or configuration defect.** The Atria path itself remains proven:
-its Responses-wire body shape is pinned by the offline check in section 3, and
-the credential's own history shows 9,436 settled calls using it.
+So the first reading in this document ("the credential's validity changed") was
+directionally right about the 401, and the second ("the key is valid - the account
+is out of quota") over-corrected: it treated a verified billing state as an
+explanation for an error code that the provider documents as belonging to a
+different condition. Both facts are true, and neither explains the other.
 
-The provider's 2026-10-24 notice also confirms `Atria-Dawn-Preview` remains
-compatible now that `Atria-Dawn` is available, so the pinned model id needs no
-change; a future run may use either.
+**Consequence for this pilot.** Atria needs two independent fixes, in this order:
+paste the correct value of the `rl_eval` key (`atr_...`, shown once at creation) into
+the repository secret, *then* restore quota - otherwise a correctly authenticated
+request fails with 429, which is a different wall at the same place. Both actions
+belong to the repository owner, and the second is outside this task's contract (no
+top-ups, no new accounts, no provider substitution). **Atria stays unattempted and
+is recorded as blocked, cause unresolved between a stale secret value and an
+exhausted account, with the 401 pointing at the secret.** One authenticated request
+would separate them; it is not needed for anything this pilot still owes, since the
+scored result came from the other approved provider.
+
+**Config note, no change made.** The current docs list `Atria-Dawn` as the single
+available model and no longer document `Atria-Dawn-Preview`; the 2026-10-24 console
+notice says the Preview id remains compatible. Both requests use the same
+`/v1/responses` path with `max_output_tokens`, which the docs describe, and the
+documented output range is 1-65,536, so the pilot's 4,096 cap is valid. If a future
+run ever returns a model-not-found error rather than an auth error, switch the id to
+`Atria-Dawn`; nothing about it should be changed speculatively now.
 
 ### 5.0.4 Run 40070994013 (`main@71f1289`, **mercury**, live): every step green
 
