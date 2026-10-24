@@ -743,6 +743,115 @@ def test_workflow_example_is_manual_dispatch_only() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 11a. The pilot workflow's steps must actually run, in the order GitHub runs them
+# ---------------------------------------------------------------------------
+
+
+def _pilot_job_step(prefix: str) -> dict:
+    job = _pilot_workflow()["jobs"]["evaluate"]
+    return next(step for step in job["steps"] if (step.get("name") or "").startswith(prefix))
+
+
+def _github_expressions(body: str) -> str:
+    """Replace ``${{ github.x }}`` the way the runner does, for an offline run."""
+
+    import re
+
+    return re.sub(
+        r"\$\{\{\s*github\.(\w+)\s*\}\}",
+        lambda match: {"sha": "0" * 40, "run_id": "1", "actor": "local",
+                       "workflow_ref": "local"}.get(match.group(1), "local"),
+        body,
+    )
+
+
+def test_reasoning_pilot_steps_run_in_order_under_set_u(tmp_path: Path) -> None:
+    """Run 40067626107 died in the Plan step with no plan and no artifact.
+
+    The resolver exported `model=`/`wire_api=`/`key_env=` into ``$GITHUB_ENV``
+    while the plan, gates and live steps read ``$MODEL``/``$WIRE_API``/``$KEY_ENV``.
+    Under ``set -u`` the first unset read aborted the step, so the provider-free
+    plan never ran and every later step was skipped. The YAML parsed, ``bash -n``
+    passed, and each script looked correct on its own: only *running* the two
+    steps in sequence exposes it. This test does that, with no provider call.
+    """
+
+    import os
+    import subprocess
+
+    workflow = _pilot_workflow()
+    job = workflow["jobs"]["evaluate"]
+    workdir = tmp_path / "repo"
+    workdir.mkdir()
+    # The plan step invokes `python tools/recursive_gluing_study.py`, so the
+    # checkout must be reachable from the working directory.
+    (workdir / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
+    for name in ("arena", "envs", "shared", "spec"):
+        if (ROOT / name).is_dir():
+            (workdir / name).symlink_to(ROOT / name, target_is_directory=True)
+
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary.md"),
+        "GITHUB_ENV": str(tmp_path / "env"),
+        # The job-level `env:` block, with the two dispatch inputs resolved.
+        "PROVIDER": "atria",
+        "EXECUTION_MODE": "plan_only",
+    }
+    env.update({key: value for key, value in job["env"].items() if not str(value).startswith("${{")})
+    (tmp_path / "env").write_text("", encoding="utf-8")
+    (tmp_path / "summary.md").write_text("", encoding="utf-8")
+
+    def run_step(step: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", _github_expressions(step["run"])],
+            cwd=workdir, env=env, capture_output=True, text=True,
+        )
+
+    resolver = run_step(_pilot_job_step("Resolve the approved"))
+    assert resolver.returncode == 0, resolver.stdout + resolver.stderr
+    exported = dict(
+        line.split("=", 1)
+        for line in (tmp_path / "env").read_text(encoding="utf-8").splitlines()
+        if "=" in line
+    )
+    # The exact variables the later steps dereference must be what was exported.
+    for step_prefix in ("Plan (provider-free)", "Gates (provider-free)", "Live pilot"):
+        step = _pilot_job_step(step_prefix)
+        env_used = set(step.get("env") or {})
+        for reference in ("MODEL", "WIRE_API", "REASONING_EFFORT", "API_BASE", "KEY_ENV"):
+            script = step["run"]
+            if f'"${reference}"' not in script and f"${{{reference}" not in script:
+                continue
+            if reference in env_used:
+                continue  # supplied by the step's own env: block, not GITHUB_ENV
+            assert reference in exported, (
+                f"{step_prefix} reads ${reference} but the resolver exported {sorted(exported)}"
+            )
+    assert exported["MODEL"] == "Atria-Dawn-Preview"
+    assert exported["WIRE_API"] == "responses"
+    assert exported["REASONING_EFFORT"] == "high"
+    assert exported["KEY_ENV"] == "ATRIA_API_KEY"
+    assert exported["API_BASE"] == "https://api.atria-asi.ai/v1"
+
+    env.update(exported)
+    plan = run_step(_pilot_job_step("Plan (provider-free)"))
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+    plan_json = workdir / "runs" / "recursive_gluing_pilot_plan" / "plan.json"
+    assert plan_json.is_file(), "the plan step produced no plan.json: nothing would be uploaded"
+    recorded = json.loads(plan_json.read_text(encoding="utf-8"))
+    assert recorded["case_count"] == 2
+    assert recorded["within_limits"] is True
+    assert recorded["provider"] == "atria"
+    assert recorded["model"] == "Atria-Dawn-Preview"
+    assert recorded["wire_api"] == "responses"
+    assert recorded["reasoning_effort"] == "high"
+    assert recorded["limits"]["max_http_attempts"] == 192
+
+
+# ---------------------------------------------------------------------------
 # 11b. The reasoning pilot cannot be dispatched with a drifted configuration
 # ---------------------------------------------------------------------------
 

@@ -222,6 +222,53 @@ on this branch, commit, then dispatch `provider=atria, execution_mode=plan_only`
 prints identity → plan → gate → per-case outcome or a named pause. Full click-path
 in `docs/workflows/recursive-gluing-eval.md` → *Reasoning pilot (Atria / Mercury)*.
 
+### 5.0.1 Post-mortem: the first pilot dispatch (run 40067626107) failed in my workflow
+
+`main@758a201` — the hand-copied copy of §5.0 — failed in **Plan** after ~1 s, with
+Gates/Live skipped, `runs/recursive_gluing_pilot_plan` missing from the artifact
+upload, and the job exiting 1. **No provider call was made and nothing was
+spent.** (Provider: `atria`, `execution_mode=plan_only`.)
+
+Cause, reproduced locally by executing the resolver and plan steps in sequence:
+
+```
+/tmp/plan_step.sh: line 17: MODEL: unbound variable
+```
+
+The resolver exported `model=`/`wire_api=`/`reasoning_effort=`/`key_env=`/`api_base=`
+into `$GITHUB_ENV`, while the Plan, Gates and Live steps dereference
+`$MODEL`/`$WIRE_API`/`$REASONING_EFFORT`/`$KEY_ENV`/`$API_BASE`. Under `set -u`
+the first unset read aborted the step, so no plan was written and every later
+step was skipped. My earlier checks did not catch it: the YAML parsed, `bash -n`
+passed for each step, and each script was self-consistent in isolation — only
+running the *pair* in order exposes it.
+
+Fixed in `docs/workflows/recursive-gluing-reasoning-pilot.yml.example` (uppercase
+exports, with a comment naming this run), and locked by a new test that executes
+the resolver, asserts every variable the later steps read is what the resolver
+exported, then runs the plan step under `set -u` and checks the resulting
+`plan.json`. Against the failed workflow that test reports exactly:
+
+```
+AssertionError: Plan (provider-free) reads $MODEL but the resolver exported
+['api_base', 'key_env', 'model', 'reasoning_effort', 'wire_api']
+```
+
+Re-verified locally, provider-free, after the fix: resolver → **Plan** (2 cases,
+`within_limits: true`, 192 derived attempts) → **Gates**
+(`provider_free_validation_complete: true`, both cases certified) → **Report**
+(2 rows, both `missing_result`, which is the correct reading for a gates-only
+leg) → **Diagnose** (`complete`, 0 of 2 recorded). The live step's command line
+was audited with a stubbed `python`:
+
+```
+run --manifest …/study_manifest.json --out … --execution-mode live --provider atria
+    --model Atria-Dawn-Preview --wire-api responses --reasoning-effort high
+    --api-key-env ATRIA_API_KEY --max-api-calls 48 --max-tokens-total 49152
+    --max-wall-seconds 4800 --max-steps 8 --max-tokens 1024 --invalid-retries 2
+    --gate-context-sha <sha>
+```
+
 ### 5.1 Provider-free validation on any host
 
 Provider-free (works anywhere with Python + PyYAML + torch):

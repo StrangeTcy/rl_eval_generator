@@ -101,11 +101,15 @@ jobs:
               ;;
           esac
           {
-            echo "model=$MODEL"
-            echo "wire_api=$WIRE_API"
-            echo "reasoning_effort=$REASONING_EFFORT"
-            echo "key_env=$KEY_ENV"
-            echo "api_base=$API_BASE"
+            # These names are read by the plan / gates / live steps below, so
+            # they must be exported in the same case those steps use. Writing
+            # `model=` here and reading `$MODEL` there fails under `set -u`
+            # before the plan is even built (run 40067626107).
+            echo "MODEL=$MODEL"
+            echo "WIRE_API=$WIRE_API"
+            echo "REASONING_EFFORT=$REASONING_EFFORT"
+            echo "KEY_ENV=$KEY_ENV"
+            echo "API_BASE=$API_BASE"
           } >> "$GITHUB_ENV"
           {
             echo "provider=$PROVIDER model=$MODEL wire_api=$WIRE_API reasoning_effort=$REASONING_EFFORT"
