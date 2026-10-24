@@ -1396,28 +1396,37 @@ def run_suite(
                 if isinstance(parsed, dict) and isinstance(parsed.get("http_attempts"), int)
                 else None
             )
-            if parsed and isinstance(final, dict) and final.get("failure_mode") in {
+            # The judge's failure vocabulary is not case-stable: shared/judge_lib.py
+            # defines lowercase codes, while some environments emit the literal
+            # uppercase spelling.  Compare case-insensitively so the same judge
+            # outcome cannot be classified two ways by letter case.
+            failure_mode = (
+                str(final.get("failure_mode")).strip().lower()
+                if isinstance(final, dict) and isinstance(final.get("failure_mode"), str)
+                else None
+            )
+            if parsed and isinstance(final, dict) and failure_mode in {
                 "api_error",
                 "provider_transient",
             }:
                 status = "paused_provider_error"
                 error = "provider or quota failure detected; resume only after checking the account"
             elif parsed and isinstance(final, dict) and (
-                final.get("failure_mode") in {
+                failure_mode in {
                     # A denied reward means the instance could not be attributed to the
                     # record that planned it.  That is an integrity failure upstream of
                     # the model, so it is never reported as a scored zero.
                     "controller_error", "judge_runtime_error", "not_submitted", "unknown",
                     "reward_denial",
                 }
-                or not isinstance(final.get("failure_mode"), str)
+                or failure_mode is None
                 or _judge_scoring_failed(final)
             ):
                 status = "infrastructure_error"
                 error = (
                     "provenance record did not match the generated instance; reward denied "
                     "before the judge ran, so no score is attributable to this episode"
-                    if isinstance(final, dict) and final.get("failure_mode") == "reward_denial"
+                    if failure_mode == "reward_denial"
                     else "arena controller or judge failed before producing a valid score"
                 )
             elif parsed and isinstance(final, dict) and "verdict" in final:

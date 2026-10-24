@@ -629,6 +629,82 @@ def test_report_classifies_outcomes_without_inventing_scores(tmp_path: Path) -> 
     assert {entry["outcome"] for entry in gated["cases"]} == {study.OUTCOME_ORACLE}
 
 
+def test_the_judges_failure_mode_is_read_case_insensitively() -> None:
+    """Run 40070994013 reported two ungraded submissions as scored failures.
+
+    `shared/judge_lib.py` defines lowercase codes (`runtime_error`,
+    `reward_denial`, ...), but the recursive-gluing judge emits the literal
+    uppercase spelling. The study compared exactly, so `RUNTIME_ERROR` matched no
+    malformed mode and fell through to `scored_model_failure` - a row the judge
+    never graded. Both spellings must land on the same outcome, and a row that
+    claims `status=scored` without a numeric score is never a graded answer:
+    `score_from_accuracy` always writes one.
+    """
+
+    graded = (1.0, 0.4, 0.166667, 0.0)
+    for spelling in ("runtime_error", "RUNTIME_ERROR", "Runtime_Error"):
+        row = {"status": "scored", "verdict": "FAIL", "score": None, "failure_mode": spelling}
+        assert study.classify_result(row, {}) == study.OUTCOME_MALFORMED, spelling
+    for spelling in ("reward_denial", "REWARD_DENIAL"):
+        row = {"status": "scored", "verdict": "FAIL", "score": None, "failure_mode": spelling}
+        assert study.classify_result(row, {}) == study.OUTCOME_ORACLE, spelling
+    for spelling in ("patch_invalid", "PATCH_INVALID", "source_invalid", "SOURCE_INVALID"):
+        row = {"status": "scored", "verdict": "FAIL", "score": None, "failure_mode": spelling}
+        assert study.classify_result(row, {}) == study.OUTCOME_MALFORMED, spelling
+
+    # A scored row without a score did not produce an answer; without a judge
+    # mode at all that is a harness reading, not a model reading.
+    assert (
+        study.classify_result({"status": "scored", "verdict": "FAIL", "score": None}, {})
+        == study.OUTCOME_INFRASTRUCTURE
+    )
+
+    # Graded rows are untouched by the case handling and the no-score guard.
+    for score in graded:
+        row = {"status": "scored", "verdict": "FAIL", "score": score, "failure_mode": "underfit"}
+        assert study.classify_result(row, {}) == study.OUTCOME_SCORED_FAILURE, score
+    assert (
+        study.classify_result(
+            {"status": "scored", "verdict": "PASS", "score": 1.0, "failure_mode": "pass"}, {}
+        )
+        == study.OUTCOME_VALIDATED_SUCCESS
+    )
+
+
+def test_the_mercury_pilot_rows_are_not_reported_as_scored_failures(tmp_path: Path) -> None:
+    """The exact rows run 40070994013 produced, through the real report builder.
+
+    The run's summary classified both cases as `scored_model_failure` with
+    `verdict FAIL`, `score None` and no failed checks. Reproducing those rows
+    here pins the corrected reading: an ungraded submission is malformed or a
+    harness/gate failure, and `score: null` never enters a scored column.
+    """
+
+    manifest, _plan = _manifest()
+    cases = manifest["cases"][:2]
+    rows = []
+    for index, case in enumerate(cases):
+        mode = "RUNTIME_ERROR" if index == 0 else "REWARD_DENIAL"
+        rows.append(
+            _row(
+                case["case_id"],
+                tmp_path,
+                final={"verdict": "FAIL", "score": None, "failure_mode": mode, "checks": {}},
+                status="scored",
+            )
+        )
+    report = study.build_report(manifest, {"results": rows}, gate_report={"instance_coverage_complete": True})
+    by_case = {entry["case_id"]: entry for entry in report["cases"]}
+    assert by_case[cases[0]["case_id"]]["outcome"] == study.OUTCOME_MALFORMED
+    assert by_case[cases[1]["case_id"]]["outcome"] == study.OUTCOME_ORACLE
+    for entry in report["cases"]:
+        assert entry["outcome"] != study.OUTCOME_SCORED_FAILURE
+        if entry["case_id"] in {case["case_id"] for case in cases}:
+            assert entry["score"] is None
+    for condition in report["conditions"]:
+        assert condition["outcomes"].get(study.OUTCOME_SCORED_FAILURE, 0) == 0
+
+
 def test_classify_never_returns_an_unsatisfiability_verdict() -> None:
     for row, final in [
         (None, {}),

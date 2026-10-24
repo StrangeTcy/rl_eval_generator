@@ -363,6 +363,66 @@ sandbox; the job summary is not exposed by the REST API either. So the outcome
 class of these two cases is **recorded but not yet read** - deliberately not
 inferred from the artifact size or the run duration.
 
+### 5.0.5 The recorded result, and why its label was wrong
+
+The Mercury run's summary (pasted from the run page) reported:
+
+| case | condition | outcome | verdict | score | failed checks |
+|---|---|---|---|---|---|
+| `recursive_gluing__…hard…__seed-1` | `expanded_control` | `scored_model_failure` | FAIL | **None** | - |
+| `recursive_gluing_discovery__…hard…__seed-1` | `recursive_discovery` | `scored_model_failure` | FAIL | **None** | - |
+
+`score: None` with **no failed checks at all** cannot be a graded answer:
+`score_from_accuracy` always writes a numeric score and `mark_check` records
+every hidden check, so a graded row always has both. These rows therefore came
+from an early `set_failure(...) + emit(result)` - the judge rejected the
+submission *before* running its hidden checks.
+
+Reproduced the cause offline. `shared/judge_lib.py` defines lowercase failure
+codes (`runtime_error`, `reward_denial`, ...), but this environment's judge emits
+the literal **uppercase** spelling (`set_failure(result, "RUNTIME_ERROR", ...)`,
+`set_failure(result, "REWARD_DENIAL", ...)`). Both the study and the controller
+compared those strings exactly, so the uppercase spelling matched no malformed
+mode and fell through to `scored_model_failure`:
+
+```
+mode='RUNTIME_ERROR' -> scored_model_failure      (before)
+mode='runtime_error' -> malformed_or_incomplete_certificate
+mode='REWARD_DENIAL' -> scored_model_failure      (before)
+mode='PATCH_INVALID' -> scored_model_failure      (before)
+```
+
+That is the failure mode the pilot contract explicitly forbids: an ungraded
+submission reported as a model score. Fixed on the reading side only
+(`classify_result` normalises case and refuses to call a score-less row a scored
+failure; `run_suite` normalises the same strings before choosing the row status).
+The judge and generator are untouched, so the judge bytes, the pinned manifests
+and the exact-instance gate remain valid. Two regression tests reproduce these
+exact rows and fail against the old code:
+
+* `test_the_judges_failure_mode_is_read_case_insensitively`
+* `test_the_mercury_pilot_rows_are_not_reported_as_scored_failures`
+
+Corrected reading of run 40070994013: **both cases are ungraded submissions** -
+`malformed_or_incomplete_certificate` if the judge's mode is `RUNTIME_ERROR`
+(the submitted `solver.py` could not be loaded/executed - the likely case at
+`max_steps=8`, `max_tokens=1024`), `oracle_or_gate_failure` if it is
+`REWARD_DENIAL`. Which of the two it was is recorded in `judge.stdout` inside
+`recursive-gluing-pilot-results-mercury-40070994013`, which is not reachable from
+this sandbox; the distinction does not change the science (neither is a model
+score) but the next dispatch will label it correctly.
+
+What the run *did* establish, and what it did not:
+
+* established - a bounded, two-case recursive-gluing episode ran end to end
+  through the existing controller against reasoning Mercury (`mercury-2.5`,
+  `chat_completions`, `reasoning_effort: high`), the independent judge executed,
+  and no ceiling, credential, quota or protocol failure occurred; the plan and
+  both exact-instance gates passed first;
+* not established - that Mercury can solve either case at maximum depth: neither
+  submission was graded, so there is no accuracy figure, no PASS/FAIL on the
+  hidden checks, and no valid comparison with any other model.
+
 ### 5.1 Provider-free validation on any host
 
 Provider-free (works anywhere with Python + PyYAML + torch):
