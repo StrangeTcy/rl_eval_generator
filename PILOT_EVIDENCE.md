@@ -1,19 +1,37 @@
 # Reasoning Atria / Mercury on the recursive-gluing study — bounded pilot attempt
 
-Date: 2026-10-23
-Branch: `arena/192dc25c-rl-eval-generator` (base `9c3ce418`)
-Code commit: `eba18e2` (`providers: enforce the physical HTTP-attempt budget on the Responses wire`)
+Date started 2026-10-23, result recorded 2026-10-24.
+Branch `arena/192dc25c-rl-eval-generator` (base `9c3ce418`) is merged as `main@27dfab0`;
+the endpoint-passthrough follow-up is on `arena/4576ee5f-rl-eval-generator`.
+Code commits: `eba18e2`, `8e54007` (failure-mode classification), `81aa127` (endpoint
+passthrough), `2af93c1` (token-plan endpoint), `3afa1e3` (preflight step secrets).
 
-**Outcome in one line: reasoning Mercury completed a bounded two-case episode through the
-existing controller and the independent judge, but neither submission was graded — the
-judge rejected both before running its hidden checks — so there is no accuracy figure yet,
-and the run's own summary mislabelled those ungraded rows as scored model failures (fixed
-in `8e54007`). Reasoning Atria could not be attempted because its credential is now
-rejected (`invalid_api_key`); it worked on 2026-10-17.**
-Everything that can be established provider-free was run and is recorded below: the plan,
-the exact-instance gate, the credential/endpoint probe, a controller-command audit, and an
-offline end-to-end run of the real controller + judge with a stubbed transport. The blocker
-is the *first* failing layer — a missing credential — not a code defect.
+**Outcome in one line: both approved providers completed the bounded two-case pilot
+and were graded `validated_success`, score 1.0, under the exact-instance oracle gate
+in both primary conditions - reasoning Mercury (`mercury-2.5`, `chat_completions`,
+`reasoning_effort: high`, run 40074836918) and reasoning Atria
+(`Atria-Dawn-Preview`, `responses`, nested `reasoning: {effort: high}`, run
+40084623031 over `discovery-api.intern-ai.org.cn`), each 10/10 and 8/8 hidden
+checks (section 5.0.8).**
+
+Atria's path to that result was not blocked by its model, its key or any code: the
+pilot had been pointed at `api.atria-asi.ai`, the website API whose allowance is
+exhausted, instead of the research token-plan host where the scored Atria campaign
+sends its traffic. Four earlier readings of that 401 - a rotated credential, an
+exhausted quota, a mismatched secret, an unresolved cause - were all wrong, and are
+recorded as such in 5.0.3, because reading the working configuration first is the step
+that should have preceded every one of them.
+
+The two earlier ungraded rows in run 40070994013 were a consequence of the
+1,024-token per-response cap rather than of the model, and the report that called
+them scored model failures was misreading a case-sensitive failure mode (fixed in
+`8e54007`).
+
+Everything establishable provider-free was run and is recorded below: the plan, the
+exact-instance gate, the credential/endpoint probe, a controller-command audit, and an
+offline end-to-end run of the real controller + judge with a stubbed transport. The
+result is four graded dispositions at n=1 per condition per provider - not a pass
+rate, and not a provider ranking.
 
 ---
 
@@ -316,30 +334,84 @@ Outstanding non-blocking note: `main` does not carry this branch's
 `arena/providers.py` accounting fix, so attempt counts on `main` runs read 0.
 Merging the branch (or dispatching from it) fixes the reporting, not the auth.
 
-### 5.0.3 The Atria credential is now rejected - and it demonstrably worked last week
+### 5.0.3 Root cause: the pilot called the wrong Atria host
 
-No key handling was needed to establish this; the repository's own campaign state
-is the evidence. The same secret name (`ATRIA_API_KEY`) is mapped in every Atria
-workflow (`.github/workflows/reasoning-atria-*.yml`, `atria-campaign.yml`,
-`atria-first5.yml`), so the pilot is not using a different or misnamed secret.
+Four explanations were offered for one `401 invalid_api_key` before anyone compared
+the pilot against the Atria workflow that has actually produced scored episodes.
+That comparison takes one command, and it settles the question:
 
-| Campaign status issue | Recorded state | When |
-|---|---|---|
-| #20 Reasoning-Atria pairwise | **415 / 416 episodes checkpointed**, paused only on `max_tokens_total`; gate 189/189; 1 provider-outage retry | 2026-10-17T15:54Z |
-| #21 Mercury pairwise | **416 / 416 episodes**, campaign `completed`; infrastructure retries only, no auth failures | 2026-10-16T11:27Z |
+```
+$ for f in experiments/*atria*.yaml; do grep -H api_base $f; done
+experiments/atria_campaign.yaml                    api_base: https://api.atria-asi.ai/v1
+experiments/atria_first5.yaml                      api_base: https://api.atria-asi.ai/v1
+experiments/reasoning_atria_covering_campaign.yaml api_base: https://api.atria-asi.ai/v1
+experiments/reasoning_atria_pairwise_campaign.yaml api_base: https://discovery-api.intern-ai.org.cn/v1
+experiments/t1_reasoning_atria.yaml                api_base: https://api.atria-asi.ai/v1
+```
 
-So on 2026-10-17 Atria-Dawn-Preview over `/v1/responses` with nested
-`reasoning:{effort}` accepted this repository's credential and produced scored
-episodes at scale. On 2026-10-24 the same secret returns Atria's own
-`{"code":"invalid_api_key"}` (run 40068694722). The harness, endpoint, protocol,
-model id and secret mapping are therefore unchanged and provably working; the
-**credential's validity is what changed** between those dates (rotation,
-revocation, expiry, or a dashboard token pasted instead of an API key). Only the
-repository owner can act on that.
+**Two different services answer Atria requests with the same key and the same model
+id.** `api.atria-asi.ai` is the website API; `discovery-api.intern-ai.org.cn` is the
+research token plan (InkStone / Duanyan), and that is where the pairwise campaign -
+the run whose 415/416 scored episodes this document has been citing all along - sends
+its traffic. The provider's own console notice recommends exactly that move for
+higher usage, and it lists `Atria-Dawn` as free of charge there.
 
-Consequence for this pilot, per its own contract: do not retry the same key, do
-not raise a ceiling, do not substitute another provider to manufacture a result.
-The remaining path to a scored episode is the other approved provider.
+The pilot was pointed at `api.atria-asi.ai`. That service's allowance last settled on
+2026-10-13 and its balance is zero, and it answered a credential it does not recognise
+with `401 invalid_api_key`. Everything follows from that one wrong host: no quota, no
+rotated secret, and nothing wrong with the key, the model id, the wire api or the
+request shape - all four of which the pilot already had right, and all four of which
+match the working profile exactly (`Atria-Dawn-Preview`, `ATRIA_API_KEY`,
+`responses`, `high`).
+
+**The four readings, and why each was wrong.**
+
+| reading | why it was wrong |
+|---|---|
+| the credential rotated / was revoked | the campaign authenticated 415/416 episodes and the console shows one Active key; nothing records a rotation |
+| the account is out of quota | true of the *website* API only; the token-plan host the campaign uses bills nothing for this model, and quota exhaustion is documented as `429`, not the 401 observed |
+| the secret holds the wrong value | requires an unseen secret edit; the pilot passes the same `secrets.ATRIA_API_KEY` and the same env name as the campaign |
+| **the pilot called the wrong host** | **the comparison above; it explains the 401 without inventing anything** |
+
+The method failure is worth naming: every earlier attempt reasoned from an isolated
+artifact - an error body, a billing page, a status table - and tried to reconcile them.
+None of them looked at the one thing in the repository that is known to work. Reading
+the working configuration first is cheaper than any of the four theories, and it is the
+step that should have come before the first one.
+
+**What changed.** The pilot workflow's Atria `API_BASE` is now
+`https://discovery-api.intern-ai.org.cn/v1`, and a regression test pins it to the base
+declared in `experiments/reasoning_atria_pairwise_campaign.yaml`, failing if the pilot
+ever advertises an Atria endpoint the scored campaign never used. The endpoint was
+already being passed to the plan, gates and live run through `--api-base`, so the
+change is effective rather than cosmetic - that passthrough had to be added first,
+because until then the workflow printed an endpoint it never sent.
+
+**Still unverified, and verifiable in one request.** That this credential is accepted
+by the token-plan host *today*. The last scored Atria episode is 2026-10-17, and the
+new `Credential preflight` step now reports the verdict for that host directly. If it
+returns `credential_rejected` there too, the credential state genuinely has changed
+and that is a new, clean observation - not a fourth theory about the website API.
+
+### 5.0.3a Run 40084623031: first Atria dispatch on the token-plan endpoint
+
+`main@ec6d8bb` (the endpoint fix, copied into `.github/workflows/`), 12 m 17 s,
+job **success**, `results-atria` **92.7 KB**, `plan-atria` 4.34 KB.
+
+So Atria ran for twelve minutes against `discovery-api.intern-ai.org.cn` and the
+controller did not pause: exit 0 means both planned cases have a disposition. The
+per-case verdict was read from the run summary afterwards, and it is graded:
+**both conditions `validated_success`, PASS, score 1.0** - see section 5.0.8.
+
+**A defect this run exposed, in the diagnostic built to prevent defects.** The
+`Credential preflight` step announced `ATRIA_API_KEY is empty` and exited 6 without
+ever invoking the probe: the step had no `env:` block, so the secrets (injected only
+on the live step) were empty by construction. The job still succeeded, and the live
+step then ran normally for twelve minutes - which is what turns that annotation from
+a nuisance into a trap, because it reads exactly like a missing credential at the one
+moment the operator is checking whether the credential works. Fixed: the step now
+carries the same three secrets as the live step, and a test asserts the two env
+blocks are equal so the probe cannot lose the credential it exists to check.
 
 ### 5.0.4 Run 40070994013 (`main@71f1289`, **mercury**, live): every step green
 
@@ -425,6 +497,94 @@ What the run *did* establish, and what it did not:
 * not established - that Mercury can solve either case at maximum depth: neither
   submission was graded, so there is no accuracy figure, no PASS/FAIL on the
   hidden checks, and no valid comparison with any other model.
+
+### 5.0.6 Result: reasoning Mercury passed both conditions (run 40074836918)
+
+`main@ece8ea2` (the two-number budget edit) + pilot workflow #6, `provider=mercury`,
+`execution_mode=live`, 3 m 28 s, exit 0, no pause:
+
+| condition | case | outcome | verdict | score | hidden checks |
+|---|---|---|---|---|---|
+| `expanded_control` | `recursive_gluing__…hard…__seed-1` | `validated_success` | PASS | **1.0** | 10/10 |
+| `recursive_discovery` | `recursive_gluing_discovery__…hard…__seed-1` | `validated_success` | PASS | **1.0** | 8/8 |
+
+`trusted_score` 1.0 in both; the decision checks (`obstructed_cycle`,
+`cyclic_unsat_generated`, `assembled_unsat`, `opaque_twin`, `decoy_heldout`) all
+passed, i.e. Mercury got the hidden satisfiability question right *and* produced a
+certificate the judge could replay. Discovery is the harder arm: depth 12,
+`summary_cells=98`, `unfolded_occurrences=8191`.
+
+The two entries the report lists as failed checks - `artifact_found` and
+`training_completed` - are **not** in either environment's `CHECK_NAMES` (10 and 8
+respectively). They are `base_result()` scaffolding defaults for environments that
+train a model, which this family does not. That is why the metrics read
+`passed_hidden_checks` 10/10 and 8/8 while the table shows 12 and 10 rows, and why
+the gate's own oracle reference produced the same two `false` entries at PASS 1.0.
+There are no real failures.
+
+Interpretation, bounded by n=1 per condition: the 1024-token hypothesis was
+correct - at 1024 both submissions were rejected before grading, at 4096 both
+graded 1.0 - and reasoning Mercury (`mercury-2.5`, `chat_completions`,
+`reasoning_effort: high`) solves the maximum-depth cell of both primary
+conditions on the held-out stability seed. This is a bounded verification, not a
+pass rate, and it is not a comparison against Atria, which remains unattempted.
+
+### 5.0.7 Workflow fix: the advertised endpoint is now the transmitted one
+
+The pilot workflow resolved `API_BASE` per provider and printed it in the
+identity block, but never passed `--api-base` to the study: plan, gates and live
+all relied on the credential resolver's pinned defaults. Harmless while the
+defaults match - misleading the day a provider moves its base, because the run
+record would claim an override that was never sent. Now:
+
+* `PLAN_ARGS+=(--api-base "$API_BASE")`, `RUN_ARGS+=(--api-base "$API_BASE")`
+  (gates) and `--api-base "$API_BASE"` in `LIVE_ARGS`;
+* `test_reasoning_pilot_passes_the_endpoint_it_advertises` fails if any
+  provider-touching step omits it, or if a third endpoint appears without its own
+  passthrough;
+* the step-execution test now asserts the generated `plan.json` carries
+  `api_base == "https://api.atria-asi.ai/v1"`, so the identity line and the
+  request cannot drift apart again.
+
+Verified by running the real steps locally: plan `api_base` set, gates green with
+both cases certified, and the live argv carrying
+`--api-key-env ATRIA_API_KEY --api-base https://api.atria-asi.ai/v1`.
+
+### 5.0.8 Both approved providers graded 1.0 on both conditions
+
+With the endpoint corrected, Atria's first live dispatch reached the judge and was
+graded. It is the same two cases, the same seed, the same gate as the Mercury run.
+
+| provider / wire / effort | condition | outcome | verdict | score | hidden checks |
+|---|---|---|---|---|---|
+| atria / `responses` / high | `expanded_control` | `validated_success` | PASS | **1.0** | 10/10 |
+| atria / `responses` / high | `recursive_discovery` | `validated_success` | PASS | **1.0** | 8/8 |
+| mercury / `chat_completions` / high | `expanded_control` | `validated_success` | PASS | 1.0 | 10/10 |
+| mercury / `chat_completions` / high | `recursive_discovery` | `validated_success` | PASS | 1.0 | 8/8 |
+
+Both runs: `trusted_score` 1.0, gate `instance_coverage_complete: true`, 2 cases,
+8 steps, all decision checks passed (`obstructed_cycle`, `cyclic_unsat_generated`,
+`assembled_unsat`, `opaque_twin`, `decoy_heldout`). The `artifact_found` and
+`training_completed` entries are `base_result()` scaffolding absent from both
+`CHECK_NAMES` lists, which is why the judge metrics read 10/10 and 8/8 while the
+tables show 12 and 10 rows - the gate's own oracle reference scores them identically
+at PASS 1.0.
+
+The two providers produced **identical** judge metrics - same Cartesian sizes, same
+`summary_cells=98`, same `unfolded_occurrences=8191`, same depth 12 on discovery.
+That is expected here rather than suspicious: the case ids are fixed by the seed and
+the matrix, so both models faced byte-identical instances, and the judged artifact is
+a certificate the environment can re-derive, not free text. The judge is not blind to
+the submission - the same gate scores `no_op` 0.0 and `plausible_wrong` 0.166667 on
+these instances, and `patch_valid` / `sources_valid` / `deterministic` are
+submission-dependent checks that fail for a wrong certificate. Two capable models
+both finding the correct certificate on a deterministic task is the ordinary
+outcome, not evidence that the score ignores the model.
+
+**Bounded, as scoped.** One case per condition per provider, seed 1, maximum-depth
+cell. This is four graded dispositions, not a pass rate, not a provider comparison
+(n=1 cannot order two models), and nothing here licenses the full 18-case campaign.
+Atria's blocker was never the model: it was the wrong host (5.0.3).
 
 ### 5.1 Provider-free validation on any host
 
