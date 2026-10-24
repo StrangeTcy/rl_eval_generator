@@ -89,7 +89,14 @@ jobs:
               WIRE_API="responses"
               REASONING_EFFORT="high"
               KEY_ENV="ATRIA_API_KEY"
-              API_BASE="https://api.atria-asi.ai/v1"
+              # The InkStone / token-plan host, NOT api.atria-asi.ai. Two
+              # different services answer Atria requests: the website API
+              # (api.atria-asi.ai), whose allowance is exhausted and which answers
+              # this credential with 401 invalid_api_key, and the research token
+              # plan (discovery-api...), where Atria-Dawn is free of charge. Every
+              # scored Atria episode in this repository came from the token-plan
+              # host, per experiments/reasoning_atria_pairwise_campaign.yaml.
+              API_BASE="https://discovery-api.intern-ai.org.cn/v1"
               ;;
             mercury)
               MODEL="mercury-2.5"
@@ -173,6 +180,11 @@ jobs:
             --out "$PLAN_DIR"
           )
           if [ -n "$MATRIX" ]; then PLAN_ARGS+=(--matrix "$MATRIX"); fi
+          # The endpoint recorded in the identity block must be the endpoint the
+          # request actually uses. The credential resolver already pins these
+          # bases, so omitting this only mattered on the day a provider moved its
+          # base - when the record would have claimed an override never sent.
+          PLAN_ARGS+=(--api-base "$API_BASE")
           # Fail-closed: a plan that does not fit the frozen ceilings exits 2 here,
           # before the gate and long before any provider call.
           python tools/recursive_gluing_study.py plan "${PLAN_ARGS[@]}"
@@ -211,7 +223,39 @@ jobs:
             --invalid-retries "$INVALID_RETRIES"
             --gate-context-sha "${{ github.sha }}"
           )
+          RUN_ARGS+=(--api-base "$API_BASE")
           python tools/recursive_gluing_study.py run "${RUN_ARGS[@]}"
+
+      - name: Credential preflight (one request, status only)
+        # Runs before the live step so an unreachable or refused credential is
+        # reported as such, in one request, instead of being inferred from a
+        # paused case. The probe never prints the key: it reports the environment
+        # variable name and a presence flag. Exit codes are mapped to a verdict
+        # rather than failing the job, unless the credential is explicitly live.
+        if: inputs.execution_mode == 'live'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          case "$KEY_ENV" in
+            ATRIA_API_KEY) test -n "${ATRIA_API_KEY:-}" || { echo "::error::ATRIA_API_KEY is empty"; exit 6; } ;;
+            INCEPTION_API_KEY) test -n "${INCEPTION_API_KEY:-}" || { echo "::error::INCEPTION_API_KEY is empty"; exit 6; } ;;
+          esac
+          python tools/provider_preflight.py \
+            --provider "$PROVIDER" \
+            --api-base "$API_BASE" \
+            --api-key-env "$KEY_ENV" \
+            --out "$RUN_DIR/provider_preflight.json" \
+            --github
+          status=$?
+          # 0 authenticated, 3 refused, 4 quota/rate, 5 other, 6 not configured.
+          case "$status" in
+            0) echo "::notice title=provider preflight::the credential is accepted";;
+            3) echo "::error title=provider preflight::the endpoint refused the credential (401/403) - this is an authorization result, not a model result";;
+            4) echo "::error title=provider preflight::rate limited or out of quota (429) - the credential is accepted, the account cannot be billed";;
+            5) echo "::warning title=provider preflight::the probe could not reach a verdict (endpoint or transport)";;
+            6) echo "::error title=provider preflight::no credential configured - nothing was sent";;
+          esac
+          exit 0
 
       - name: Live pilot (only when explicitly dispatched as live)
         if: inputs.execution_mode == 'live'
@@ -254,6 +298,7 @@ jobs:
             --wire-api "$WIRE_API"
             --reasoning-effort "$REASONING_EFFORT"
             --api-key-env "$KEY_ENV"
+            --api-base "$API_BASE"
             --max-api-calls "$MAX_API_CALLS"
             --max-tokens-total "$MAX_TOKENS_TOTAL"
             --max-wall-seconds "$MAX_WALL_SECONDS"
