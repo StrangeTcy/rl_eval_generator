@@ -338,6 +338,31 @@ Consequence for this pilot, per its own contract: do not retry the same key, do
 not raise a ceiling, do not substitute another provider to manufacture a result.
 The remaining path to a scored episode is the other approved provider.
 
+### 5.0.4 Run 40070994013 (`main@71f1289`, **mercury**, live): every step green
+
+The first live dispatch that completed without a pause.
+
+| | |
+|---|---|
+| provider / model / wire / effort | `mercury` / `mercury-2.5` / `chat_completions` / `high` |
+| Plan | success - frozen 2-case slice, within every ceiling |
+| Gates | success - both cases certified by the exact-instance oracle |
+| **Live** | **success, exit 0** - the controller reported no pause |
+| Report / Diagnose / Upload | success; two artifacts (`plan` 4.25 KB, `results` 51.6 KB) |
+| wall clock | 3 m 3 s of the 4 800 s ceiling |
+| annotations | only the two runner deprecation notices; no pause, no error |
+
+Exit 0 means `checkpoint["paused"]` was false, i.e. both planned cases have a
+disposition. It does **not** by itself distinguish a scored row from an
+`infrastructure_error` / `not_submitted` row (`run_suite` records either without
+pausing). The per-case verdict, score and hidden-check breakdown exist only in
+`recursive-gluing-pilot-results-mercury-40070994013`, whose storage
+(`productionresultssa*.blob.core.windows.net`) and whose job log
+(`results-receiver.actions.githubusercontent.com`) are both unreachable from this
+sandbox; the job summary is not exposed by the REST API either. So the outcome
+class of these two cases is **recorded but not yet read** - deliberately not
+inferred from the artifact size or the run duration.
+
 ### 5.1 Provider-free validation on any host
 
 Provider-free (works anywhere with Python + PyYAML + torch):
