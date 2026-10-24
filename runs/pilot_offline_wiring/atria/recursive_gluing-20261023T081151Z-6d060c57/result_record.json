@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "record_type": "episode_attempt",
+  "campaign_id": null,
+  "case_id": "recursive_gluing__offline_wiring__seed-1",
+  "attempt_id": "recursive_gluing-20261023T081151Z-6d060c57",
+  "environment": "recursive_gluing",
+  "difficulty": "hard,hard,hard,hard",
+  "seed": 1,
+  "case_disposition": "scored",
+  "end_to_end_status": "passed",
+  "failure_mode": "pass",
+  "judge_guarantee": "behavioral_reference",
+  "stages": {
+    "provider_transport": {
+      "status": "passed",
+      "successful_responses": 2,
+      "errors": 0
+    },
+    "response_parsing": {
+      "status": "passed",
+      "code": "action_parsed",
+      "valid_actions": 2,
+      "invalid_attempts": 0
+    },
+    "patch_validation": {
+      "status": "passed",
+      "code": "patch_applied"
+    },
+    "required_artifacts": {
+      "status": "passed",
+      "code": "required_artifacts_present",
+      "missing_files": []
+    },
+    "source_validation": {
+      "status": "passed",
+      "code": "sources_accepted"
+    },
+    "runtime_execution": {
+      "status": "unknown"
+    },
+    "judge_execution": {
+      "status": "passed",
+      "code": "judge_result_emitted"
+    },
+    "behavioral_evaluation": {
+      "status": "scored_pass",
+      "code": "behavioral_criteria_met"
+    }
+  },
+  "raw_scores": {
+    "verdict": "PASS",
+    "score": 1.0,
+    "raw_accuracy": 1.0,
+    "accuracy_bin": ">= 85%",
+    "checks": {
+      "patch_found": true,
+      "patch_valid": true,
+      "sources_valid": true,
+      "training_completed": false,
+      "artifact_found": false,
+      "hidden_metric_passed": true,
+      "anti_gaming_passed": true,
+      "required_multifile_edit": true,
+      "local_path_sat": true,
+      "configured": true,
+      "solvable_cycle": true,
+      "obstructed_cycle": true,
+      "nested_recursive": true,
+      "cyclic_sat_generated": true,
+      "cyclic_unsat_generated": true,
+      "relabel_twin": true,
+      "heldout_large": true,
+      "deterministic": true
+    },
+    "metrics": {
+      "changed_files": [
+        "solver.py"
+      ],
+      "missing_required_files": [],
+      "passed_hidden_checks": 10,
+      "total_hidden_checks": 10,
+      "configured_cartesian_size": 4747561509943,
+      "heldout_cartesian_size": 4747561509943,
+      "gluing_regime": "cyclic_unsat",
+      "recursive_depth": 3,
+      "domain_size": 7,
+      "trusted_score": 1.0
+    }
+  },
+  "diagnostics": {
+    "notes": [],
+    "judge_events": [
+      {
+        "ts": 1792743113.046,
+        "tool": "judge",
+        "action": "hidden_eval",
+        "status": "ok",
+        "summary": "running candidate solver on held-out instances",
+        "details": {}
+      }
+    ]
+  }
+}

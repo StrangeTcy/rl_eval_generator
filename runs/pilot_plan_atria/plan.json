@@ -1,0 +1,96 @@
+{
+  "profile": {
+    "name": "recursive-gluing-frontier",
+    "version": "1"
+  },
+  "provider_free": true,
+  "scope": "diagnostic",
+  "matrix": "diagnostic",
+  "seeds": [
+    1
+  ],
+  "provider": "atria",
+  "model": "Atria-Dawn-Preview",
+  "api_base": null,
+  "wire_api": "responses",
+  "reasoning_effort": "high",
+  "case_count": 2,
+  "case_ids": [
+    "recursive_gluing__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard__seed-1",
+    "recursive_gluing_discovery__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard_structural_ambiguity=hard__seed-1"
+  ],
+  "environments": [
+    "recursive_gluing",
+    "recursive_gluing_discovery"
+  ],
+  "factors": [
+    "max_depth_unsat_stability_seed"
+  ],
+  "excluded_environments": [],
+  "shard": {
+    "index": 0,
+    "count": 1
+  },
+  "per_case_limits": {
+    "max_steps": 8,
+    "max_tokens": 1024,
+    "invalid_retries": 2,
+    "worst_case_api_calls": 24,
+    "worst_case_output_tokens": 24576
+  },
+  "limits": {
+    "max_api_calls": 48,
+    "max_tokens_total": 49152,
+    "max_wall_seconds": 4800.0,
+    "max_retries": 3,
+    "max_http_attempts": 192,
+    "max_http_attempts_source": "derived"
+  },
+  "worst_case": {
+    "api_calls": 48,
+    "output_tokens": 49152,
+    "http_attempts": 48,
+    "http_attempts_upper_bound": 192,
+    "estimated_wall_seconds": 4800,
+    "minimum_wall_seconds": 240
+  },
+  "within_limits": true,
+  "checks": [
+    {
+      "name": "cases_present",
+      "ok": true,
+      "detail": "2 planned cases"
+    },
+    {
+      "name": "max_api_calls",
+      "ok": true,
+      "detail": "ceiling 48 vs worst case 48"
+    },
+    {
+      "name": "max_tokens_total",
+      "ok": true,
+      "detail": "ceiling 49152 vs worst case 49152"
+    },
+    {
+      "name": "max_wall_seconds",
+      "ok": true,
+      "detail": "ceiling 4800s vs minimum 240s (estimate 4800s)"
+    },
+    {
+      "name": "max_http_attempts",
+      "ok": true,
+      "detail": "physical attempt budget 192 (derived: max_api_calls 48 x (1 + max_retries 3) = 192) vs 48 planned logical calls; the controller pauses the episode as soon as this global budget is spent, so a budget below the plan guarantees a mid-run pause"
+    },
+    {
+      "name": "no_compile_only",
+      "ok": true,
+      "detail": "every selected environment has a behavioural reference"
+    },
+    {
+      "name": "dispatch_wall_cap",
+      "ok": true,
+      "detail": "ceiling 4800s must stay under 21000s so a hosted runner uploads its checkpoint instead of being killed"
+    }
+  ],
+  "warnings": []
+}

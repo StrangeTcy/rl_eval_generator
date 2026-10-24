@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "event": "provider_preflight",
+  "checked_at": "2026-10-23T08:29:34.376125Z",
+  "paid_fallback": false,
+  "providers": [
+    {
+      "provider": "atria",
+      "status": "credential_error",
+      "status_code": null,
+      "error_type": "credential_or_endpoint_error",
+      "model_ids": [],
+      "latency_ms": 0
+    },
+    {
+      "provider": "mercury",
+      "status": "credential_error",
+      "status_code": null,
+      "error_type": "credential_or_endpoint_error",
+      "model_ids": [],
+      "latency_ms": 0
+    }
+  ],
+  "reachable_count": 0,
+  "failure_count": 2
+}

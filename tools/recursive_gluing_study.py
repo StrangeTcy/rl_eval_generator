@@ -1462,7 +1462,15 @@ def classify_result(
         return OUTCOME_INFRASTRUCTURE
     if status != "scored":
         return OUTCOME_MISSING
-    mode = str(row.get("failure_mode") or final.get("failure_mode") or "")
+    # The judge's own vocabulary is not case-stable: `shared/judge_lib.py`
+    # defines lowercase codes (FAILURE_RUNTIME_ERROR = "runtime_error"), while
+    # some environments emit the literal uppercase spelling. Comparing exactly
+    # sent a crashed candidate solver down the scored-failure branch: run
+    # 40070994013 recorded two `scored_model_failure` rows whose judge had
+    # reported no score and no checks at all. Normalising the case is a reading
+    # fix only - the judge bytes stay frozen so the exact-instance gate and the
+    # pinned manifests remain valid.
+    mode = str(row.get("failure_mode") or final.get("failure_mode") or "").strip().lower()
     if mode == "timeout":
         return OUTCOME_TIMEOUT
     if row.get("judge_guarantee") == "compile_only":
@@ -1472,7 +1480,17 @@ def classify_result(
         return OUTCOME_MALFORMED
     verdict = row.get("verdict")
     score = row.get("score")
-    if verdict == "PASS" and isinstance(score, (int, float)) and float(score) >= 1.0:
+    # `score_from_accuracy` always writes a numeric score, so a row claiming
+    # status=scored without one never reached grading. That is a malformed or
+    # interrupted submission (or a judge/harness failure), never a model answer
+    # graded wrong, and never a zero.
+    if not isinstance(score, (int, float)) or isinstance(score, bool):
+        if mode in {"reward_denial", "judge_runtime_error"}:
+            return OUTCOME_ORACLE
+        if mode and mode != "pass":
+            return OUTCOME_MALFORMED
+        return OUTCOME_INFRASTRUCTURE
+    if verdict == "PASS" and float(score) >= 1.0:
         return OUTCOME_VALIDATED_SUCCESS
     if decision_checks and checks:
         if any(check in checks and checks[check] is False for check in decision_checks):

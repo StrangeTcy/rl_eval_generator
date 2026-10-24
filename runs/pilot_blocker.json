@@ -1,0 +1,41 @@
+{
+  "checked_at": "2026-10-23T08:29:40.736951Z",
+  "providers": {
+    "atria": {
+      "env_names_present": {
+        "ATRIA_API_KEY": false
+      },
+      "secret_profile_files_present": [],
+      "resolve_provider": {
+        "error_type": "ValueError",
+        "message": "No API key for provider 'atria'; set ATRIA_API_KEY or add providers.atria.api_key to secret_key.json"
+      },
+      "https_probe": {
+        "url": "https://api.atria-asi.ai/v1/models",
+        "error_type": "URLError",
+        "message": "<urlopen error TLS/SSL connection has been closed (EOF) (_ssl.c:992)>"
+      }
+    },
+    "mercury": {
+      "env_names_present": {
+        "INCEPTION_API_KEY": false,
+        "MERCURY_API_KEY": false
+      },
+      "secret_profile_files_present": [],
+      "resolve_provider": {
+        "error_type": "ValueError",
+        "message": "No API key for provider 'mercury'; set INCEPTION_API_KEY or add providers.mercury.api_key to secret_key.json"
+      },
+      "https_probe": {
+        "url": "https://api.inceptionlabs.ai/v1/models",
+        "error_type": "URLError",
+        "message": "<urlopen error TLS/SSL connection has been closed (EOF) (_ssl.c:992)>"
+      }
+    }
+  },
+  "github_actions_dispatch": {
+    "command": "gh workflow run 'Recursive gluing frontier evaluation' --ref arena/192dc25c-rl-eval-generator ...",
+    "result": "HTTP 403: Resource not accessible by integration (POST /actions/workflows/<id>/dispatches)",
+    "secrets_api": "HTTP 403: Resource not accessible by integration (GET /actions/secrets)"
+  }
+}

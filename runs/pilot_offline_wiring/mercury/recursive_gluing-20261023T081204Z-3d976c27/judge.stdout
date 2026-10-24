@@ -1,0 +1,77 @@
+{
+  "score": 1.0,
+  "raw_accuracy": 1.0,
+  "failure_mode": "pass",
+  "checks": {
+    "patch_found": true,
+    "patch_valid": true,
+    "sources_valid": true,
+    "training_completed": false,
+    "artifact_found": false,
+    "hidden_metric_passed": true,
+    "anti_gaming_passed": true,
+    "required_multifile_edit": true,
+    "local_path_sat": true,
+    "configured": true,
+    "solvable_cycle": true,
+    "obstructed_cycle": true,
+    "nested_recursive": true,
+    "cyclic_sat_generated": true,
+    "cyclic_unsat_generated": true,
+    "relabel_twin": true,
+    "heldout_large": true,
+    "deterministic": true
+  },
+  "metrics": {
+    "changed_files": [
+      "solver.py"
+    ],
+    "missing_required_files": [],
+    "passed_hidden_checks": 10,
+    "total_hidden_checks": 10,
+    "configured_cartesian_size": 4747561509943,
+    "heldout_cartesian_size": 4747561509943,
+    "gluing_regime": "cyclic_unsat",
+    "recursive_depth": 3,
+    "domain_size": 7,
+    "trusted_score": 1.0
+  },
+  "notes": [],
+  "events": [
+    {
+      "ts": 1792743125.384,
+      "tool": "judge",
+      "action": "hidden_eval",
+      "status": "ok",
+      "summary": "running candidate solver on held-out instances",
+      "details": {}
+    }
+  ],
+  "stage_outcomes": {
+    "patch_validation": {
+      "status": "passed",
+      "code": "patch_applied"
+    },
+    "source_validation": {
+      "status": "passed",
+      "code": "sources_accepted"
+    },
+    "required_artifacts": {
+      "status": "passed",
+      "code": "required_artifacts_present",
+      "missing_files": []
+    },
+    "behavioral_evaluation": {
+      "status": "scored_pass",
+      "code": "behavioral_criteria_met"
+    }
+  },
+  "training_completed": true,
+  "model_saved": true,
+  "accuracy_bin": ">= 85%",
+  "patch_found": true,
+  "patch_valid": true,
+  "sources_valid": true,
+  "_required_files_ok": true,
+  "verdict": "PASS"
+}

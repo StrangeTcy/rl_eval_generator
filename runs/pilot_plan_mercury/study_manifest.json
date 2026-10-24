@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "manifest_type": "rl_eval_generator_suite",
+  "created_at": "2026-10-23T08:29:07.673928Z",
+  "repository": {
+    "commit": "eba18e2b51676daf9d10a787b72724c545e92bb9",
+    "pinned_revision": "eba18e2b51676daf9d10a787b72724c545e92bb9",
+    "dirty": true,
+    "root": "/home/user/rl_eval_generator"
+  },
+  "inventory": {
+    "config_paths_sha256": "5a06864a28e6c76ba2461e36608a67345d080bf4ddf9e64b34a82ca27d84b401",
+    "comparison_refs": []
+  },
+  "selection": {
+    "matrix": "diagnostic",
+    "seeds": [
+      1
+    ],
+    "families": [],
+    "selected_levels": [],
+    "expand_interventions": false,
+    "dry_run": false,
+    "max_tokens_total": 49152,
+    "environments": [
+      "recursive_gluing",
+      "recursive_gluing_discovery"
+    ]
+  },
+  "registry_audit": {
+    "registry_path": "envs/registry.yaml",
+    "registered_environment_count": 48,
+    "selected_environment_count": 2,
+    "missing_registry_paths": [],
+    "unregistered_config_paths": [],
+    "duplicate_registry_paths": {},
+    "selected_only": true
+  },
+  "families": [],
+  "family_count": 0,
+  "intervention_case_count": 0,
+  "branch_comparisons": [],
+  "environment_count": 2,
+  "case_count": 2,
+  "environments": [
+    {
+      "environment": "recursive_gluing",
+      "registry_names": [
+        "recursive_gluing"
+      ],
+      "config_path": "envs/cat_theo/recursive_gluing/config.yaml",
+      "config_sha256": "23a25cb58ce5ad56a57d3e6b5bb79f330344198ca0e7623441cc71529eb61cf1",
+      "track": "category_theoretic_compositional",
+      "axes": [
+        {
+          "id": "recursive_depth",
+          "description": "Nesting depth of recursively substituted branch templates; deeper settings add regions, nested ids, and skip-level overlaps",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "state_space",
+          "description": "Finite local domain size; larger values make naive Cartesian-product enumeration expensive",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "gluing_regime",
+          "description": "Global consistency regime: tree-like SAT, cyclic SAT, or a cyclic global obstruction",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "label_opacity",
+          "description": "Local state labels: shared numeric names versus arbitrary per-region relabellings that preserve the answer",
+          "levels": [
+            "easy",
+            "hard"
+          ]
+        }
+      ],
+      "axis_count": 4,
+      "difficulty_vector_count": 1,
+      "issues": []
+    },
+    {
+      "environment": "recursive_gluing_discovery",
+      "registry_names": [
+        "recursive_gluing_discovery"
+      ],
+      "config_path": "envs/cat_theo/recursive_gluing_discovery/config.yaml",
+      "config_sha256": "4333394496afa8db1fd49c1f1b7b4c29096090ceeb7ac7b92d2aedc3ace909f1",
+      "track": "category_theoretic_compositional",
+      "axes": [
+        {
+          "id": "recursive_depth",
+          "description": "Remaining depth of the recursively applied productions; unfolded occurrence count is 2^(depth+1)-1 while the grammar stays compact",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "state_space",
+          "description": "Finite interface alphabet size; larger values enlarge local pair tables without unfolding the grammar",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "gluing_regime",
+          "description": "Root closing regime: tree-like SAT, cyclic SAT, or a cyclic global obstruction whose every local table is nonempty",
+          "levels": [
+            "easy",
+            "hard",
+            "medium"
+          ]
+        },
+        {
+          "id": "label_opacity",
+          "description": "Local port labels: shared names versus arbitrary per-type relabellings that preserve the answer",
+          "levels": [
+            "easy",
+            "hard"
+          ]
+        },
+        {
+          "id": "structural_ambiguity",
+          "description": "Whether depth-1 expansions use one leaf type or a second decoy leaf with a different pair table",
+          "levels": [
+            "easy",
+            "hard"
+          ]
+        }
+      ],
+      "axis_count": 5,
+      "difficulty_vector_count": 1,
+      "issues": []
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "recursive_gluing__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard__seed-1",
+      "environment": "recursive_gluing",
+      "condition": "expanded_control",
+      "config_path": "envs/cat_theo/recursive_gluing/config.yaml",
+      "config_sha256": "23a25cb58ce5ad56a57d3e6b5bb79f330344198ca0e7623441cc71529eb61cf1",
+      "track": "category_theoretic_compositional",
+      "runner": "arena_episode",
+      "difficulty_levels": {
+        "recursive_depth": "hard",
+        "state_space": "hard",
+        "gluing_regime": "hard",
+        "label_opacity": "hard"
+      },
+      "difficulty": "hard,hard,hard,hard",
+      "seed": 1,
+      "status": "planned",
+      "study": {
+        "profile": "recursive-gluing-frontier/1",
+        "factor": "max_depth_unsat_stability_seed",
+        "rationale": "The same maximum-depth condition on a held-out seed: is the behaviour stable or seed luck?",
+        "expectation": "unsat",
+        "pinned_levels": {}
+      }
+    },
+    {
+      "case_id": "recursive_gluing_discovery__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard_structural_ambiguity=hard__seed-1",
+      "environment": "recursive_gluing_discovery",
+      "condition": "recursive_discovery",
+      "config_path": "envs/cat_theo/recursive_gluing_discovery/config.yaml",
+      "config_sha256": "4333394496afa8db1fd49c1f1b7b4c29096090ceeb7ac7b92d2aedc3ace909f1",
+      "track": "category_theoretic_compositional",
+      "runner": "arena_episode",
+      "difficulty_levels": {
+        "recursive_depth": "hard",
+        "state_space": "hard",
+        "gluing_regime": "hard",
+        "label_opacity": "hard",
+        "structural_ambiguity": "hard"
+      },
+      "difficulty": "hard,hard,hard,hard,hard",
+      "seed": 1,
+      "status": "planned",
+      "study": {
+        "profile": "recursive-gluing-frontier/1",
+        "factor": "max_depth_unsat_stability_seed",
+        "rationale": "The maximum-depth condition on a held-out seed.",
+        "expectation": "unsat",
+        "pinned_levels": {}
+      }
+    }
+  ],
+  "issues": [],
+  "ready_for_scheduler": true,
+  "study": {
+    "profile": {
+      "name": "recursive-gluing-frontier",
+      "version": "1"
+    },
+    "scope": "diagnostic",
+    "matrix": "diagnostic",
+    "seeds": [
+      1
+    ],
+    "execution_mode_context": "plan_only",
+    "family": [
+      "recursive_gluing",
+      "recursive_gluing_discovery",
+      "recursive_maze_gluing",
+      "recursive_distributed_gluing",
+      "recursive_epistemic_gluing",
+      "recursive_holonomy_gluing",
+      "recursive_compiler_bootstrap",
+      "recursive_error_correcting_codes",
+      "recursive_coarse_graining"
+    ],
+    "family_selected": [
+      "recursive_gluing",
+      "recursive_gluing_discovery"
+    ],
+    "live_environments": [
+      "recursive_gluing",
+      "recursive_gluing_discovery"
+    ],
+    "excluded_environments": [],
+    "condition_map": {
+      "recursive_gluing": "expanded_control",
+      "recursive_gluing_discovery": "recursive_discovery"
+    },
+    "provider": "mercury",
+    "model": "mercury-2.5",
+    "api_base": null,
+    "wire_api": "chat_completions",
+    "reasoning_effort": "high",
+    "limits": {
+      "max_api_calls": 48,
+      "max_tokens_total": 49152,
+      "max_wall_seconds": 4800.0,
+      "max_retries": 3,
+      "max_http_attempts": 192,
+      "max_http_attempts_source": "derived"
+    },
+    "per_case_limits": {
+      "max_steps": 8,
+      "max_tokens": 1024,
+      "invalid_retries": 2,
+      "worst_case_api_calls": 24,
+      "worst_case_output_tokens": 24576
+    },
+    "worst_case": {
+      "api_calls": 48,
+      "output_tokens": 49152,
+      "http_attempts": 48,
+      "http_attempts_upper_bound": 192,
+      "estimated_wall_seconds": 4800,
+      "minimum_wall_seconds": 240
+    },
+    "case_ids": [
+      "recursive_gluing__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard__seed-1",
+      "recursive_gluing_discovery__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard_structural_ambiguity=hard__seed-1"
+    ],
+    "full_case_count": 2,
+    "shard": {
+      "index": 0,
+      "count": 1
+    },
+    "decision_checks": {
+      "recursive_gluing": [
+        "obstructed_cycle",
+        "cyclic_unsat_generated"
+      ],
+      "recursive_gluing_discovery": [
+        "assembled_unsat",
+        "configured"
+      ]
+    },
+    "axis_pins": {}
+  }
+}

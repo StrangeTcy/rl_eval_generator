@@ -629,6 +629,82 @@ def test_report_classifies_outcomes_without_inventing_scores(tmp_path: Path) -> 
     assert {entry["outcome"] for entry in gated["cases"]} == {study.OUTCOME_ORACLE}
 
 
+def test_the_judges_failure_mode_is_read_case_insensitively() -> None:
+    """Run 40070994013 reported two ungraded submissions as scored failures.
+
+    `shared/judge_lib.py` defines lowercase codes (`runtime_error`,
+    `reward_denial`, ...), but the recursive-gluing judge emits the literal
+    uppercase spelling. The study compared exactly, so `RUNTIME_ERROR` matched no
+    malformed mode and fell through to `scored_model_failure` - a row the judge
+    never graded. Both spellings must land on the same outcome, and a row that
+    claims `status=scored` without a numeric score is never a graded answer:
+    `score_from_accuracy` always writes one.
+    """
+
+    graded = (1.0, 0.4, 0.166667, 0.0)
+    for spelling in ("runtime_error", "RUNTIME_ERROR", "Runtime_Error"):
+        row = {"status": "scored", "verdict": "FAIL", "score": None, "failure_mode": spelling}
+        assert study.classify_result(row, {}) == study.OUTCOME_MALFORMED, spelling
+    for spelling in ("reward_denial", "REWARD_DENIAL"):
+        row = {"status": "scored", "verdict": "FAIL", "score": None, "failure_mode": spelling}
+        assert study.classify_result(row, {}) == study.OUTCOME_ORACLE, spelling
+    for spelling in ("patch_invalid", "PATCH_INVALID", "source_invalid", "SOURCE_INVALID"):
+        row = {"status": "scored", "verdict": "FAIL", "score": None, "failure_mode": spelling}
+        assert study.classify_result(row, {}) == study.OUTCOME_MALFORMED, spelling
+
+    # A scored row without a score did not produce an answer; without a judge
+    # mode at all that is a harness reading, not a model reading.
+    assert (
+        study.classify_result({"status": "scored", "verdict": "FAIL", "score": None}, {})
+        == study.OUTCOME_INFRASTRUCTURE
+    )
+
+    # Graded rows are untouched by the case handling and the no-score guard.
+    for score in graded:
+        row = {"status": "scored", "verdict": "FAIL", "score": score, "failure_mode": "underfit"}
+        assert study.classify_result(row, {}) == study.OUTCOME_SCORED_FAILURE, score
+    assert (
+        study.classify_result(
+            {"status": "scored", "verdict": "PASS", "score": 1.0, "failure_mode": "pass"}, {}
+        )
+        == study.OUTCOME_VALIDATED_SUCCESS
+    )
+
+
+def test_the_mercury_pilot_rows_are_not_reported_as_scored_failures(tmp_path: Path) -> None:
+    """The exact rows run 40070994013 produced, through the real report builder.
+
+    The run's summary classified both cases as `scored_model_failure` with
+    `verdict FAIL`, `score None` and no failed checks. Reproducing those rows
+    here pins the corrected reading: an ungraded submission is malformed or a
+    harness/gate failure, and `score: null` never enters a scored column.
+    """
+
+    manifest, _plan = _manifest()
+    cases = manifest["cases"][:2]
+    rows = []
+    for index, case in enumerate(cases):
+        mode = "RUNTIME_ERROR" if index == 0 else "REWARD_DENIAL"
+        rows.append(
+            _row(
+                case["case_id"],
+                tmp_path,
+                final={"verdict": "FAIL", "score": None, "failure_mode": mode, "checks": {}},
+                status="scored",
+            )
+        )
+    report = study.build_report(manifest, {"results": rows}, gate_report={"instance_coverage_complete": True})
+    by_case = {entry["case_id"]: entry for entry in report["cases"]}
+    assert by_case[cases[0]["case_id"]]["outcome"] == study.OUTCOME_MALFORMED
+    assert by_case[cases[1]["case_id"]]["outcome"] == study.OUTCOME_ORACLE
+    for entry in report["cases"]:
+        assert entry["outcome"] != study.OUTCOME_SCORED_FAILURE
+        if entry["case_id"] in {case["case_id"] for case in cases}:
+            assert entry["score"] is None
+    for condition in report["conditions"]:
+        assert condition["outcomes"].get(study.OUTCOME_SCORED_FAILURE, 0) == 0
+
+
 def test_classify_never_returns_an_unsatisfiability_verdict() -> None:
     for row, final in [
         (None, {}),
@@ -740,6 +816,238 @@ def test_workflow_example_is_manual_dispatch_only() -> None:
     assert ".github/workflows/recursive-gluing-eval.yml" in deployment
     assert "docs/workflows/recursive-gluing-eval.yml.example" in deployment
     assert "manual" in deployment.lower()
+
+
+# ---------------------------------------------------------------------------
+# 11a. The pilot workflow's steps must actually run, in the order GitHub runs them
+# ---------------------------------------------------------------------------
+
+
+def _pilot_job_step(prefix: str) -> dict:
+    job = _pilot_workflow()["jobs"]["evaluate"]
+    return next(step for step in job["steps"] if (step.get("name") or "").startswith(prefix))
+
+
+def _github_expressions(body: str) -> str:
+    """Replace ``${{ github.x }}`` the way the runner does, for an offline run."""
+
+    import re
+
+    return re.sub(
+        r"\$\{\{\s*github\.(\w+)\s*\}\}",
+        lambda match: {"sha": "0" * 40, "run_id": "1", "actor": "local",
+                       "workflow_ref": "local"}.get(match.group(1), "local"),
+        body,
+    )
+
+
+def test_reasoning_pilot_steps_run_in_order_under_set_u(tmp_path: Path) -> None:
+    """Run 40067626107 died in the Plan step with no plan and no artifact.
+
+    The resolver exported `model=`/`wire_api=`/`key_env=` into ``$GITHUB_ENV``
+    while the plan, gates and live steps read ``$MODEL``/``$WIRE_API``/``$KEY_ENV``.
+    Under ``set -u`` the first unset read aborted the step, so the provider-free
+    plan never ran and every later step was skipped. The YAML parsed, ``bash -n``
+    passed, and each script looked correct on its own: only *running* the two
+    steps in sequence exposes it. This test does that, with no provider call.
+    """
+
+    import os
+    import subprocess
+
+    workflow = _pilot_workflow()
+    job = workflow["jobs"]["evaluate"]
+    workdir = tmp_path / "repo"
+    workdir.mkdir()
+    # The plan step invokes `python tools/recursive_gluing_study.py`, so the
+    # checkout must be reachable from the working directory.
+    (workdir / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
+    for name in ("arena", "envs", "shared", "spec"):
+        if (ROOT / name).is_dir():
+            (workdir / name).symlink_to(ROOT / name, target_is_directory=True)
+
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary.md"),
+        "GITHUB_ENV": str(tmp_path / "env"),
+        # The job-level `env:` block, with the two dispatch inputs resolved.
+        "PROVIDER": "atria",
+        "EXECUTION_MODE": "plan_only",
+    }
+    env.update({key: value for key, value in job["env"].items() if not str(value).startswith("${{")})
+    (tmp_path / "env").write_text("", encoding="utf-8")
+    (tmp_path / "summary.md").write_text("", encoding="utf-8")
+
+    def run_step(step: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", _github_expressions(step["run"])],
+            cwd=workdir, env=env, capture_output=True, text=True,
+        )
+
+    resolver = run_step(_pilot_job_step("Resolve the approved"))
+    assert resolver.returncode == 0, resolver.stdout + resolver.stderr
+    exported = dict(
+        line.split("=", 1)
+        for line in (tmp_path / "env").read_text(encoding="utf-8").splitlines()
+        if "=" in line
+    )
+    # The exact variables the later steps dereference must be what was exported.
+    for step_prefix in ("Plan (provider-free)", "Gates (provider-free)", "Live pilot"):
+        step = _pilot_job_step(step_prefix)
+        env_used = set(step.get("env") or {})
+        for reference in ("MODEL", "WIRE_API", "REASONING_EFFORT", "API_BASE", "KEY_ENV"):
+            script = step["run"]
+            if f'"${reference}"' not in script and f"${{{reference}" not in script:
+                continue
+            if reference in env_used:
+                continue  # supplied by the step's own env: block, not GITHUB_ENV
+            assert reference in exported, (
+                f"{step_prefix} reads ${reference} but the resolver exported {sorted(exported)}"
+            )
+    assert exported["MODEL"] == "Atria-Dawn-Preview"
+    assert exported["WIRE_API"] == "responses"
+    assert exported["REASONING_EFFORT"] == "high"
+    assert exported["KEY_ENV"] == "ATRIA_API_KEY"
+    assert exported["API_BASE"] == "https://api.atria-asi.ai/v1"
+
+    env.update(exported)
+    plan = run_step(_pilot_job_step("Plan (provider-free)"))
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+    plan_json = workdir / "runs" / "recursive_gluing_pilot_plan" / "plan.json"
+    assert plan_json.is_file(), "the plan step produced no plan.json: nothing would be uploaded"
+    recorded = json.loads(plan_json.read_text(encoding="utf-8"))
+    assert recorded["case_count"] == 2
+    assert recorded["within_limits"] is True
+    assert recorded["provider"] == "atria"
+    assert recorded["model"] == "Atria-Dawn-Preview"
+    assert recorded["wire_api"] == "responses"
+    assert recorded["reasoning_effort"] == "high"
+    assert recorded["limits"]["max_http_attempts"] == 192
+
+
+# ---------------------------------------------------------------------------
+# 11b. The reasoning pilot cannot be dispatched with a drifted configuration
+# ---------------------------------------------------------------------------
+
+
+def _pilot_workflow() -> dict:
+    path = ROOT / "docs" / "workflows" / "recursive-gluing-reasoning-pilot.yml.example"
+    assert path.is_file(), "the copyable pilot workflow must live in docs/workflows"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_reasoning_pilot_workflow_pins_the_frozen_slice_and_its_ceilings() -> None:
+    """A pilot dispatch may choose the provider and whether to spend; nothing else.
+
+    The first Atria/Mercury run is a bounded verification, not a campaign. If the
+    ceilings or the case slice were inputs, one tired dispatch could turn it into
+    an 18-case spend; if the model/wire/effort were typed, one typo could send
+    Atria's reasoning effort down Chat Completions (where it has no effect) or
+    Mercury's flat field down the Responses wire. Both are made unrepresentable:
+    the two approved triples are derived from ``provider``, and every limit is a
+    constant. This test is the contract, not a style check.
+    """
+
+    workflow = _pilot_workflow()
+    triggers = workflow[True] if True in workflow else workflow["on"]
+    assert set(triggers) == {"workflow_dispatch"}, "no schedule, no push, no self-dispatch"
+    assert workflow["permissions"] == {"contents": "read"}
+
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    # Exactly two dimensions: which provider, and whether to spend at all.
+    assert set(inputs) == {"provider", "execution_mode"}
+    assert set(inputs["provider"]["options"]) == {"atria", "mercury"}
+    assert inputs["execution_mode"]["default"] == "plan_only"
+    assert set(inputs["execution_mode"]["options"]) == {"plan_only", "live"}
+    assert not [name for name in inputs if name.startswith("max_")], (
+        "a ceiling must not be a dispatch input: this workflow may not raise one"
+    )
+    assert "model" not in inputs and "wire_api" not in inputs, (
+        "model and wire API are derived from the provider so they cannot disagree"
+    )
+
+    job = workflow["jobs"]["evaluate"]
+    env = job["env"]
+    assert env["SCOPE"] == "diagnostic"
+    assert env["SEEDS"] == "1"
+    for name, value in {
+        "MAX_API_CALLS": "48",
+        "MAX_TOKENS_TOTAL": "196608",
+        "MAX_WALL_SECONDS": "4800",
+        "MAX_STEPS": "8",
+        "MAX_TOKENS": "4096",
+        "INVALID_RETRIES": "2",
+    }.items():
+        assert env[name] == value, f"{name} drifted from the frozen pilot ceiling"
+
+    # The two approved triples, and only those, are produced by the resolver.
+    resolver = next(step for step in job["steps"] if step.get("id") == "profile")
+    script = resolver["run"]
+    assert 'MODEL="Atria-Dawn-Preview"' in script
+    assert "mercury-2.5" in script
+    assert script.count('REASONING_EFFORT="high"') == 2
+    assert script.count('WIRE_API="responses"') == 1
+    assert script.count('WIRE_API="chat_completions"') == 1
+    assert 'KEY_ENV="ATRIA_API_KEY"' in script
+    assert 'KEY_ENV="INCEPTION_API_KEY"' in script
+
+    # Those triples are exactly what the study accepts; a swapped pair is refused
+    # provider-free, so the workflow cannot silently buy an uncontrolled run.
+    case = {"case_id": "pilot", "environment": "recursive_gluing",
+            "difficulty": "hard", "seed": 1}
+    for provider, model, wire_api in (
+        ("atria", "Atria-Dawn-Preview", "responses"),
+        ("mercury", "mercury-2.5", "chat_completions"),
+    ):
+        plan = study.build_plan(
+            [case], scope="diagnostic", matrix="diagnostic", seeds=[1],
+            provider=provider, model=model, api_base=None, wire_api=wire_api,
+            reasoning_effort="high", max_api_calls=48, max_tokens_total=196_608,
+            max_wall_seconds=4_800, max_steps=8, max_tokens=4_096,
+        )
+        assert plan["within_limits"] is True
+        assert plan["limits"]["max_http_attempts"] == 192
+        with pytest.raises(study.StudyError):
+            study.build_plan(
+                [case], scope="diagnostic", matrix="diagnostic", seeds=[1],
+                provider=provider, model=model, api_base=None,
+                wire_api="chat_completions" if wire_api == "responses" else "responses",
+                reasoning_effort="high", max_api_calls=48, max_tokens_total=196_608,
+                max_wall_seconds=4_800, max_steps=8, max_tokens=4_096,
+            )
+
+    # A credential is never referenced from a shell step, and only the two
+    # providers' names are exposed to the one step that needs them.
+    for step in job["steps"]:
+        assert "secrets." not in (step.get("run") or ""), step.get("name")
+        assert "] && " not in (step.get("run") or ""), (
+            f"{step.get('name')}: set -e would abort on an empty optional input"
+        )
+    live = next(step for step in job["steps"] if step.get("name", "").startswith("Live pilot"))
+    assert live["if"] == "inputs.execution_mode == 'live'"
+    assert set(live["env"]) == {"ATRIA_API_KEY", "INCEPTION_API_KEY", "MERCURY_API_KEY"}
+    assert '--api-key-env "$KEY_ENV"' in live["run"]
+    # No re-implementation of the harness, and no automatic retry of a paired call.
+    for step in job["steps"]:
+        script = step.get("run") or ""
+        assert "tools/run_suite.py" not in script
+        assert "env_runner" not in script
+        assert "--auto" not in script
+
+    import subprocess
+
+    for step in job["steps"]:
+        body = step.get("run")
+        if not body:
+            continue
+        parsed = subprocess.run(["bash", "-n"], input=body, text=True, capture_output=True)
+        assert parsed.returncode == 0, f"{step.get('name')}: {parsed.stderr}"
+
+    note = (ROOT / "docs" / "workflows" / "recursive-gluing-eval.md").read_text(encoding="utf-8")
+    assert "docs/workflows/recursive-gluing-reasoning-pilot.yml.example" in note
+    assert ".github/workflows/recursive-gluing-reasoning-pilot.yml" in note
 
 
 # ---------------------------------------------------------------------------

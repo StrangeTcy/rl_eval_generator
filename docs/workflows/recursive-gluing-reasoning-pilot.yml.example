@@ -1,0 +1,335 @@
+# Copy this reviewed workflow to .github/workflows/recursive-gluing-reasoning-pilot.yml
+# when ready to run the first reasoning-model pilot. GitHub does not execute this
+# docs copy; the copy under .github/workflows is what the Actions tab dispatches.
+#
+# This is a *pilot* wrapper around the same tools/recursive_gluing_study.py
+# contract as recursive-gluing-eval.yml. It exists so the first Atria/Mercury
+# reasoning run cannot be dispatched with a drifted configuration:
+#
+#   * the two approved provider/model/protocol/effort triples are the only
+#     choices, and model + wire + effort are derived from the provider name
+#     instead of being typed, so a mismatched combination is unrepresentable;
+#   * the frozen case slice (scope=diagnostic, seed 1 -> one case per primary
+#     environment) and every pilot ceiling are constants here, not inputs, so a
+#     dispatch cannot raise a ceiling or expand the campaign by accident;
+#   * `workflow_dispatch` only: no schedule, no push, no repository_dispatch,
+#     no self-re-arm. Nothing here can spend money without a human pressing
+#     the button, and one dispatch bills one provider.
+#
+# The two providers are dispatched separately, against the same case ids, so
+# their outcomes are comparable; the report keeps the expanded control
+# (`recursive_gluing`) and the discovery condition (`recursive_gluing_discovery`)
+# separate and never pools them into one headline score.
+name: Recursive gluing reasoning pilot (Atria / Mercury)
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "One provider per dispatch. Model, wire API and reasoning effort are derived from this choice."
+        required: true
+        type: choice
+        options:
+          - atria
+          - mercury
+        default: atria
+      execution_mode:
+        description: "plan_only = provider-free plan and gates only; live = actually evaluate the frozen two-case slice"
+        required: true
+        type: choice
+        options:
+          - plan_only
+          - live
+        default: plan_only
+
+permissions:
+  contents: read
+
+# Two dispatches for one provider would bill the same frozen cases twice.
+concurrency:
+  group: recursive-gluing-reasoning-pilot-${{ inputs.provider }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # Frozen pilot configuration. These are deliberately not inputs.
+      SCOPE: diagnostic
+      SEEDS: "1"
+      MATRIX: ""
+      MAX_API_CALLS: "48"
+      # Run 40070994013 rejected both submissions before grading with a 1024-token
+      # per-response cap. 4096 tokens x 8 steps x 3 attempts = 98,304 tokens per
+      # case, so the two-case total is 196,608 - the plan fails closed below that.
+      MAX_TOKENS_TOTAL: "196608"
+      MAX_WALL_SECONDS: "4800"
+      MAX_STEPS: "8"
+      MAX_TOKENS: "4096"
+      INVALID_RETRIES: "2"
+      PROVIDER: ${{ inputs.provider }}
+      EXECUTION_MODE: ${{ inputs.execution_mode }}
+      PLAN_DIR: runs/recursive_gluing_pilot_plan
+      RUN_DIR: runs/recursive_gluing_pilot
+    steps:
+      - name: Check out the dispatched ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Resolve the approved provider profile
+        id: profile
+        run: |
+          set -euo pipefail
+          case "$PROVIDER" in
+            atria)
+              MODEL="Atria-Dawn-Preview"
+              WIRE_API="responses"
+              REASONING_EFFORT="high"
+              KEY_ENV="ATRIA_API_KEY"
+              API_BASE="https://api.atria-asi.ai/v1"
+              ;;
+            mercury)
+              MODEL="mercury-2.5"
+              WIRE_API="chat_completions"
+              REASONING_EFFORT="high"
+              KEY_ENV="INCEPTION_API_KEY"
+              API_BASE="https://api.inceptionlabs.ai/v1"
+              ;;
+            *)
+              echo "::error::provider '$PROVIDER' has no approved reasoning profile in this pilot"
+              exit 2
+              ;;
+          esac
+          {
+            # These names are read by the plan / gates / live steps below, so
+            # they must be exported in the same case those steps use. Writing
+            # `model=` here and reading `$MODEL` there fails under `set -u`
+            # before the plan is even built (run 40067626107).
+            echo "MODEL=$MODEL"
+            echo "WIRE_API=$WIRE_API"
+            echo "REASONING_EFFORT=$REASONING_EFFORT"
+            echo "KEY_ENV=$KEY_ENV"
+            echo "API_BASE=$API_BASE"
+          } >> "$GITHUB_ENV"
+          {
+            echo "provider=$PROVIDER model=$MODEL wire_api=$WIRE_API reasoning_effort=$REASONING_EFFORT"
+            echo "api_base=$API_BASE credential_env=$KEY_ENV"
+            echo "scope=$SCOPE seeds=$SEEDS per_episode max_steps=$MAX_STEPS max_tokens=$MAX_TOKENS invalid_retries=$INVALID_RETRIES"
+            echo "ceilings max_api_calls=$MAX_API_CALLS max_tokens_total=$MAX_TOKENS_TOTAL max_wall_seconds=$MAX_WALL_SECONDS"
+            echo "commit=$(git rev-parse HEAD) run_id=${{ github.run_id }} actor=${{ github.actor }}"
+          } | tee runs-identity.txt
+          {
+            echo "## Recursive gluing reasoning pilot - $PROVIDER"
+            echo ""
+            echo '```'
+            cat runs-identity.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install controller dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          # Both recursive judges compile the submitted solver through torch;
+          # the pinned CPU wheel keeps the gate deterministic and cheap.
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
+          python -m pip install jinja2 numpy
+
+      - name: Refuse a ref that cannot run the gated study
+        run: |
+          set -euo pipefail
+          for path in tools/instance_oracle_gate.py tools/recursive_gluing_study.py \
+                      tools/recursive_references.py arena/providers.py; do
+            test -f "$path" || { echo "::error::$path is missing at $(git rev-parse HEAD)"; exit 1; }
+          done
+
+      - name: Plan (provider-free) - frozen two-case slice and budget
+        run: |
+          set -euo pipefail
+          PLAN_ARGS=(
+            --scope "$SCOPE"
+            --seeds "$SEEDS"
+            --execution-mode "$EXECUTION_MODE"
+            --provider "$PROVIDER"
+            --model "$MODEL"
+            --wire-api "$WIRE_API"
+            --reasoning-effort "$REASONING_EFFORT"
+            --max-api-calls "$MAX_API_CALLS"
+            --max-tokens-total "$MAX_TOKENS_TOTAL"
+            --max-wall-seconds "$MAX_WALL_SECONDS"
+            --max-steps "$MAX_STEPS"
+            --max-tokens "$MAX_TOKENS"
+            --invalid-retries "$INVALID_RETRIES"
+            --out "$PLAN_DIR"
+          )
+          if [ -n "$MATRIX" ]; then PLAN_ARGS+=(--matrix "$MATRIX"); fi
+          # Fail-closed: a plan that does not fit the frozen ceilings exits 2 here,
+          # before the gate and long before any provider call.
+          python tools/recursive_gluing_study.py plan "${PLAN_ARGS[@]}"
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib
+          plan = json.loads(pathlib.Path("runs/recursive_gluing_pilot_plan/plan.json").read_text())
+          print("### Plan (provider-free)")
+          print()
+          print(f"- provider / model: `{plan['provider']}` / `{plan['model']}`")
+          print(f"- wire api: `{plan['wire_api']}`, reasoning effort: `{plan['reasoning_effort']}`")
+          print(f"- cases: **{plan['case_count']}**, seeds {plan['seeds']}, scope `{plan['scope']}`")
+          for case_id in plan["case_ids"]:
+              print(f"  - `{case_id}`")
+          print()
+          print(f"- worst case: {plan['worst_case']}")
+          print(f"- within every ceiling: {plan['within_limits']}")
+          PY
+
+      - name: Gates (provider-free) - exact-instance oracles
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUN_DIR"
+          RUN_ARGS=(
+            --manifest "$PLAN_DIR/study_manifest.json"
+            --out "$RUN_DIR"
+            --execution-mode gates_only
+            --provider "$PROVIDER"
+            --model "$MODEL"
+            --wire-api "$WIRE_API"
+            --reasoning-effort "$REASONING_EFFORT"
+            --max-api-calls "$MAX_API_CALLS"
+            --max-tokens-total "$MAX_TOKENS_TOTAL"
+            --max-wall-seconds "$MAX_WALL_SECONDS"
+            --max-steps "$MAX_STEPS"
+            --max-tokens "$MAX_TOKENS"
+            --invalid-retries "$INVALID_RETRIES"
+            --gate-context-sha "${{ github.sha }}"
+          )
+          python tools/recursive_gluing_study.py run "${RUN_ARGS[@]}"
+
+      - name: Live pilot (only when explicitly dispatched as live)
+        if: inputs.execution_mode == 'live'
+        env:
+          # Host-only credentials, scoped to this step. Names are the first entry
+          # of arena/secrets.py PROVIDER_ENV for each provider (plus Mercury's
+          # documented legacy alias); arena/episode.py strips every *API_KEY* /
+          # *_TOKEN from the agent and judge environments, and no value is ever
+          # written to a command line, a log, or an artifact. An unset secret
+          # resolves to an empty string and the controller fails closed with a
+          # missing-credential error instead of calling out.
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+          INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
+          MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Refuse before the first paid call if the selected provider's secret is
+          # not configured for this repository: that is a dispatch problem, not a
+          # model result, and it must not be recorded as one.
+          case "$KEY_ENV" in
+            ATRIA_API_KEY) test -n "${ATRIA_API_KEY:-}" || { echo "::error::ATRIA_API_KEY is not configured"; exit 2; } ;;
+            INCEPTION_API_KEY)
+              # Either name may carry the credential; both empty is a dispatch
+              # problem, detected before the first paid call.
+              if [ -z "${INCEPTION_API_KEY:-}${MERCURY_API_KEY:-}" ]; then
+                echo "::error::neither INCEPTION_API_KEY nor MERCURY_API_KEY is configured"
+                exit 2
+              fi
+              ;;
+          esac
+          # The live leg resumes the gate checkpoint in $RUN_DIR, so the gate rows
+          # are reused and a manifest or grading-context change is refused rather
+          # than silently re-gated.
+          LIVE_ARGS=(
+            --manifest "$PLAN_DIR/study_manifest.json"
+            --out "$RUN_DIR"
+            --execution-mode live
+            --provider "$PROVIDER"
+            --model "$MODEL"
+            --wire-api "$WIRE_API"
+            --reasoning-effort "$REASONING_EFFORT"
+            --api-key-env "$KEY_ENV"
+            --max-api-calls "$MAX_API_CALLS"
+            --max-tokens-total "$MAX_TOKENS_TOTAL"
+            --max-wall-seconds "$MAX_WALL_SECONDS"
+            --max-steps "$MAX_STEPS"
+            --max-tokens "$MAX_TOKENS"
+            --invalid-retries "$INVALID_RETRIES"
+            --gate-context-sha "${{ github.sha }}"
+          )
+          set +e
+          python tools/recursive_gluing_study.py run "${LIVE_ARGS[@]}"
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            # 3 = the controller paused (ceiling, provider quota/auth failure,
+            # infrastructure). The report step still runs and this job must not
+            # report success: no automatic retry, no ceiling bump, no resubmission.
+            echo "::error::the controller paused or failed with exit code $STATUS; see $RUN_DIR/suite_checkpoint.json pause_reason"
+            exit "$STATUS"
+          fi
+
+      - name: Report (JSON + CSV + Markdown)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUN_DIR/suite_checkpoint.json" ]; then
+            echo "no checkpoint: the gate did not produce one, so there is nothing to report"
+            exit 0
+          fi
+          python tools/recursive_gluing_study.py report \
+            --manifest "$PLAN_DIR/study_manifest.json" \
+            --run-out "$RUN_DIR" \
+            --out "$RUN_DIR/report"
+
+      - name: Diagnose a paused leg on the run page
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUN_DIR/suite_checkpoint.json" ]; then
+            exit 0
+          fi
+          # Annotations are only parsed when they reach stdout; `>> $GITHUB_STEP_SUMMARY`
+          # would turn them into literal text in the summary instead of run-page
+          # annotations. So: annotations to stdout, readable markdown to the summary.
+          python tools/recursive_gluing_study.py diagnose \
+            --run-out "$RUN_DIR" \
+            --manifest "$PLAN_DIR/study_manifest.json" \
+            --out "$RUN_DIR/pause_diagnosis.json" \
+            --github
+          python tools/recursive_gluing_study.py diagnose \
+            --run-out "$RUN_DIR" \
+            --manifest "$PLAN_DIR/study_manifest.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarise the outcome
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f "$RUN_DIR/report/summary.md" ]; then
+            cat "$RUN_DIR/report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recursive-gluing-pilot-plan-${{ inputs.provider }}-${{ github.run_id }}
+          path: runs/recursive_gluing_pilot_plan
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recursive-gluing-pilot-results-${{ inputs.provider }}-${{ github.run_id }}
+          path: |
+            runs/recursive_gluing_pilot
+            runs-identity.txt
+          retention-days: 30
+          if-no-files-found: warn
