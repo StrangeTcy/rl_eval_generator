@@ -4,9 +4,12 @@ Date: 2026-10-23
 Branch: `arena/192dc25c-rl-eval-generator` (base `9c3ce418`)
 Code commit: `eba18e2` (`providers: enforce the physical HTTP-attempt budget on the Responses wire`)
 
-**Outcome in one line: no scored live episode was produced, because this environment has
-neither the provider credentials nor a network route to either provider, and the GitHub
-Actions dispatch that does hold them is refused to the integration token (HTTP 403).**
+**Outcome in one line: reasoning Mercury completed a bounded two-case episode through the
+existing controller and the independent judge, but neither submission was graded — the
+judge rejected both before running its hidden checks — so there is no accuracy figure yet,
+and the run's own summary mislabelled those ungraded rows as scored model failures (fixed
+in `8e54007`). Reasoning Atria could not be attempted because its credential is now
+rejected (`invalid_api_key`); it worked on 2026-10-17.**
 Everything that can be established provider-free was run and is recorded below: the plan,
 the exact-instance gate, the credential/endpoint probe, a controller-command audit, and an
 offline end-to-end run of the real controller + judge with a stubbed transport. The blocker
