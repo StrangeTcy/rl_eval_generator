@@ -234,6 +234,14 @@ jobs:
         # rather than failing the job, unless the credential is explicitly live.
         if: inputs.execution_mode == 'live'
         continue-on-error: true
+        env:
+          # Without this block the presence check below tests an empty string and
+          # reports "ATRIA_API_KEY is empty" on every live run - a false alarm that
+          # also exits before the probe is ever invoked. Same secrets as the live
+          # step: a probe that cannot see the credential reports nothing useful.
+          ATRIA_API_KEY: ${{ secrets.ATRIA_API_KEY }}
+          INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
+          MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
         run: |
           set -uo pipefail
           case "$KEY_ENV" in
