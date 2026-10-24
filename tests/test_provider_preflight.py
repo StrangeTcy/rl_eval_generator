@@ -242,6 +242,32 @@ def test_the_workflow_runs_the_probe_before_the_live_step() -> None:
     assert "recursive_gluing_study.py" not in body
 
 
+def test_the_probe_step_receives_the_same_secrets_as_the_live_step() -> None:
+    """A probe that cannot see the credential reports a false alarm.
+
+    Run 40084623031 annotated "ATRIA_API_KEY is empty" and exited 6 before invoking
+    the tool, because the step had no env: block - the secrets were injected only on
+    the live step. The job still succeeded and the live step ran for 12 minutes, so
+    the annotation looked like a finding about the credential rather than a defect
+    in the step that produced it.
+    """
+
+    import yaml
+
+    workflow = yaml.safe_load(
+        Path("docs/workflows/recursive-gluing-reasoning-pilot.yml.example").read_text()
+    )
+    steps = {step["name"].split(" (")[0]: step for step in workflow["jobs"]["evaluate"]["steps"]}
+    probe_env = set((steps["Credential preflight"].get("env") or {}))
+    live_env = set((steps["Live pilot"].get("env") or {}))
+    assert live_env, "the live step is the reference; it must carry the secrets"
+    assert probe_env == live_env, (
+        "the probe step must receive every secret the live step does, or its "
+        f"presence check tests an empty string (probe {sorted(probe_env)} vs "
+        f"live {sorted(live_env)})"
+    )
+
+
 _DEPLOYED = Path(".github/workflows/recursive-gluing-reasoning-pilot.yml")
 _REVIEWABLE = Path("docs/workflows/recursive-gluing-reasoning-pilot.yml.example")
 

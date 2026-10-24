@@ -385,6 +385,28 @@ new `Credential preflight` step now reports the verdict for that host directly. 
 returns `credential_rejected` there too, the credential state genuinely has changed
 and that is a new, clean observation - not a fourth theory about the website API.
 
+### 5.0.3a Run 40084623031: first Atria dispatch on the token-plan endpoint
+
+`main@ec6d8bb` (the endpoint fix, copied into `.github/workflows/`), 12 m 17 s,
+job **success**, `results-atria` **92.7 KB**, `plan-atria` 4.34 KB.
+
+So Atria ran for twelve minutes against `discovery-api.intern-ai.org.cn` and the
+controller did not pause: exit 0 means both planned cases have a disposition. The
+per-case verdict is not in this document yet - it lives in the run's Summary and the
+artifact, neither reachable from here - so the outcome class is recorded, not read,
+exactly as with run 40070994013. What the duration and artifact size do *not* prove
+is grading; that inference is what produced the wrong labels last time.
+
+**A defect this run exposed, in the diagnostic built to prevent defects.** The
+`Credential preflight` step announced `ATRIA_API_KEY is empty` and exited 6 without
+ever invoking the probe: the step had no `env:` block, so the secrets (injected only
+on the live step) were empty by construction. The job still succeeded, and the live
+step then ran normally for twelve minutes - which is what turns that annotation from
+a nuisance into a trap, because it reads exactly like a missing credential at the one
+moment the operator is checking whether the credential works. Fixed: the step now
+carries the same three secrets as the live step, and a test asserts the two env
+blocks are equal so the probe cannot lose the credential it exists to check.
+
 ### 5.0.4 Run 40070994013 (`main@71f1289`, **mercury**, live): every step green
 
 The first live dispatch that completed without a pause.
