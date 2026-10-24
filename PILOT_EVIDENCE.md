@@ -371,6 +371,30 @@ current state is the problem; `429` or a successful call means the secret is fin
 and the wall is the balance. Until someone makes that request, Atria is recorded as
 **blocked, cause unresolved**, not as a diagnosed defect.
 
+**A probe replaces the guessing.** `tools/provider_preflight.py` already existed and
+already probed `/models` with redaction and a no-redirect opener; it reported a
+status code but not which condition that code described, so a 401 and a 429 looked
+the same from the outside. It now names the condition and exposes it as an exit
+code, and the pilot workflow runs it before the live step, so the next dispatch
+answers the question above in the run page with one request and without spending a
+case:
+
+| preflight verdict | exit | reading |
+|---|---|---|
+| `authenticated` | 0 | the credential is accepted (a 404 on `/models` also counts as accepted - the key routed, only the path is absent) |
+| `credential_rejected` | 3 | the credential's current state is the blocker |
+| `quota_or_rate_limited` | 4 | the credential is accepted; the balance is the blocker |
+| `transport_error` | 5 | no verdict; must not be read as either |
+| `no_credential` | 6 | nothing was sent |
+
+An offline contract test covers every branch, including that a missing key sends no
+request at all, that a refusal outranks a reachable provider in the run verdict, and
+that the key never appears in the report, the annotation or stdout.
+
+A second guard records the failure that made an earlier fix inert: the docs copy and
+the dispatched workflow are now required to be byte-identical, because an endpoint
+change once landed in `docs/workflows/` while `.github/workflows/` kept the old text.
+
 **One trap worth recording.** The campaign's 123 scheduled runs all display
 "completed successfully", which looks like continuing proof that the key works. They
 are 8-13 second no-ops: the campaign is finished, so each run inspects state and

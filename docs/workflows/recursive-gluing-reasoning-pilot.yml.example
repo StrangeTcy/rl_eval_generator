@@ -219,6 +219,37 @@ jobs:
           RUN_ARGS+=(--api-base "$API_BASE")
           python tools/recursive_gluing_study.py run "${RUN_ARGS[@]}"
 
+      - name: Credential preflight (one request, status only)
+        # Runs before the live step so an unreachable or refused credential is
+        # reported as such, in one request, instead of being inferred from a
+        # paused case. The probe never prints the key: it reports the environment
+        # variable name and a presence flag. Exit codes are mapped to a verdict
+        # rather than failing the job, unless the credential is explicitly live.
+        if: inputs.execution_mode == 'live'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          case "$KEY_ENV" in
+            ATRIA_API_KEY) test -n "${ATRIA_API_KEY:-}" || { echo "::error::ATRIA_API_KEY is empty"; exit 6; } ;;
+            INCEPTION_API_KEY) test -n "${INCEPTION_API_KEY:-}" || { echo "::error::INCEPTION_API_KEY is empty"; exit 6; } ;;
+          esac
+          python tools/provider_preflight.py \
+            --provider "$PROVIDER" \
+            --api-base "$API_BASE" \
+            --api-key-env "$KEY_ENV" \
+            --out "$RUN_DIR/provider_preflight.json" \
+            --github
+          status=$?
+          # 0 authenticated, 3 refused, 4 quota/rate, 5 other, 6 not configured.
+          case "$status" in
+            0) echo "::notice title=provider preflight::the credential is accepted";;
+            3) echo "::error title=provider preflight::the endpoint refused the credential (401/403) - this is an authorization result, not a model result";;
+            4) echo "::error title=provider preflight::rate limited or out of quota (429) - the credential is accepted, the account cannot be billed";;
+            5) echo "::warning title=provider preflight::the probe could not reach a verdict (endpoint or transport)";;
+            6) echo "::error title=provider preflight::no credential configured - nothing was sent";;
+          esac
+          exit 0
+
       - name: Live pilot (only when explicitly dispatched as live)
         if: inputs.execution_mode == 'live'
         env:
