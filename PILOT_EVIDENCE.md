@@ -316,30 +316,52 @@ Outstanding non-blocking note: `main` does not carry this branch's
 `arena/providers.py` accounting fix, so attempt counts on `main` runs read 0.
 Merging the branch (or dispatching from it) fixes the reporting, not the auth.
 
-### 5.0.3 The Atria credential is now rejected - and it demonstrably worked last week
+### 5.0.3 Correction: the Atria key is valid - the account is out of quota
 
-No key handling was needed to establish this; the repository's own campaign state
-is the evidence. The same secret name (`ATRIA_API_KEY`) is mapped in every Atria
-workflow (`.github/workflows/reasoning-atria-*.yml`, `atria-campaign.yml`,
-`atria-first5.yml`), so the pilot is not using a different or misnamed secret.
+An earlier reading of this section concluded that "the credential's validity is
+what changed" and that the key needed rotating. **That was wrong**, and the
+provider console disproves it. The account holds exactly one API key:
 
-| Campaign status issue | Recorded state | When |
-|---|---|---|
-| #20 Reasoning-Atria pairwise | **415 / 416 episodes checkpointed**, paused only on `max_tokens_total`; gate 189/189; 1 provider-outage retry | 2026-10-17T15:54Z |
-| #21 Mercury pairwise | **416 / 416 episodes**, campaign `completed`; infrastructure retries only, no auth failures | 2026-10-16T11:27Z |
+| field | value |
+|---|---|
+| key | `rl_eval`, created 2026-09-24, status **Active** |
+| settled calls | 9,436 |
+| billed tokens | 3,559,108 lifetime |
+| last settled use | **2026-10-13 09:56** (Europe/Moscow) |
+| tokens remaining | **0** - total quota used 100% |
+| usage, last 7 days | none |
 
-So on 2026-10-17 Atria-Dawn-Preview over `/v1/responses` with nested
-`reasoning:{effort}` accepted this repository's credential and produced scored
-episodes at scale. On 2026-10-24 the same secret returns Atria's own
-`{"code":"invalid_api_key"}` (run 40068694722). The harness, endpoint, protocol,
-model id and secret mapping are therefore unchanged and provably working; the
-**credential's validity is what changed** between those dates (rotation,
-revocation, expiry, or a dashboard token pasted instead of an API key). Only the
-repository owner can act on that.
+The key was never revoked (revoked keys would still be listed), so there is no
+other candidate for the Actions secret and nothing to rotate. What the console
+shows instead is an account whose quota is exhausted: 3.56 M tokens billed
+against a fully consumed allowance, with the meter stopping on 2026-10-13 - the
+same boundary after which every Atria attempt in this repository has failed.
 
-Consequence for this pilot, per its own contract: do not retry the same key, do
-not raise a ceiling, do not substitute another provider to manufacture a result.
-The remaining path to a scored episode is the other approved provider.
+The pilot's own failure (`credential_rejected` / `{"code":"invalid_api_key"}`,
+run 40068694722) is therefore an auth-shaped refusal from a key that has nowhere
+to bill, not evidence of a malformed, revoked or mis-pasted secret. The two
+readings are not distinguishable from the response body alone, which is why the
+distinction was worth checking in the console rather than asserting.
+
+Residual uncertainty, stated rather than smoothed over: campaign issue #20 records
+**415/416 episodes** with its last write on 2026-10-17, while the meter settles
+nothing after 2026-10-13. Either that checkpoint reflects traffic that was
+reserved before the allowance ran out, or settlement lags the call. A single
+minimal credentialed request would separate the two readings; it is not worth a
+key change, and it is not required for anything this pilot still owes.
+
+Consequence for the pilot, unchanged in effect but for a different reason: Atria
+cannot produce a scored episode while the account has no remaining quota, and
+restoring quota (Duanyan Token Plan, or the provider's token-request form) is
+outside this task's contract - no top-ups, no new accounts, no provider
+substitution. **Atria stays unattempted and is recorded as blocked-by-quota, not
+as a credential or configuration defect.** The Atria path itself remains proven:
+its Responses-wire body shape is pinned by the offline check in section 3, and
+the credential's own history shows 9,436 settled calls using it.
+
+The provider's 2026-10-24 notice also confirms `Atria-Dawn-Preview` remains
+compatible now that `Atria-Dawn` is available, so the pinned model id needs no
+change; a future run may use either.
 
 ### 5.0.4 Run 40070994013 (`main@71f1289`, **mercury**, live): every step green
 
