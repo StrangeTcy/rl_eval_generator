@@ -60,10 +60,13 @@ jobs:
       SEEDS: "1"
       MATRIX: ""
       MAX_API_CALLS: "48"
-      MAX_TOKENS_TOTAL: "49152"
+      # Run 40070994013 rejected both submissions before grading with a 1024-token
+      # per-response cap. 4096 tokens x 8 steps x 3 attempts = 98,304 tokens per
+      # case, so the two-case total is 196,608 - the plan fails closed below that.
+      MAX_TOKENS_TOTAL: "196608"
       MAX_WALL_SECONDS: "4800"
       MAX_STEPS: "8"
-      MAX_TOKENS: "1024"
+      MAX_TOKENS: "4096"
       INVALID_RETRIES: "2"
       PROVIDER: ${{ inputs.provider }}
       EXECUTION_MODE: ${{ inputs.execution_mode }}
@@ -291,10 +294,17 @@ jobs:
           if [ ! -f "$RUN_DIR/suite_checkpoint.json" ]; then
             exit 0
           fi
+          # Annotations are only parsed when they reach stdout; `>> $GITHUB_STEP_SUMMARY`
+          # would turn them into literal text in the summary instead of run-page
+          # annotations. So: annotations to stdout, readable markdown to the summary.
           python tools/recursive_gluing_study.py diagnose \
             --run-out "$RUN_DIR" \
             --manifest "$PLAN_DIR/study_manifest.json" \
-            --github >> "$GITHUB_STEP_SUMMARY"
+            --out "$RUN_DIR/pause_diagnosis.json" \
+            --github
+          python tools/recursive_gluing_study.py diagnose \
+            --run-out "$RUN_DIR" \
+            --manifest "$PLAN_DIR/study_manifest.json" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summarise the outcome
         if: always()
