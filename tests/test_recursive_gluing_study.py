@@ -974,10 +974,10 @@ def test_reasoning_pilot_workflow_pins_the_frozen_slice_and_its_ceilings() -> No
     assert env["SEEDS"] == "1"
     for name, value in {
         "MAX_API_CALLS": "48",
-        "MAX_TOKENS_TOTAL": "49152",
+        "MAX_TOKENS_TOTAL": "196608",
         "MAX_WALL_SECONDS": "4800",
         "MAX_STEPS": "8",
-        "MAX_TOKENS": "1024",
+        "MAX_TOKENS": "4096",
         "INVALID_RETRIES": "2",
     }.items():
         assert env[name] == value, f"{name} drifted from the frozen pilot ceiling"
@@ -1004,8 +1004,8 @@ def test_reasoning_pilot_workflow_pins_the_frozen_slice_and_its_ceilings() -> No
         plan = study.build_plan(
             [case], scope="diagnostic", matrix="diagnostic", seeds=[1],
             provider=provider, model=model, api_base=None, wire_api=wire_api,
-            reasoning_effort="high", max_api_calls=48, max_tokens_total=49_152,
-            max_wall_seconds=4_800, max_steps=8, max_tokens=1_024,
+            reasoning_effort="high", max_api_calls=48, max_tokens_total=196_608,
+            max_wall_seconds=4_800, max_steps=8, max_tokens=4_096,
         )
         assert plan["within_limits"] is True
         assert plan["limits"]["max_http_attempts"] == 192
@@ -1014,8 +1014,8 @@ def test_reasoning_pilot_workflow_pins_the_frozen_slice_and_its_ceilings() -> No
                 [case], scope="diagnostic", matrix="diagnostic", seeds=[1],
                 provider=provider, model=model, api_base=None,
                 wire_api="chat_completions" if wire_api == "responses" else "responses",
-                reasoning_effort="high", max_api_calls=48, max_tokens_total=49_152,
-                max_wall_seconds=4_800, max_steps=8, max_tokens=1_024,
+                reasoning_effort="high", max_api_calls=48, max_tokens_total=196_608,
+                max_wall_seconds=4_800, max_steps=8, max_tokens=4_096,
             )
 
     # A credential is never referenced from a shell step, and only the two

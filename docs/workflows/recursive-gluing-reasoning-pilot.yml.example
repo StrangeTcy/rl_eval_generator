@@ -60,10 +60,13 @@ jobs:
       SEEDS: "1"
       MATRIX: ""
       MAX_API_CALLS: "48"
-      MAX_TOKENS_TOTAL: "49152"
+      # Run 40070994013 rejected both submissions before grading with a 1024-token
+      # per-response cap. 4096 tokens x 8 steps x 3 attempts = 98,304 tokens per
+      # case, so the two-case total is 196,608 - the plan fails closed below that.
+      MAX_TOKENS_TOTAL: "196608"
       MAX_WALL_SECONDS: "4800"
       MAX_STEPS: "8"
-      MAX_TOKENS: "1024"
+      MAX_TOKENS: "4096"
       INVALID_RETRIES: "2"
       PROVIDER: ${{ inputs.provider }}
       EXECUTION_MODE: ${{ inputs.execution_mode }}
