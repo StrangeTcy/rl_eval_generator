@@ -89,7 +89,14 @@ jobs:
               WIRE_API="responses"
               REASONING_EFFORT="high"
               KEY_ENV="ATRIA_API_KEY"
-              API_BASE="https://api.atria-asi.ai/v1"
+              # The InkStone / token-plan host, NOT api.atria-asi.ai. Two
+              # different services answer Atria requests: the website API
+              # (api.atria-asi.ai), whose allowance is exhausted and which answers
+              # this credential with 401 invalid_api_key, and the research token
+              # plan (discovery-api...), where Atria-Dawn is free of charge. Every
+              # scored Atria episode in this repository came from the token-plan
+              # host, per experiments/reasoning_atria_pairwise_campaign.yaml.
+              API_BASE="https://discovery-api.intern-ai.org.cn/v1"
               ;;
             mercury)
               MODEL="mercury-2.5"
