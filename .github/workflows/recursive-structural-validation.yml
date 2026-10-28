@@ -1,0 +1,49 @@
+name: Recursive structural validation (no providers)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-behavior:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies on the hosted runner
+        run: python -m pip install -r requirements.txt
+      - name: Validate the nine environments and study contract
+        run: >-
+          python -m pytest
+          tests/test_recursive_gluing.py
+          tests/test_recursive_gluing_discovery.py
+          tests/test_recursive_maze_gluing.py
+          tests/test_recursive_distributed_gluing.py
+          tests/test_recursive_epistemic_gluing.py
+          tests/test_recursive_compiler_bootstrap.py
+          tests/test_recursive_error_correcting_codes.py
+          tests/test_recursive_coarse_graining.py
+          tests/test_recursive_holonomy_gluing.py
+          tests/test_recursive_apps_readiness.py
+          tests/test_recursive_gluing_study.py
+          tests/test_instance_oracle_reference.py
+          --junitxml=structural-validation.xml
+      - name: Record algorithm rivals on the same public grading instances
+        run: >-
+          python tools/recursive_necessity_baselines.py --structural
+          --depth 2 --seed 41 --json structural-rivals.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recursive-structural-validation
+          path: |
+            structural-validation.xml
+            structural-rivals.json
+          if-no-files-found: warn

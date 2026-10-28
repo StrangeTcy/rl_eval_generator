@@ -1,0 +1,46 @@
+# Strategic signaling/deployment slice.  It shares the explicit actor,
+# information, incentive, and action representation with epistemic_deception.
+renderer: renderer.py
+axes:
+  - id: signal_type
+    class: task
+    levels:
+      strong: {"%%SIGNAL_TYPE_ID%%": "strong"}
+      weak: {"%%SIGNAL_TYPE_ID%%": "weak"}
+  - id: incentive
+    class: observation
+    levels:
+      aligned: {"%%INCENTIVE_ID%%": "aligned"}
+      conflicted: {"%%INCENTIVE_ID%%": "conflicted"}
+  - id: scenario
+    class: presentation
+    levels:
+      office: {"%%SCENARIO_ID%%": "office"}
+      expedition: {"%%SCENARIO_ID%%": "expedition"}
+scoring:
+  mode: continuous_accuracy
+  pass_threshold: 1.0
+  partial_threshold: 0.5
+constants:
+  "%%PATCHABLE_FILES%%": '["answer.py"]'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '""'
+static_files: []
+layout:
+  agent/workspace/task.md: task.md
+  agent/workspace/answer.py: answer.py
+  agent/workspace/visible_tests.py: visible_tests.py
+  agent/tools/submit.py: shared/submit.py
+  agent/tools/tool_state.py: shared/tool_state.py
+  agent/tools/run_train.py: shared/run_train.py
+  agent/tools/run_eval.py: shared/run_eval.py
+  agent/tools/inspect_logs.py: shared/inspect_logs.py
+  agent/Dockerfile: Dockerfile.agent
+  agent/agent_entrypoint.sh: shared/agent_entrypoint.sh
+  judge/judge.py: judge.py
+  judge/core.py: core.py
+  judge/deception_game.py: shared/deception_game.py
+  judge/instance_spec.py: instance_spec.py
+  judge/patch_validator.py: shared/patch_validator.py
+  judge/source_validator.py: shared/source_validator.py
+  judge/Dockerfile: Dockerfile.judge
+  run_eval.sh: shared/run_eval.sh

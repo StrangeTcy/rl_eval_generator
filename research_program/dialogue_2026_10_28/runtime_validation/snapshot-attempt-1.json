@@ -1,0 +1,166 @@
+{
+  "schema": "op-validation-snapshot/1",
+  "created_at": "2026-10-28T13:47:26.296Z",
+  "base_commit": "507a62730d66a9d0b7ad8eccb62b23f72b0dd3d3",
+  "branch": "codex/op-runtime-validation-20261028",
+  "execution_location": "GitHub-hosted ubuntu-latest; no local Python execution",
+  "workflow_path_on_validation_branch": ".github/workflows/recursive-gluing-eval.yml",
+  "workflow_note": "Existing dispatch registration used on the isolated validation branch with the reviewed hosted-workflow.yml contents. Default branch and local sibling workflow are not changed.",
+  "files": [
+    {
+      "path": "arena/inquiry/baselines.py",
+      "bytes": 1200,
+      "sha256": "6233524f17ccf7926086d24f69ba19b0e76eb40d18067cc9a75616c75d4d5bab"
+    },
+    {
+      "path": "arena/inquiry/diagnostic.py",
+      "bytes": 7946,
+      "sha256": "d0d241b7302a89e7f32128f1173deaad08721f361741264de6d5b0547ce37cb4"
+    },
+    {
+      "path": "arena/inquiry/finite.py",
+      "bytes": 3979,
+      "sha256": "bc332353f525f0c5b8c3dec8d755a953c3f0704c8e7e9fa2bcfd3130f5634171"
+    },
+    {
+      "path": "arena/inquiry/presenter.py",
+      "bytes": 1569,
+      "sha256": "797f71b683e071a3729106d3844e6a82dba177f88994329dcab689deb2c57e2f"
+    },
+    {
+      "path": "arena/inquiry/reference.py",
+      "bytes": 5560,
+      "sha256": "26c31d260ecab4a64ab4c8199cd56ca7b1014302e844365ef81cc359e2949ca3"
+    },
+    {
+      "path": "arena/inquiry/session.py",
+      "bytes": 4242,
+      "sha256": "8ada4766d2be9b740fccba3bff64dcee4fcb63c60bcd1bc41e379988f0070bd9"
+    },
+    {
+      "path": "arena/inquiry/strategic.py",
+      "bytes": 13632,
+      "sha256": "63153fe28915e3eac79249cb5d0efcfbb04a4a69805dd865943e0ccab6eff4dd"
+    },
+    {
+      "path": "arena/inquiry/trial.py",
+      "bytes": 1832,
+      "sha256": "b8e981752d9131cf2f98b8faf496d34d004d12496ca8475cf8c99e17c5a1f415"
+    },
+    {
+      "path": "arena/inquiry/__init__.py",
+      "bytes": 95,
+      "sha256": "2b48bea364a2e2f768af8234cebf8e8332ee5a416736b58f9b1e5f5809498a73"
+    },
+    {
+      "path": "arena/inquiry/__main__.py",
+      "bytes": 130,
+      "sha256": "9fd53bc11c09644b48777d3ab2de814b8790db4e7a348ccbcc3c9f43f492e941"
+    },
+    {
+      "path": "arena/recursive_programs/game.py",
+      "bytes": 10543,
+      "sha256": "2aade1e5ae39ec95d8ea695f536625590734de750c5dfceb2f522177b24b4d66"
+    },
+    {
+      "path": "arena/recursive_programs/reference.py",
+      "bytes": 7027,
+      "sha256": "5cb52268c3261742e54eaff8ef3869f662a6192690bf86c2f5aa5fd6121072a8"
+    },
+    {
+      "path": "arena/recursive_programs/semantics.py",
+      "bytes": 5973,
+      "sha256": "a62777cfb986f0d780b3b080d326e44ec478eb867091fb7bce58d873e25d061d"
+    },
+    {
+      "path": "arena/recursive_programs/session.py",
+      "bytes": 3958,
+      "sha256": "8ba2433896c24548bd54c8bb19b9d0c02bb83d4c74d4c832a1d4bc1006bcf2b2"
+    },
+    {
+      "path": "arena/recursive_programs/__init__.py",
+      "bytes": 155,
+      "sha256": "12f681b144217b8e7c63eedcd98e59e70c1ad94b4936f308b186b3e7fa32ae51"
+    },
+    {
+      "path": "arena/recursive_programs/__main__.py",
+      "bytes": 103,
+      "sha256": "cd15d726751eefca50b1152feb9bdda9e3cbc680e084a76c10e4c692008cdb24"
+    },
+    {
+      "path": "arena/epistemic_control/game.py",
+      "bytes": 12182,
+      "sha256": "32ea6c8ae74e0079cf88aea2c539951152073214708abec6648cb5ea84bd547f"
+    },
+    {
+      "path": "arena/epistemic_control/planning.py",
+      "bytes": 7370,
+      "sha256": "499bafb893e9ec07d6a0cf795b9a6b4535993646c2eecf713924b737f256b2d2"
+    },
+    {
+      "path": "arena/epistemic_control/reference_semantics.py",
+      "bytes": 4970,
+      "sha256": "d1ab0728a889315a74a5293ea94945a30fc33006d49fdd9fb8a86a9dfbb8c675"
+    },
+    {
+      "path": "arena/epistemic_control/semantics.py",
+      "bytes": 6782,
+      "sha256": "2d216f5b5b09be088c4e342acab1422d8af0fb8646524019f512c7d7ea2194da"
+    },
+    {
+      "path": "arena/epistemic_control/__init__.py",
+      "bytes": 88,
+      "sha256": "5e29420633767e0643610fb542928d3e2adcf517e47e3609310949b8d6d22b0f"
+    },
+    {
+      "path": "tests/test_inquiry_games.py",
+      "bytes": 12735,
+      "sha256": "970b67a26f2def0d989bc8ff859ef5d7b413a639c0989e33e82361ec9f45b248"
+    },
+    {
+      "path": "tests/test_inquiry_op_validation.py",
+      "bytes": 13056,
+      "sha256": "49907545bab14e7906b55b3cdd1c8f682ddc24017e28905ded4259bfa7a03aac"
+    },
+    {
+      "path": "tests/test_recursive_programs.py",
+      "bytes": 11503,
+      "sha256": "eb13f5ef85269b6b0ea102e9fb09da7340990e6d182a714c291e084b4e5298f9"
+    },
+    {
+      "path": "tests/test_recursive_programs_op_validation.py",
+      "bytes": 7669,
+      "sha256": "6ae24af022ae0b81a0469addda6b52322c1a58728d12450ef36fb00a285cf47b"
+    },
+    {
+      "path": "tests/test_epistemic_control_math.py",
+      "bytes": 5463,
+      "sha256": "9a039ee4b2310a5e2ffc8382ac6de4e2a510c0fb3312bc891f64366a77937f27"
+    },
+    {
+      "path": "tests/test_epistemic_control_op_validation.py",
+      "bytes": 9959,
+      "sha256": "ca99da9697be016abfa7a54ebf7798c6e99e483f86fc08f85b32cb92483cb5fc"
+    },
+    {
+      "path": "arena/__init__.py",
+      "bytes": 219,
+      "sha256": "e77cd08d38fc818b6b42005ae069f1f866200baf5338ca3736f6767818a8bb43"
+    },
+    {
+      "path": "arena/providers.py",
+      "bytes": 51393,
+      "sha256": "5fde9ebea8a9e13e0d218789046e74901af5d6de26c7ca0d670148272e385671"
+    },
+    {
+      "path": "arena/secrets.py",
+      "bytes": 10898,
+      "sha256": "cf3bd2f995a90128b3027ab5e0722813b9d36c59e2930d9fb5e1305eb2948b69"
+    },
+    {
+      "path": "research_program/dialogue_2026_10_28/inventory.json",
+      "bytes": 1056062,
+      "sha256": "5735b7d66e3ed1f6d187f9086806be6bb1ee3322284c0cdd2c227b5469780a85"
+    }
+  ]
+}

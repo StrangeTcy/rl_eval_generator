@@ -24,6 +24,9 @@ CHECK_NAMES = (
     "assembled_sat",
     "assembled_unsat",
     "opaque_twin",
+    "lock_capacity_sat",
+    "lock_capacity_unsat",
+    "address_twin",
     "deterministic",
 )
 
@@ -92,10 +95,11 @@ def generate_job(
             "parent": parent,
             "child": child,
             "program": program,
+            "rule": (1 + seed % max(1, modulus - 1), (seed + i + 1) % modulus, 1),
         }
     return {
         "modulus": int(modulus),
-        "input": 1,
+        "input": 1 + seed % max(1, modulus - 1),
         "lock_count": int(lock_count),
         "workers": workers,
         "root": names[0],
@@ -113,7 +117,8 @@ def relabel_job(job: Mapping[str, Any], seed: int) -> dict[str, Any]:
         workers[mapping[old]] = {
             "parent": None if spec["parent"] is None else mapping[spec["parent"]],
             "child": None if spec["child"] is None else mapping[spec["child"]],
-            "program": list(spec["program"]),
+            "program": SchedulerControls().rename_ops(tuple(spec["program"]), mapping),
+            "rule": spec.get("rule", (1, 1, 0) if spec["child"] is None else (1, 0, 1)),
         }
     return {
         "modulus": job["modulus"],
@@ -180,6 +185,8 @@ def replay_trace(job: Mapping[str, Any], trace: list, max_events: int = 10_000) 
         if agent not in workers:
             return False, f"event {i}: unknown agent", None
         spec = workers[agent]
+        if agent != job["root"] and not spawned[spec["parent"]]:
+            return 0, f"event {i}: worker has not been spawned", None
         program = spec["program"]
         if pc[agent] >= len(program):
             return False, f"event {i}: {agent} already finished", None
@@ -217,9 +224,11 @@ def replay_trace(job: Mapping[str, Any], trace: list, max_events: int = 10_000) 
             if spec["child"] is not None:
                 if extra is None:
                     return False, f"event {i}: compute without child result", None
-                value[agent] = (base + extra) % modulus
+                a, b, c = spec.get("rule", (1, 0, 1))
+                value[agent] = (a * base + b + c * extra) % modulus
             else:
-                value[agent] = (base + 1) % modulus
+                a, b, c = spec.get("rule", (1, 1, 0))
+                value[agent] = (a * base + b) % modulus
         elif op.startswith("send:"):
             target = _resolve(agent, spec, op.split(":", 1)[1])
             if target is None:
@@ -263,9 +272,13 @@ def _enabled(job, pc, inbox, value, last_recv, mail, lock_held, holding, spawned
     for name, spec in workers.items():
         if pc[name] >= len(spec["program"]):
             continue
+        if name != job["root"]:
+            parent = spec["parent"]
+            if pc[parent] <= tuple(workers[parent]["program"]).index("spawn"):
+                continue
         op = spec["program"][pc[name]]
         if op == "spawn":
-            if inbox[name] is None:
+            if inbox[name] is None or spec["child"] is None:
                 continue
             enabled.append(name)
         elif op == "lock":
@@ -282,7 +295,7 @@ def _enabled(job, pc, inbox, value, last_recv, mail, lock_held, holding, spawned
             enabled.append(name)
         elif op.startswith("send:"):
             payload = value[name] if value[name] is not None else inbox[name]
-            if payload is None:
+            if payload is None or _resolve(name, spec, op.split(":", 1)[1]) is None:
                 continue
             enabled.append(name)
         elif op.startswith("recv:"):
@@ -370,9 +383,11 @@ def shortest_trace(job: Mapping[str, Any], max_nodes: int = 80_000) -> Optional[
                 lock2 -= 1
             elif op == "compute":
                 if spec["child"] is not None:
-                    value2[agent] = (inbox2[agent] + last2[agent]) % modulus
+                    a, b, c = spec.get("rule", (1, 0, 1))
+                    value2[agent] = (a * inbox2[agent] + b + c * last2[agent]) % modulus
                 else:
-                    value2[agent] = (inbox2[agent] + 1) % modulus
+                    a, b, c = spec.get("rule", (1, 1, 0))
+                    value2[agent] = (a * inbox2[agent] + b) % modulus
             elif op.startswith("send:"):
                 target = _resolve(agent, spec, op.split(":", 1)[1])
                 payload = value2[agent] if value2[agent] is not None else inbox2[agent]
@@ -487,6 +502,9 @@ def build_grade_jobs(*, depth: int, regime: str, opacity: str, seed: int) -> lis
             generate_job(depth=max(depth, 1), regime=CYCLIC_UNSAT, opacity=opacity, seed=seed + 13),
         ),
         ("opaque_twin", relabel_job(configured, seed + 99)),
+        ("lock_capacity_sat", SchedulerControls().rendezvous(max(2, depth), seed + 31, 2)),
+        ("lock_capacity_unsat", SchedulerControls().rendezvous(max(2, depth), seed + 31, 1)),
+        ("address_twin", SchedulerControls().addresses(configured)),
     ]
 
 
@@ -506,3 +524,39 @@ def grade_solver(solve_fn: Callable, *, depth: int, regime: str, opacity: str, s
     except Exception:
         checks["deterministic"] = False
     return checks
+
+
+class SchedulerControls:
+    """Causal capacity interventions and equivalent endpoint presentations."""
+
+    def rename_ops(self, program, mapping):
+        if not program:
+            return ()
+        operation = program[0]
+        verb, separator, target = operation.partition(":")
+        renamed = verb + separator + mapping.get(target, target) if separator else operation
+        return (renamed,) + self.rename_ops(program[1:], mapping)
+
+    def addresses(self, job, names=None):
+        if names is None:
+            job = copy.deepcopy(job)
+            return self.addresses(job, tuple(job["workers"]))
+        if not names:
+            return job
+        spec = job["workers"][names[0]]
+        spec["program"] = self.rename_ops(tuple(spec["program"]),
+                                          {"parent": spec["parent"], "child": spec["child"]})
+        return self.addresses(job, names[1:])
+
+    def rendezvous(self, depth, seed, capacity):
+        job = generate_job(depth=depth, regime=TREE, opacity=OPAQUE,
+                           seed=seed, lock_count=capacity)
+        root = job["workers"][job["root"]]
+        root["program"] = ("spawn", "lock", "recv:child", "compute", "unlock")
+        job.pop("meta", None)
+        return job
+
+    def capacity_blind(self, job):
+        foil = copy.deepcopy(job)
+        foil["lock_count"] = 1000
+        return reference_certificate(foil)

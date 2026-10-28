@@ -117,6 +117,19 @@ torch.save(outputs, "eval_outputs.pt")
     except Exception:
         checks["deterministic"] = False
 
+    # Keep path dependence as a named mandatory condition rather than allowing
+    # a globally wrong transport result to be hidden by easy checks.
+    try:
+        first = row.get("first")
+        from network import paths_agree
+        checks["path_consistency"] = (
+            isinstance(first, dict)
+            and type(first.get("path_consistent")) is bool
+            and first["path_consistent"] is paths_agree(configured)
+        )
+    except Exception:
+        checks["path_consistency"] = False
+
     passed = sum(1 for name in CHECK_NAMES if checks.get(name))
     accuracy = passed / float(len(CHECK_NAMES))
     for name in CHECK_NAMES:

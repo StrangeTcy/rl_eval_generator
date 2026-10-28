@@ -66,3 +66,19 @@ all of the blocks at once.
 ```bash
 python visible_tests.py
 ```
+
+## Modal reachability certificate
+
+Some generated models have four agents and a `knowledge_probe = [agents, atom]`.
+Here agents is an ordered sequence and the query is the corresponding nested
+knowledge formula about atom. The modal order is at least three in this probe
+family. Start with the actual outer world. For each agent in order, replace
+the current reachable set by the union of that agent's outer information
+cells through the currently reachable worlds.
+
+Return `"reachability"` as the sequence of reachable sets, including the
+initial singleton and the set after every agent step. World order within a
+set does not affect acceptance. This field is required when knowledge_probe
+is present. The ordinary query_value and bundle_possible conclusions and
+joint witnesses remain required. Nested frames use the stated product-frame
+semantics; outer and inner report intersections are separate conditions.

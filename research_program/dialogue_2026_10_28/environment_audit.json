@@ -1,0 +1,976 @@
+{
+  "schema": "environment-source-audit/1",
+  "registered_count": 50,
+  "entries": [
+    {
+      "id": "glyph",
+      "config": "envs/glyph/config.yaml",
+      "judge": "envs/glyph/files/judge.py",
+      "judge_sha256": "c9edfaf42022c7995a288dc79d85804aa7d469628b1c2f54fac554af7516e733",
+      "check_labels": [
+        "training_completed",
+        "artifact_found",
+        "optimization_progressed",
+        "spatial_invariance_learned"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "architecture",
+        "optimizer",
+        "red_herring",
+        "visible_tests",
+        "data_clue",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "batchnorm_ema",
+      "config": "envs/batchnorm_ema/config.yaml",
+      "judge": "envs/batchnorm_ema/files/judge.py",
+      "judge_sha256": "dc344dbe372a3f5e52306c799276f024e0b339e3a5329933de67f690e08e6699",
+      "check_labels": [
+        "training_completed",
+        "artifact_found",
+        "running_stats_sane",
+        "eval_mode_consistent"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "optimizer_hint",
+        "red_herring",
+        "visible_tests",
+        "data_complexity",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "moco",
+      "config": "envs/moco/config.yaml",
+      "judge": "envs/moco/files/judge.py",
+      "judge_sha256": "83ff4dd62561f2726109a0171e26e6839107068901f3cb6549b4af726c358a00",
+      "check_labels": [
+        "training_completed",
+        "artifact_found",
+        "non_collapsed_features",
+        "temperature_sensitive",
+        "queue_wraparound"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "distractors",
+        "queue_math",
+        "temperature",
+        "visible_tests",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "rope",
+      "config": "envs/rope/config.yaml",
+      "judge": "envs/rope/files/judge.py",
+      "judge_sha256": "4773f8aa0dcf90e476f6e286e07183bfd876fa1c1b921ed3c15aa0dbccc39b85",
+      "check_labels": [
+        "rope_pairing",
+        "rope_offset",
+        "cache_state",
+        "attention_offset_propagated",
+        "chunked_equals_full",
+        "training_completed",
+        "artifact_found",
+        "hidden_metric_passed",
+        "anti_gaming_passed"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "paper_clarity",
+        "implementation_style",
+        "notation_mismatch",
+        "visible_tests",
+        "hidden_context",
+        "interaction_depth",
+        "investigation_difficulty",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "tensor_functor",
+      "config": "envs/cat_theo/tensor_functor/config.yaml",
+      "judge": "envs/cat_theo/tensor_functor/files/judge.py",
+      "judge_sha256": "e07a8dcd9cbbec628886d00ee2837725602b4a5f70ca07650335dab6bc035a49",
+      "check_labels": [
+        "basic_run",
+        "vmap_naturality",
+        "dynamic_spatial",
+        "jacobian_naturality"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "selected judge source inspected"
+    },
+    {
+      "id": "equivariant_diagram",
+      "config": "envs/cat_theo/equivariant_diagram/config.yaml",
+      "judge": "envs/cat_theo/equivariant_diagram/files/judge.py",
+      "judge_sha256": "e03aad5f93cd129e45150a6a7fe3308d275043a48a380c61f8049f991ac53ad4",
+      "check_labels": [
+        "basic_run",
+        "equivariance_commutes"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "stochastic_monad",
+      "config": "envs/cat_theo/stochastic_monad/config.yaml",
+      "judge": "envs/cat_theo/stochastic_monad/files/judge.py",
+      "judge_sha256": "6986befad5d0f06548ec7a72b39718c2945a20fa59c157b9edde40a4628d02bb",
+      "check_labels": [
+        "left_identity",
+        "right_identity",
+        "independence"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "functorial_augmentation",
+      "config": "envs/cat_theo/functorial_augmentation/config.yaml",
+      "judge": "envs/cat_theo/functorial_augmentation/files/judge.py",
+      "judge_sha256": "e743d479d2a87dcadbeba556f1cd0b4dcd980edc5914c3ae9fb375e9678c8109",
+      "check_labels": [
+        "basic_run",
+        "symmetry_preserved"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "compositional_optimizer",
+      "config": "envs/cat_theo/compositional_optimizer/config.yaml",
+      "judge": "envs/cat_theo/compositional_optimizer/files/judge.py",
+      "judge_sha256": "484daeb9f83d6e9870a3433eafe44b8b4151418a9bcb672a7fbe299419d1bf87",
+      "check_labels": [
+        "basic_run",
+        "state_isolated"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "tokenizer_adjunction",
+      "config": "envs/cat_theo/tokenizer_adjunction/config.yaml",
+      "judge": "envs/cat_theo/tokenizer_adjunction/files/judge.py",
+      "judge_sha256": "c84ba242cd26e51f5aeb50ba780129a8248f804c80ecf1d396abecde5bcec1ed",
+      "check_labels": [
+        "basic_reconstruction",
+        "spacing_correct",
+        "adjunction_unit"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "architecture_naturality",
+      "config": "envs/cat_theo/architecture_naturality/config.yaml",
+      "judge": "envs/cat_theo/architecture_naturality/files/judge.py",
+      "judge_sha256": "e43625dbd9035480dd578fe835b3d9758b7ee2f7b35fecf9baadcf14a0c09a60",
+      "check_labels": [
+        "basic_run",
+        "naturality_commutes"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "transformer_ssm_lift",
+      "config": "envs/cat_theo/transformer_ssm_lift/config.yaml",
+      "judge": "envs/cat_theo/transformer_ssm_lift/files/judge.py",
+      "judge_sha256": "324ed9e142664eda3a1fde390efdb4a7df7da967c54bd8e379e1b730feb31f45",
+      "check_labels": [
+        "basic_run",
+        "isomorphism_preserves_attention"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "categorical_lenses",
+      "config": "envs/cat_theo/categorical_lenses/config.yaml",
+      "judge": "envs/cat_theo/categorical_lenses/files/judge.py",
+      "judge_sha256": "598d44f919b92cde837c43d051ca8ec1b56b6fd57bf06189584f77296efe3a30",
+      "check_labels": [
+        "put_get",
+        "get_put",
+        "put_put"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "monadic_reward",
+      "config": "envs/cat_theo/monadic_reward/config.yaml",
+      "judge": "envs/cat_theo/monadic_reward/files/judge.py",
+      "judge_sha256": "088572f839d67f706366def8e45f929ad02122f8a30517c85afc5d6c871888c5",
+      "check_labels": [
+        "basic_run",
+        "monadic_purity",
+        "boundary_collapse_safe"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "semiring_unification",
+      "config": "envs/cat_theo/semiring_unification/config.yaml",
+      "judge": "envs/cat_theo/semiring_unification/files/judge.py",
+      "judge_sha256": "5600b944d37bb6641b9de4c12e72921647fce706fefaa70fe94a0578aa0a6188",
+      "check_labels": [
+        "arithmetic_ok",
+        "tropical_ok",
+        "boolean_ok"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "ssm_parallel_scan",
+      "config": "envs/cat_theo/semiring/ssm_parallel_scan/config.yaml",
+      "judge": "envs/cat_theo/semiring/ssm_parallel_scan/files/judge.py",
+      "judge_sha256": "fea1a6dfbcda61a0e841233c096477f7796af0be8de662a3d0c7e9165a5dcc03",
+      "check_labels": [
+        "basic_run",
+        "associativity_commutes"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "neuro_symbolic_parser",
+      "config": "envs/cat_theo/semiring/neuro_symbolic_parser/config.yaml",
+      "judge": "envs/cat_theo/semiring/neuro_symbolic_parser/files/judge.py",
+      "judge_sha256": "d1e4679c9401fa712d833f8129d3d7290a1ba378d55cc6f722dbe68fa90aef25",
+      "check_labels": [
+        "basic_run",
+        "gradient_flow_ok"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "gnn_message_passing",
+      "config": "envs/cat_theo/semiring/gnn_message_passing/config.yaml",
+      "judge": "envs/cat_theo/semiring/gnn_message_passing/files/judge.py",
+      "judge_sha256": "d353e89e6b3b28aa459f9ae4806ae8096a6cc741d5a4540d5e05bbf0f3384cc4",
+      "check_labels": [
+        "basic_run",
+        "permutation_equivariance"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "sheaf_schema_sync",
+      "config": "envs/cat_theo/sheaf/sheaf_schema_sync/config.yaml",
+      "judge": "envs/cat_theo/sheaf/sheaf_schema_sync/files/judge.py",
+      "judge_sha256": "dfb06c14bf4a80766e41eb15f339979d3cc7879a970d4e67fbe7d3aec2919dda",
+      "check_labels": [
+        "local_schema_ok",
+        "constraints_preserved",
+        "global_gluing_ok"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "sheaf_invariant_gluing",
+      "config": "envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml",
+      "judge": "envs/cat_theo/sheaf/sheaf_invariant_gluing/files/judge.py",
+      "judge_sha256": "ebf4e05c221c1c8fc683cfed3b061687c34c87d52942ebe241febca587cd6448",
+      "check_labels": [
+        "local_run_ok",
+        "global_gluing_ok",
+        "monotonicity_ok",
+        "robustness_ok"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "sheaf_physical_constraints",
+      "config": "envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml",
+      "judge": "envs/cat_theo/sheaf/sheaf_physical_constraints/files/judge.py",
+      "judge_sha256": "4e5783abf652741a8b151f18366fd42160c7c8926cf0f92906d9a09e7fadc160",
+      "check_labels": [
+        "local_routing_ok",
+        "local_bounds_ok",
+        "global_backbone_ok"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "naming",
+        "symptom_mask"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_gluing",
+      "config": "envs/cat_theo/recursive_gluing/config.yaml",
+      "judge": "envs/cat_theo/recursive_gluing/files/judge.py",
+      "judge_sha256": "07d9f00691e95ed5d2d13bae5e3352a13a7221a0fb8159bcb69b0d280e7ce47c",
+      "check_labels": [
+        "deterministic"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "state_space",
+        "gluing_regime",
+        "label_opacity"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_gluing_discovery",
+      "config": "envs/cat_theo/recursive_gluing_discovery/config.yaml",
+      "judge": "envs/cat_theo/recursive_gluing_discovery/files/judge.py",
+      "judge_sha256": "6c35bc144f1fc20dd3509b05b2fbea465faf5a2f647f39098b608b3c26b764fd",
+      "check_labels": [
+        "deterministic"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "state_space",
+        "gluing_regime",
+        "label_opacity",
+        "structural_ambiguity"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_maze_gluing",
+      "config": "envs/cat_theo/recursive_maze_gluing/config.yaml",
+      "judge": "envs/cat_theo/recursive_maze_gluing/files/judge.py",
+      "judge_sha256": "ac5a28d7b9554df89a964d6cdea8be05e5a463991488cff980341a77625c8ac0",
+      "check_labels": [
+        "deterministic"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "gluing_regime",
+        "label_opacity",
+        "structural_ambiguity"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_distributed_gluing",
+      "config": "envs/cat_theo/recursive_distributed_gluing/config.yaml",
+      "judge": "envs/cat_theo/recursive_distributed_gluing/files/judge.py",
+      "judge_sha256": "d09da2003502db94b8cdf04daa0959eb1e7eb887767e9111431aeacfbed07b2c",
+      "check_labels": [
+        "deterministic"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "gluing_regime",
+        "label_opacity"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_epistemic_gluing",
+      "config": "envs/cat_theo/recursive_epistemic_gluing/config.yaml",
+      "judge": "envs/cat_theo/recursive_epistemic_gluing/files/judge.py",
+      "judge_sha256": "c90c6c70f1bc0e6e1c6e4ee3564e5e3945e9180081584a872efe1727625d4466",
+      "check_labels": [
+        "deterministic"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "gluing_regime",
+        "formula_order",
+        "label_opacity"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_holonomy_gluing",
+      "config": "envs/cat_theo/recursive_holonomy_gluing/config.yaml",
+      "judge": "envs/cat_theo/recursive_holonomy_gluing/files/judge.py",
+      "judge_sha256": "087d9a15ce9ba2336673cf1e672baec68460cc425d0dd13dd4325cd1f05d5247",
+      "check_labels": [
+        "deterministic",
+        "path_consistency"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "map_family",
+        "cycle_regime",
+        "representation"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_compiler_bootstrap",
+      "config": "envs/cat_theo/recursive_compiler_bootstrap/config.yaml",
+      "judge": "envs/cat_theo/recursive_compiler_bootstrap/files/judge.py",
+      "judge_sha256": "bf93bb92d148bab6f037d11d1ed06de5299894bea08472ce551f304e0ac98d6c",
+      "check_labels": [
+        "deterministic"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "bootstrap_regime",
+        "representation"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_error_correcting_codes",
+      "config": "envs/cat_theo/recursive_error_correcting_codes/config.yaml",
+      "judge": "envs/cat_theo/recursive_error_correcting_codes/files/judge.py",
+      "judge_sha256": "3db2c56cf9df3ff20ce4615ec9d8c497db9838684f1644166a2fcf6b8052985b",
+      "check_labels": [
+        "deterministic"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "code_regime",
+        "representation"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "recursive_coarse_graining",
+      "config": "envs/cat_theo/recursive_coarse_graining/config.yaml",
+      "judge": "envs/cat_theo/recursive_coarse_graining/files/judge.py",
+      "judge_sha256": "bd6471b0861b01d6a3ff387708992008fd919ac0845628e3ed1dc9f884485622",
+      "check_labels": [
+        "deterministic"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recursive_depth",
+        "scale_regime",
+        "representation"
+      ],
+      "sibling": "active_recursive_gluing_workstream",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "epistemic_games",
+      "config": "envs/epistemic_games/config.yaml",
+      "judge": "envs/epistemic_games/files/judge.py",
+      "judge_sha256": "3c6dce7d102f006e62e6cc6dff773c224cce2de794947e3345c83e6698415cfc",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "scenario",
+        "evidence",
+        "presentation",
+        "prior",
+        "framing"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "epistemic_announcements",
+      "config": "envs/epistemic_announcements/config.yaml",
+      "judge": "envs/epistemic_announcements/files/judge.py",
+      "judge_sha256": "9a1b06a8c65eac10d7fa43d48aa6c61f99786e2239fefbc40216a03a89e52daa",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "worlds",
+        "depth",
+        "query",
+        "scenario"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "epistemic_nested_knowledge",
+      "config": "envs/epistemic_nested_knowledge/config.yaml",
+      "judge": "envs/epistemic_nested_knowledge/files/judge.py",
+      "judge_sha256": "20fe4d5b6359f3d463b67a1c6261996df84e4930af18a951e22efb649f031a09",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "worlds",
+        "order",
+        "scenario"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "epistemic_fragmented_observation",
+      "config": "envs/epistemic_fragmented_observation/config.yaml",
+      "judge": "envs/epistemic_fragmented_observation/files/judge.py",
+      "judge_sha256": "1b6881247f84f5d320bf0531cbeab67e82e06ef6814a2d4bce702a31addbf425",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "worlds",
+        "fragment",
+        "scenario"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "epistemic_silence",
+      "config": "envs/epistemic_silence/config.yaml",
+      "judge": "envs/epistemic_silence/files/judge.py",
+      "judge_sha256": "d9853216995735403fd167177041314da3c39365b81e76afafd1f4ef3ee76dab",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "observation",
+        "protocol",
+        "prior",
+        "scenario"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "epistemic_type_games",
+      "config": "envs/epistemic_type_games/config.yaml",
+      "judge": "envs/epistemic_type_games/files/judge.py",
+      "judge_sha256": "8964f45b952131f72492c641a2e034e613e0cc9578bc4563a89fd0b5a782d2bd",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "types",
+        "payoffs",
+        "scenario"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "epistemic_deception",
+      "config": "envs/epistemic_deception/config.yaml",
+      "judge": "envs/epistemic_deception/files/judge.py",
+      "judge_sha256": "be4c498a94c59b4626e75b112e23eb84b34afdcbae323f51cc37118ca8febeba",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "mode",
+        "mechanism",
+        "incentive",
+        "visibility",
+        "scenario"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "epistemic_signaling",
+      "config": "envs/epistemic_signaling/config.yaml",
+      "judge": "envs/epistemic_signaling/files/judge.py",
+      "judge_sha256": "fce44b6233f15bc384eb83b478282fddc0d318b04450c1f804eaf9a98de9b470",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "signal_type",
+        "incentive",
+        "scenario"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "rd_state_carry",
+      "config": "envs/recurrent_depth/state_carry/config.yaml",
+      "judge": "envs/recurrent_depth/state_carry/files/judge.py",
+      "judge_sha256": "fecc1025b96578f1b267cb58ef097091c69e8116b26af90178ecc70f330907b9",
+      "check_labels": [
+        "depth_one_exact",
+        "configured_depth_exact",
+        "hidden_depth_exact",
+        "parameter_count_independent_of_depth",
+        "batch_independence"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recurrence_depth",
+        "clue_clarity",
+        "visible_tests",
+        "implementation_obfuscation",
+        "batching_complexity"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "rd_adaptive_halting",
+      "config": "envs/recurrent_depth/adaptive_halting/config.yaml",
+      "judge": "envs/recurrent_depth/adaptive_halting/files/judge.py",
+      "judge_sha256": "1a02daf8a2182780b132958dcbf538d871d4ee999f3c0c7a3452b15b58ae9df6",
+      "check_labels": [
+        "per_example_halting",
+        "permutation_equivariance",
+        "no_cross_example_leakage",
+        "exact_off_by_one",
+        "valid_active_gradients"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recurrence_depth",
+        "clue_clarity",
+        "visible_tests",
+        "implementation_obfuscation",
+        "batching_complexity"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "rd_gradient_credit",
+      "config": "envs/recurrent_depth/gradient_credit/config.yaml",
+      "judge": "envs/recurrent_depth/gradient_credit/files/judge.py",
+      "judge_sha256": "7ddae9ccbb8f09d2952dcb5462ed14e8a2b911757b5b3efaff9cc8580a2d4d07",
+      "check_labels": [
+        "input_gradient_equivalence",
+        "parameter_gradient_equivalence",
+        "finite_larger_depth_gradients",
+        "optimization_reduces_trusted_loss",
+        "no_depth_parameter_duplication"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "recurrence_depth",
+        "clue_clarity",
+        "visible_tests",
+        "implementation_obfuscation",
+        "batching_complexity"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "ts_parse_only",
+      "config": "envs/trajectory_semantics/parse_only/config.yaml",
+      "judge": "envs/trajectory_semantics/parse_only/files/judge.py",
+      "judge_sha256": "3eb1d508d02fe021d8e3e5f7077a87b722e59a8307a1b76d2803924871324249",
+      "check_labels": [
+        "answer_types_are_strings",
+        "witness_is_query_specific",
+        "format_only_does_not_change_answer"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "witness_status",
+        "representation"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "ts_one_step",
+      "config": "envs/trajectory_semantics/one_step/config.yaml",
+      "judge": "envs/trajectory_semantics/one_step/files/judge.py",
+      "judge_sha256": "21f8e05e7fc1ccb85ddcf31e12a0de2002ada66e520701185a86f663b43aaf6f",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "witness_status",
+        "representation"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "ts_trajectory",
+      "config": "envs/trajectory_semantics/trajectory/config.yaml",
+      "judge": "envs/trajectory_semantics/trajectory/files/judge.py",
+      "judge_sha256": "7a661c0f5f4d83eb499815098389068a66957b23a2a0e477d4c2a758d9a0fdb9",
+      "check_labels": [],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "witness_status",
+        "representation"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "regex_state_machine",
+      "config": "envs/weird_machine/regex_state_machine/config.yaml",
+      "judge": "envs/weird_machine/regex_state_machine/files/judge.py",
+      "judge_sha256": "4fc90ed4dc707a143aa92f9a10bb037d4ab5252817b51b13266d37c52e887217",
+      "check_labels": [
+        "regex_used",
+        "basic_step",
+        "length_preservation",
+        "randomized_accuracy",
+        "forensics"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "surface_deceptiveness",
+        "hidden_depth"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "selected judge source inspected"
+    },
+    {
+      "id": "sql_fixed_point",
+      "config": "envs/weird_machine/sql_fixed_point/config.yaml",
+      "judge": "envs/weird_machine/sql_fixed_point/files/judge.py",
+      "judge_sha256": "dcb4b49af30555caf1bc623a77c680577111bdf23aff30bca3af1ec99401b196",
+      "check_labels": [
+        "query_is_sql",
+        "cycle_handling",
+        "cycle_error",
+        "reflexive_semantics",
+        "randomized_reachability"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "surface_deceptiveness",
+        "hidden_depth"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "selected judge source inspected"
+    },
+    {
+      "id": "spreadsheet_dataflow",
+      "config": "envs/weird_machine/spreadsheet_dataflow/config.yaml",
+      "judge": "envs/weird_machine/spreadsheet_dataflow/files/judge.py",
+      "judge_sha256": "6b5fb6321595e6a9310014e4c031e83e82975b1800d24e7dd5016826de346f75",
+      "check_labels": [
+        "formula_syntax",
+        "basic_eval",
+        "randomized_invariance"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "surface_deceptiveness",
+        "hidden_depth"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "css_state_machine",
+      "config": "envs/weird_machine/css_state_machine/config.yaml",
+      "judge": "envs/weird_machine/css_state_machine/files/judge.py",
+      "judge_sha256": "df6b313169829e3d5c46961e8d16a62f5f6929cc1e435ce443b74d28e7a16646",
+      "check_labels": [
+        "rule_structure",
+        "parity_correctness"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "surface_deceptiveness",
+        "hidden_depth"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "template_interpreter",
+      "config": "envs/weird_machine/template_interpreter/config.yaml",
+      "judge": "envs/weird_machine/template_interpreter/files/judge.py",
+      "judge_sha256": "079b01db3b26a5f7572ba691fc206638759907d1869316053abaa76364bd0d8a",
+      "check_labels": [
+        "template_syntax",
+        "basic_render",
+        "randomized_rendering"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "surface_deceptiveness",
+        "hidden_depth"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "id": "ci_dependency_graph",
+      "config": "envs/weird_machine/ci_dependency_graph/config.yaml",
+      "judge": "envs/weird_machine/ci_dependency_graph/files/judge.py",
+      "judge_sha256": "eec9357438d5d187f386368465dd4de547feb712df1e1f421b472719d96f8154",
+      "check_labels": [
+        "workflow_structure",
+        "diamond_dag",
+        "randomized_scheduling"
+      ],
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "current_readiness": "not_executed_this_mission",
+      "axes": [
+        "surface_deceptiveness",
+        "hidden_depth"
+      ],
+      "sibling": "not_sibling",
+      "manual_review": "registry and check inventory only"
+    }
+  ],
+  "concurrent_source_changes": [
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/judge.py",
+      "earlier_audit_sha256": "bf93bb92d148bab6f037d11d1ed06de5299894bea08472ce551f304e0ac98d6c",
+      "latest_observed_sha256": "fd6271c3b50ce9f371b15904e900a0b51e0501647b38f28e421140ae8845f895",
+      "scope": "active recursive-gluing sibling; no edits by this workstream",
+      "interpretation": "Earlier audit evidence remains attached to its original hash. The newer file was fingerprinted, not given a fresh semantic audit."
+    }
+  ]
+}

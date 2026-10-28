@@ -21,6 +21,7 @@ from judge_lib import (
     validate_submission,
 )
 from network import (
+    BootstrapMachine,
     CHECK_NAMES,
     OracleBudgetExceeded,
     build_grade_items,
@@ -112,6 +113,8 @@ torch.save(outputs, "eval_outputs.pt")
     try:
         first, second = row.get("first"), row.get("second")
         ok, _ = verify_certificate(configured, first)
+        checks["bootstrap_chain"] = BootstrapMachine().chain_valid(configured["bootstrap"], first.get("bootstrap"))
+        checks["compiler_semantics"] = BootstrapMachine().semantic_valid(configured["bootstrap"], first.get("bootstrap"))
         checks["deterministic"] = first == second and ok
     except Exception:
         checks["deterministic"] = False

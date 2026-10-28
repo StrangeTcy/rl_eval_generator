@@ -131,12 +131,51 @@ def test_depth_is_series_region_count() -> None:
     assert "meta" not in inf
 
 
-def test_heldout() -> None:
-    n = 0
-    for seed in range(10_000, 10_006):
-        inst = NET.generate_instance(depth=2, regime=NET.REC_COMP, representation=NET.REVEALED, seed=seed)
-        assert NET.true_table_and_fixed(inst)[1] is False
-        n += 1
-    (ROOT / "docs" / "audits" / "2026-10-16-coarse-baselines.json").write_text(
-        json.dumps({"n": n, "local_only_fixed_acc": 0.0, "reference_acc": 1.0}, indent=2) + "\n"
+def test_inferred_label_permutation_is_identifiable() -> None:
+    inst = NET.generate_instance(
+        depth=2, regime=NET.REC_COMP, representation=NET.INFERRED, seed=0
     )
+    public = NET.public_instance(inst)
+    assert "label_perm" not in public
+    cert = NET.reference_certificate(inst)
+    assert cert["label_perm"] == [1, 0]
+    assert NET.verify_certificate(inst, cert)[0]
+    bad = dict(cert)
+    bad["label_perm"] = [0, 1]
+    assert NET.verify_certificate(inst, bad)[0] is False
+
+
+@pytest.mark.parametrize("seed", tuple(range(10_000, 10_006)))
+def test_heldout(seed):
+    inst = NET.generate_instance(depth=2, regime=NET.REC_COMP, representation=NET.REVEALED, seed=seed)
+    assert not NET.true_table_and_fixed(inst)[1]
+    assert NET.verify_certificate(inst, NET.reference_certificate(inst))[0]
+    assert not NET.verify_certificate(inst, NET.arm_local_only(inst))[0]
+
+@pytest.mark.parametrize("seed,width", ((40, 6), (41, 10)))
+def test_structural_quotient_and_single_transition_obstruction(seed, width):
+    model = NET.LumpingTask()
+    task = model.instance(3, seed)
+    broken = model.instance(3, seed, 1)
+    cert = model.solve(task)
+    assert model.size(task[0][0]) == width
+    assert cert[0] == "quotient"
+    assert tuple(map(tuple, cert[2])) == ((1, 0), (0, 0))
+    assert model.verify(task, cert)
+    assert model.solve(broken) == ("obstruction",)
+    assert not model.verify(broken, cert)
+    assert not model.verify(task, ("obstruction",))
+    assert cert[1][model.microscopic_prediction(task, task[2][0])] == cert[3][0]
+
+
+def test_structural_quotient_twin_and_wrong_prediction():
+    model = NET.LumpingTask()
+    task = model.instance(2, 41)
+    twin = model.relabel(task, 97)
+    cert = model.solve(twin)
+    assert model.verify(twin, cert)
+    assert cert[3] == model.solve(task)[3]
+    status, partition, effective, predictions = cert
+    wrong = (status, partition, effective, (1 - predictions[0], predictions[1]))
+    assert not model.verify(twin, wrong)
+    assert not model.verify(twin, (status, partition + (0,), effective, predictions))

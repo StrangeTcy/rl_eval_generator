@@ -10,6 +10,8 @@ def _visible():
         "root": "leaf",
         "depth": 1,
         "cycle": ["leaf"],
+        "paths": {"path_a": ("leaf",), "path_b": ("leaf",)},
+        "transport_edges": (("base", "base", "leaf"), ("base", "base", "leaf")),
         "calibration": {"leaf": [[1, 1]]},
         "representation": "revealed",
         "maps": {"leaf": {"q": 1}},

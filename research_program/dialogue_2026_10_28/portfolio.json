@@ -1,0 +1,127 @@
+{
+  "schema": "epistemic-portfolio/1",
+  "source": "inventory.json",
+  "families": [
+    {
+      "id": "diagnostic_inquiry",
+      "status": "implemented_unexecuted",
+      "files": [
+        "arena/inquiry/diagnostic.py",
+        "arena/inquiry/finite.py",
+        "arena/inquiry/presenter.py"
+      ],
+      "opportunities": [
+        "OP015",
+        "OP025",
+        "OP028",
+        "OP035",
+        "OP039",
+        "OP040",
+        "OP043",
+        "OP059"
+      ],
+      "target": "sequential cost-sensitive inquiry and behavioral presentation sensitivity",
+      "formal_task": "finite-horizon classification risk plus observation cost",
+      "public_information": "prior, all test likelihood rows, costs, past requested outcomes",
+      "private_information": "realized world and world seed",
+      "actions": [
+        "present permutation",
+        "inspect test",
+        "answer decision and distribution"
+      ],
+      "generalization": "parameter regimes only; no hidden-rule or topology generalization implemented",
+      "scores": [
+        "inquiry_regrets",
+        "stop_regret",
+        "decision_regret",
+        "test_cost",
+        "terminal_loss",
+        "brier",
+        "forecast_excess"
+      ],
+      "rivals": [
+        "FirstRow",
+        "NeverInvestigate",
+        "finite exhaustive PublicOracle"
+      ],
+      "value": 5,
+      "gap": 5,
+      "feasibility": 5,
+      "reuse": 5
+    },
+    {
+      "id": "strategic_source",
+      "status": "implemented_unexecuted",
+      "files": [
+        "arena/inquiry/strategic.py",
+        "arena/inquiry/session.py"
+      ],
+      "opportunities": [
+        "OP005",
+        "OP007",
+        "OP010",
+        "OP018",
+        "OP020",
+        "OP023",
+        "OP034",
+        "OP052",
+        "OP075"
+      ],
+      "target": "posterior attribution, payoff-sensitive opponent response, protocol planning, truthful selective communication, and recovery",
+      "formal_task": "persistent four-state source, protocol-dependent response channel, finite-horizon disposition loss plus query cost",
+      "public_information": "prior, noise, payoff and audit visibility contract, chosen protocol responses",
+      "private_information": "source disposition, final quality, sensor draws",
+      "actions": [
+        "protocol rate",
+        "independent reveal",
+        "answer five marginal forecasts"
+      ],
+      "deployment_port": "SenderSession: report under own private quality and public payoff contract",
+      "generalization": "payoff/prior/noise/channel parameter variation only; not novel game structure",
+      "scores": [
+        "disposition_brier",
+        "quality_brier",
+        "intent_brier",
+        "error_brier",
+        "literal_falsehood_brier",
+        "forecast_excess",
+        "protocol_regrets",
+        "stop_regret",
+        "recovery_arm",
+        "disposition_decision_loss",
+        "disposition_decision_regret",
+        "protocol_cost",
+        "deployment_regret"
+      ],
+      "rivals": [
+        "AlwaysDistrust",
+        "StationarySource",
+        "PublicOracle",
+        "always disclose",
+        "always conceal"
+      ],
+      "value": 5,
+      "gap": 5,
+      "feasibility": 4,
+      "reuse": 5
+    }
+  ],
+  "sibling": {
+    "family": "recursive_gluing",
+    "implementation_owner": "active sibling workstream",
+    "source": "docs/decisions/2026-10-26-recursive-gluing-experimental-design.md",
+    "action": "no implementation changes; reuse evidence distinctions"
+  },
+  "execution": {
+    "tests": 0,
+    "episodes": 0,
+    "provider_calls": 0
+  },
+  "future_priority": [
+    "isolated readiness",
+    "truthful subset selection laws",
+    "sincere disagreement",
+    "observationally equivalent causal mechanisms",
+    "independent rule/representation transfer"
+  ]
+}

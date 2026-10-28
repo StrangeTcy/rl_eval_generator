@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase-0 necessity baselines for the three recursive gluing domain families.
+"""Legacy phase-0 baselines and public-input structural rivals for all nine tasks.
 
 Analysis code only. Not imported by any judge. Ground truth is the domain
 oracle already in each network.py. Predictions never read `meta`.
@@ -10,7 +10,9 @@ import argparse
 import copy
 import importlib.util
 import json
+import hashlib
 import sys
+import time
 from collections import defaultdict
 from itertools import combinations, product
 from pathlib import Path
@@ -303,7 +305,7 @@ def sample_dist(net, n: int = 216) -> list[dict]:
             try:
                 return net.job_satisfiable(j)
             except net.OracleBudgetExceeded:
-                return True  # not counted as unsat; recorded separately in audit
+                raise  # legacy summary must not turn missing evidence into SAT
 
         rows.append(
             {
@@ -482,7 +484,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=216)
     parser.add_argument("--json", default="")
+    parser.add_argument("--structural", action="store_true", help="record public-input rivals across all nine environments")
+    parser.add_argument("--depth", default="2")
+    parser.add_argument("--seed", default="41")
     args = parser.parse_args(argv)
+    if args.structural:
+        return StructuralRivals().main(args)
     maze = load_net("envs/cat_theo/recursive_maze_gluing/files/network.py", "maze_net")
     dist = load_net("envs/cat_theo/recursive_distributed_gluing/files/network.py", "dist_net")
     epi = load_net("envs/cat_theo/recursive_epistemic_gluing/files/network.py", "epi_net")
@@ -510,6 +517,158 @@ def main(argv=None) -> int:
     else:
         sys.stdout.write(text + "\n")
     return 0
+
+
+class StructuralRivals:
+    """Provider-free certificate rivals using the existing grading instances.
+
+    Independence is declared per strategy. Reference-conditioned negative
+    controls are never labelled independent solvers. No elapsed-time or
+    accuracy claim exists until this runner is executed.
+    """
+
+    environments = (
+        "recursive_gluing", "recursive_gluing_discovery", "recursive_maze_gluing",
+        "recursive_distributed_gluing", "recursive_epistemic_gluing",
+        "recursive_compiler_bootstrap", "recursive_error_correcting_codes",
+        "recursive_coarse_graining", "recursive_holonomy_gluing",
+    )
+
+    def gluing_local(self, instance):
+        return {"status": "sat", "assignment": self.net.naive_spanning_forest_assignment(instance)}
+
+    def epistemic_facts(self, instance):
+        cert = self.net.reference_certificate(instance)
+        cert["query_value"] = self.net.atom_at(instance, "p", tuple(instance["actual"]))
+        return cert
+
+    def configure(self, environment, depth, seed):
+        net = load_net("envs/cat_theo/" + environment + "/files/network.py", "rival_" + environment)
+        self.net = net
+        if environment == "recursive_gluing":
+            items = net.build_grade_instances(depth=depth, domain_size=3, regime=net.CYCLIC_SAT, label_mode=net.OPAQUE, seed=seed)
+            return net, None, items, (("expanded_csp", "reference", net.reference_solve),
+                                     ("spanning_forest", "local_constraint_ablation", self.gluing_local))
+        if environment == "recursive_gluing_discovery":
+            items = net.build_grade_grammars(depth=depth, interface_size=3, regime=net.CYCLIC_SAT, opacity=net.OPAQUE, ambiguity=net.CLEAN, seed=seed)
+            return net, net.public_grammar, items, (("compact_relations", "reference", net.reference_certificate),
+                ("expanded_csp", "independent_answer_construction", net.arm_expanded),
+                ("copy_leaf", "local_template", net.arm_copy_leaf_upward))
+        if environment == "recursive_maze_gluing":
+            items = net.build_grade_mazes(depth=depth, regime=net.CYCLIC_SAT, opacity=net.OPAQUE, ambiguity=net.CLEAN, seed=seed)
+            return net, net.public_maze, items, (("full_state_bfs", "reference_search", net.reference_certificate),
+                ("ignore_orientation", "search_with_ablation", net.arm_ignore_orientation))
+        if environment == "recursive_distributed_gluing":
+            items = net.build_grade_jobs(depth=depth, regime=net.TREE, opacity=net.OPAQUE, seed=seed)
+            return net, net.public_job, items, (("scheduler_bfs", "reference_search", net.reference_certificate),
+                ("ignore_capacity", "search_with_ablation", net.SchedulerControls().capacity_blind))
+        if environment == "recursive_epistemic_gluing":
+            items = net.build_grade_models(depth=depth, regime=net.CYCLIC_SAT, opacity=net.OPAQUE, order=3, seed=seed)
+            return net, net.public_model, items, (("finite_modal_evaluation", "reference_enumeration", net.reference_certificate),
+                ("actual_facts", "reference_conditioned_negative_control", self.epistemic_facts))
+        if environment == "recursive_compiler_bootstrap":
+            items = net.build_grade_items(depth=depth, regime=net.RECURSIVE, representation=net.REVEALED, seed=seed)
+            return net, net.public_instance, items, (("known_l1_compiler", "reference_program", net.reference_certificate),
+                ("local_decoder", "reference_conditioned_negative_control", net.arm_local_only))
+        if environment == "recursive_error_correcting_codes":
+            items = net.build_grade_items(depth=depth, regime=net.RECURSIVE, representation=net.INFERRED, seed=seed)
+            return net, net.public_instance, items, (("field_elimination", "reference", net.reference_certificate),
+                ("exhaustive_coordinates", "independent_search_shared_assignment_predicate", net.enumeration_certificate))
+        if environment == "recursive_coarse_graining":
+            items = net.build_grade_items(depth=depth, regime=net.RECURSIVE, representation=net.INFERRED, seed=seed)
+            return net, net.public_instance, items, (("matrix_and_partition_enumeration", "reference_direct_algorithm", net.reference_certificate),
+                ("local_table", "nuisance_certified_ablation", net.arm_local_only))
+        if environment == "recursive_holonomy_gluing":
+            items = net.build_grade_items(depth=depth, family=net.AFF, regime=net.REC_COMP, representation=net.INFERRED, seed=seed)
+            return net, net.public_instance, items, (("algebraic_composition", "reference", net.reference_certificate),
+                ("finite_state_transport", "direct_algorithm_shared_map_semantics", net.arm_revealed_compose))
+        raise ValueError("unknown recursive environment")
+
+    def record(self, environment, net, instance, public, strategy):
+        name, independence, solve = strategy
+        record = {"strategy": name, "independence": independence,
+                  "input_sha256": hashlib.sha256(json.dumps(public, sort_keys=True).encode()).hexdigest(),
+                  "certificate_valid": None, "outcome": "unmeasured"}
+        started = time.perf_counter()
+        try:
+            candidate = solve(copy.deepcopy(public))
+        except net.OracleBudgetExceeded:
+            record["outcome"] = "solver_budget_exhausted"
+            record["solver_seconds"] = time.perf_counter() - started
+            return record
+        except Exception as exc:
+            record["outcome"] = "solver_error"
+            record["error"] = str(exc)
+            return record
+        record["solver_seconds"] = time.perf_counter() - started
+        try:
+            if environment == "recursive_gluing":
+                parsed, reason = net.parse_solve_output(instance, candidate)
+                valid = parsed is not None
+                if valid and parsed["status"] == "unsat":
+                    valid = not net.oracle_satisfiable(instance)
+                    reason = "checked global unsatisfiability"
+            else:
+                valid, reason = net.verify_certificate(instance, candidate)
+        except net.OracleBudgetExceeded:
+            record["outcome"] = "oracle_budget_exhausted"
+            return record
+        except Exception as exc:
+            record["outcome"] = "verification_error"
+            record["error"] = str(exc)
+            return record
+        record["certificate_valid"] = int(valid)
+        record["outcome"] = "accepted" if valid else "rejected"
+        record["reason"] = reason
+        return record
+
+    def strategies(self, environment, net, instance, public, strategies):
+        if not strategies:
+            return ()
+        return (self.record(environment, net, instance, public, strategies[0]),) + self.strategies(
+            environment, net, instance, public, strategies[1:])
+
+    def items(self, environment, net, public_fn, items, strategies):
+        if not items:
+            return ()
+        name, instance = items[0]
+        public = public_fn(instance) if public_fn is not None else copy.deepcopy(instance)
+        row = {"check": name, "rivals": self.strategies(environment, net, instance, public, strategies)}
+        return (row,) + self.items(environment, net, public_fn, items[1:], strategies)
+
+    def family(self, environments, depth, seed):
+        if not environments:
+            return ()
+        environment = environments[0]
+        net, public_fn, items, strategies = self.configure(environment, depth, seed)
+        row = {"environment": environment, "requested_depth": depth, "seed": seed,
+               "network_sha256": hashlib.sha256((ROOT / "envs" / "cat_theo" / environment / "files" / "network.py").read_bytes()).hexdigest(),
+               "checks": self.items(environment, net, public_fn, tuple(items), strategies)}
+        return (row,) + self.family(environments[1:], depth, seed)
+
+    def main(self, args):
+        report = {"schema_version": 1, "provider_calls": 0,
+                  "scope": "algorithm controls, no model capability claims",
+                  "resource_policy": "budget exhaustion has no certificate score and is never SAT or UNSAT",
+                  "declared_limits": {
+                      "gluing_csp_nodes": 200000, "discovery_expansion_depth": 4,
+                      "discovery_csp_nodes_per_projection": 200000,
+                      "maze_search_states": 50000, "scheduler_search_states": 80000,
+                      "epistemic_uncached_formula_states": 50000,
+                      "l1_steps_per_vm_invocation": 200000,
+                      "code_exhaustive_candidates": 80000, "quotient_microstates": 12,
+                  },
+                  "environments": self.family(self.environments, int(args.depth), int(args.seed))}
+        text = json.dumps(report, indent=2)
+        if args.json:
+            path = Path(args.json)
+            if not path.is_absolute():
+                path = ROOT / path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text + "\n", encoding="utf-8")
+        else:
+            sys.stdout.write(text + "\n")
+        return 0
 
 
 if __name__ == "__main__":

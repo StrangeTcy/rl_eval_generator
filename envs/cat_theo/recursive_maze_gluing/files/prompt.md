@@ -54,3 +54,12 @@ compose along the walk.
 ```bash
 python visible_tests.py
 ```
+
+## Mixed tile compositions
+
+A nesting description may include `by_depth`, mapping the remaining-depth
+integer as a string to a tile name. When remaining depth exceeds one, use
+that tile instead of `deeper` if a by_depth entry exists. At remaining depth
+one, the shaft's named child is used. All flip, exit-sealing, return, and
+edge-use rules still apply. Reaching or clearing a child does not create a
+fresh copy of an already used parent edge. Full-state search is permitted.

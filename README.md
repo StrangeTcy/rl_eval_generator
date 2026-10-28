@@ -14,6 +14,15 @@ The generator creates self-contained, Dockerized evaluation tasks. Each task pre
     > *These tasks target compositional invariants that current transformer-family models routinely violate under composition, batching, symmetry, and state.*
 *   **Latent Substrate & Weird Machine Discovery:** `weird_machine/*` (6 environments)
     > *These tasks evaluate whether agents can recognize and exploit latent computational power in substrates whose surface semantics present them as non-programming artifacts.*
+*   **Epistemic and Strategic Evaluation:** `epistemic_*`
+    > *These tasks separate belief updating, deception mechanism attribution, incentive reasoning, and strategic signaling through independently scored fields.*
+
+### Research program
+
+The provenance-preserving inventory, roadmap, environment audit, evidence map,
+and delivery report are in [`research_program/`](research_program/). The new
+`epistemic_deception` and `epistemic_signaling` slices are torch-free and reuse
+the registry, renderer, provenance, and literal-answer judge conventions.
 
 ### Recommended Entry Points
 

@@ -1,0 +1,771 @@
+{
+  "date": "2026-10-28",
+  "sources": [
+    {
+      "path": "arena/episode.py",
+      "sha256": "f85188e269b701aa342f84440faf4779c28a31a6f6c1424d826bae49b50ab133",
+      "lines": 901,
+      "inspection": "source_only"
+    },
+    {
+      "path": "arena/matched_facts.py",
+      "sha256": "25b773110416d195e5d7646347104daf8787a5b120dcd625f83e4e72db6394db",
+      "lines": 759,
+      "inspection": "source_only"
+    },
+    {
+      "path": "arena/t1_pairing.py",
+      "sha256": "1f682938c3b7f249b4aa642b9baf25440ced72129f073b75dbda00d92f10d52a",
+      "lines": 370,
+      "inspection": "source_only"
+    },
+    {
+      "path": "arena/trajectory_metrics.py",
+      "sha256": "57cdb13c813ce491fb331fbb64cbd0029dd53253a2ce8090666b784ad4b13aa9",
+      "lines": 194,
+      "inspection": "source_only"
+    },
+    {
+      "path": "tools/epistemic_probe.py",
+      "sha256": "57cfa70a061efe1fdeab195663d5a2efa66414dff5a97a504a22d67dae445ddd",
+      "lines": 700,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/registry.yaml",
+      "sha256": "5eb6d9d5bbf881408dab7cc7b053256255c51c26aaace2e4c86ab76401c0598f",
+      "lines": 74,
+      "inspection": "source_only"
+    },
+    {
+      "path": "research_program/ideas_inventory.json",
+      "sha256": "55ae43a732a7a96781d6f5827eeaa40dab59273d209c85ddb80e28adb42a4303",
+      "lines": 67,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_games/files/core.py",
+      "sha256": "3f3af7c4e8ff100efdeb456d316f1fac64b96b7d90c15216a39cfba35d254eea",
+      "lines": 1041,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_announcements/files/core.py",
+      "sha256": "699a0cfbb1098d9ff0842a102e9dedafddcafb533e544c2b97e777dc6c9dd604",
+      "lines": 590,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_nested_knowledge/files/core.py",
+      "sha256": "b2c1b8804eba2182e0bcfeac6235b39c7ba6731991ed64fc5fbce268a1c92826",
+      "lines": 461,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_fragmented_observation/files/core.py",
+      "sha256": "786aa34fa424245029c94ff8c7bc403a279bbd641fee2e9a2b833f48be4c2766",
+      "lines": 489,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_silence/files/core.py",
+      "sha256": "2cf14a46782679f540fafe9772d10417a508fc0448f4acfc70e1334d3f9fd601",
+      "lines": 452,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_type_games/files/core.py",
+      "sha256": "54e1c2f32e1c1e02342533281bdad57afc4a8ce1f1393a3609d9d9af5b337e0f",
+      "lines": 525,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/weird_machine/sql_fixed_point/files/judge.py",
+      "sha256": "dcb4b49af30555caf1bc623a77c680577111bdf23aff30bca3af1ec99401b196",
+      "lines": 180,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/weird_machine/regex_state_machine/files/judge.py",
+      "sha256": "4fc90ed4dc707a143aa92f9a10bb037d4ab5252817b51b13266d37c52e887217",
+      "lines": 164,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/tensor_functor/files/judge.py",
+      "sha256": "e07a8dcd9cbbec628886d00ee2837725602b4a5f70ca07650335dab6bc035a49",
+      "lines": 116,
+      "inspection": "source_only"
+    },
+    {
+      "path": "docs/decisions/2026-10-26-recursive-gluing-experimental-design.md",
+      "sha256": "f478fa333ce34a48c3563aee15b4b7b4fff44173c28072bddcb1c212c3151e1b",
+      "lines": 344,
+      "inspection": "source_only"
+    },
+    {
+      "path": "research_program/FINAL_REPORT.md",
+      "sha256": "ae3a3c45003ac2d8f064f362e7ae33554608ddbb1bee3c4a3dd7eaf2199e3fd3",
+      "lines": 41,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/glyph/config.yaml",
+      "sha256": "f7e0ddfedd100d64265950883ef75665b979fdb5b14e8b57edda99d37243ece7",
+      "lines": 351,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/batchnorm_ema/config.yaml",
+      "sha256": "68d0783e0bb774d6a80e985aa6c11d40287db56a9579b72772a92a9785f3e129",
+      "lines": 172,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/moco/config.yaml",
+      "sha256": "eb99268dac63895a45c1b7e369639099bb3f10f0b80a359884432e287d9752fd",
+      "lines": 344,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/rope/config.yaml",
+      "sha256": "da198c14bfe3449503f2339fc839fe3bd6e1d5f78a97955b01410f0e7d533540",
+      "lines": 248,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/tensor_functor/config.yaml",
+      "sha256": "d4c292852bdc8272f1d8382843d32279ab3f945c9c8f584665e2fed394620baf",
+      "lines": 89,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/equivariant_diagram/config.yaml",
+      "sha256": "2ebdb667c68f0325528853edb1aea01b1a79bf5f5c6d56f6bd57133795161648",
+      "lines": 86,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/stochastic_monad/config.yaml",
+      "sha256": "ebcca74898eee2e814dfde9b805e69272f7cea863786b042d6915dcccf8ea83b",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/functorial_augmentation/config.yaml",
+      "sha256": "b688a1a8a6b5e27361a935e5ddeaebdf93bccaf0c1eeef44c113bbca40b159b6",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/compositional_optimizer/config.yaml",
+      "sha256": "afe196dd8971f47fd73e07e45a9f77c96485080442ef24e8090e6b900f884645",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/tokenizer_adjunction/config.yaml",
+      "sha256": "0afa81e744a5dc93dd050db29e22951e4b6f1b11db6471eec349ee90721198ea",
+      "lines": 86,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/architecture_naturality/config.yaml",
+      "sha256": "b472869150c0a197206f288209b7e974e8f1153197950eea0ba4b51bc55b56b3",
+      "lines": 86,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/transformer_ssm_lift/config.yaml",
+      "sha256": "da25f326644d461aeb5106eb11dd51960b71da5ac00ab95f8d5172293b472fdb",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/categorical_lenses/config.yaml",
+      "sha256": "cfb053ddbe6d99cf2b219532b2a6b1da049c526b55fb2ec1a528c1115932bdb9",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/monadic_reward/config.yaml",
+      "sha256": "76f3b3c252749108f32d438d8b8e6c9b5f27cc04e8b22910703b692ab006b188",
+      "lines": 86,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/semiring_unification/config.yaml",
+      "sha256": "35908e874008953a7f6447599da7814f36e06dffc5db5978a7bb0d17c8e5d36e",
+      "lines": 94,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/semiring/ssm_parallel_scan/config.yaml",
+      "sha256": "9097d4c9130070822c53dbfc65a01e40715a213d23afe82ba9e68dc8a3785c3d",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/semiring/neuro_symbolic_parser/config.yaml",
+      "sha256": "8048ae41cce1996e04995a133a31c0f7614ac3eb9250812bad0d16fe5393471c",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/semiring/gnn_message_passing/config.yaml",
+      "sha256": "10f121edf3978b8b9fda6b8856b18c133fd559556bde5ec96672ad5b16b353bc",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/sheaf/sheaf_schema_sync/config.yaml",
+      "sha256": "8e97fe8a077e604128e931627b723c5bcf2572af7501179faeac97a4ef9f1ecf",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml",
+      "sha256": "850c1fc831546cd418b381ccedea89356913f82fa60d4a0c308c9858268e1add",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml",
+      "sha256": "db3f8ea1073bf48a59d29c4544d6e3cf8480e0107fd15dfbc18ff72baeb47b8e",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing/config.yaml",
+      "sha256": "400ecfe9353917144aed4f89c5819a3e9af42a37221e96f42d171e205ad26f1d",
+      "lines": 108,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing_discovery/config.yaml",
+      "sha256": "494ad52497ec6d908a356e0cd3885a4ce97eda494c13a73852ad53e2b9c6eb55",
+      "lines": 118,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_maze_gluing/config.yaml",
+      "sha256": "9b045b9e3b7ad9eee5550994f1552d45188dd639f7aa90f95a510276bfa97e90",
+      "lines": 106,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_distributed_gluing/config.yaml",
+      "sha256": "1c2d5316e740b934096d9b794b8a55448838b84e84b45b8db9114dab4b37bea4",
+      "lines": 96,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_epistemic_gluing/config.yaml",
+      "sha256": "8646e39c5883ce554acec51ea6591153470a838f4c5010862fce115d8b52860c",
+      "lines": 108,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_holonomy_gluing/config.yaml",
+      "sha256": "23f40836bb5bdea7be7af59a61fd331eff133373779999b24c903f2c6a2c4825",
+      "lines": 95,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/config.yaml",
+      "sha256": "9428da9175932e59e6e75c4b3bfd5a7095a55fbfcb3c64d795d6cbf193cb01fb",
+      "lines": 83,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_error_correcting_codes/config.yaml",
+      "sha256": "95a2957fa9e752b86b21427041c96c666a7380268c590e32ea8c6436a1bd3e89",
+      "lines": 83,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_coarse_graining/config.yaml",
+      "sha256": "ad42b92313b8ab5e9a87538718eebdd37513634b7fcfca9dcebc0875946aea03",
+      "lines": 83,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_games/config.yaml",
+      "sha256": "2a39ec133c8466e9d321aeb7705088999583a697e5e54754c0675f818a00ba8b",
+      "lines": 201,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_announcements/config.yaml",
+      "sha256": "2297ae428dc98074c8b8aec09276f5b89e221a1cde17114bc8ff7eda8777ddbb",
+      "lines": 122,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_nested_knowledge/config.yaml",
+      "sha256": "c7d6f622335cf56a4cf855894d6c95729c487178d9d2192cd20f6c67353a1987",
+      "lines": 109,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_fragmented_observation/config.yaml",
+      "sha256": "b0400628d93172bb6e6282e0f2d56932241610941047ff196b0c3e2e7e7e988c",
+      "lines": 111,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_silence/config.yaml",
+      "sha256": "72603e338b9443334ba7cd79fbabc5845e10400cb1f68ce6ed68fb73d956635e",
+      "lines": 117,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_type_games/config.yaml",
+      "sha256": "ded6f1701161cac512e8905af67bc5ecc0fef1ed390b4fea115c283e2e61146b",
+      "lines": 102,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_deception/config.yaml",
+      "sha256": "4f610aa76f292a0d6a44c140c6936a964062b1bb220fd6f70682a35c8fa91c00",
+      "lines": 62,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/epistemic_signaling/config.yaml",
+      "sha256": "cf5142896d66d7ae983d2c7773442e3e013ddca8094962cb313c5a82ea099cb7",
+      "lines": 47,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/recurrent_depth/state_carry/config.yaml",
+      "sha256": "d6c2a6a034ff38a2b951dd8efada5f7347b94c11b4f64e5c113d3c1a09bfdd19",
+      "lines": 135,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/recurrent_depth/adaptive_halting/config.yaml",
+      "sha256": "1f7d85a6ac2a819b3c132d19378ad9defba8a2318d49f8c9406776043f5daf52",
+      "lines": 139,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/recurrent_depth/gradient_credit/config.yaml",
+      "sha256": "4abe4c03dbd24ce96fd1017c13911b0a72bfd84a7be6c5b7c56fc7267b88493b",
+      "lines": 137,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/trajectory_semantics/parse_only/config.yaml",
+      "sha256": "2539fc0f5b1916683ee4d44912b2e9b9603004ae4f3e767e790079a2fc722ec3",
+      "lines": 154,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/trajectory_semantics/one_step/config.yaml",
+      "sha256": "18090b908ed23ec6c4d329f70524f370e8750d12c6a0a41e91e4a69fd9e96e57",
+      "lines": 202,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/trajectory_semantics/trajectory/config.yaml",
+      "sha256": "18090b908ed23ec6c4d329f70524f370e8750d12c6a0a41e91e4a69fd9e96e57",
+      "lines": 202,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/weird_machine/regex_state_machine/config.yaml",
+      "sha256": "408880a7adbc11c4e2f8ece2c8aa0f2ad5f8f7cfc5a8b0140c0117c499eb152f",
+      "lines": 89,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/weird_machine/sql_fixed_point/config.yaml",
+      "sha256": "29937fd53eb1eb21d029567eccbea1f4eff0adffca62019f5f9e0d074711f329",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/weird_machine/spreadsheet_dataflow/config.yaml",
+      "sha256": "e8a80f862367826abad01c41d71434b947b9dae584b01a83c05c000cc80cde54",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/weird_machine/css_state_machine/config.yaml",
+      "sha256": "e14156e1a66dab9f74a2d367d2620a2289890bcbd5d5257b7d7701e312d68c9a",
+      "lines": 100,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/weird_machine/template_interpreter/config.yaml",
+      "sha256": "e1c0b46f1c7abbdd69f946788778c76cbf1fbb1fbc0c8f8a7a9bc9882d6a545c",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/weird_machine/ci_dependency_graph/config.yaml",
+      "sha256": "a41d8857feb2252635f20aaa036984543458f42cf2bb0fef3d8abd9c60e5920a",
+      "lines": 85,
+      "inspection": "source_only"
+    },
+    {
+      "path": "shared/deception_game.py",
+      "sha256": "2052e96dc8610caefd859f7d29cbb8c49917d0d83fb724c669bfe414f0f59b90",
+      "lines": 273,
+      "inspection": "source_only"
+    },
+    {
+      "path": "arena/__init__.py",
+      "sha256": "e77cd08d38fc818b6b42005ae069f1f866200baf5338ca3736f6767818a8bb43",
+      "lines": 6,
+      "inspection": "source_only"
+    },
+    {
+      "path": "arena/providers.py",
+      "sha256": "5fde9ebea8a9e13e0d218789046e74901af5d6de26c7ca0d670148272e385671",
+      "lines": 1201,
+      "inspection": "top_level_import_chain_source_review"
+    },
+    {
+      "path": "arena/secrets.py",
+      "sha256": "cf3bd2f995a90128b3027ab5e0722813b9d36c59e2930d9fb5e1305eb2948b69",
+      "lines": 286,
+      "inspection": "top_level_import_chain_source_review"
+    },
+    {
+      "path": "conftest.py",
+      "sha256": "c4da8b2d9d540469ee2276b7680beb0f7d88a882a62dd3fd349f3e7d87f2245b",
+      "lines": 58,
+      "inspection": "source_only"
+    },
+    {
+      "path": "tools/campaign_kick.py",
+      "sha256": "f33c363221d160715f9f029d22c4b7fd893ccd4fb8464346054e1b8193ff4531",
+      "lines": 272,
+      "inspection": "pytest_dispatch_call_graph_source_review"
+    },
+    {
+      "path": "C:/Users/hatgu/epistemic-compiler/knowledge/README.md",
+      "sha256": "8b3ee3c8ff817cd1414ddbb59b0da3d11db0dea3e9cc32e25aea88950de44545",
+      "lines": 61,
+      "inspection": "source_only"
+    },
+    {
+      "path": "C:/Users/hatgu/epistemic-compiler/knowledge/import_manifest.json",
+      "sha256": "265e456086febf3219963d1fa4e7d4bb4de32da93011af33be2312f878e994b1",
+      "lines": 82,
+      "inspection": "source_only"
+    },
+    {
+      "path": "C:/Users/hatgu/epistemic-compiler/research_protocol/strategy_families.yaml",
+      "sha256": "12dd3b63028c8ac87aca1889af564553a3c456365b063fa7f0543a3b616aef76",
+      "lines": 233,
+      "inspection": "source_only"
+    },
+    {
+      "path": "C:/Users/hatgu/epistemic-compiler/mission-01/claim_set.md",
+      "sha256": "9caae849dbf0587bfb355221492d7f0be8553dca3b09d227f39413f8337b2957",
+      "lines": 83,
+      "inspection": "source_only"
+    },
+    {
+      "path": "envs/glyph/files/judge.py",
+      "sha256": "c9edfaf42022c7995a288dc79d85804aa7d469628b1c2f54fac554af7516e733",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/batchnorm_ema/files/judge.py",
+      "sha256": "dc344dbe372a3f5e52306c799276f024e0b339e3a5329933de67f690e08e6699",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/moco/files/judge.py",
+      "sha256": "83ff4dd62561f2726109a0171e26e6839107068901f3cb6549b4af726c358a00",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/rope/files/judge.py",
+      "sha256": "4773f8aa0dcf90e476f6e286e07183bfd876fa1c1b921ed3c15aa0dbccc39b85",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/equivariant_diagram/files/judge.py",
+      "sha256": "e03aad5f93cd129e45150a6a7fe3308d275043a48a380c61f8049f991ac53ad4",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/stochastic_monad/files/judge.py",
+      "sha256": "6986befad5d0f06548ec7a72b39718c2945a20fa59c157b9edde40a4628d02bb",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/functorial_augmentation/files/judge.py",
+      "sha256": "e743d479d2a87dcadbeba556f1cd0b4dcd980edc5914c3ae9fb375e9678c8109",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/compositional_optimizer/files/judge.py",
+      "sha256": "484daeb9f83d6e9870a3433eafe44b8b4151418a9bcb672a7fbe299419d1bf87",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/tokenizer_adjunction/files/judge.py",
+      "sha256": "c84ba242cd26e51f5aeb50ba780129a8248f804c80ecf1d396abecde5bcec1ed",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/architecture_naturality/files/judge.py",
+      "sha256": "e43625dbd9035480dd578fe835b3d9758b7ee2f7b35fecf9baadcf14a0c09a60",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/transformer_ssm_lift/files/judge.py",
+      "sha256": "324ed9e142664eda3a1fde390efdb4a7df7da967c54bd8e379e1b730feb31f45",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/categorical_lenses/files/judge.py",
+      "sha256": "598d44f919b92cde837c43d051ca8ec1b56b6fd57bf06189584f77296efe3a30",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/monadic_reward/files/judge.py",
+      "sha256": "088572f839d67f706366def8e45f929ad02122f8a30517c85afc5d6c871888c5",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/semiring_unification/files/judge.py",
+      "sha256": "5600b944d37bb6641b9de4c12e72921647fce706fefaa70fe94a0578aa0a6188",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/semiring/ssm_parallel_scan/files/judge.py",
+      "sha256": "fea1a6dfbcda61a0e841233c096477f7796af0be8de662a3d0c7e9165a5dcc03",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/semiring/neuro_symbolic_parser/files/judge.py",
+      "sha256": "d1e4679c9401fa712d833f8129d3d7290a1ba378d55cc6f722dbe68fa90aef25",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/semiring/gnn_message_passing/files/judge.py",
+      "sha256": "d353e89e6b3b28aa459f9ae4806ae8096a6cc741d5a4540d5e05bbf0f3384cc4",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/sheaf/sheaf_schema_sync/files/judge.py",
+      "sha256": "dfb06c14bf4a80766e41eb15f339979d3cc7879a970d4e67fbe7d3aec2919dda",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/sheaf/sheaf_invariant_gluing/files/judge.py",
+      "sha256": "ebf4e05c221c1c8fc683cfed3b061687c34c87d52942ebe241febca587cd6448",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/sheaf/sheaf_physical_constraints/files/judge.py",
+      "sha256": "4e5783abf652741a8b151f18366fd42160c7c8926cf0f92906d9a09e7fadc160",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing/files/judge.py",
+      "sha256": "07d9f00691e95ed5d2d13bae5e3352a13a7221a0fb8159bcb69b0d280e7ce47c",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing_discovery/files/judge.py",
+      "sha256": "6c35bc144f1fc20dd3509b05b2fbea465faf5a2f647f39098b608b3c26b764fd",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_maze_gluing/files/judge.py",
+      "sha256": "ac5a28d7b9554df89a964d6cdea8be05e5a463991488cff980341a77625c8ac0",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_distributed_gluing/files/judge.py",
+      "sha256": "d09da2003502db94b8cdf04daa0959eb1e7eb887767e9111431aeacfbed07b2c",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_epistemic_gluing/files/judge.py",
+      "sha256": "c90c6c70f1bc0e6e1c6e4ee3564e5e3945e9180081584a872efe1727625d4466",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_holonomy_gluing/files/judge.py",
+      "sha256": "087d9a15ce9ba2336673cf1e672baec68460cc425d0dd13dd4325cd1f05d5247",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/judge.py",
+      "sha256": "bf93bb92d148bab6f037d11d1ed06de5299894bea08472ce551f304e0ac98d6c",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_error_correcting_codes/files/judge.py",
+      "sha256": "3db2c56cf9df3ff20ce4615ec9d8c497db9838684f1644166a2fcf6b8052985b",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/cat_theo/recursive_coarse_graining/files/judge.py",
+      "sha256": "bd6471b0861b01d6a3ff387708992008fd919ac0845628e3ed1dc9f884485622",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/epistemic_games/files/judge.py",
+      "sha256": "3c6dce7d102f006e62e6cc6dff773c224cce2de794947e3345c83e6698415cfc",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/epistemic_announcements/files/judge.py",
+      "sha256": "9a1b06a8c65eac10d7fa43d48aa6c61f99786e2239fefbc40216a03a89e52daa",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/epistemic_nested_knowledge/files/judge.py",
+      "sha256": "20fe4d5b6359f3d463b67a1c6261996df84e4930af18a951e22efb649f031a09",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/epistemic_fragmented_observation/files/judge.py",
+      "sha256": "1b6881247f84f5d320bf0531cbeab67e82e06ef6814a2d4bce702a31addbf425",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/epistemic_silence/files/judge.py",
+      "sha256": "d9853216995735403fd167177041314da3c39365b81e76afafd1f4ef3ee76dab",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/epistemic_type_games/files/judge.py",
+      "sha256": "8964f45b952131f72492c641a2e034e613e0cc9578bc4563a89fd0b5a782d2bd",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/epistemic_deception/files/judge.py",
+      "sha256": "be4c498a94c59b4626e75b112e23eb84b34afdcbae323f51cc37118ca8febeba",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/epistemic_signaling/files/judge.py",
+      "sha256": "fce44b6233f15bc384eb83b478282fddc0d318b04450c1f804eaf9a98de9b470",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/recurrent_depth/state_carry/files/judge.py",
+      "sha256": "fecc1025b96578f1b267cb58ef097091c69e8116b26af90178ecc70f330907b9",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/recurrent_depth/adaptive_halting/files/judge.py",
+      "sha256": "1a02daf8a2182780b132958dcbf538d871d4ee999f3c0c7a3452b15b58ae9df6",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/recurrent_depth/gradient_credit/files/judge.py",
+      "sha256": "7ddae9ccbb8f09d2952dcb5462ed14e8a2b911757b5b3efaff9cc8580a2d4d07",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/trajectory_semantics/parse_only/files/judge.py",
+      "sha256": "3eb1d508d02fe021d8e3e5f7077a87b722e59a8307a1b76d2803924871324249",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/trajectory_semantics/one_step/files/judge.py",
+      "sha256": "21f8e05e7fc1ccb85ddcf31e12a0de2002ada66e520701185a86f663b43aaf6f",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/trajectory_semantics/trajectory/files/judge.py",
+      "sha256": "7a661c0f5f4d83eb499815098389068a66957b23a2a0e477d4c2a758d9a0fdb9",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/weird_machine/spreadsheet_dataflow/files/judge.py",
+      "sha256": "6b5fb6321595e6a9310014e4c031e83e82975b1800d24e7dd5016826de346f75",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/weird_machine/css_state_machine/files/judge.py",
+      "sha256": "df6b313169829e3d5c46961e8d16a62f5f6929cc1e435ce443b74d28e7a16646",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/weird_machine/template_interpreter/files/judge.py",
+      "sha256": "079b01db3b26a5f7572ba691fc206638759907d1869316053abaa76364bd0d8a",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    },
+    {
+      "path": "envs/weird_machine/ci_dependency_graph/files/judge.py",
+      "sha256": "eec9357438d5d187f386368465dd4de547feb712df1e1f421b472719d96f8154",
+      "inspection": "lexical_source_audit; labels are leads and not execution evidence",
+      "manual_review": "registry and check inventory only"
+    }
+  ],
+  "unresolved_local_references": [
+    "C:/Users/hatgu/epistemic-compiler/mission-02/ (absent from available checkout)",
+    "docs/epistemic_trajectories_v0.md (proposal in dialogue; not treated as current implementation)",
+    "diagnostic_device.py and results.txt quoted as attachments (not present in dialogue or inspected current arena tree)"
+  ],
+  "execution": "No execution of repository code; file reads and edits only after the mission restriction was read.",
+  "concurrent_source_changes": [
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/judge.py",
+      "earlier_audit_sha256": "bf93bb92d148bab6f037d11d1ed06de5299894bea08472ce551f304e0ac98d6c",
+      "latest_observed_sha256": "fd6271c3b50ce9f371b15904e900a0b51e0501647b38f28e421140ae8845f895",
+      "scope": "active recursive-gluing sibling; no edits by this workstream",
+      "interpretation": "Earlier audit evidence remains attached to its original hash. The newer file was fingerprinted, not given a fresh semantic audit."
+    }
+  ],
+  "hash_scope": "Hashes identify read-time source revisions, not one atomic checkout snapshot; active sibling work can continue between reads."
+}

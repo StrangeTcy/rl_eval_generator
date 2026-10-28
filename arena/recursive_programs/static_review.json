@@ -1,0 +1,78 @@
+{
+  "schema": "recursive-programs-static-review/1",
+  "status": "static_inspection_only_not_compilation_or_execution",
+  "modules": [
+    {
+      "path": "arena/recursive_programs/game.py",
+      "sha256": "2aade1e5ae39ec95d8ea695f536625590734de750c5dfceb2f522177b24b4d66",
+      "lines": 172,
+      "forbidden_tokens": [],
+      "top_level_helpers": 0,
+      "delimiter_issues": [],
+      "authored_tests": 0
+    },
+    {
+      "path": "arena/recursive_programs/reference.py",
+      "sha256": "5cb52268c3261742e54eaff8ef3869f662a6192690bf86c2f5aa5fd6121072a8",
+      "lines": 159,
+      "forbidden_tokens": [],
+      "top_level_helpers": 0,
+      "delimiter_issues": [],
+      "authored_tests": 0
+    },
+    {
+      "path": "arena/recursive_programs/semantics.py",
+      "sha256": "a62777cfb986f0d780b3b080d326e44ec478eb867091fb7bce58d873e25d061d",
+      "lines": 159,
+      "forbidden_tokens": [],
+      "top_level_helpers": 0,
+      "delimiter_issues": [],
+      "authored_tests": 0
+    },
+    {
+      "path": "arena/recursive_programs/session.py",
+      "sha256": "8ba2433896c24548bd54c8bb19b9d0c02bb83d4c74d4c832a1d4bc1006bcf2b2",
+      "lines": 104,
+      "forbidden_tokens": [],
+      "top_level_helpers": 0,
+      "delimiter_issues": [],
+      "authored_tests": 0
+    },
+    {
+      "path": "arena/recursive_programs/__init__.py",
+      "sha256": "12f681b144217b8e7c63eedcd98e59e70c1ad94b4936f308b186b3e7fa32ae51",
+      "lines": 5,
+      "forbidden_tokens": [],
+      "top_level_helpers": 0,
+      "delimiter_issues": [],
+      "authored_tests": 0
+    },
+    {
+      "path": "arena/recursive_programs/__main__.py",
+      "sha256": "cd15d726751eefca50b1152feb9bdda9e3cbc680e084a76c10e4c692008cdb24",
+      "lines": 6,
+      "forbidden_tokens": [],
+      "top_level_helpers": 0,
+      "delimiter_issues": [],
+      "authored_tests": 0
+    },
+    {
+      "path": "tests/test_recursive_programs.py",
+      "sha256": "eb13f5ef85269b6b0ea102e9fb09da7340990e6d182a714c291e084b4e5298f9",
+      "lines": 224,
+      "forbidden_tokens": [],
+      "top_level_helpers": 0,
+      "delimiter_issues": [],
+      "authored_tests": 30
+    }
+  ],
+  "tests_authored": 30,
+  "tests_executed": 0,
+  "episodes_executed": 0,
+  "provider_calls": 0,
+  "limits": [
+    "Token and delimiter scans are lexical heuristics, not a Python parser or proof of runtime correctness.",
+    "The exact reference and engine were inspected but neither was imported or run.",
+    "The maximum 19,683-candidate partial-information case has unmeasured runtime."
+  ]
+}

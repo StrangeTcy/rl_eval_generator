@@ -1,0 +1,109 @@
+{
+  "schema": "inquiry-readiness-plan/1",
+  "status": "planned_not_executed",
+  "allowed_execution": "authorized isolated runner only",
+  "test_module": "tests/test_inquiry_games.py",
+  "authored_test_count": 35,
+  "isolated_validation": {
+    "python_minimum": "3.11",
+    "command": "python -m unittest discover -s tests -p test_inquiry_games.py -v",
+    "executed": false,
+    "python_floor_source": "arena/providers.py imports datetime.UTC via the parent arena package",
+    "runner_choice": "Focused unittest discovery does not load conftest.py, whose pytest_sessionfinish hook can dispatch campaigns in CI.",
+    "evidence_required": "exact source hashes, Python version, command, exit status, complete output"
+  },
+  "diagnostic": {
+    "semantic_seeds": [
+      0,
+      1,
+      13,
+      24
+    ],
+    "world_seeds": [
+      0,
+      7,
+      29
+    ],
+    "budgets": [
+      1,
+      2,
+      3
+    ],
+    "prior_families": [
+      "balanced",
+      "skewed"
+    ],
+    "presentations": [
+      "present 0 1 2",
+      "present 0 2 1",
+      "present 1 0 2",
+      "present 1 2 0",
+      "present 2 0 1",
+      "present 2 1 0"
+    ],
+    "policies": [
+      "PublicOracle",
+      "FirstRow",
+      "NeverInvestigate"
+    ]
+  },
+  "source": {
+    "semantic_seeds": [
+      0,
+      2,
+      8,
+      11,
+      23
+    ],
+    "world_seeds": [
+      0,
+      7,
+      19,
+      27
+    ],
+    "budgets": [
+      1,
+      2,
+      3
+    ],
+    "visibility": [
+      "disclosed",
+      "blind"
+    ],
+    "channels": [
+      "assertion",
+      "certificate"
+    ],
+    "noise": [
+      "0",
+      "1/4"
+    ],
+    "policies": [
+      "PublicOracle",
+      "AlwaysDistrust",
+      "StationarySource"
+    ]
+  },
+  "required_gates": [
+    "independent oracle expected-excess and decision regret zero",
+    "semantic identity and public view invariant to private world seed",
+    "incomplete and appended replays rejected",
+    "pre-observation regret nonnegative",
+    "exact tie and impossible-event fixtures preserved",
+    "certificate literal falsity remains zero",
+    "disclosed versus blind source laws match contract",
+    "all noncanonical or invalid response statuses retained"
+  ],
+  "model_campaign": {
+    "authorized": false,
+    "scheduled": false,
+    "provider_configuration": null
+  },
+  "statistical_contract": {
+    "unit": "semantic case with world/replication nesting",
+    "primary_endpoint": "prospectively choose one per family before model execution",
+    "effect_sign": "adversarial minus neutral, or disclosed minus blind, reported separately",
+    "equivalence": "predefine paired difference margin; overlapping CIs are not equivalence",
+    "missingness": "report excluded/invalid/missing pairs and denominators"
+  }
+}

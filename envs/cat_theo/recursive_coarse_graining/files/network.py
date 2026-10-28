@@ -25,6 +25,7 @@ REVEALED = "revealed"
 INFERRED = "inferred"
 SPINS = (0, 1)
 PUBLIC_KEYS = (
+    "abstraction",
     "spins",
     "regions",
     "tree",
@@ -39,6 +40,8 @@ CHECK_NAMES = (
     "assembled_unsat",
     "opaque_twin",
     "child_matters",
+    "quotient_positive",
+    "quotient_counterfactual",
     "deterministic",
 )
 
@@ -143,10 +146,21 @@ def generate_instance(*, depth: int, regime: str, representation: str, seed: int
     label_perm = [0, 1]
     if representation == INFERRED:
         label_perm = [1, 0]
+    # Equal-spin observations alone are invariant under swapping labels. Add an
+    # asymmetric probe so inferred presentation is identifiable rather than a
+    # hidden, unverifiable flag.
+    probe = [[1, 2], [3, 4]]
+    observed_probe = [[0, 0], [0, 0]]
+    for L in SPINS:
+        for R in SPINS:
+            observed_probe[label_perm[L]][label_perm[R]] = probe[L][R]
     calibration = {
-        "spin_pairs": [[0, 0], [1, 1]],  # visible equal-spin observations
+        "spin_pairs": [[0, 0], [1, 1]],
+        "probe_table": probe,
+        "observed_probe_table": observed_probe,
     }
     return {
+        "abstraction": LumpingTask().instance(requested, seed, int(regime == REC_COMP)),
         "spins": [0, 1],
         "regions": regions,
         "tree": tree,
@@ -198,12 +212,13 @@ def true_table_and_fixed(inst: Mapping[str, Any]) -> tuple[list[list[int]], bool
 
 
 def relabel_instance(inst: Mapping[str, Any], seed: int) -> dict[str, Any]:
-    rng = random.Random(seed)
     foil = copy.deepcopy(inst)
-    foil["label_perm"] = [1, 0] if inst.get("label_perm") == [0, 1] else [0, 1]
-    foil["meta"] = dict(inst.get("meta") or {})
-    foil["meta"]["presentation"] = True
-    _ = rng
+    foil["label_perm"].reverse()
+    observed = foil["calibration"]["observed_probe_table"]
+    observed.reverse()
+    observed[0].reverse()
+    observed[1].reverse()
+    foil["abstraction"] = LumpingTask().relabel(inst["abstraction"], seed)
     return foil
 
 
@@ -212,8 +227,17 @@ def example_visible_instance() -> dict[str, Any]:
 
 
 def reference_certificate(inst: Mapping[str, Any]) -> dict[str, Any]:
+    if inst.get("label_perm") is None:
+        inst = copy.deepcopy(inst)
+        probe = tuple(map(tuple, inst["calibration"]["probe_table"]))
+        observed = tuple(map(tuple, inst["calibration"]["observed_probe_table"]))
+        inst["label_perm"] = (0, 1) if probe == observed else (1, 0)
     table, fixed = true_table_and_fixed(inst)
-    return {"table": table, "fixed": bool(fixed)}
+    result: dict[str, Any] = {"table": table, "fixed": bool(fixed)}
+    if inst.get("representation") == INFERRED:
+        result["label_perm"] = copy.deepcopy(inst["label_perm"])
+    result["abstraction"] = LumpingTask().solve(inst["abstraction"])
+    return result
 
 
 def verify_certificate(inst: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
@@ -223,12 +247,29 @@ def verify_certificate(inst: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
         return False, "table/fixed missing"
     if type(raw["fixed"]) is not bool:
         return False, "fixed must be a bool"
-    true_table, true_fixed = true_table_and_fixed(inst)
+    if not LumpingTask().verify(inst["abstraction"], raw.get("abstraction")):
+        return 0, "abstraction or composition prediction failed"
+    candidate = inst
+    if inst.get("representation") == INFERRED:
+        submitted = raw.get("label_perm") if isinstance(raw, dict) else None
+        if submitted is None or tuple(sorted(submitted)) != (0, 1):
+            return False, "inferred representation requires label_perm"
+        observed = inst["calibration"]["observed_probe_table"]
+        probe = inst["calibration"]["probe_table"]
+        expected = [[0, 0], [0, 0]]
+        for L in SPINS:
+            for R in SPINS:
+                expected[submitted[L]][submitted[R]] = probe[L][R]
+        if tuple(map(tuple, expected)) != tuple(map(tuple, observed)):
+            return False, "label_perm disagrees with calibration"
+        candidate = copy.deepcopy(inst)
+        candidate["label_perm"] = list(submitted)
+    true_table, true_fixed = true_table_and_fixed(candidate)
     try:
-        got = [[int(raw["table"][i][j]) for j in SPINS] for i in SPINS]
+        got = tuple(map(tuple, raw["table"]))
     except Exception:
         return False, "table"
-    if got != true_table:
+    if got != tuple(map(tuple, true_table)):
         return False, "table mismatch"
     if raw["fixed"] is not true_fixed:
         return False, "fixed mismatch"
@@ -252,7 +293,11 @@ def arm_local_only(inst: Mapping[str, Any]) -> dict[str, Any]:
     """Baseline: table of the first listed region, ignore composition."""
     name = next(iter(inst["regions"]))
     table = table_from_weights(inst["regions"][name]["weights"], [50_000])
-    return {"table": table, "fixed": True}
+    probe = tuple(map(tuple, inst["calibration"]["probe_table"]))
+    observed = tuple(map(tuple, inst["calibration"]["observed_probe_table"]))
+    return {"table": table, "fixed": True,
+            "label_perm": (0, 1) if probe == observed else (1, 0),
+            "abstraction": LumpingTask().solve(inst["abstraction"])}
 
 
 def build_grade_items(*, depth: int, regime: str, representation: str, seed: int) -> list[tuple[str, dict[str, Any]]]:
@@ -269,6 +314,8 @@ def build_grade_items(*, depth: int, regime: str, representation: str, seed: int
             generate_instance(depth=max(depth, 2), regime=REC_COMP, representation=representation, seed=seed + 13),
         ),
         ("opaque_twin", relabel_instance(configured, seed + 99)),
+        ("quotient_positive", LumpingTask().intervention(configured, seed + 31, 0)),
+        ("quotient_counterfactual", LumpingTask().intervention(configured, seed + 31, 1)),
         (
             "child_matters",
             generate_instance(depth=2, regime=REC_COMP, representation=REVEALED, seed=seed + 17),
@@ -292,3 +339,127 @@ def grade_solver(solve_fn: Callable, *, depth: int, regime: str, representation:
     except Exception:
         checks["deterministic"] = False
     return checks
+
+
+
+class LumpingTask:
+    """Infer a two-state quotient of six- or ten-state observed dynamics.
+
+    The hidden partition is not supplied. Both transition tables must commute
+    with a proposed quotient. One microscopic edge can destroy its existence.
+    """
+
+    def size(self, values):
+        if not values:
+            return 0
+        return 1 + self.size(values[1:])
+
+    def rename(self, table, perm, index=0):
+        if index == self.size(table):
+            return ()
+        return (perm[table[perm.index(index)]],) + self.rename(table, perm, index + 1)
+
+    def instance(self, depth, seed, broken=0):
+        width = 3 + 2 * (seed % 2)
+        a, b = self.dynamics(width, broken)
+        task = ((a, b), ((0, 0), (width, 1)),
+                ((0, (0, 1) * depth + (0,)), (2 * width - 1, (1, 0) * depth)))
+        return self.relabel(task, seed)
+
+    def dynamics(self, width, broken, position=0):
+        if position == 2 * width:
+            return (), ()
+        a, b = self.dynamics(width, broken, position + 1)
+        target = width if broken and position == 2 * width - 1 else (position + width) % (2 * width)
+        return (target,) + a, ((position + 1) % width,) + b
+
+    def relabel(self, task, seed):
+        tables, anchors, queries = task
+        width = self.size(tables[0])
+        perm = tuple(random.Random(seed).sample(range(width), width))
+        return (
+            (self.rename(tables[0], perm), self.rename(tables[1], perm)),
+            ((perm[anchors[0][0]], anchors[0][1]), (perm[anchors[1][0]], anchors[1][1])),
+            ((perm[queries[0][0]], queries[0][1]), (perm[queries[1][0]], queries[1][1])),
+        )
+
+    def partition(self, code, remaining=6):
+        if remaining == 0:
+            return ()
+        return (code % 2,) + self.partition(code // 2, remaining - 1)
+
+    def compatibility(self, tables, partition, effective, index=0):
+        if index == self.size(partition):
+            return 1
+        label = partition[index]
+        if (partition[tables[0][index]] != effective[0][label]
+                or partition[tables[1][index]] != effective[1][label]):
+            return 0
+        return self.compatibility(tables, partition, effective, index + 1)
+
+    def predict(self, effective, state, word):
+        if not word:
+            return state
+        return self.predict(effective, effective[word[0]][state], word[1:])
+
+    def candidate(self, task, code):
+        tables, anchors, queries = task
+        p = self.partition(code, self.size(tables[0]))
+        if p[anchors[0][0]] != anchors[0][1] or p[anchors[1][0]] != anchors[1][1]:
+            return ("obstruction",)
+        zero, one = p.index(0), p.index(1)
+        effective = ((p[tables[0][zero]], p[tables[0][one]]), (p[tables[1][zero]], p[tables[1][one]]))
+        if not self.compatibility(tables, p, effective):
+            return ("obstruction",)
+        predictions = (self.predict(effective, p[queries[0][0]], queries[0][1]),
+                       self.predict(effective, p[queries[1][0]], queries[1][1]))
+        return "quotient", p, effective, predictions
+
+    def search(self, task, start, span):
+        if span == 1:
+            return self.candidate(task, start)
+        first = self.search(task, start, span // 2)
+        if first[0] == "quotient":
+            return first
+        return self.search(task, start + span // 2, span // 2)
+
+    def solve(self, task):
+        width = self.size(task[0][0])
+        if width > 12:
+            raise OracleBudgetExceeded("quotient enumeration supports at most twelve microstates")
+        return self.search(task, 0, 2 ** width)
+
+    def microscopic_prediction(self, task, query):
+        """Direct-state rival: predicts observations without finding a quotient."""
+        tables, anchors, queries = task
+        state, word = query
+        return self.predict(tables, state, word)
+
+    def intervention(self, inst, seed, broken):
+        foil = copy.deepcopy(inst)
+        foil["abstraction"] = self.instance(inst["depth"], seed, broken)
+        return foil
+
+    def verify(self, task, raw):
+        try:
+            if tuple(raw) == ("obstruction",):
+                return int(self.solve(task) == ("obstruction",))
+            status, partition, effective, predictions = raw
+            p = tuple(partition)
+            tables, anchors, queries = task
+            if status != "quotient" or p.count(0) + p.count(1) != self.size(tables[0]):
+                return 0
+            zero, one = effective
+            zero_a, one_a = zero
+            zero_b, one_b = one
+            if set((zero_a, one_a, zero_b, one_b)).difference((0, 1)):
+                return 0
+            if p[anchors[0][0]] != anchors[0][1] or p[anchors[1][0]] != anchors[1][1]:
+                return 0
+            if not self.compatibility(tables, p, effective):
+                return 0
+            expected = (self.predict(effective, p[queries[0][0]], queries[0][1]),
+                        self.predict(effective, p[queries[1][0]], queries[1][1]))
+            return int(tuple(predictions) == expected)
+        except (IndexError, TypeError, ValueError):
+            return 0

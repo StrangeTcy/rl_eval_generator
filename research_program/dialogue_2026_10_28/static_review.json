@@ -1,0 +1,241 @@
+{
+  "kind": "static_source_and_artifact_review_not_test_execution",
+  "date": "2026-10-28",
+  "coverage": {
+    "snapshot_matches_download": true,
+    "passage_reconstruction_matches_source": true,
+    "coverage_start": 1,
+    "coverage_end": 6389,
+    "contiguous": true,
+    "all_graph_references_resolve": true,
+    "all_relationships_resolve": true,
+    "snapshot_hash_matches_manifest": true,
+    "all_opportunity_ids_unique": true,
+    "source_quotes_within_recorded_spans": true
+  },
+  "modules": [
+    {
+      "path": "arena/inquiry/baselines.py",
+      "lines": 40,
+      "sha256": "6233524f17ccf7926086d24f69ba19b0e76eb40d18067cc9a75616c75d4d5bab",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/diagnostic.py",
+      "lines": 154,
+      "sha256": "d0d241b7302a89e7f32128f1173deaad08721f361741264de6d5b0547ce37cb4",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/finite.py",
+      "lines": 93,
+      "sha256": "bc332353f525f0c5b8c3dec8d755a953c3f0704c8e7e9fa2bcfd3130f5634171",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/presenter.py",
+      "lines": 42,
+      "sha256": "797f71b683e071a3729106d3844e6a82dba177f88994329dcab689deb2c57e2f",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/reference.py",
+      "lines": 105,
+      "sha256": "26c31d260ecab4a64ab4c8199cd56ca7b1014302e844365ef81cc359e2949ca3",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/session.py",
+      "lines": 110,
+      "sha256": "8ada4766d2be9b740fccba3bff64dcee4fcb63c60bcd1bc41e379988f0070bd9",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/strategic.py",
+      "lines": 238,
+      "sha256": "63153fe28915e3eac79249cb5d0efcfbb04a4a69805dd865943e0ccab6eff4dd",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/trial.py",
+      "lines": 46,
+      "sha256": "b8e981752d9131cf2f98b8faf496d34d004d12496ca8475cf8c99e17c5a1f415",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/__init__.py",
+      "lines": 2,
+      "sha256": "2b48bea364a2e2f768af8234cebf8e8332ee5a416736b58f9b1e5f5809498a73",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "arena/inquiry/__main__.py",
+      "lines": 6,
+      "sha256": "9fd53bc11c09644b48777d3ab2de814b8790db4e7a348ccbcc3c9f43f492e941",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    },
+    {
+      "path": "tests/test_inquiry_games.py",
+      "lines": 257,
+      "sha256": "970b67a26f2def0d989bc8ff859ef5d7b413a639c0989e33e82361ec9f45b248",
+      "forbidden_tokens": [],
+      "top_level_definitions": 0
+    }
+  ],
+  "authored_test_names": [
+    "test_conditioning_uses_likelihood_and_prior",
+    "test_zero_probability_branch_is_rejected",
+    "test_two_complementary_tests_identify_four_worlds",
+    "test_optimal_action_can_be_to_stop",
+    "test_action_value_accounts_for_cost_and_horizon",
+    "test_decision_prior_changes_best_partition",
+    "test_invalid_horizon_and_probabilities",
+    "test_world_seed_does_not_change_public_view_or_identity",
+    "test_presenter_can_only_permute_all_facts",
+    "test_order_changes_baseline_but_not_oracle",
+    "test_repeated_test_and_exhausted_budget_fail",
+    "test_malformed_probability_vectors_leave_state_intact",
+    "test_terminal_actions_cannot_be_revised",
+    "test_replay_recomputes_and_rejects_missing_or_extra_actions",
+    "test_incentives_reverse_bad_sender_action",
+    "test_boundary_tie_does_not_recommend",
+    "test_identical_positive_report_leaves_error_strategy_ambiguous",
+    "test_protocol_change_identifies_different_causes",
+    "test_truthful_certificate_preserves_policy_but_changes_truth_semantics",
+    "test_blind_protocol_does_not_change_sender_likelihood",
+    "test_public_view_has_no_hidden_seed_dependence",
+    "test_recovery_is_once_after_report",
+    "test_noise_zero_is_an_accurate_sincere_control",
+    "test_incorrect_sender_policy_loses_utility",
+    "test_always_distrust_does_not_get_a_free_pass",
+    "test_controller_initialization_is_not_echoed",
+    "test_eof_is_unscored",
+    "test_deployment_port",
+    "test_diagnostic_reference_uses_only_rendered_observations",
+    "test_skewed_prior_and_short_budget",
+    "test_source_reference_derives_response_law_from_payoffs",
+    "test_blind_truthful_source_reference",
+    "test_public_reference_updates_after_recovery",
+    "test_two_role_permutation_cannot_change_semantic_case",
+    "test_extra_probe_after_source_terminal_is_rejected"
+  ],
+  "tests_executed": 0,
+  "episodes_executed": 0,
+  "provider_calls": 0,
+  "review_limits": [
+    "Lexical scan removes strings/comments before matching prohibited tokens and top-level def statements; it is not a Python parser or a complete proof of coding-rule compliance.",
+    "Imports, compilation, tests, environment episodes, transport processes, and provider calls were not executed.",
+    "Hand-derived examples and an independent implementation are source evidence only until executed in an authorized isolated runner."
+  ],
+  "import_review": {
+    "chain": [
+      "arena/__init__.py",
+      "arena/providers.py",
+      "arena/secrets.py"
+    ],
+    "python_minimum": "3.11",
+    "top_level_effects": [
+      "HTTP opener construction",
+      "credential-file candidate path resolution",
+      "redaction-pattern compilation"
+    ],
+    "provider_request_or_credential_load": "No top-level invocation found in inspected source; not runtime verified."
+  },
+  "runner_review": {
+    "pytest_hook": "conftest.py::pytest_sessionfinish -> tools/campaign_kick.py::maybe_kick_from_ci",
+    "future_route": "Focused unittest discovery in an authorized isolated checkout",
+    "executed": false
+  },
+  "concurrent_source_changes": [
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/judge.py",
+      "earlier_audit_sha256": "bf93bb92d148bab6f037d11d1ed06de5299894bea08472ce551f304e0ac98d6c",
+      "latest_observed_sha256": "fd6271c3b50ce9f371b15904e900a0b51e0501647b38f28e421140ae8845f895",
+      "scope": "active recursive-gluing sibling; no edits by this workstream",
+      "interpretation": "Earlier audit evidence remains attached to its original hash. The newer file was fingerprinted, not given a fresh semantic audit."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "AUDIT.md",
+      "bytes": 9116,
+      "sha256": "776bf6002c1a2e898413c1dfd596653932edde161ba44935dcaa6d7607d9bae8"
+    },
+    {
+      "path": "environment_audit.json",
+      "bytes": 35948,
+      "sha256": "406fee668cda06b03a3fca5a948af13464ff2afa085e2bc9e873d450c9f09256"
+    },
+    {
+      "path": "EVIDENCE_MAP.md",
+      "bytes": 6603,
+      "sha256": "b6384eb9cf18fc34c8dc8a051924b71a03cdd5abdf69ce911396aaca76210834"
+    },
+    {
+      "path": "inventory.json",
+      "bytes": 939711,
+      "sha256": "08f2e000c9dbca4bc9639965f8c3bd4b4163763d769ad8dd84613118cb01e7d3"
+    },
+    {
+      "path": "portfolio.json",
+      "bytes": 3798,
+      "sha256": "49a9fb3178da28264e624ae128299196f54b5acfcd0ccc8440857705021bc524"
+    },
+    {
+      "path": "READINESS.md",
+      "bytes": 6213,
+      "sha256": "220ac4dd9efe6141e547a828afaaea486172dd54dea421a383bc3bd14a151c2a"
+    },
+    {
+      "path": "readiness_plan.json",
+      "bytes": 2749,
+      "sha256": "e4fe97ca37f67390767fa562ea59c2eee1d13ac111901e006bdb69bb92358c23"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2512,
+      "sha256": "8b6074748110f5b0f667f45d008108044d1aeb5ad1a2b739e991bb95c9461367"
+    },
+    {
+      "path": "related_graph.json",
+      "bytes": 97195,
+      "sha256": "78c288a122805a33805bd7d7f8ce65396509ef9f6b77cd35966e0732fe085ff7"
+    },
+    {
+      "path": "REPORT.md",
+      "bytes": 6565,
+      "sha256": "1fbd9b34f3b8757771687c2c358f76a33d0e1a6b19b4a113646aa9ede982a32f"
+    },
+    {
+      "path": "ROADMAP.md",
+      "bytes": 12214,
+      "sha256": "9451ed04ffa4aa24a30b779cc51aadf2c1b9eb87fd34c50da1ef1a249bad9a5b"
+    },
+    {
+      "path": "source.md",
+      "bytes": 258137,
+      "sha256": "7f370970bb488e2e1a469c6e6914b6ce3d7d19b929d9e21ba90521566a7ec14f"
+    },
+    {
+      "path": "source_manifest.json",
+      "bytes": 32337,
+      "sha256": "2cb5d362f9fadf74ba3e89a2de20f85bc1b8fb6def70f311b751da4ae3379ecc"
+    }
+  ],
+  "artifact_checks": {
+    "json_parse_errors": [],
+    "markdown_local_links_checked": 16,
+    "markdown_link_errors": [],
+    "read_errors": []
+  }
+}

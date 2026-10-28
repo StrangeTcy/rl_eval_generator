@@ -69,7 +69,7 @@ from tools.suite_inventory import (  # noqa: E402
 )
 
 PROFILE_NAME = "recursive-gluing-frontier"
-PROFILE_VERSION = "1"
+PROFILE_VERSION = "2"
 
 # The complete recursive local-to-global family, in registry order.  This is a
 # pinned expectation: ``verify_family`` fails closed if the registry disagrees,
@@ -159,14 +159,12 @@ _INFERRED_REPRESENTATION_REASON = (
 
 AXIS_PINS: dict[str, dict[str, tuple[str, str]]] = {
     name: {"representation": ("easy", _INFERRED_REPRESENTATION_REASON)}
-    for name in (
-        "recursive_coarse_graining",
-        "recursive_holonomy_gluing",
-        "recursive_compiler_bootstrap",
-        "recursive_error_correcting_codes",
-    )
+    for name in ("recursive_compiler_bootstrap",)
 }
 
+# Historical diagnostic labels retained in manifests. These checks combine
+# decisions and certificates; failure alone cannot diagnose a wrong decision.
+# Classification requires an explicit incorrect_satisfiability_decision mode.
 DECISION_CHECKS: dict[str, tuple[str, ...]] = {
     "recursive_gluing": ("obstructed_cycle", "cyclic_unsat_generated"),
     "recursive_gluing_discovery": ("assembled_unsat", "configured"),
@@ -205,6 +203,72 @@ OUTCOMES: tuple[str, ...] = (
 
 class StudyError(RuntimeError):
     """A fail-closed planning, launch, or reporting error."""
+
+
+class StudyEvidence:
+    """Interpret check observations without promoting them to research claims.
+
+    Pair observations are joint within one episode, not products of marginal
+    pass rates. Missing checks stay missing. Independent trials and held-out
+    training protocols are still needed for generalization/transfer claims.
+    """
+
+    controls = {
+        "recursive_gluing": (("branching_sat", "branching_unsat", "closing_intervention"),
+                             ("configured", "relabel_twin", "presentation")),
+        "recursive_gluing_discovery": (("branching_sat", "branching_unsat", "closing_intervention"),
+                                       ("configured", "opaque_twin", "presentation")),
+        "recursive_maze_gluing": (("composition_sat", "composition_unsat", "orientation_intervention"),
+                                  ("configured", "opaque_twin", "presentation")),
+        "recursive_distributed_gluing": (("lock_capacity_sat", "lock_capacity_unsat", "capacity_intervention"),
+                                         ("configured", "address_twin", "endpoint_presentation")),
+        "recursive_epistemic_gluing": (("modal_positive", "modal_counterfactual", "atom_intervention"),
+                                       ("assembled_sat", "assembled_unsat", "inner_report_intervention"),
+                                       ("configured", "opaque_twin", "presentation")),
+        "recursive_compiler_bootstrap": (("configured", "opaque_twin", "opcode_presentation"),),
+        "recursive_error_correcting_codes": (("parent_positive", "parent_counterfactual", "rhs_intervention"),
+                                            ("configured", "opaque_twin", "coordinate_presentation")),
+        "recursive_coarse_graining": (("quotient_positive", "quotient_counterfactual", "transition_intervention"),
+                                      ("configured", "opaque_twin", "microscopic_presentation")),
+        "recursive_holonomy_gluing": (("configured", "opaque_twin", "coordinate_presentation"),),
+    }
+
+    def pair_rows(self, checks, controls):
+        if not controls:
+            return ()
+        left, right, purpose = controls[0]
+        a, b = checks.get(left), checks.get(right)
+        status = "unobserved" if a is None or b is None else (
+            "both_checks_passed" if a and b else "failed_control")
+        return ({"checks": (left, right), "purpose": purpose, "status": status},) + self.pair_rows(checks, controls[1:])
+
+    def pairs(self, environment, checks):
+        return self.pair_rows(checks, self.controls.get(environment, ()))
+
+    def count(self, rows, outcome):
+        if not rows:
+            return 0
+        return int(rows[0]["outcome"] == outcome) + self.count(rows[1:], outcome)
+
+    def claims(self, rows):
+        return {
+            "competence": {"validated_instances": self.count(rows, OUTCOME_VALIDATED_SUCCESS),
+                           "scope": "these generated instances and their mandatory certificates"},
+            "shortcut_resistance": {"status": "not_established_by_model_scores",
+                                    "required": "independent rival outcomes and resource limits on the same inputs"},
+            "structural_inference": {"status": "certificate_evidence_only",
+                                     "required": "inspect recovered representations, ambiguity classes, and perturbation responses"},
+            "compositional_generalization": {"status": "within_episode_controls_only",
+                                             "required": "a preregistered training/evaluation split and disjoint compositions"},
+            "cross_domain_transfer": {"status": "not_measured",
+                                      "required": "separate source-domain training and target-domain evaluation with leakage controls"},
+        }
+
+    def contract(self):
+        return {"version": 1, "claims": self.claims(()), "paired_controls": self.controls,
+                "aggregation": "no pooled family score",
+                "bootstrap_limit": "finite semantic challenges do not prove universal compiler correctness",
+                "budget_limit": "an exhausted solver budget is neither unsat nor a model capability result"}
 
 
 def _utc_now() -> str:
@@ -936,10 +1000,10 @@ def _exclude_ungated(
                 "environment": environment,
                 "reason": "no_behavioural_reference",
                 "detail": (
-                    "the exact-instance gate has no correct/incorrect reference pair for this "
-                    "environment (it hides a representation the judge oracle needs at "
-                    "representation=inferred), so a scored live result cannot be certified; "
-                    "the case is excluded rather than run under compile-only judging"
+                    "no executed positive/negative exact-instance certification is available "
+                    "for this research member. Transport semantics and strict scoring have "
+                    "changed; it remains excluded until isolated runtime regressions and "
+                    "gate certification establish the new contract"
                 ),
                 "dropped_case_count": 0,
             },
@@ -1102,6 +1166,7 @@ def build_study_manifest(
         "ready_for_scheduler": not issues and all(case["status"] in {"planned", "ready"} for case in cases),
         "study": {
             "profile": {"name": PROFILE_NAME, "version": PROFILE_VERSION},
+            "evidence_contract": StudyEvidence().contract(),
             "scope": scope,
             "matrix": chosen_matrix,
             "seeds": list(seeds),
@@ -1492,9 +1557,10 @@ def classify_result(
         return OUTCOME_INFRASTRUCTURE
     if verdict == "PASS" and float(score) >= 1.0:
         return OUTCOME_VALIDATED_SUCCESS
-    if decision_checks and checks:
-        if any(check in checks and checks[check] is False for check in decision_checks):
-            return OUTCOME_WRONG_DECISION
+    # A combined certificate check can fail with the correct decision and an
+    # invalid witness. Its Boolean alone cannot identify a wrong decision.
+    if mode == "incorrect_satisfiability_decision":
+        return OUTCOME_WRONG_DECISION
     return OUTCOME_SCORED_FAILURE
 
 
@@ -1629,6 +1695,7 @@ def build_report(
                 "failure_mode": row.get("failure_mode") if row else None,
                 "judge_guarantee": row.get("judge_guarantee") if row else None,
                 "checks": {str(name): bool(value) for name, value in checks.items()},
+                "paired_controls": StudyEvidence().pairs(str(case.get("environment")), checks),
                 "metrics": dict(metrics),
                 "usage": _usage_for(run_dir),
                 "elapsed_seconds": row.get("elapsed_seconds") if row else None,
@@ -1663,6 +1730,7 @@ def build_report(
                 "outcomes": counts,
                 "scored_case_count": len(scored),
                 "validated_success_count": counts[OUTCOME_VALIDATED_SUCCESS],
+                "evidence_claims": StudyEvidence().claims(tuple(subset)),
                 "checks": checks,
                 "metrics": _numeric_metrics(subset),
                 "factors": sorted({str(entry["factor"]) for entry in subset if entry["factor"]}),
@@ -1799,6 +1867,7 @@ def build_report(
             "excluded_environments": study.get("excluded_environments") or [],
         },
         "cross_condition_aggregation": "none",
+        "evidence_contract": StudyEvidence().contract(),
         "conditions": conditions,
         "environments": environments,
         "factors": factors,
@@ -1894,6 +1963,8 @@ def report_markdown(report: Mapping[str, Any]) -> str:
         f"- **Gate:** instance coverage complete = "
         f"`{report['gate']['instance_coverage_complete']}`",
         "- **Aggregation:** none across conditions (counts are reported per condition)",
+        "- **Evidence:** competence, shortcut resistance, structural inference, compositional generalization, and cross-domain transfer are separate claims in the JSON report.",
+        "- Paired hidden checks are within-episode observations. A pass does not establish a training-to-test generalization or transfer result.",
         "",
     ]
     if run.get("paused") or run.get("pause_reason"):

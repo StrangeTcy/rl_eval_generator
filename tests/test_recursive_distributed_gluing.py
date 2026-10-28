@@ -129,3 +129,34 @@ def test_generation_and_visible() -> None:
     finally:
         for path in created:
             shutil.rmtree(path, ignore_errors=True)
+
+def test_structural_capacity_changes_global_schedulability():
+    sat = NET.SchedulerControls().rendezvous(3, 41, 2)
+    unsat = NET.SchedulerControls().rendezvous(3, 41, 1)
+    assert sat["workers"] == unsat["workers"]
+    assert NET.job_satisfiable(sat)
+    assert not NET.job_satisfiable(unsat)
+    wrong = NET.SchedulerControls().capacity_blind(unsat)
+    assert wrong["status"] == "sat"
+    assert not NET.verify_certificate(unsat, wrong)[0]
+
+
+def test_structural_explicit_endpoints_survive_renaming():
+    job = NET.generate_job(depth=2, regime=NET.TREE, opacity=NET.TRANSPARENT, seed=41)
+    named = NET.SchedulerControls().addresses(job)
+    renamed = NET.relabel_job(named, 97)
+    assert NET.reference_certificate(job)["result"] == NET.reference_certificate(named)["result"]
+    assert NET.reference_certificate(named)["result"] == NET.reference_certificate(renamed)["result"]
+    assert NET.verify_certificate(renamed, NET.reference_certificate(renamed))[0]
+
+
+def test_structural_worker_rules_and_spawn_causality():
+    job = NET.example_visible_job()
+    job["modulus"] = 7
+    job["workers"]["root"]["rule"] = (2, 1, 3)
+    job["workers"]["leaf"]["rule"] = (3, 2, 0)
+    cert = NET.reference_certificate(job)
+    assert cert["result"] == 4
+    assert NET.verify_certificate(job, cert)[0]
+    premature = ({"agent": "leaf", "op": "compute"},)
+    assert not NET.replay_trace(job, list(premature))[0]

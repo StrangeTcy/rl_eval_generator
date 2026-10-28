@@ -1,0 +1,83 @@
+{
+  "artifact": "docs/decisions/2026-10-26-recursive-gluing-experimental-design.json",
+  "check_count": 15,
+  "passed": 15,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "diagnostic_case_count",
+      "ok": true,
+      "detail": "actual=18"
+    },
+    {
+      "name": "diagnostic_environment_counts",
+      "ok": true,
+      "detail": "{\"recursive_gluing\":8,\"recursive_gluing_discovery\":10}"
+    },
+    {
+      "name": "diagnostic_case_ids_unique",
+      "ok": true,
+      "detail": "18 unique ids"
+    },
+    {
+      "name": "diagnostic_seed_1_count",
+      "ok": true,
+      "detail": "expected two stability cells"
+    },
+    {
+      "name": "family_environment_count",
+      "ok": true,
+      "detail": "actual=8"
+    },
+    {
+      "name": "family_has_no_holonomy",
+      "ok": true,
+      "detail": "holonomy absent"
+    },
+    {
+      "name": "family_case_count",
+      "ok": true,
+      "detail": "three rows per eligible environment"
+    },
+    {
+      "name": "family_environment_names",
+      "ok": true,
+      "detail": "recursive_gluing,recursive_gluing_discovery,recursive_maze_gluing,recursive_distributed_gluing,recursive_epistemic_gluing,recursive_compiler_bootstrap,recursive_error_correcting_codes,recursive_coarse_graining"
+    },
+    {
+      "name": "case_id_recomputation",
+      "ok": true,
+      "detail": "all diagnostic ids recompute from levels and seed"
+    },
+    {
+      "name": "config_files_exist",
+      "ok": true,
+      "detail": "all eight family configs exist"
+    },
+    {
+      "name": "reference_network_files_exist",
+      "ok": true,
+      "detail": "all eight oracle files exist"
+    },
+    {
+      "name": "compiler_caveat_present",
+      "ok": true,
+      "detail": "compiler depth caveat recorded"
+    },
+    {
+      "name": "discovery_rival_present",
+      "ok": true,
+      "detail": "expanded rival recorded"
+    },
+    {
+      "name": "family_contract_complete",
+      "ok": true,
+      "detail": "all three family condition contracts present"
+    },
+    {
+      "name": "episode_accounting",
+      "ok": true,
+      "detail": "72 logical calls per case"
+    }
+  ]
+}

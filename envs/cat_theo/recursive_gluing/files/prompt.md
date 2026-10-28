@@ -50,3 +50,9 @@ Transport has to follow the listed pairs.
 ```bash
 python visible_tests.py
 ```
+
+The supplied overlap relations need not be bijections or total functions.
+Some local labels have several compatible neighbors. Hidden checks include
+longer cycles of these relations and pairs differing only in the closing
+overlap. Validate all constraints simultaneously; every local relation can
+be nonempty even when no global assignment exists.

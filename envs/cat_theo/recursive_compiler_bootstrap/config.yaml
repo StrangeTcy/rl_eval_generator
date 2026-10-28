@@ -1,6 +1,6 @@
 axes:
   - id: recursive_depth
-    description: "Program-tree height of a bounded add-grammar over {0,1,2}, capped at 2. Recorded depth is that height. Stage count is the bootstrap_regime, not this axis."
+    description: "Actual L1 expression depth and d+1 executed self-compilation stages; supported depth 1 through 4, larger requests fail explicitly. Also controls the finite add-grammar depth."
     class: "task"
     levels:
       easy:
@@ -32,7 +32,7 @@ axes:
 
 scoring:
   mode: continuous_accuracy
-  pass_threshold: 0.85
+  pass_threshold: 1.0
   partial_threshold: 0.60
 
 constants:

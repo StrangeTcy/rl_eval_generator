@@ -238,3 +238,22 @@ def test_generation_and_visible() -> None:
     finally:
         for path in created:
             shutil.rmtree(path, ignore_errors=True)
+
+@pytest.mark.parametrize("depth", (2, 3, 4))
+def test_structural_mixed_tiles_and_orientation_counterfactual(depth):
+    sat = NET.MazeControls().composition(depth, 41)
+    unsat = NET.MazeControls().composition(depth, 41, 1)
+    assert sat["tiles"] == unsat["tiles"]
+    assert sat["nesting"] == unsat["nesting"]
+    assert sat["goal_orientation"] != unsat["goal_orientation"]
+    route = NET.shortest_route(sat)
+    assert route is not None
+    assert NET.replay_route(sat, route)[0]
+    assert not NET.replay_route(unsat, route)[0]
+    assert NET.shortest_route(unsat) is None
+
+
+def test_structural_clearing_does_not_reset_edge_identity():
+    before = (("root", 2, None, 0), ("child", 1, "return", 0))
+    after = (("root", 2, None, 1), ("child", 1, "return", 1))
+    assert NET.MazeControls().occurrence(before) == NET.MazeControls().occurrence(after)

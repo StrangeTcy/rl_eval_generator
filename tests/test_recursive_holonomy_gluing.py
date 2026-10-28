@@ -119,8 +119,22 @@ def test_grade_reference_beats_baseline() -> None:
     ref = NET.grade_solver(NET.arm_reference, **kwargs)
     assert all(ref.values()), ref
     base = NET.grade_solver(_baseline().solve, **kwargs)
-    assert base["local_visible"] is True
+    assert not base["local_visible"]  # The stub omits the mandatory transport certificate.
     assert sum(base.values()) < sum(ref.values())
+
+
+def test_path_consistency_is_observed_and_mandatory() -> None:
+    inst = NET.generate_instance(
+        depth=2, family=NET.AFF, regime=NET.REC_COMP,
+        representation=NET.REVEALED, seed=6
+    )
+    assert NET.paths_agree(inst) is False
+    reference = NET.reference_certificate(inst)
+    assert reference["path_consistent"] is False
+    assert NET.verify_certificate(inst, reference)[0]
+    wrong = dict(reference)
+    wrong["path_consistent"] = True
+    assert NET.verify_certificate(inst, wrong)[0] is False
 
 
 def test_oracle_not_candidate_solver() -> None:
@@ -167,23 +181,66 @@ def test_depth_recorded_equals_cycle_leaf_count() -> None:
         assert "meta" not in pub_i
 
 
-def test_heldout_baselines_recorded() -> None:
-    rows = []
-    for seed in range(10_000, 10_012):
-        inst = NET.generate_instance(
-            depth=2, family=NET.MUL, regime=NET.REC_COMP, representation=NET.REVEALED, seed=seed
-        )
-        truth = NET.instance_satisfiable(inst)
-        local = NET.arm_local_only(inst)["status"] == "sat"
-        rows.append((truth, local))
-    # REC_COMP is unsat; local-only always sat
-    assert all(t is False for t, _ in rows)
-    assert all(local is True for _, local in rows)
-    report = {
-        "n": len(rows),
-        "truth_unsat": sum(1 for t, _ in rows if not t),
-        "local_only_unsat_acc": 0.0,
-        "reference_acc": 1.0,
-    }
-    out = ROOT / "docs" / "audits" / "2026-10-16-holonomy-baselines.json"
-    out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+@pytest.mark.parametrize("seed", tuple(range(10_000, 10_012)))
+def test_heldout_baselines_rejected(seed):
+    inst = NET.generate_instance(
+        depth=2, family=NET.MUL, regime=NET.REC_COMP, representation=NET.REVEALED, seed=seed
+    )
+    assert not NET.instance_satisfiable(inst)
+    assert NET.verify_certificate(inst, NET.reference_certificate(inst))[0]
+    assert not NET.verify_certificate(inst, NET.arm_local_only(inst))[0]
+
+@pytest.mark.parametrize("family", (NET.MUL, NET.AFF, NET.PERM))
+def test_structural_direct_transport_rival_and_public_calibration(family):
+    inst = NET.generate_instance(depth=3, family=family, regime=NET.REC_COMP,
+                                 representation=NET.INFERRED, seed=41)
+    cert = NET.TransportGraph().direct_certificate(NET.public_instance(inst))
+    assert NET.verify_certificate(inst, cert)[0]
+    assert cert["status"] == NET.reference_certificate(inst)["status"]
+    assert not cert["sections"]
+
+
+def test_structural_curved_transport_can_have_a_global_section():
+    inst = NET.TransportGraph().curved_section(41)
+    cert = NET.reference_certificate(inst)
+    assert cert["status"] == "sat"
+    assert cert["sections"] == (0,)
+    assert not cert["path_consistent"]
+    assert cert["transport"][2] == "curved"
+    assert NET.verify_certificate(inst, cert)[0]
+    a, b, geometry = cert["transport"]
+    cert["transport"] = (a[::-1], b[::-1], geometry)
+    assert NET.verify_certificate(inst, cert)[0]
+    cert["transport"] = (a, b, "flat")
+    assert not NET.verify_certificate(inst, cert)[0]
+
+
+def test_structural_second_loop_and_complete_section_set_are_mandatory():
+    inst = NET.TransportGraph().curved_section(41)
+    inst["maps"]["node_alt"] = {"a": 3, "b": 1}
+    inst["calibration"]["node_alt"] = ((0, 1), (1, 4))
+    cert = NET.reference_certificate(inst)
+    assert cert["status"] == "unsat"
+    assert NET.verify_certificate(inst, cert)[0]
+    cert["status"] = "sat"
+    cert["state"] = 0
+    cert["sections"] = (0,)
+    assert not NET.verify_certificate(inst, cert)[0]
+
+
+def test_structural_equal_nonidentity_paths_are_not_flat():
+    inst = NET.generate_instance(depth=2, family=NET.AFF, regime=NET.RECURSIVE,
+                                 representation=NET.REVEALED, seed=41)
+    cert = NET.reference_certificate(inst)
+    assert cert["path_consistent"]
+    assert cert["transport"][2] == "curved"
+    assert cert["sections"]
+
+
+@pytest.mark.parametrize("rows", (None, ((0,),), ((0, 0),) * 2000))
+def test_structural_malformed_transport_is_rejected(rows):
+    inst = NET.TransportGraph().curved_section(41)
+    cert = NET.reference_certificate(inst)
+    a, b, geometry = cert["transport"]
+    cert["transport"] = (rows, b, geometry)
+    assert not NET.verify_certificate(inst, cert)[0]

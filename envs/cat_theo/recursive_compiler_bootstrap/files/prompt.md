@@ -1,62 +1,88 @@
-# Source, bytecode, and encodings
+# Compile a compiler
 
-Implement `%%MODEL_CLASS%%.solve` in `%%MODEL_FILE%%`.
+Implement `%%MODEL_CLASS%%.solve` in `%%MODEL_FILE%%`. Return a deterministic certificate for both tasks below.
 
-## Languages
+## L1 and its machine
 
-Source expressions, evaluated modulo `modulus`:
+The `bootstrap` input is
+`[version, stage_count, opcode_shift, null, trusted_seed, program_depth, salt]`.
+The null slot deliberately supplies no compiler implementation. Write an L1
+compiler source expression. The trusted seed is executable machine code that
+accepts `[source_expression, output_opcode_shift]` and returns compiled code.
 
-- an integer `n`
-- `["add", left, right]`
+An L1 expression is a tagged array. Values are signed integers or finite
+sequences. Literal payloads are integers. Evaluation has one argument and a
+root program; a self call evaluates that root with a new argument.
 
-Bytecode, stack machine, same modulus:
+| Source | Meaning |
+|---|---|
+| `[0,n]` | integer literal |
+| `[1]` | current argument |
+| `[12]` | empty sequence |
+| `[2,e]`, `[3,e]`, `[6,e]` | first element, remaining sequence, sequence length |
+| `[4,a,b]` | prepend value a to sequence b |
+| `[5,a,b]` | concatenate sequences |
+| `[7,a,b]`, `[8,a,b]` | integer addition, subtraction |
+| `[9,a,b]` | equality, returning 1 or 0 |
+| `[10,c,a,b]` | evaluate c, then only a if nonzero or only b if zero |
+| `[11,e]` | call the root program with argument e |
+| `[13,a,b]` | evaluate a, evaluate b with that argument, then restore the caller argument |
 
-- `["push", n]` pushes `n`
-- `["add"]` replaces the top two values `a, b` with `(a + b) mod modulus`
-- `["halt"]` returns the top of stack
+Operands evaluate left to right. There is no modular reduction in L1. Invalid
+operations such as taking the first element of an empty sequence fail.
 
-A compiler from source is: integers become `push`; `add` concatenates the
-compiled children and then `add`. A trailing `halt` is added.
+Machine code is a sequence of `[opcode_shift + opcode, operand]` instructions.
+The program counter starts at zero; the stack starts empty. Fetch increments
+the counter before executing the instruction. Ordinary operands are zero.
 
-An **encoding** assigns each of `push`, `add`, `halt` a distinct opcode id
-in `{0,1,2}`. Encoded programs use those ids in the first slot of each
-instruction. A **decoder** is the inverse map id → name.
+| Opcode | Machine effect |
+|---|---|
+| 0 | push integer operand |
+| 1 | push current argument |
+| 2, 3, 6 | replace top with first, remaining sequence, or length |
+| 4, 5, 7, 8, 9 | pop b then a; apply the corresponding source operation |
+| 10 | pop condition; add operand to counter if condition is zero |
+| 11 | unconditionally add operand to counter |
+| 12 | pop new argument; save continuation and remaining stack; call this code at counter zero |
+| 14 | push empty sequence |
+| 15 | replace top by saved argument and use the former top as current argument |
+| 16 | stack ends in saved argument, result; restore argument, leaving result |
+ 
+Reaching exactly the end of code requires a single stack value. Return it to
+the caller or finish if there is no continuation. Jumping beyond the end,
+stack errors, unknown opcodes, and fuel exhaustion fail. No instruction
+performs compilation.
 
-## Input
+Return `"bootstrap": [your_source, compiled_stages]`. The first submitted stage
+must equal the trusted seed's output on your source. Each subsequent stage
+must equal the preceding submitted compiler's output on the same source.
+The sequence must have exactly `stage_count` entries. Every compiler stage
+must preserve semantics on independent source/VM checks. The final compiler
+is tested on additional programs containing every construct, changed
+constants, conditional branches, self calls, and deeper expression trees.
+These checks allow alternative compiler source and alternative correct
+instruction sequences. Supported program depths are 1 through 4; larger
+requests fail explicitly. A depth d requests d+1 executed compilation stages.
 
-- `modulus`, `programs`: the finite set of source programs the claim is about.
-  Programs are sampled from the grammar of constants `{0,1,2}` and nested
-  `add`, with tree height at most `program_height` (also recorded as `depth`,
-  at most 2). The claim is only about this listed set, not every expression
-  of that height.
-- `stages`: ordered path. `"compile"` then optional `"recode"`. When
-  `representation` is `"revealed"`, a recode stage includes its opcode-id
-  permutation; otherwise recover encodings from `calibration`.
-- `claimed_decoder`: map from opcode id to name for the **last** stage's
-  encoding.
-- `calibration`: a few `{source, bytes}` pairs produced by that last encoding.
-- `representation`: `"revealed"` also lists `encodings`.
+## Finite decoder control
 
-The claim is: for every program in `programs`, evaluating the source equals
-evaluating the bytecode obtained by compiling, encoding with the last-stage
-encoding, and decoding with `claimed_decoder`.
+The other fields describe a separate, smaller task. Its source is an integer
+or `["add",left,right]`, evaluated modulo `modulus`. Compilation emits
+`["push",n]` for integers and child code followed by `["add"]` for addition,
+then a trailing `["halt"]`. An encoding assigns distinct ids 0,1,2 to these
+three instructions. Decode the final stage using `claimed_decoder`.
 
-Each stage may still be correct **relative to its own encoding** even if the
-claimed decoder for the whole path is not.
+Decide whether all listed `programs` preserve their source values. Revealed
+inputs include `encodings`; otherwise infer the last encoding from
+`calibration` source/byte pairs. The decoder control concerns only the listed
+programs. Its height bound is `program_height`.
 
-## Output
+Return `"equivalent": true` when the claim holds. Otherwise return false and
+`"counterexample": {"source": expression, "source_value": n, "decoded_value": m}`.
+Use null for decoded_value when a well-formed source produces a decoding or
+machine error. Malformed source and fuel exhaustion are not counterexamples.
 
-```python
-{"equivalent": True, "encodings": {...}}
-{"equivalent": False, "counterexample": {"source": expr, "source_value": int, "decoded_value": int}}
-```
-
-`equivalent` must be a Boolean. If you claim false, cite a program from the
-instance (or any well-formed source) that actually disagrees under the claimed
-decoder. `solve` must be deterministic.
-
-## Visible checks
-
-```bash
-python visible_tests.py
-```
+The L1 bootstrap certificate is mandatory with either decoder verdict.
+The visible decoder-only demonstration uses bootstrap=null and requires only
+the decoder answer. Every generated grading input has a non-null bootstrap
+and requires both tasks. Visible checks establish only basic API behavior.

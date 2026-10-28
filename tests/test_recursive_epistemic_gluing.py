@@ -12,6 +12,7 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
+import copy
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -671,10 +672,41 @@ def test_13_heldout_metrics_and_metadata_probe() -> None:
         / len(y),
         "B1_acc": sum(int(NET.task_sat(m) == _baseline_pairwise(m)) for m, _ in balanced) / len(y),
     }
-    # Honest record: metadata may do well; do not tweak features to force failure.
+    # Metadata may do well; keep that observation instead of forcing failure.
     assert 0.0 <= meta_acc <= 1.0
-    report = ROOT / "docs" / "audits" / "2026-10-16-epistemic-heldout-metrics.json"
-    report.write_text(json.dumps(per_class, indent=2) + "\n", encoding="utf-8")
     assert per_class[NET.NEG_DEEP]["B1_pairwise"] == 0.0
     assert per_class[NET.NEG_RECURSIVE]["Bflat"] == 0.0
     assert per_class[NET.POS_RECURSIVE]["Bflat"] == 0.0
+
+def test_structural_modal_depth_boundary_and_minimal_counterfactual():
+    model = NET.KnowledgeProbe().generate(1, 5, NET.TREE, NET.OPAQUE, 41)
+    changed = NET.KnowledgeProbe().counterfactual(model)
+    assert NET.query_value(model)
+    assert not NET.query_value(changed)
+    assert model["query"] == changed["query"]
+    assert model["frames"]["outer"]["indist"] == changed["frames"]["outer"]["indist"]
+    short = copy.deepcopy(changed)
+    agents, atom = short["knowledge_probe"]
+    short["query"] = NET.KnowledgeProbe().formula(agents[:-1], atom)
+    short["knowledge_probe"] = (agents[:-1], atom)
+    assert NET.query_value(short)
+
+
+def test_structural_reachability_requires_all_layers_but_allows_row_order():
+    model = NET.KnowledgeProbe().generate(1, 4, NET.TREE, NET.OPAQUE, 43)
+    cert = NET.reference_certificate(model)
+    layers = cert["reachability"]
+    cert["reachability"] = layers[:-1] + (layers[-1][::-1],)
+    assert NET.verify_certificate(model, cert)[0]
+    cert["reachability"] = layers[:-1]
+    assert not NET.verify_certificate(model, cert)[0]
+
+
+def test_structural_threewise_inner_cells_do_not_settle_global_intersection():
+    model = NET.KnowledgeProbe().generate(2, 3, NET.CYCLIC_UNSAT, NET.OPAQUE, 41)
+    frame = model["frames"][model["levels"][1]]
+    cells = NET.cells_for_reports(frame, model["nested_bundle"])
+    assert NET.kwise_nonempty(cells, 3)
+    assert not NET.intersection_of(cells)
+    assert not NET.bundle_possible(model)
+    assert NET.verify_certificate(model, NET.reference_certificate(model))[0]

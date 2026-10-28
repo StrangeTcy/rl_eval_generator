@@ -1,47 +1,46 @@
-# Finite maps on nested modules
+# Transport around two loops
 
 Implement `%%MODEL_CLASS%%.solve` in `%%MODEL_FILE%%`.
 
-## Input
+The input contains a finite `domain`, named maps, and two loops `paths.path_a`
+and `paths.path_b` based at the same vertex. Apply names in listed order.
+`transport_edges` gives the corresponding source vertex, target vertex, and
+map name for every edge. Each loop has its own interior vertices.
+`cycle` is path_a. Module names describe presentation, not extra constraints.
 
-`solve` receives one instance:
+Map families:
+- multiplicative: y = q*x modulo prime p, on nonzero field elements;
+- affine: y = a*x+b modulo prime p, with nonzero a;
+- permutation: y = image[x], on 0 through n-1. Here `modulus` is n and need
+  not be prime.
 
-- `family`: `"multiplicative"`, `"affine"`, or `"permutation"`.
-- `modulus`: a prime `p`.
-- `domain`: the allowed states. Multiplicative uses `{1, ..., p-1}`;
-  affine uses `{0, ..., p-1}`; permutation uses `{0, ..., n-1}`.
-- `modules`: each module has ports `in` and `out`. A `node` has a `child`
-  whose in-to-out map is used as a factor of the parent map.
-- `root`, `depth`, `cycle`: `cycle` is a list of map names. Apply them
-  **in listed order, first name first**.
-- `calibration`: for each named map, a list of `[x, y]` pairs that the map
-  must send `x` to `y`.
-- `representation`: `"revealed"` includes a `maps` field with the maps
-  written out; `"inferred"` and `"explicit"` follow the same field rules
-  (`explicit` also includes `expanded`, the same maps as a flat list).
+Revealed and explicit inputs supply `maps`. Explicit inputs also supply the
+expanded path_a factors. Inferred inputs supply sufficient `calibration`
+pairs to recover every map. For affine maps two distinct input probes
+determine a and b; permutation probes cover the domain.
 
-Map families (exact):
+A global section exists exactly when a base state returns to itself along
+**both** loops. Equality of the two complete transport maps is a different
+question. Call the two-loop connection `flat` only when both loop maps are
+identity maps. Equal nonidentity loop maps are `curved`; curved transport can
+still have compatible base states.
 
-- multiplicative: `y = (q * x) mod p` with `q` in `{1, ..., p-1}`.
-- affine: `y = (a * x + b) mod p` with `a` in `{1, ..., p-1}`.
-- permutation: `y = image[x]` for a listed bijection `image`.
-
-A state `s` in `domain` is **compatible** when applying every map in `cycle`
-in order returns `s`.
-
-## Output
-
-```python
-{"status": "sat", "state": s, "maps": {"leaf": {...}, ...}}
-{"status": "unsat"}
+Return:
+```json
+{
+  "status": "sat",
+  "state": 0,
+  "maps": {},
+  "path_consistent": true,
+  "transport": [ [[0,0]], [[0,0]], "flat" ],
+  "sections": [0]
+}
 ```
-
-If `representation` is `"inferred"`, SAT answers must include `maps` that
-match every calibration pair. A crash or parse failure is not a verdict.
-`solve` must be deterministic.
-
-## Visible checks
-
-```bash
-python visible_tests.py
-```
+The numbers and empty maps above illustrate the shape, not a solution.
+`transport` must contain the full [input,output] table for each loop and its
+flat/curved classification. Table rows may be reordered.
+`sections` must list every compatible base state exactly once.
+`path_consistent` says whether the two complete maps agree.
+For sat, `state` is any member of sections. For unsat, sections is empty and
+state can be omitted. Inferred answers must supply all calibrated maps,
+including on unsat inputs. All these conditions are mandatory.

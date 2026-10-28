@@ -492,3 +492,47 @@ def test_generated_workspace_solver_is_the_buggy_baseline() -> None:
         assert NET.evaluate_solve_fn(module.RegionNetworkSolver().solve, inst) is False
     finally:
         shutil.rmtree(generated, ignore_errors=True)
+
+def test_structural_branching_closing_intervention():
+    sat = NET.MonotoneCycle().generate(7, 104729)
+    unsat = NET.MonotoneCycle().generate(7, 104729, 1)
+    assert sat["regions"] == unsat["regions"]
+    assert sat["overlaps"][:-1] == unsat["overlaps"][:-1]
+    assert sat["overlaps"][-1] != unsat["overlaps"][-1]
+    assert not NET.semantic_issues(sat)
+    assert not NET.semantic_issues(unsat)
+    assert NET.pairwise_nonempty(sat) and NET.pairwise_nonempty(unsat)
+    assert NET.oracle_satisfiable(sat)
+    assert not NET.oracle_satisfiable(unsat)
+    assert NET.evaluate_solve_fn(NET.reference_solve, sat)
+    assert NET.evaluate_solve_fn(NET.reference_solve, unsat)
+
+
+def test_structural_alternative_global_assignment_is_accepted():
+    inst = NET.example_solvable_cycle()
+    candidate = {"status": "sat", "assignment": {"cell_a": "1", "cell_b": "1", "cell_c": "1"}}
+    assert NET.parse_solve_output(inst, candidate)[0] is not None
+
+
+class StructuralFalseUnsat:
+    def solve(self, instance):
+        return {"status": "unsat"}
+
+
+class StructuralBudgetRival:
+    def solve(self, instance):
+        raise NET.OracleBudgetExceeded("declared rival budget")
+
+
+def test_structural_rival_recorder_rejects_false_unsat_and_preserves_exhaustion():
+    from tools.recursive_necessity_baselines import StructuralRivals
+
+    instance = NET.example_solvable_cycle()
+    runner = StructuralRivals()
+    wrong = runner.record("recursive_gluing", NET, instance, instance,
+                          ("false_unsat", "negative_control", StructuralFalseUnsat().solve))
+    assert wrong["outcome"] == "rejected"
+    exhausted = runner.record("recursive_gluing", NET, instance, instance,
+                              ("bounded", "resource_control", StructuralBudgetRival().solve))
+    assert exhausted["outcome"] == "solver_budget_exhausted"
+    assert exhausted["certificate_valid"] is None

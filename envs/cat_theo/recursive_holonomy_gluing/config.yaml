@@ -43,7 +43,8 @@ axes:
 
 scoring:
   mode: continuous_accuracy
-  pass_threshold: 0.85
+  # Every designated global transport check is mandatory.
+  pass_threshold: 1.0
   partial_threshold: 0.60
 
 constants:

@@ -11,6 +11,7 @@ is a translation on Z/qZ (q odd prime) presented only as pair tables.
 """
 from __future__ import annotations
 
+import copy
 import json
 import random
 import time
@@ -38,6 +39,8 @@ CHECK_NAMES = (
     "opaque_twin",
     "decoy_heldout",
     "heldout_twist",
+    "branching_sat",
+    "branching_unsat",
     "deterministic",
 )
 PUBLIC_KEYS = ("root", "depth", "modules", "productions", "closing")
@@ -141,26 +144,10 @@ def compose_branch(
     right_pairs: set[tuple[str, str]],
     wiring: Mapping[str, list],
 ) -> set[tuple[str, str]]:
-    enter = _as_map(wiring["enter"])  # parent_enter -> left_enter
-    mid = _as_map(wiring["mid"])  # left_leave -> right_enter
-    leave = _as_map(wiring["leave"])  # right_leave -> parent_leave
-    inv_enter = {v: k for k, v in enter.items()}
-    right_by_enter: dict[str, list[str]] = defaultdict(list)
-    for e_r, l_r in right_pairs:
-        right_by_enter[e_r].append(l_r)
-    out: set[tuple[str, str]] = set()
-    for e_l, l_l in left_pairs:
-        parent_enter = inv_enter.get(e_l)
-        if parent_enter is None:
-            continue
-        right_enter = mid.get(l_l)
-        if right_enter is None:
-            continue
-        for l_r in right_by_enter.get(right_enter, ()):
-            parent_leave = leave.get(l_r)
-            if parent_leave is not None:
-                out.add((parent_enter, parent_leave))
-    return out
+    return set(RelationAlgebra().compose((
+        tuple(wiring["enter"]), tuple(left_pairs), tuple(wiring["mid"]),
+        tuple(right_pairs), tuple(wiring["leave"]),
+    )))
 
 
 def compact_summaries(
@@ -415,7 +402,8 @@ def _csp_solution(instance: Mapping[str, Any], max_nodes: int = 200_000) -> Opti
             return None
         unassigned = [rid for rid in rids if len(dom[rid]) > 1]
         if not unassigned:
-            return {rid: next(iter(sorted(dom[rid]))) for rid in rids}
+            candidate = {rid: next(iter(sorted(dom[rid]))) for rid in rids}
+            return candidate if RelationAlgebra().check(candidate, tuple(instance["overlaps"])) else None
         unassigned.sort(key=lambda rid: (len(dom[rid]), rid))
         rid = unassigned[0]
         for value in sorted(dom[rid]):
@@ -449,6 +437,41 @@ def expanded_root_pairs(grammar: Mapping[str, Any], max_nodes: int = 200_000) ->
             if _csp_solution(pinned, max_nodes=max_nodes) is not None:
                 accepted.add((e, l))
     return accepted
+
+
+def expanded_summaries(
+    grammar: Mapping[str, Any], *, max_nodes: int = 200_000
+) -> dict[str, dict[str, list[list[str]]]]:
+    """Build the certificate from independently expanded CSP projections.
+
+    This intentionally does not call ``compact_summaries`` or
+    ``reference_certificate``.  For each branch depth, the grammar is unfolded
+    into explicit port variables and the accepted root-port relation is
+    projected by finite CSP search.  The result is therefore a genuine
+    non-recursive rival for the compact relation-composition algorithm, although
+    it may hit the explicit expansion/resource limit at larger depths.
+    """
+
+    depth = int(grammar["depth"])
+    if depth > MAX_EXPAND_DEPTH:
+        raise OracleBudgetExceeded("expanded certificate exceeds the declared depth cap")
+    modules = grammar["modules"]
+    out: dict[str, dict[str, list[list[str]]]] = {}
+    for name, spec in modules.items():
+        if spec["kind"] == "leaf":
+            out[name] = {"0": sorted([list(pair) for pair in spec["pairs"]])}
+            continue
+        out[name] = {}
+        for remaining in range(1, depth + 1):
+            sub = copy.deepcopy(dict(grammar))
+            sub["root"] = name
+            sub["depth"] = remaining
+            sub["closing"] = None
+            pairs = sorted(
+                [list(pair) for pair in expanded_root_pairs(sub, max_nodes=max_nodes)]
+            )
+            out[name][str(remaining)] = pairs
+    return out
 
 
 def _tokens(rng: random.Random, n: int, used: set[str]) -> list[str]:
@@ -647,17 +670,29 @@ def arm_compact(grammar: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def arm_expanded(grammar: Mapping[str, Any]) -> dict[str, Any]:
-    """Cross-check: independent expanded SAT, then the compact certificate.
+    """Independent expanded-CSP certificate baseline.
 
-    SAT is decided by the expanded CSP. The compact ``realizable`` tables are
-    not computed by expansion; filling the exact-match certificate still uses
-    the compact oracle. The scaling experiment never calls this function.
+    Unlike the old cross-check, this function constructs every required
+    ``realizable`` table from explicit unfolded CSP projections.  It never
+    calls ``compact_summaries`` or ``reference_certificate``.  At depths beyond
+    the expansion/resource budget it raises ``OracleBudgetExceeded`` rather
+    than silently delegating to the compact solver.
     """
-    sat = expanded_satisfiable(grammar)
-    cert = reference_certificate(grammar)
-    if sat != (cert["status"] == "sat"):
-        raise RuntimeError("expanded SAT disagrees with compact SAT")
-    return cert
+    realizable = expanded_summaries(grammar)
+    root = str(grammar["root"])
+    depth = str(int(grammar["depth"]))
+    accepted = _pair_set(realizable[root][depth])
+    closing = closing_pairs(grammar)
+    if closing is not None:
+        accepted &= closing
+    result: dict[str, Any] = {
+        "status": "sat" if accepted else "unsat",
+        "realizable": realizable,
+    }
+    if accepted:
+        pair = sorted(accepted)[0]
+        result["root_enter"], result["root_leave"] = pair
+    return result
 
 
 def arm_given_canonical(grammar: Mapping[str, Any]) -> dict[str, Any]:
@@ -759,6 +794,8 @@ def build_grade_grammars(
             ),
         ),
         ("opaque_twin", relabel_grammar(configured, seed + 99)),
+        ("branching_sat", RelationAlgebra().control(max(2, depth), seed + 41)),
+        ("branching_unsat", RelationAlgebra().control(max(2, depth), seed + 41, 1)),
         (
             "decoy_heldout",
             generate_grammar(
@@ -857,3 +894,49 @@ def measure_scaling(
             }
         )
     return rows
+
+
+
+class RelationAlgebra:
+    """Finite relation composition, including branching and partial overlaps."""
+
+    def image(self, relation, point):
+        if not relation:
+            return ()
+        a, b = relation[0]
+        rest = self.image(relation[1:], point)
+        return (b,) + rest if a == point else rest
+
+    def pairs(self, point, targets):
+        if not targets:
+            return ()
+        return ((point, targets[0]),) + self.pairs(point, targets[1:])
+
+    def join(self, left, right):
+        if not left:
+            return ()
+        a, b = left[0]
+        return self.pairs(a, self.image(right, b)) + self.join(left[1:], right)
+
+    def compose(self, relations):
+        if not relations[1:]:
+            return tuple(map(tuple, relations[0]))
+        return self.join(tuple(relations[0]), self.compose(relations[1:]))
+
+    def check(self, assignment, overlaps):
+        if not overlaps:
+            return 1
+        edge = overlaps[0]
+        pair = assignment[edge["left"]], assignment[edge["right"]]
+        if tuple(map(tuple, edge["pairs"])).count(pair) == 0:
+            return 0
+        return self.check(assignment, overlaps[1:])
+
+    def control(self, depth, seed, obstructed=0):
+        grammar = generate_grammar(depth=depth, interface_size=3, regime=TREE,
+                                   opacity=TRANSPARENT, ambiguity=CLEAN, seed=seed)
+        grammar["modules"]["tip"]["pairs"] = (
+            ("s0", "s0"), ("s0", "s1"), ("s1", "s1"), ("s2", "s2"))
+        grammar["closing"] = {"pairs": (("s1", "s0"),) if obstructed else (("s0", "s1"),)}
+        grammar.pop("meta", None)
+        return relabel_grammar(grammar, seed)

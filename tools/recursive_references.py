@@ -18,20 +18,17 @@ environments.  It is deliberately not a second solver framework:
 Both patches are written only into a throwaway gate workspace by the host.  No
 model sees them, and nothing here is part of the agent-facing tree.
 
-Coverage is intentionally partial.  ``recursive_holonomy_gluing`` is not
-certified here: its shipped pass threshold is 0.85, and a locally consistent but
-globally wrong certificate still scores 6/7 = 0.857 on seven of its ten pairwise
-vectors, so on those vectors the case has no discriminating negative control and
-the exact-instance gate rightly refuses it.  Tuning a "more wrong" arm would
-certify this file instead of the environment, so the member stays excluded and
-``tools/recursive_gluing_study.py`` records that reason in every plan and report.
+Coverage is intentionally partial.  ``recursive_holonomy_gluing`` remains
+excluded pending executed positive/negative gate certification of its revised
+transport contract. Its current pass threshold is 1.0. The historical 0.85
+threshold allowed decisive global failures to be hidden by other checks;
+repairing that source-level defect does not itself certify the revised judge.
+``tools/recursive_gluing_study.py`` records the outstanding certification.
 
-For the same reason ``representation`` is pinned to ``revealed`` for the four
-members whose judge-side oracle needs the hidden structure
-(``recursive_coarse_graining``, ``recursive_compiler_bootstrap``,
-``recursive_error_correcting_codes`` and, when it is later certified,
-``recursive_holonomy_gluing``): the judge cannot replay its own reference from
-an inferred instance, so those columns are unscored rather than guessed at.
+Only ``recursive_compiler_bootstrap`` currently pins ``representation`` to
+``revealed``: its legacy decoder reference still needs the hidden encodings.
+Codes and coarse-graining now recover their presentations from public
+calibration. The exact-instance gate must still certify each selected case.
 """
 from __future__ import annotations
 
@@ -94,13 +91,11 @@ NEGATIVE_CHECK: dict[str, str] = {
     "recursive_error_correcting_codes": "assembled_unsat",
 }
 
-# Explicit wrong patches for environments whose shipped naive arm is not wrong
-# enough to clear the environment's own pass threshold at every vector.  The
-# maze baseline only drops the orientation bit; on shallow vectors it still
-# scores 0.857 (above the 0.85 threshold), so the gate correctly refuses it as a
-# negative control.  The flat-search arm below is the same tempting shortcut
-# taken further: it searches the root tile's rooms as if the maze were flat,
-# ignoring both orientation and nested shafts.
+# The maze flat-search negative control predates the strict 1.0 threshold.
+# Under the historical 0.85 threshold, dropping orientation alone could still
+# pass shallow cases. This retained control searches only the root tile,
+# ignoring both orientation and nested shafts; the gate checks its named
+# assembled-unsat failure on the current instance.
 _MAZE_WRONG_SOURCE = '''
 class {class_name}:
     """Tempting shortcut: search the root tile as if the maze were flat."""

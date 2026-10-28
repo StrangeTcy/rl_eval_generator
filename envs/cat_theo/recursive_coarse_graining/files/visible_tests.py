@@ -4,10 +4,13 @@ from solver import %%MODEL_CLASS%%
 def _visible():
     w = [[[1, 0], [0, 0]], [[0, 0], [0, 0]]]
     return {
+        "abstraction": (((3, 4, 5, 0, 1, 2), (1, 2, 0, 1, 2, 0)),
+                        ((0, 0), (3, 1)), ((0, (0, 1, 0)), (5, (1, 0)))),
         "spins": [0, 1],
         "regions": {"leaf": {"weights": w}},
         "tree": {"kind": "leaf", "name": "leaf"},
-        "calibration": {"spin_pairs": [[0, 0], [1, 1]]},
+        "calibration": {"spin_pairs": [[0, 0], [1, 1]],
+                        "probe_table": ((1, 2), (3, 4)), "observed_probe_table": ((1, 2), (3, 4))},
         "representation": "revealed",
         "depth": 1,
         "label_perm": [0, 1],

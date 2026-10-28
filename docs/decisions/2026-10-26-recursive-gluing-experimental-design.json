@@ -1,0 +1,640 @@
+{
+  "schema_version": 1,
+  "design_id": "recursive-gluing-experimental-design-2026-10-26",
+  "source_revision": null,
+  "status": "source_changes_runtime_validation_pending",
+  "scientific_levels": [
+    "competence",
+    "shortcut_resistance",
+    "structural_inference",
+    "compositional_generalization",
+    "cross_domain_transfer"
+  ],
+  "controls": {
+    "positive": "tools/recursive_references.py reference entry embedded in a throwaway solver; score 1.0 on the real judge",
+    "negative": "Named plausible negative controls must fail a mandatory certificate check. Reference-conditioned controls are labelled; their rejection does not establish independent shortcut resistance.",
+    "gate_failure_is": "oracle_or_gate_failure, never a model score"
+  },
+  "action_interface_limit": "Externally checked certificates now include L1 compiler source and bootstrap stages, modal reachability, code ambiguity classes, quotients and predictions, and transport tables/common sections. They do not expose or establish private reasoning mechanisms.",
+  "diagnostic_cases": [
+    {
+      "id": "recursive_gluing__recursive_depth=easy_state_space=easy_gluing_regime=easy_label_opacity=easy__seed-0",
+      "environment": "recursive_gluing",
+      "difficulty": "easy,easy,easy,easy",
+      "levels": {
+        "recursive_depth": "easy",
+        "state_space": "easy",
+        "gluing_regime": "easy",
+        "label_opacity": "easy"
+      },
+      "seed": 0,
+      "factor": "baseline_tree_sat",
+      "matched_comparison": "anchor",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing__recursive_depth=medium_state_space=medium_gluing_regime=medium_label_opacity=easy__seed-0",
+      "environment": "recursive_gluing",
+      "difficulty": "medium,medium,medium,easy",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "medium",
+        "label_opacity": "easy"
+      },
+      "seed": 0,
+      "factor": "cyclic_sat",
+      "matched_comparison": "baseline_tree_sat; depth,state_space,regime change",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing__recursive_depth=medium_state_space=medium_gluing_regime=hard_label_opacity=easy__seed-0",
+      "environment": "recursive_gluing",
+      "difficulty": "medium,medium,hard,easy",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "hard",
+        "label_opacity": "easy"
+      },
+      "seed": 0,
+      "factor": "cyclic_unsat_locally_nonempty",
+      "matched_comparison": "cyclic_sat; regime only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing__recursive_depth=medium_state_space=medium_gluing_regime=medium_label_opacity=hard__seed-0",
+      "environment": "recursive_gluing",
+      "difficulty": "medium,medium,medium,hard",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "medium",
+        "label_opacity": "hard"
+      },
+      "seed": 0,
+      "factor": "opaque_labels",
+      "matched_comparison": "cyclic_sat; opacity only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing__recursive_depth=medium_state_space=medium_gluing_regime=hard_label_opacity=hard__seed-0",
+      "environment": "recursive_gluing",
+      "difficulty": "medium,medium,hard,hard",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "hard",
+        "label_opacity": "hard"
+      },
+      "seed": 0,
+      "factor": "opacity_x_unsat",
+      "matched_comparison": "cyclic_unsat_locally_nonempty; opacity only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing__recursive_depth=medium_state_space=medium_gluing_regime=easy_label_opacity=hard__seed-0",
+      "environment": "recursive_gluing",
+      "difficulty": "medium,medium,easy,hard",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "easy",
+        "label_opacity": "hard"
+      },
+      "seed": 0,
+      "factor": "nested_tree_opaque",
+      "matched_comparison": "cyclic_sat; regime and opacity change",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard__seed-0",
+      "environment": "recursive_gluing",
+      "difficulty": "hard,hard,hard,hard",
+      "levels": {
+        "recursive_depth": "hard",
+        "state_space": "hard",
+        "gluing_regime": "hard",
+        "label_opacity": "hard"
+      },
+      "seed": 0,
+      "factor": "max_depth_unsat",
+      "matched_comparison": "opacity_x_unsat; depth and state_space change",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard__seed-1",
+      "environment": "recursive_gluing",
+      "difficulty": "hard,hard,hard,hard",
+      "levels": {
+        "recursive_depth": "hard",
+        "state_space": "hard",
+        "gluing_regime": "hard",
+        "label_opacity": "hard"
+      },
+      "seed": 1,
+      "factor": "max_depth_unsat_stability_seed",
+      "matched_comparison": "max_depth_unsat; seed only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=easy_state_space=easy_gluing_regime=easy_label_opacity=easy_structural_ambiguity=easy__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "easy,easy,easy,easy,easy",
+      "levels": {
+        "recursive_depth": "easy",
+        "state_space": "easy",
+        "gluing_regime": "easy",
+        "label_opacity": "easy",
+        "structural_ambiguity": "easy"
+      },
+      "seed": 0,
+      "factor": "baseline_tree_sat",
+      "matched_comparison": "anchor",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=medium_state_space=medium_gluing_regime=medium_label_opacity=easy_structural_ambiguity=easy__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "medium,medium,medium,easy,easy",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "medium",
+        "label_opacity": "easy",
+        "structural_ambiguity": "easy"
+      },
+      "seed": 0,
+      "factor": "cyclic_sat",
+      "matched_comparison": "baseline_tree_sat; depth,state_space,regime change",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=medium_state_space=medium_gluing_regime=hard_label_opacity=easy_structural_ambiguity=easy__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "medium,medium,hard,easy,easy",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "hard",
+        "label_opacity": "easy",
+        "structural_ambiguity": "easy"
+      },
+      "seed": 0,
+      "factor": "cyclic_unsat_locally_nonempty",
+      "matched_comparison": "cyclic_sat; regime only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=medium_state_space=medium_gluing_regime=medium_label_opacity=hard_structural_ambiguity=easy__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "medium,medium,medium,hard,easy",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "medium",
+        "label_opacity": "hard",
+        "structural_ambiguity": "easy"
+      },
+      "seed": 0,
+      "factor": "opaque_labels",
+      "matched_comparison": "cyclic_sat; opacity only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=medium_state_space=medium_gluing_regime=medium_label_opacity=easy_structural_ambiguity=hard__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "medium,medium,medium,easy,hard",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "medium",
+        "label_opacity": "easy",
+        "structural_ambiguity": "hard"
+      },
+      "seed": 0,
+      "factor": "decoy_leaf",
+      "matched_comparison": "cyclic_sat; structural_ambiguity only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=medium_state_space=medium_gluing_regime=hard_label_opacity=easy_structural_ambiguity=hard__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "medium,medium,hard,easy,hard",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "hard",
+        "label_opacity": "easy",
+        "structural_ambiguity": "hard"
+      },
+      "seed": 0,
+      "factor": "copy_upward_foil",
+      "matched_comparison": "decoy_leaf; regime only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=medium_state_space=medium_gluing_regime=hard_label_opacity=hard_structural_ambiguity=easy__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "medium,medium,hard,hard,easy",
+      "levels": {
+        "recursive_depth": "medium",
+        "state_space": "medium",
+        "gluing_regime": "hard",
+        "label_opacity": "hard",
+        "structural_ambiguity": "easy"
+      },
+      "seed": 0,
+      "factor": "opacity_x_unsat",
+      "matched_comparison": "cyclic_unsat_locally_nonempty; opacity only",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard_structural_ambiguity=hard__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "hard,hard,hard,hard,hard",
+      "levels": {
+        "recursive_depth": "hard",
+        "state_space": "hard",
+        "gluing_regime": "hard",
+        "label_opacity": "hard",
+        "structural_ambiguity": "hard"
+      },
+      "seed": 0,
+      "factor": "max_depth_unsat",
+      "matched_comparison": "copy_upward_foil; depth,state_space,opacity change",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=hard_state_space=medium_gluing_regime=medium_label_opacity=hard_structural_ambiguity=easy__seed-0",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "hard,medium,medium,hard,easy",
+      "levels": {
+        "recursive_depth": "hard",
+        "state_space": "medium",
+        "gluing_regime": "medium",
+        "label_opacity": "hard",
+        "structural_ambiguity": "easy"
+      },
+      "seed": 0,
+      "factor": "max_depth_sat",
+      "matched_comparison": "max_depth_unsat; state_space,regime,ambiguity change",
+      "class": "diagnostic"
+    },
+    {
+      "id": "recursive_gluing_discovery__recursive_depth=hard_state_space=hard_gluing_regime=hard_label_opacity=hard_structural_ambiguity=hard__seed-1",
+      "environment": "recursive_gluing_discovery",
+      "difficulty": "hard,hard,hard,hard,hard",
+      "levels": {
+        "recursive_depth": "hard",
+        "state_space": "hard",
+        "gluing_regime": "hard",
+        "label_opacity": "hard",
+        "structural_ambiguity": "hard"
+      },
+      "seed": 1,
+      "factor": "max_depth_unsat_stability_seed",
+      "matched_comparison": "max_depth_unsat; seed only",
+      "class": "diagnostic"
+    }
+  ],
+  "family_screen": [
+    {
+      "environment": "recursive_gluing",
+      "baseline": "easy,easy,easy,easy",
+      "obstruction": "easy,easy,hard,easy",
+      "maximum": "hard,hard,hard,hard",
+      "seed": 0
+    },
+    {
+      "environment": "recursive_gluing_discovery",
+      "baseline": "easy,easy,easy,easy,easy",
+      "obstruction": "easy,easy,hard,easy,easy",
+      "maximum": "hard,hard,hard,hard,hard",
+      "seed": 0
+    },
+    {
+      "environment": "recursive_maze_gluing",
+      "baseline": "easy,easy,easy,easy",
+      "obstruction": "easy,hard,easy,easy",
+      "maximum": "hard,hard,hard,hard",
+      "seed": 0
+    },
+    {
+      "environment": "recursive_distributed_gluing",
+      "baseline": "easy,easy,easy",
+      "obstruction": "easy,hard,easy",
+      "maximum": "hard,hard,hard",
+      "seed": 0
+    },
+    {
+      "environment": "recursive_epistemic_gluing",
+      "baseline": "easy,easy,easy,easy",
+      "obstruction": "easy,hard,easy,easy",
+      "maximum": "hard,hard,hard,hard",
+      "seed": 0
+    },
+    {
+      "environment": "recursive_compiler_bootstrap",
+      "baseline": "easy,easy,easy",
+      "obstruction": "easy,hard,easy",
+      "maximum": "hard,hard,easy",
+      "seed": 0,
+      "representation_pin": "revealed legacy decoder; L1 bootstrap runtime validation outstanding"
+    },
+    {
+      "environment": "recursive_error_correcting_codes",
+      "baseline": "easy,easy,easy",
+      "obstruction": "easy,hard,easy",
+      "maximum": "hard,hard,hard",
+      "seed": 0
+    },
+    {
+      "environment": "recursive_coarse_graining",
+      "baseline": "easy,easy,easy",
+      "obstruction": "easy,hard,easy",
+      "maximum": "hard,hard,hard",
+      "seed": 0
+    }
+  ],
+  "family_condition_contract": {
+    "family_baseline": {
+      "factor_change": "anchor; no axis changed",
+      "scientific_claim": "basic behavioral competence on the domain's transparent/direct/tree condition",
+      "strongest_shortcut": "visible-example memorization, answer-class prior, or a solver that never composes nested structure",
+      "positive_control": "environment reference entry",
+      "negative_control": "environment-specific local-only shortcut, expected to fail on the obstruction sibling",
+      "success_criterion": "diagnostic only: positive gate passes; model score is recorded per hidden check and not interpreted as recursive reasoning",
+      "evidence_level": "behavioral_competence"
+    },
+    "family_obstruction": {
+      "factor_change": "regime/family axis only: first level to hardest level; all other axes stay at first level",
+      "scientific_claim": "the solver handles a globally obstructed composition when local components remain plausible",
+      "strongest_shortcut": "local consistency, numbers-only, actual-facts, or local-table propagation without the cross-level composition",
+      "positive_control": "environment reference entry",
+      "negative_control": "named wrong arm from the per-environment control map; it must fail the environment's assembled/obstruction decision check",
+      "success_criterion": "validated_success plus the designated obstruction check true; this is evidence against the named shortcut, not proof of an internal rule",
+      "evidence_level": "controlled_instance_competence"
+    },
+    "family_maximum": {
+      "factor_change": "all configured axes move to their hardest level, subject to revealed-representation pins",
+      "scientific_claim": "exploratory stress/generalization across depth, task regime, presentation, and ambiguity where configured",
+      "strongest_shortcut": "memorized answer polarity or a shortcut that works only at the baseline topology/representation",
+      "positive_control": "environment reference entry",
+      "negative_control": "same named wrong arm and empty submission; both remain required even though this cell is stress-confounded",
+      "success_criterion": "per-environment validated_success and full hidden-check breakdown; no pooled family pass rate",
+      "evidence_level": "exploratory_behavioral_only"
+    }
+  },
+  "excluded": {
+    "recursive_holonomy_gluing": "Research-only: repaired two-loop semantics and strict scoring await isolated runtime regressions and exact-instance certification."
+  },
+  "readiness_limits": {
+    "recursive_gluing": "Nonfunctional relation-cycle interventions are implemented. Expanded CSP remains sufficient; latent coordinate discovery is not required.",
+    "recursive_gluing_discovery": "Independent expanded answer construction and branching-relation controls are implemented. Expansion cap is 4; recursion necessity and scaling remain unmeasured.",
+    "recursive_maze_gluing": "Mixed tile compositions and orientation interventions are implemented. Full-state BFS remains sufficient; interfaces are explicit.",
+    "recursive_distributed_gluing": "Seeded worker rules, explicit-address twins, and lock-capacity interventions are implemented. Scheduler search remains sufficient on the chain topology.",
+    "recursive_epistemic_gluing": "Four-agent modal certificates and matched higher-order inner intersections are generated. Product-frame nesting remains factorized; finite enumeration is a rival.",
+    "recursive_compiler_bootstrap": "L1 source-to-seed-to-self stages and independent source/VM semantic checks are specified in code. Depth 1..4 does real work. Runtime correctness is unverified; inferred legacy decoder references remain pinned.",
+    "recursive_error_correcting_codes": "Elimination and exhaustive rivals, coordinate/unit transforms, and ambiguity/RHS controls are implemented. The code families remain small single-parity examples.",
+    "recursive_coarse_graining": "Six/ten-state binary quotient inference and single-transition obstructions supplement the legacy matrix task. Exhaustive partition search remains practical.",
+    "recursive_holonomy_gluing": "Two-loop transport, noncommuting factors, complete section sets, and strict judging are implemented. Excluded from campaigns pending isolated runtime and exact-instance certification."
+  },
+  "source_audit": {
+    "execution": "file inspection only; Python, tests, gates, and model runs not executed",
+    "report": "docs/reports/2026-10-28-recursive-structural-rebuild.md",
+    "environments": {
+      "recursive_gluing": {
+        "network": "envs/cat_theo/recursive_gluing/files/network.py",
+        "status": "Nonfunctional relation-cycle interventions are implemented. Expanded CSP remains sufficient; latent coordinate discovery is not required."
+      },
+      "recursive_gluing_discovery": {
+        "network": "envs/cat_theo/recursive_gluing_discovery/files/network.py",
+        "status": "Independent expanded answer construction and branching-relation controls are implemented. Expansion cap is 4; recursion necessity and scaling remain unmeasured."
+      },
+      "recursive_maze_gluing": {
+        "network": "envs/cat_theo/recursive_maze_gluing/files/network.py",
+        "status": "Mixed tile compositions and orientation interventions are implemented. Full-state BFS remains sufficient; interfaces are explicit."
+      },
+      "recursive_distributed_gluing": {
+        "network": "envs/cat_theo/recursive_distributed_gluing/files/network.py",
+        "status": "Seeded worker rules, explicit-address twins, and lock-capacity interventions are implemented. Scheduler search remains sufficient on the chain topology."
+      },
+      "recursive_epistemic_gluing": {
+        "network": "envs/cat_theo/recursive_epistemic_gluing/files/network.py",
+        "status": "Four-agent modal certificates and matched higher-order inner intersections are generated. Product-frame nesting remains factorized; finite enumeration is a rival."
+      },
+      "recursive_compiler_bootstrap": {
+        "network": "envs/cat_theo/recursive_compiler_bootstrap/files/network.py",
+        "status": "L1 source-to-seed-to-self stages and independent source/VM semantic checks are specified in code. Depth 1..4 does real work. Runtime correctness is unverified; inferred legacy decoder references remain pinned."
+      },
+      "recursive_error_correcting_codes": {
+        "network": "envs/cat_theo/recursive_error_correcting_codes/files/network.py",
+        "status": "Elimination and exhaustive rivals, coordinate/unit transforms, and ambiguity/RHS controls are implemented. The code families remain small single-parity examples."
+      },
+      "recursive_coarse_graining": {
+        "network": "envs/cat_theo/recursive_coarse_graining/files/network.py",
+        "status": "Six/ten-state binary quotient inference and single-transition obstructions supplement the legacy matrix task. Exhaustive partition search remains practical."
+      },
+      "recursive_holonomy_gluing": {
+        "network": "envs/cat_theo/recursive_holonomy_gluing/files/network.py",
+        "status": "Two-loop transport, noncommuting factors, complete section sets, and strict judging are implemented. Excluded from campaigns pending isolated runtime and exact-instance certification."
+      }
+    }
+  },
+  "matrix_review": {
+    "diagnostic_18": "Within-episode certificate and intervention diagnostics; no recursive-necessity claim.",
+    "family_24": "Exploratory per-environment screen; no pooled score or cross-domain transfer claim.",
+    "holonomy": "Excluded from scored campaigns until runtime and exact-instance certification.",
+    "confirmatory_status": "none; no model experiments executed for this revision"
+  },
+  "episode_accounting": {
+    "per_case": {
+      "episodes_per_provider_model": 1,
+      "hidden_checks": {
+        "recursive_gluing": 12,
+        "recursive_gluing_discovery": 10,
+        "recursive_maze_gluing": 9,
+        "recursive_distributed_gluing": 9,
+        "recursive_epistemic_gluing": 11,
+        "recursive_compiler_bootstrap": 9,
+        "recursive_error_correcting_codes": 9,
+        "recursive_coarse_graining": 9,
+        "recursive_holonomy_gluing": 9
+      },
+      "max_steps": 24,
+      "max_tokens": 4096,
+      "invalid_retries": 2,
+      "logical_calls": 72,
+      "output_tokens": 294912
+    },
+    "diagnostic": {
+      "episodes": 18,
+      "hidden_check_instances": 196,
+      "logical_calls": 1296,
+      "output_tokens": 5308416,
+      "recommended_max_wall_seconds": 14400
+    },
+    "family_screen": {
+      "episodes": 24,
+      "hidden_check_instances": 234,
+      "logical_calls": 1728,
+      "output_tokens": 7077888,
+      "recommended_max_wall_seconds": 18000
+    },
+    "unique_union_reusing_duplicate_case_ids": {
+      "episodes": 38,
+      "hidden_check_instances": 386,
+      "logical_calls": 2736,
+      "output_tokens": 11206656
+    },
+    "accounting_status": "static manifest counts only; no run or budget validation performed"
+  },
+  "reproducibility_artifacts": [
+    "study_manifest.json",
+    "plan.json",
+    "plan.md",
+    "config_sha256 values",
+    "generation/provenance record",
+    "positive and negative exact-instance gate report",
+    "agent prompt, visible tests, action/tool log and model_responses.jsonl",
+    "final.json and hidden-check breakdown",
+    "suite_checkpoint.json",
+    "report/results.json",
+    "report/results.csv",
+    "report/summary.md",
+    "source commit SHA"
+  ],
+  "updated_at": "2026-10-28",
+  "source_review": "docs/reports/2026-10-28-structural-source-review.json",
+  "historical_source_audit": {
+    "revision": "507a62730d66a9d0b7ad8eccb62b23f72b0dd3d3",
+    "execution": "source inspection only; no Python, tests, Docker, provider calls, or model runs",
+    "environments": {
+      "recursive_gluing": {
+        "local_data": "domains and explicit overlap pair relations",
+        "global_object": "total assignment accepted by every overlap",
+        "obstruction": "cycle or skip-level overlap has no simultaneous assignment",
+        "strongest_shortcut": "AC-3/MRV/backtracking or expanded Cartesian search",
+        "structural_claim_supported": "local-global CSP competence; not hidden-coordinate discovery",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_gluing/files/network.py:generate_instance",
+          "envs/cat_theo/recursive_gluing/files/network.py:oracle_solution",
+          "envs/cat_theo/recursive_gluing/files/network.py:build_grade_instances"
+        ]
+      },
+      "recursive_gluing_discovery": {
+        "local_data": "leaf relations, production rules, and enter/mid/leave wiring",
+        "global_object": "complete type/depth realizable summaries and a closed root pair",
+        "obstruction": "nonempty local tables with no root pair in closing",
+        "strongest_shortcut": "expanded CSP or direct finite relation iteration",
+        "structural_claim_supported": "compact certificate competence and evidence against copy-upward; not necessity of recursive discovery",
+        "repair": "arm_expanded now constructs realizable summaries from independent expanded CSP projections without calling compact_summaries or reference_certificate; MAX_EXPAND_DEPTH=4 still limits the shipped cross-check",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_gluing_discovery/files/network.py:compose_branch",
+          "envs/cat_theo/recursive_gluing_discovery/files/network.py:compact_summaries",
+          "envs/cat_theo/recursive_gluing_discovery/files/network.py:arm_expanded",
+          "envs/cat_theo/recursive_gluing_discovery/files/network.py:expand_grammar"
+        ]
+      },
+      "recursive_maze_gluing": {
+        "local_data": "rooms, directed edges, XOR flips, shafts, nesting, orientations",
+        "global_object": "stack-valid route with all edge-use, sealing, and orientation conditions",
+        "obstruction": "nonzero accumulated flip or sealed/uncompleted nested child",
+        "strongest_shortcut": "BFS over full route state",
+        "structural_claim_supported": "orientation/nesting route competence; not recursive inference",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_maze_gluing/files/network.py:replay_route",
+          "envs/cat_theo/recursive_maze_gluing/files/network.py:shortest_route",
+          "envs/cat_theo/recursive_maze_gluing/files/network.py:arm_ignore_orientation"
+        ]
+      },
+      "recursive_distributed_gluing": {
+        "local_data": "worker programs, explicit parent/child links, mailboxes, mutex count",
+        "global_object": "complete legal interleaving and root result",
+        "obstruction": "wait-for deadlock while local programs remain well-typed",
+        "strongest_shortcut": "finite-state BFS over scheduler state",
+        "structural_claim_supported": "global scheduling competence only",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_distributed_gluing/files/network.py:replay_trace",
+          "envs/cat_theo/recursive_distributed_gluing/files/network.py:shortest_trace",
+          "envs/cat_theo/recursive_distributed_gluing/files/network.py:arm_numbers_only"
+        ]
+      },
+      "recursive_epistemic_gluing": {
+        "local_data": "agent indistinguishability cells, atoms, outer and inner reports",
+        "global_object": "world/chain in every selected cell satisfying the modal query",
+        "obstruction": "empty total intersection despite local/pairwise/triple compatibility, or inner conflict hidden by truncation",
+        "strongest_shortcut": "enumerate all chains and intersect sets directly",
+        "structural_claim_supported": "global intersection and nesting controls; not latent coordinate discovery",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_epistemic_gluing/files/network.py:all_chains",
+          "envs/cat_theo/recursive_epistemic_gluing/files/network.py:eval_formula",
+          "envs/cat_theo/recursive_epistemic_gluing/files/network.py:_four_world_cover",
+          "envs/cat_theo/recursive_epistemic_gluing/files/network.py:build_grade_models"
+        ]
+      },
+      "recursive_holonomy_gluing": {
+        "local_data": "finite maps or calibration pairs and an explicit ordered cycle",
+        "global_object": "fixed state of the composite transport",
+        "obstruction": "empty fixed-point set",
+        "strongest_shortcut": "infer each named map and compose the list directly",
+        "structural_claim_supported": "finite composite fixed-point competence only; current generator does not test path dependence",
+        "scoring_repair": "pass_threshold=1.0 and mandatory path_consistency check; all designated global checks must pass",
+        "required_repair": "all designated global checks required, alternate path/order cases, noncommuting factors, coordinate-conjugate twins, and a per-check known-wrong regression",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_holonomy_gluing/files/network.py:generate_instance",
+          "envs/cat_theo/recursive_holonomy_gluing/files/network.py:compose_specs",
+          "envs/cat_theo/recursive_holonomy_gluing/files/network.py:fixed_states",
+          "envs/cat_theo/recursive_holonomy_gluing/files/judge.py:score_from_accuracy"
+        ]
+      },
+      "recursive_compiler_bootstrap": {
+        "local_data": "finite source programs, stage encodings, claimed decoder, calibration",
+        "global_object": "observational equivalence on the listed programs",
+        "obstruction": "locally valid stages with a wrong composed-path decoder",
+        "strongest_shortcut": "execute the finite listed programs directly",
+        "structural_claim_supported": "encoding composition competence only; no self-compilation or depth scaling",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_compiler_bootstrap/files/network.py:generate_instance",
+          "envs/cat_theo/recursive_compiler_bootstrap/files/network.py:path_observationally_equivalent",
+          "envs/cat_theo/recursive_compiler_bootstrap/files/network.py:MAX_PROGRAM_HEIGHT"
+        ]
+      },
+      "recursive_error_correcting_codes": {
+        "local_data": "parity blocks, coordinate permutations, glues, parent equation, calibration",
+        "global_object": "assignment satisfying all local kernels, glues, and parent check",
+        "obstruction": "nonempty local kernels but empty stacked solution set",
+        "strongest_shortcut": "Gaussian elimination or brute force over at most six coordinates",
+        "structural_claim_supported": "linear global consistency only",
+        "repair": "inferred certificates now return perms validated against codeword/observed calibration; relabel_instance remains a metadata-only audit limitation",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_error_correcting_codes/files/network.py:generate_instance",
+          "envs/cat_theo/recursive_error_correcting_codes/files/network.py:stacked_satisfiable",
+          "envs/cat_theo/recursive_error_correcting_codes/files/network.py:relabel_instance"
+        ]
+      },
+      "recursive_coarse_graining": {
+        "local_data": "local weights, series tree, and optional root permutation",
+        "global_object": "exact composed transfer table and its doubling fixed-point status",
+        "obstruction": "composed table is not idempotent",
+        "strongest_shortcut": "direct 2x2 transfer-matrix multiplication",
+        "structural_claim_supported": "coarse-graining arithmetic competence, not sheaf gluing or latent discovery",
+        "repair": "inferred certificates now return label_perm validated against an asymmetric calibration probe; direct regime always has one region",
+        "relevant_sources": [
+          "envs/cat_theo/recursive_coarse_graining/files/network.py:generate_instance",
+          "envs/cat_theo/recursive_coarse_graining/files/effective_table",
+          "envs/cat_theo/recursive_coarse_graining/files:is_fixed_point"
+        ]
+      }
+    }
+  },
+  "validation": {
+    "python": "not_executed",
+    "tests": "not_executed",
+    "rivals": "not_executed",
+    "container_gates": "not_certified",
+    "model_experiments": "not_executed",
+    "workflow": ".github/workflows/recursive-structural-validation.yml"
+  }
+}

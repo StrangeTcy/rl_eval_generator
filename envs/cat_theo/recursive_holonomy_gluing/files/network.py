@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import copy
 import random
+from operator import index
 from typing import Any, Callable, Mapping, Optional
 
 
@@ -46,6 +47,8 @@ CHECK_NAMES = (
     "assembled_unsat",
     "opaque_twin",
     "explicit_expand",
+    "path_consistency",
+    "curved_section",
     "deterministic",
 )
 
@@ -56,12 +59,46 @@ class OracleBudgetExceeded(RuntimeError):
 
 def public_instance(inst: Mapping[str, Any]) -> dict[str, Any]:
     out = {key: copy.deepcopy(inst[key]) for key in PUBLIC_KEYS}
+    if "paths" in inst:
+        out["paths"] = copy.deepcopy(inst["paths"])
+        out["transport_edges"] = (
+            TransportGraph().edges(inst["paths"]["path_a"], "a")
+            + TransportGraph().edges(inst["paths"]["path_b"], "b")
+        )
     if inst.get("representation") == REVEALED:
         out["maps"] = copy.deepcopy(inst["maps"])
     if inst.get("representation") == "explicit":
         out["maps"] = copy.deepcopy(inst["maps"])
         out["expanded"] = copy.deepcopy(inst["expanded"])
     return out
+
+
+def path_composite(inst: Mapping[str, Any], path_name: str) -> dict[str, Any]:
+    """Compose one named transport path in its declared order."""
+
+    paths = inst.get("paths") or {}
+    names = paths.get(path_name)
+    if names is None or not names:
+        raise ValueError(f"missing transport path {path_name!r}")
+    return compose_specs(
+        str(inst["family"]),
+        [inst["maps"][name] for name in names],
+        int(inst["modulus"]),
+    )
+
+
+def paths_agree(inst: Mapping[str, Any]) -> bool:
+    """Whether the two observed paths induce the same transport map."""
+
+    paths = inst.get("paths") or {}
+    if "path_a" not in paths or "path_b" not in paths:
+        return True
+    return maps_equal(
+        str(inst["family"]),
+        path_composite(inst, "path_a"),
+        path_composite(inst, "path_b"),
+        int(inst["modulus"]),
+    )
 
 
 def _inv_mod(x: int, p: int) -> int:
@@ -199,14 +236,32 @@ def generate_instance(
     if regime in (DIRECT, FLAT):
         cycle = ["leaf"] * depth_used
         root = "leaf"
+        maps["node_alt"] = copy.deepcopy(identity)
+        paths = {"path_a": list(cycle), "path_b": list(cycle)}
     elif regime == RECURSIVE:
         maps["node_extra"] = sat_twist if family != MUL else identity
+        maps["node_alt"] = copy.deepcopy(maps["node_extra"])
         cycle = ["leaf"] * depth_used + ["node_extra"]
         root = "node" if depth_used >= 2 else "leaf"
+        paths = {"path_a": list(cycle), "path_b": ["leaf"] * depth_used + ["node_alt"]}
     else:
-        maps["node_extra"] = twist
-        cycle = ["leaf"] * depth_used + ["node_extra"]
+        if family == AFF:
+            maps["node_extra"] = aff_spec(2, 1)
+            maps["node_alt"] = aff_spec(3, 0)
+            cycle = ["leaf"] * depth_used + ["node_extra", "node_alt"]
+            alternate = ["leaf"] * depth_used + ["node_alt", "node_extra"]
+        elif family == PERM:
+            maps["node_extra"] = perm_spec([1, 2, 3, 0])
+            maps["node_alt"] = perm_spec([0, 3, 2, 1])
+            cycle = ["leaf"] * depth_used + ["node_extra", "node_alt"]
+            alternate = ["leaf"] * depth_used + ["node_alt", "node_extra"]
+        else:
+            maps["node_extra"] = twist
+            maps["node_alt"] = identity
+            cycle = ["leaf"] * depth_used + ["node_extra"]
+            alternate = ["leaf"] * depth_used + ["node_alt"]
         root = "node" if depth_used >= 2 else "leaf"
+        paths = {"path_a": list(cycle), "path_b": alternate}
 
     modules = {"leaf": {"ports": ["in", "out"], "child": None}}
     if root == "node":
@@ -230,9 +285,10 @@ def generate_instance(
         "representation": representation,
         "maps": maps,
         "expanded": expanded,
+        "paths": paths,
         "meta": {"regime": regime, "sat": sat, "seed": seed, "composite": composite, "fixed": fps},
     }
-    return inst
+    return TransportGraph().factor_presentation(inst, seed)
 
 
 def expand_instance(inst: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -252,7 +308,8 @@ def instance_satisfiable(inst: Mapping[str, Any], budget: int = 50_000) -> bool:
         budget_box[0] -= 1
         if budget_box[0] < 0:
             raise OracleBudgetExceeded("map oracle exceeded step budget; refusing to call this unsat")
-        if apply_spec(family, spec, x, modulus) == x:
+        if (apply_spec(family, spec, x, modulus) == x
+                and TransportGraph().follow(inst, inst["paths"]["path_b"], x) == x):
             found.append(x)
     return bool(found)
 
@@ -308,16 +365,24 @@ def example_visible_instance() -> dict[str, Any]:
 
 
 def reference_certificate(inst: Mapping[str, Any]) -> dict[str, Any]:
+    if inst.get("maps") is None:
+        inst = TransportGraph().recover(inst)
     family, modulus, domain = inst["family"], int(inst["modulus"]), list(inst["domain"])
     spec = composite_of(inst)
-    fps = fixed_states(family, spec, domain, modulus)
-    if not fps:
-        return {"status": "unsat"}
-    return {
-        "status": "sat",
-        "state": int(fps[0]),
-        "maps": copy.deepcopy(inst["maps"]),
+    fps = tuple(sorted(set(fixed_states(family, spec, domain, modulus)).intersection(
+        fixed_states(family, path_composite(inst, "path_b"), domain, modulus)
+    )))
+    cert: dict[str, Any] = {
+        "status": "sat" if fps else "unsat",
+        "path_consistent": bool(paths_agree(inst)),
     }
+    if inst.get("representation") == INFERRED or fps:
+        cert["maps"] = copy.deepcopy(inst["maps"])
+    if fps:
+        cert["state"] = int(fps[0])
+    cert["transport"] = TransportGraph().certificate(inst)
+    cert["sections"] = TransportGraph().sections(inst, tuple(inst["domain"]))
+    return cert
 
 
 def _require_status(raw: Any) -> tuple[Optional[str], str]:
@@ -336,17 +401,12 @@ def verify_certificate(inst: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
         return False, err
     true_sat = instance_satisfiable(inst)
     if status == "unsat":
-        return (not true_sat, "unsat but a compatible state exists" if true_sat else "ok")
-    if not true_sat:
+        if true_sat:
+            return False, "unsat but a compatible state exists"
+    elif not true_sat:
         return False, "sat but no compatible state exists"
-    if "state" not in raw:
-        return False, "sat needs state"
-    try:
-        state = int(raw["state"])
-    except (TypeError, ValueError):
-        return False, "state"
-    if state not in inst["domain"]:
-        return False, "state not in domain"
+    if "path_consistent" not in raw or type(raw["path_consistent"]) is not bool:
+        return False, "path_consistent must be a bool"
     submitted_maps = raw.get("maps")
     if inst.get("representation") == INFERRED:
         if not isinstance(submitted_maps, dict):
@@ -354,9 +414,41 @@ def verify_certificate(inst: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
         for name, pairs in inst["calibration"].items():
             if name not in submitted_maps:
                 return False, f"map {name} missing"
-            inferred = infer_from_calibration(inst["family"], pairs, inst["domain"], int(inst["modulus"]))
-            if not maps_equal(inst["family"], submitted_maps[name], inferred, int(inst["modulus"])):
+            inferred = infer_from_calibration(
+                inst["family"], pairs, inst["domain"], int(inst["modulus"])
+            )
+            try:
+                if not TransportGraph().valid_map(inst, submitted_maps[name]):
+                    return 0, f"map {name} leaves its declared family"
+                agrees = maps_equal(inst["family"], submitted_maps[name], inferred, int(inst["modulus"]))
+            except (KeyError, IndexError, TypeError, ValueError):
+                return 0, f"map {name} is malformed"
+            if not agrees:
                 return False, f"map {name} disagrees with calibration"
+        probe = dict(inst)
+        probe["maps"] = submitted_maps
+    else:
+        probe = inst
+    if bool(raw["path_consistent"]) is not paths_agree(probe):
+        return False, "path consistency mismatch"
+    if not TransportGraph().verify(probe, raw.get("transport")):
+        return 0, "ordered transport tables or flatness claim failed"
+    try:
+        if tuple(sorted(map(index, raw["sections"]))) != TransportGraph().sections(probe, tuple(probe["domain"])):
+            return 0, "global section set mismatch"
+    except (KeyError, TypeError, ValueError):
+        return 0, "global section set missing or malformed"
+    if status == "unsat":
+        return True, "ok"
+    if "state" not in raw:
+        return False, "sat needs state"
+    try:
+        state = index(raw["state"])
+    except (TypeError, ValueError):
+        return False, "state"
+    if state not in inst["domain"]:
+        return False, "state not in domain"
+    if inst.get("representation") == INFERRED:
         spec = compose_specs(
             inst["family"],
             [submitted_maps[name] for name in inst["cycle"]],
@@ -366,6 +458,8 @@ def verify_certificate(inst: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
         spec = composite_of(inst)
     if apply_spec(inst["family"], spec, state, int(inst["modulus"])) != state:
         return False, "state is not compatible with the cycle"
+    if TransportGraph().follow(probe, probe["paths"]["path_b"], state) != state:
+        return 0, "state does not extend across the second loop"
     return True, "ok"
 
 
@@ -388,9 +482,8 @@ def arm_local_only(inst: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def arm_revealed_compose(inst: Mapping[str, Any]) -> dict[str, Any]:
-    if inst.get("representation") == INFERRED and "maps" not in public_instance(inst):
-        return arm_local_only(inst)
-    return reference_certificate(inst)
+    """Direct finite transport rival, including identifiable calibrations."""
+    return TransportGraph().direct_certificate(inst)
 
 
 def build_grade_items(
@@ -427,6 +520,7 @@ def build_grade_items(
         ),
         ("opaque_twin", relabel_instance(configured, seed + 99)),
         ("explicit_expand", explicit),
+        ("curved_section", TransportGraph().curved_section(seed + 23)),
     ]
 
 
@@ -452,7 +546,151 @@ def grade_solver(
         first = solve_fn(copy.deepcopy(pub))
         second = solve_fn(copy.deepcopy(pub))
         ok, _ = verify_certificate(configured, first)
+        checks["path_consistency"] = (
+            isinstance(first, dict)
+            and type(first.get("path_consistent")) is bool
+            and first["path_consistent"] is paths_agree(configured)
+        )
         checks["deterministic"] = first == second and ok
     except Exception:
+        checks["path_consistency"] = False
         checks["deterministic"] = False
     return checks
+
+
+
+class TransportGraph:
+    """Two edge-labelled loops sharing a base vertex; interior vertices differ."""
+
+    def edges(self, names, branch, index=0):
+        if not names:
+            return ()
+        source = "base" if index == 0 else branch + ":" + str(index)
+        target = "base" if not names[1:] else branch + ":" + str(index + 1)
+        return ((source, target, names[0]),) + self.edges(names[1:], branch, index + 1)
+
+    def follow(self, inst, names, state):
+        if not names:
+            return state
+        value = apply_spec(inst["family"], inst["maps"][names[0]], state, inst["modulus"])
+        return self.follow(inst, names[1:], value)
+
+    def table(self, inst, names, domain):
+        if not domain:
+            return ()
+        state = domain[0]
+        return ((state, self.follow(inst, names, state)),) + self.table(inst, names, domain[1:])
+
+    def identity(self, table):
+        if not table:
+            return 1
+        a, b = table[0]
+        return self.identity(table[1:]) if a == b else 0
+
+    def certificate(self, inst):
+        a = self.table(inst, inst["paths"]["path_a"], inst["domain"])
+        b = self.table(inst, inst["paths"]["path_b"], inst["domain"])
+        geometry = "flat" if self.identity(a) and self.identity(b) else "curved"
+        return a, b, geometry
+
+    def verify(self, inst, raw):
+        try:
+            a, b, geometry = raw
+            return int((tuple(sorted(self.rows(a))), tuple(sorted(self.rows(b))), geometry)
+                       == self.certificate(inst))
+        except (IndexError, KeyError, TypeError, ValueError, RecursionError):
+            return 0
+
+    def rows(self, rows):
+        if not rows:
+            return ()
+        a, b = rows[0]
+        return ((index(a), index(b)),) + self.rows(rows[1:])
+
+    def valid_map(self, inst, spec):
+        family, p = inst["family"], inst["modulus"]
+        if family == MUL:
+            return int(0 < index(spec["q"]) < p)
+        if family == AFF:
+            return int(0 < index(spec["a"]) < p and 0 <= index(spec["b"]) < p)
+        return int(tuple(sorted(map(index, spec["image"]))) == tuple(inst["domain"]))
+
+    def sections(self, inst, domain):
+        if not domain:
+            return ()
+        state = domain[0]
+        tail = self.sections(inst, domain[1:])
+        if (self.follow(inst, inst["paths"]["path_a"], state) == state
+                and self.follow(inst, inst["paths"]["path_b"], state) == state):
+            return (state,) + tail
+        return tail
+
+    def inverse(self, family, spec, modulus):
+        if family == MUL:
+            return {"q": pow(spec["q"], -1, modulus)}
+        if family == AFF:
+            a = pow(spec["a"], -1, modulus)
+            return {"a": a, "b": (-a * spec["b"]) % modulus}
+        image = tuple(spec["image"])
+        return {"image": tuple(map(image.index, range(modulus)))}
+
+    def factor_presentation(self, inst, seed):
+        """Replace idle depth padding by transports and an inverse composite."""
+        family, p = inst["family"], inst["modulus"]
+        if family == MUL:
+            leaf = {"q": 2 + seed % 4}
+        elif family == AFF:
+            leaf = {"a": 2 + seed % 4, "b": seed % p}
+        else:
+            leaf = {"image": (1, 2, 3, 0)}
+        inst["maps"]["leaf"] = leaf
+        padding = compose_specs(family, (leaf,) * inst["depth"], p)
+        undo = self.inverse(family, padding, p)
+        inst["maps"]["undo"] = undo
+        inst["calibration"]["leaf"] = calibrate(family, leaf, inst["domain"], p)
+        inst["calibration"]["undo"] = calibrate(family, undo, inst["domain"], p)
+        depth = inst["depth"]
+        a, b = inst["paths"]["path_a"], inst["paths"]["path_b"]
+        inst["paths"]["path_a"] = tuple(a[:depth]) + ("undo",) + tuple(a[depth:])
+        inst["paths"]["path_b"] = tuple(b[:depth]) + ("undo",) + tuple(b[depth:])
+        inst["cycle"] = inst["paths"]["path_a"]
+        inst["expanded"] = expand_instance(inst)
+        inst["meta"]["fixed"] = self.sections(inst, tuple(inst["domain"]))
+        inst["meta"]["sat"] = int(inst["meta"]["fixed"] != ())
+        inst["meta"]["composite"] = composite_of(inst)
+        return inst
+
+    def recover(self, inst, names=None):
+        if names is None:
+            inst = copy.deepcopy(inst)
+            inst["maps"] = {}
+            return self.recover(inst, tuple(inst["calibration"]))
+        if not names:
+            return inst
+        name = names[0]
+        inst["maps"][name] = infer_from_calibration(
+            inst["family"], inst["calibration"][name], inst["domain"], inst["modulus"])
+        return self.recover(inst, names[1:])
+
+    def curved_section(self, seed):
+        inst = generate_instance(depth=2, family=AFF, regime=RECURSIVE,
+                                 representation=INFERRED, seed=seed)
+        inst["maps"]["node_extra"] = {"a": 2, "b": 0}
+        inst["maps"]["node_alt"] = {"a": 3, "b": 0}
+        inst["calibration"]["node_extra"] = ((0, 0), (1, 2))
+        inst["calibration"]["node_alt"] = ((0, 0), (1, 3))
+        inst["expanded"] = expand_instance(inst)
+        inst.pop("meta", None)
+        return inst
+
+    def direct_certificate(self, inst):
+        if inst.get("maps") is None:
+            inst = self.recover(inst)
+        a, b, geometry = self.certificate(inst)
+        sections = self.sections(inst, tuple(inst["domain"]))
+        cert = {"status": "sat" if sections else "unsat", "maps": inst["maps"],
+                "transport": (a, b, geometry), "sections": sections,
+                "path_consistent": a == b}
+        if sections:
+            cert["state"] = sections[0]
+        return cert

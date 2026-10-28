@@ -3,6 +3,7 @@ from solver import %%MODEL_CLASS%%
 
 def _visible():
     return {
+        "bootstrap": None,  # Decoder-only API demonstration; grading inputs contain the full task.
         "modulus": 5,
         "programs": [1, ["add", 1, 2]],
         "stages": [{"name": "front", "kind": "compile"}],

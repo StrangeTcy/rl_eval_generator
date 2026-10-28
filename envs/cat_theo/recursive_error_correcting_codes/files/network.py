@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import random
+from operator import index
 from typing import Any, Callable, Mapping, Optional
 
 
@@ -19,6 +20,7 @@ REC_COMP = "recursive_composition"
 REVEALED = "revealed"
 INFERRED = "inferred"
 PUBLIC_KEYS = (
+    "identification",
     "modulus",
     "blocks",
     "glues",
@@ -34,6 +36,8 @@ CHECK_NAMES = (
     "assembled_unsat",
     "opaque_twin",
     "explicit_expand",
+    "parent_positive",
+    "parent_counterfactual",
     "deterministic",
 )
 
@@ -122,8 +126,17 @@ def generate_instance(*, depth: int, regime: str, representation: str, seed: int
             if spec["length"] == 2 and spec["H"] == [[1, 1]]:
                 vec[1] = (-x) % p
             words.append(vec)
-        calibration[name] = words[:2]
+        probes = words[:2]
+        calibration[name] = {
+            "codewords": probes,
+            # The observed coordinates are the evidence from which an inferred
+            # presentation must recover the hidden permutation.  The old
+            # calibration exposed only unpermuted words, so inferred mode was
+            # not an identifiable task.
+            "observed": [_apply_perm(vec, perms[name]) for vec in probes],
+        }
     return {
+        "identification": CodePresentation().identification(seed, seed % 2),
         "modulus": p,
         "blocks": blocks,
         "glues": glues,
@@ -208,14 +221,11 @@ def local_kernels_nonempty(inst: Mapping[str, Any]) -> bool:
 
 
 def relabel_instance(inst: Mapping[str, Any], seed: int) -> dict[str, Any]:
-    rng = random.Random(seed)
     p = int(inst["modulus"])
-    scale = rng.choice([1, 2, 3, 4])
+    scale = 2 + seed % (p - 2)
     foil = copy.deepcopy(inst)
-    # scale all symbols in checks: H' = H (invariant for [1,1] if we scale vec)
-    foil["meta"] = dict(inst.get("meta") or {})
-    foil["meta"]["symbol_scale"] = scale
-    return foil
+    foil["parent_check"]["rhs"] = (scale * foil["parent_check"]["rhs"]) % p
+    return CodePresentation().transform(foil, tuple(foil["blocks"]), scale)
 
 
 def example_visible_instance() -> dict[str, Any]:
@@ -223,6 +233,13 @@ def example_visible_instance() -> dict[str, Any]:
 
 
 def reference_certificate(inst: Mapping[str, Any]) -> dict[str, Any]:
+    return CodeLinearSystem().certificate(inst)
+
+
+def enumeration_certificate(inst):
+    """Bounded exhaustive rival; independent of field elimination."""
+    if inst.get("perms") is None:
+        inst = CodePresentation().recover(inst)
     p = int(inst["modulus"])
     names = list(inst["blocks"])
     lengths = {n: inst["blocks"][n]["length"] for n in names}
@@ -230,7 +247,11 @@ def reference_certificate(inst: Mapping[str, Any]) -> dict[str, Any]:
 
     dims = [lengths[n] for n in names]
     coords = [range(p) for _ in range(sum(dims))]
+    remaining = 80000
     for vec in product(*coords):
+        remaining -= 1
+        if remaining < 0:
+            raise OracleBudgetExceeded("reference enumeration exhausted; no unsat conclusion")
         assignment: dict[str, list[int]] = {}
         k = 0
         for n in names:
@@ -240,8 +261,13 @@ def reference_certificate(inst: Mapping[str, Any]) -> dict[str, Any]:
         foil = copy.deepcopy(inst)
         # reuse stacked check on a singleton by injecting
         if _assignment_ok(inst, assignment):
-            return {"status": "sat", "blocks": assignment}
-    return {"status": "unsat"}
+            result: dict[str, Any] = {"status": "sat", "blocks": assignment}
+            if inst.get("representation") == INFERRED:
+                result["perms"] = copy.deepcopy(inst["perms"])
+            result["identification"] = CodePresentation().invariants(inst["identification"])
+            return result
+    return {"status": "unsat", "perms": copy.deepcopy(inst["perms"]),
+            "identification": CodePresentation().invariants(inst["identification"])}
 
 
 def _assignment_ok(inst: Mapping[str, Any], assignment: Mapping[str, list[int]]) -> bool:
@@ -266,19 +292,41 @@ def _assignment_ok(inst: Mapping[str, Any], assignment: Mapping[str, list[int]])
 def verify_certificate(inst: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
     if not isinstance(raw, dict) or raw.get("status") not in ("sat", "unsat"):
         return False, "status"
-    true = stacked_satisfiable(inst)
+    if not CodePresentation().verify(inst["identification"], raw.get("identification")):
+        return 0, "calibration ambiguity or corruption invariant failed"
+    candidate = inst
+    if inst.get("representation") == INFERRED:
+        submitted_perms = raw.get("perms") if isinstance(raw, dict) else None
+        if not isinstance(submitted_perms, dict):
+            return False, "inferred representation requires perms"
+        candidate = copy.deepcopy(inst)
+        candidate["perms"] = {}
+        for name, spec in inst["blocks"].items():
+            perm = submitted_perms.get(name)
+            try:
+                perm = tuple(map(index, perm))
+            except TypeError:
+                return 0, "permutation coordinates must be integers"
+            if perm is None or tuple(sorted(perm)) != tuple(range(int(spec["length"]))):
+                return False, f"invalid permutation for {name}"
+            calibration = inst["calibration"][name]
+            observed = calibration["observed"]
+            for source, expected in zip(calibration["codewords"], observed):
+                if _apply_perm(list(source), perm) != list(expected):
+                    return False, f"permutation for {name} disagrees with calibration"
+            candidate["perms"][name] = list(perm)
     if raw["status"] == "unsat":
-        return (not true, "unsat but a codeword exists" if true else "ok")
-    if not true:
-        return False, "sat but no global codeword"
+        return CodeLinearSystem().solution(candidate) is None, "checked linear system"
     blocks = raw.get("blocks")
     if not isinstance(blocks, dict):
         return False, "blocks missing"
     try:
-        assignment = {n: [int(x) for x in blocks[n]] for n in inst["blocks"]}
+        assignment = CodePresentation().coordinates(blocks, tuple(inst["blocks"]), {})
     except Exception:
         return False, "blocks"
-    if not _assignment_ok(inst, assignment):
+    if not CodePresentation().assignment_shape(candidate, assignment, tuple(candidate["blocks"])):
+        return 0, "coordinate count or field value is invalid"
+    if not _assignment_ok(candidate, assignment):
         return False, "parity or glue failed"
     return True, "ok"
 
@@ -297,6 +345,8 @@ def arm_reference(inst: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def arm_local_only(inst: Mapping[str, Any]) -> dict[str, Any]:
+    if inst.get("perms") is None:
+        inst = CodePresentation().recover(inst)
     p = int(inst["modulus"])
     blocks = {}
     for name, spec in inst["blocks"].items():
@@ -304,7 +354,8 @@ def arm_local_only(inst: Mapping[str, Any]) -> dict[str, Any]:
         if spec["length"] == 2 and spec["H"] == [[1, 1]]:
             vec = [1, (p - 1) % p]
         blocks[name] = vec
-    return {"status": "sat", "blocks": blocks}
+    return {"status": "sat", "blocks": blocks, "perms": copy.deepcopy(inst["perms"]),
+            "identification": CodePresentation().invariants(inst["identification"])}
 
 
 def build_grade_items(*, depth: int, regime: str, representation: str, seed: int) -> list[tuple[str, dict[str, Any]]]:
@@ -321,6 +372,8 @@ def build_grade_items(*, depth: int, regime: str, representation: str, seed: int
             generate_instance(depth=max(depth, 2), regime=REC_COMP, representation=representation, seed=seed + 13),
         ),
         ("opaque_twin", relabel_instance(configured, seed + 99)),
+        ("parent_positive", CodePresentation().parent_control(max(2, depth), representation, seed + 31, 0)),
+        ("parent_counterfactual", CodePresentation().parent_control(max(2, depth), representation, seed + 31, 1)),
         (
             "explicit_expand",
             generate_instance(depth=max(depth, 2), regime=regime, representation=REVEALED, seed=seed),
@@ -344,3 +397,259 @@ def grade_solver(solve_fn: Callable, *, depth: int, regime: str, representation:
     except Exception:
         checks["deterministic"] = False
     return checks
+
+
+
+class CodePresentation:
+    """Coordinate and unit changes, calibration ambiguity, and syndrome controls."""
+
+    def rows(self, rows, scale, p, swap=0):
+        if not rows:
+            return ()
+        row = tuple(rows[0])
+        transformed = ((scale * row[1]) % p, (scale * row[0]) % p) if swap else (
+            (scale * row[0]) % p, (scale * row[1]) % p)
+        return (transformed,) + self.rows(rows[1:], scale, p, swap)
+
+    def transform(self, foil, names, scale):
+        if not names:
+            return foil
+        name = names[0]
+        p = foil["modulus"]
+        spec = foil["blocks"][name]
+        spec["H"] = self.rows(spec["H"], pow(scale, -1, p), p, 1)
+        perm = foil["perms"][name]
+        foil["perms"][name] = (1 - perm[0], 1 - perm[1])
+        calibration = foil["calibration"][name]
+        calibration["codewords"] = self.rows(calibration["codewords"], scale, p, 1)
+        calibration["observed"] = self.rows(calibration["observed"], scale, p)
+        return self.transform(foil, names[1:], scale)
+
+    def recover(self, inst, names=None):
+        if names is None:
+            inst = copy.deepcopy(inst)
+            inst["perms"] = inst["calibration"].copy()
+            return self.recover(inst, tuple(inst["blocks"]))
+        if not names:
+            return inst
+        name = names[0]
+        c = inst["calibration"][name]
+        source, observed = tuple(c["codewords"][1]), tuple(c["observed"][1])
+        inst["perms"][name] = (0, 1) if source == observed else (1, 0)
+        return self.recover(inst, names[1:])
+
+    def observe(self, word, perm):
+        return word[perm[0]], word[perm[1]], word[perm[2]]
+
+    def identification(self, seed, extra=0):
+        choices = ((0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0))
+        perm = choices[seed % 6]
+        probes = ((1, 1, 3), (0, 1, 4)) if extra else ((1, 1, 3),)
+        observed = (self.observe(probes[0], perm),)
+        if extra:
+            observed += (self.observe(probes[1], perm),)
+        received = self.observe((2 + seed % 4, 1, 3), perm)
+        return 5, probes, observed, received
+
+    def matches(self, probes, observed, perm):
+        if not probes:
+            return 1
+        if self.observe(probes[0], perm) != tuple(observed[0]):
+            return 0
+        return self.matches(probes[1:], observed[1:], perm)
+
+    def admissible(self, probes, observed, choices):
+        if not choices:
+            return ()
+        tail = self.admissible(probes, observed, choices[1:])
+        return (choices[0],) + tail if self.matches(probes, observed, choices[0]) else tail
+
+    def invariants(self, task):
+        p, probes, observed, received = task
+        choices = ((0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0))
+        admissible = self.admissible(probes, observed, choices)
+        syndrome = sum(received) % p
+        x, y, z = received
+        corrections = (((x - syndrome) % p, y % p, z % p),
+                       (x % p, (y - syndrome) % p, z % p),
+                       (x % p, y % p, (z - syndrome) % p))
+        return admissible, syndrome, corrections
+
+    def verify(self, task, raw):
+        try:
+            choices, syndrome, corrections = raw
+            a, s, c = self.invariants(task)
+            return int(set(map(tuple, choices)) == set(a) and syndrome == s
+                       and set(map(tuple, corrections)) == set(c))
+        except (TypeError, ValueError):
+            return 0
+
+    def assignment_shape(self, inst, assignment, names):
+        if not names:
+            return 1
+        name = names[0]
+        word = tuple(assignment[name])
+        if word[inst["blocks"][name]["length"]:] or not word:
+            return 0
+        if self.width(word) != inst["blocks"][name]["length"]:
+            return 0
+        try:
+            tuple(map(index, word))
+        except TypeError:
+            return 0
+        if min(word) < 0 or max(word) >= inst["modulus"]:
+            return 0
+        return self.assignment_shape(inst, assignment, names[1:])
+
+    def width(self, sequence):
+        if not sequence:
+            return 0
+        return 1 + self.width(sequence[1:])
+
+    def coordinates(self, blocks, names, result):
+        if not names:
+            return result
+        result[names[0]] = tuple(map(index, blocks[names[0]]))
+        return self.coordinates(blocks, names[1:], result)
+
+    def parent_control(self, depth, representation, seed, rhs):
+        inst = generate_instance(depth=depth, regime=RECURSIVE,
+                                 representation=representation, seed=seed)
+        inst["parent_check"]["rhs"] = rhs
+        return inst
+
+
+class CodeLinearSystem:
+    """Field elimination on all local checks, presented overlaps, and RHS.
+
+    The exhaustive stacked_satisfiable/enumeration_certificate routines are
+    retained as separately implemented small-instance rivals.
+    """
+
+    def variables(self, inst, names, coordinate=0):
+        if not names:
+            return ()
+        name = names[0]
+        if coordinate == inst["blocks"][name]["length"]:
+            return self.variables(inst, names[1:])
+        return ((name, coordinate),) + self.variables(inst, names, coordinate + 1)
+
+    def terms(self, coordinates, coefficients):
+        if not coordinates:
+            return ()
+        return ((tuple(coordinates[0]), coefficients[0]),) + self.terms(coordinates[1:], coefficients[1:])
+
+    def coefficient(self, variable, terms):
+        if not terms:
+            return 0
+        value = terms[0][1] if variable == terms[0][0] else 0
+        return value + self.coefficient(variable, terms[1:])
+
+    def row(self, variables, terms, p):
+        if not variables:
+            return ()
+        return (self.coefficient(variables[0], terms) % p,) + self.row(variables[1:], terms, p)
+
+    def local_rows(self, inst, variables, names, checks=None):
+        if not names:
+            return ()
+        name = names[0]
+        if checks is None:
+            checks = inst["blocks"][name]["H"]
+        if not checks:
+            return self.local_rows(inst, variables, names[1:])
+        local = self.variables(inst, (name,))
+        row = self.row(variables, self.terms(local, checks[0]), inst["modulus"])
+        return (row + (0,),) + self.local_rows(inst, variables, names, checks[1:])
+
+    def overlap_rows(self, inst, variables, edges):
+        if not edges:
+            return ()
+        edge = edges[0]
+        a, i = edge["left"]
+        b, j = edge["right"]
+        terms = (((a, inst["perms"][a][i]), 1), ((b, inst["perms"][b][j]), -edge["scale"]))
+        row = self.row(variables, terms, inst["modulus"])
+        return (row + (0,),) + self.overlap_rows(inst, variables, edges[1:])
+
+    def presented(self, inst, coordinates):
+        if not coordinates:
+            return ()
+        name, coordinate = coordinates[0]
+        return ((name, inst["perms"][name][coordinate]),) + self.presented(inst, coordinates[1:])
+
+    def pivot(self, rows):
+        if not rows:
+            return None, ()
+        if rows[0][0]:
+            return rows[0], rows[1:]
+        pivot, rest = self.pivot(rows[1:])
+        return pivot, (rows[0],) + rest
+
+    def subtract(self, row, pivot, factor, p):
+        if not row:
+            return ()
+        return ((row[0] - factor * pivot[0]) % p,) + self.subtract(row[1:], pivot[1:], factor, p)
+
+    def eliminate(self, rows, pivot, p):
+        if not rows:
+            return ()
+        factor = rows[0][0] * pow(pivot[0], -1, p) % p
+        reduced = self.subtract(rows[0], pivot, factor, p)[1:]
+        return (reduced,) + self.eliminate(rows[1:], pivot, p)
+
+    def drop(self, rows):
+        if not rows:
+            return ()
+        return (rows[0][1:],) + self.drop(rows[1:])
+
+    def dot(self, a, b):
+        if not a:
+            return 0
+        return a[0] * b[0] + self.dot(a[1:], b[1:])
+
+    def consistent(self, rows, p):
+        if not rows:
+            return 1
+        return self.consistent(rows[1:], p) if rows[0][0] % p == 0 else 0
+
+    def solve(self, rows, variables, p):
+        if not variables:
+            return () if self.consistent(rows, p) else None
+        pivot, rest = self.pivot(rows)
+        if pivot is None:
+            tail = self.solve(self.drop(rows), variables[1:], p)
+            return None if tail is None else (0,) + tail
+        tail = self.solve(self.eliminate(rest, pivot, p), variables[1:], p)
+        if tail is None:
+            return None
+        value = (pivot[-1] - self.dot(pivot[1:-1], tail)) * pow(pivot[0], -1, p) % p
+        return (value,) + tail
+
+    def solution(self, inst):
+        variables = self.variables(inst, tuple(inst["blocks"]))
+        parent = inst["parent_check"]
+        terms = self.terms(self.presented(inst, parent["vars"]), parent["row"])
+        final = self.row(variables, terms, inst["modulus"]) + (parent["rhs"] % inst["modulus"],)
+        rows = self.local_rows(inst, variables, tuple(inst["blocks"]))
+        rows += self.overlap_rows(inst, variables, inst["glues"]) + (final,)
+        return self.solve(rows, variables, inst["modulus"])
+
+    def assignment(self, inst, names, values, result):
+        if not names:
+            return result
+        name = names[0]
+        width = inst["blocks"][name]["length"]
+        result[name] = values[:width]
+        return self.assignment(inst, names[1:], values[width:], result)
+
+    def certificate(self, inst):
+        if inst.get("perms") is None:
+            inst = CodePresentation().recover(inst)
+        values = self.solution(inst)
+        cert = {"status": "unsat" if values is None else "sat",
+                "perms": copy.deepcopy(inst["perms"]),
+                "identification": CodePresentation().invariants(inst["identification"])}
+        if values is not None:
+            cert["blocks"] = self.assignment(inst, tuple(inst["blocks"]), values, {})
+        return cert

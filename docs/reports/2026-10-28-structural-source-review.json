@@ -1,0 +1,1400 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-10-28",
+  "status": "static_source_review_only",
+  "workspace": "C:/Users/hatgu/rl_eval_generator",
+  "source_revision": null,
+  "scope": {
+    "reviewed_files": 97,
+    "python_source_texts": 74,
+    "environments": [
+      "recursive_gluing",
+      "recursive_gluing_discovery",
+      "recursive_maze_gluing",
+      "recursive_distributed_gluing",
+      "recursive_epistemic_gluing",
+      "recursive_compiler_bootstrap",
+      "recursive_error_correcting_codes",
+      "recursive_coarse_graining",
+      "recursive_holonomy_gluing"
+    ],
+    "structural_test_function_definitions": [
+      {
+        "path": "tests/test_recursive_compiler_bootstrap.py",
+        "structural_definitions": 5
+      },
+      {
+        "path": "tests/test_recursive_gluing.py",
+        "structural_definitions": 3
+      },
+      {
+        "path": "tests/test_recursive_maze_gluing.py",
+        "structural_definitions": 2
+      },
+      {
+        "path": "tests/test_recursive_gluing_discovery.py",
+        "structural_definitions": 2
+      },
+      {
+        "path": "tests/test_recursive_epistemic_gluing.py",
+        "structural_definitions": 3
+      },
+      {
+        "path": "tests/test_recursive_distributed_gluing.py",
+        "structural_definitions": 3
+      },
+      {
+        "path": "tests/test_recursive_error_correcting_codes.py",
+        "structural_definitions": 5
+      },
+      {
+        "path": "tests/test_recursive_holonomy_gluing.py",
+        "structural_definitions": 5
+      },
+      {
+        "path": "tests/test_recursive_coarse_graining.py",
+        "structural_definitions": 2
+      },
+      {
+        "path": "tests/test_recursive_gluing_study.py",
+        "structural_definitions": 4
+      },
+      {
+        "path": "tests/test_recursive_apps_readiness.py",
+        "structural_definitions": 1
+      },
+      {
+        "path": "tests/test_instance_oracle_reference.py",
+        "structural_definitions": 0
+      }
+    ],
+    "not_a_change_inventory": "Digests include inspected dependencies and pre-existing files; presence here does not imply this pass changed or originated a file."
+  },
+  "execution": {
+    "file_reads_edits_and_javascript_source_text_analysis": "performed",
+    "python_syntax_or_import_checks": "not_executed",
+    "pytest": "not_executed",
+    "repository_algorithms": "not_executed",
+    "algorithm_rival_measurements": "not_executed",
+    "generated_judge_container_gates": "not_executed",
+    "hosted_workflow": "written_not_dispatched",
+    "provider_or_model_runs": "not_executed",
+    "local_processes_during_this_final_review": "none",
+    "earlier_pass_disclosure": "Two initial read-only PowerShell calls preceded reading the execution restriction; see the implementation report."
+  },
+  "checks": [
+    {
+      "id": "python_delimiters_and_strings",
+      "method": "JavaScript text scanner skipped comments, escaped characters, single/double quoted strings, and triple quoted strings; checked matching (), [], {} in every listed Python file.",
+      "status": "no_findings",
+      "files": [
+        {
+          "path": "envs/cat_theo/recursive_gluing/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_gluing/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_gluing_discovery/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_gluing_discovery/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_maze_gluing/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_maze_gluing/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_distributed_gluing/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_epistemic_gluing/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_epistemic_gluing/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_distributed_gluing/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_compiler_bootstrap/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_compiler_bootstrap/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_error_correcting_codes/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_coarse_graining/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_error_correcting_codes/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_coarse_graining/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_holonomy_gluing/files/network.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_holonomy_gluing/files/judge.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_compiler_bootstrap.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_gluing.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_maze_gluing.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_gluing_discovery.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_epistemic_gluing.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_distributed_gluing.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_error_correcting_codes.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_holonomy_gluing.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_coarse_graining.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_gluing_study.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_recursive_apps_readiness.py",
+          "errors": []
+        },
+        {
+          "path": "tools/recursive_gluing_study.py",
+          "errors": []
+        },
+        {
+          "path": "tools/recursive_necessity_baselines.py",
+          "errors": []
+        },
+        {
+          "path": "tools/recursive_references.py",
+          "errors": []
+        },
+        {
+          "path": "tests/test_instance_oracle_reference.py",
+          "errors": []
+        },
+        {
+          "path": "tools/instance_oracle_gate.py",
+          "errors": []
+        },
+        {
+          "path": "arena/secrets.py",
+          "errors": []
+        },
+        {
+          "path": "arena/providers.py",
+          "errors": []
+        },
+        {
+          "path": "tools/suite_inventory.py",
+          "errors": []
+        },
+        {
+          "path": "env_runner.py",
+          "errors": []
+        },
+        {
+          "path": "tools/public_bayes_oracle.py",
+          "errors": []
+        },
+        {
+          "path": "tools/run_suite.py",
+          "errors": []
+        },
+        {
+          "path": "generate_env.py",
+          "errors": []
+        },
+        {
+          "path": "arena/diffing.py",
+          "errors": []
+        },
+        {
+          "path": "shared/tool_state.py",
+          "errors": []
+        },
+        {
+          "path": "shared/generation_manifest.py",
+          "errors": []
+        },
+        {
+          "path": "shared/evaluator_views.py",
+          "errors": []
+        },
+        {
+          "path": "arena/docker_backend.py",
+          "errors": []
+        },
+        {
+          "path": "arena/episode_id.py",
+          "errors": []
+        },
+        {
+          "path": "tools/judge_preflight.py",
+          "errors": []
+        },
+        {
+          "path": "tools/campaign_progress.py",
+          "errors": []
+        },
+        {
+          "path": "tools/campaign_telemetry.py",
+          "errors": []
+        },
+        {
+          "path": "tools/oracle_preflight.py",
+          "errors": []
+        },
+        {
+          "path": "shared/source_validator.py",
+          "errors": []
+        },
+        {
+          "path": "shared/latent_spec.py",
+          "errors": []
+        },
+        {
+          "path": "shared/judge_lib.py",
+          "errors": []
+        },
+        {
+          "path": "shared/information_policy.py",
+          "errors": []
+        },
+        {
+          "path": "shared/patch_validator.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_gluing/files/solver.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_gluing/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_gluing_discovery/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_distributed_gluing/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_maze_gluing/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_epistemic_gluing/files/solver.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_maze_gluing/files/solver.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_compiler_bootstrap/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_gluing_discovery/files/solver.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_coarse_graining/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_distributed_gluing/files/solver.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_holonomy_gluing/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_error_correcting_codes/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_epistemic_gluing/files/visible_tests.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_compiler_bootstrap/files/solver.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_coarse_graining/files/solver.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_error_correcting_codes/files/solver.py",
+          "errors": []
+        },
+        {
+          "path": "envs/cat_theo/recursive_holonomy_gluing/files/solver.py",
+          "errors": []
+        }
+      ],
+      "limitations": "This is not a Python parser. It does not validate indentation, identifiers, annotations, f-string expressions, imports, placeholder substitution, runtime behavior, or mathematical correctness."
+    },
+    {
+      "id": "declared_check_coverage",
+      "method": "Extracted CHECK_NAMES string literals, named tuples in each grading builder, and explicit checks[name] assignments in each judge; manually inspected the builder iteration and scoring paths.",
+      "status": "no_uncovered_or_unknown_checks",
+      "environments": [
+        {
+          "environment": "recursive_gluing",
+          "declared": [
+            "local_path_sat",
+            "configured",
+            "solvable_cycle",
+            "obstructed_cycle",
+            "nested_recursive",
+            "cyclic_sat_generated",
+            "cyclic_unsat_generated",
+            "relabel_twin",
+            "heldout_large",
+            "branching_sat",
+            "branching_unsat",
+            "deterministic"
+          ],
+          "built": [
+            "local_path_sat",
+            "configured",
+            "solvable_cycle",
+            "obstructed_cycle",
+            "nested_recursive",
+            "cyclic_sat_generated",
+            "cyclic_unsat_generated",
+            "relabel_twin",
+            "branching_sat",
+            "branching_unsat",
+            "heldout_large"
+          ],
+          "judge_assignments": [
+            "deterministic"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 3
+        },
+        {
+          "environment": "recursive_gluing_discovery",
+          "declared": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "decoy_heldout",
+            "heldout_twist",
+            "branching_sat",
+            "branching_unsat",
+            "deterministic"
+          ],
+          "built": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "branching_sat",
+            "branching_unsat",
+            "decoy_heldout",
+            "heldout_twist"
+          ],
+          "judge_assignments": [
+            "deterministic"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 2
+        },
+        {
+          "environment": "recursive_maze_gluing",
+          "declared": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "decoy_heldout",
+            "composition_sat",
+            "composition_unsat",
+            "deterministic"
+          ],
+          "built": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "composition_sat",
+            "composition_unsat",
+            "decoy_heldout"
+          ],
+          "judge_assignments": [
+            "deterministic"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 2
+        },
+        {
+          "environment": "recursive_distributed_gluing",
+          "declared": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "lock_capacity_sat",
+            "lock_capacity_unsat",
+            "address_twin",
+            "deterministic"
+          ],
+          "built": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "lock_capacity_sat",
+            "lock_capacity_unsat",
+            "address_twin"
+          ],
+          "judge_assignments": [
+            "deterministic"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 3
+        },
+        {
+          "environment": "recursive_epistemic_gluing",
+          "declared": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "order_heldout",
+            "neg_deep",
+            "neg_recursive",
+            "modal_positive",
+            "modal_counterfactual",
+            "deterministic"
+          ],
+          "built": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "order_heldout",
+            "neg_deep",
+            "neg_recursive",
+            "modal_positive",
+            "modal_counterfactual"
+          ],
+          "judge_assignments": [
+            "deterministic"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 3
+        },
+        {
+          "environment": "recursive_compiler_bootstrap",
+          "declared": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "path_vs_local",
+            "bootstrap_chain",
+            "compiler_semantics",
+            "deterministic"
+          ],
+          "built": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "path_vs_local"
+          ],
+          "judge_assignments": [
+            "bootstrap_chain",
+            "compiler_semantics",
+            "deterministic"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 5
+        },
+        {
+          "environment": "recursive_error_correcting_codes",
+          "declared": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "explicit_expand",
+            "parent_positive",
+            "parent_counterfactual",
+            "deterministic"
+          ],
+          "built": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "parent_positive",
+            "parent_counterfactual",
+            "explicit_expand"
+          ],
+          "judge_assignments": [
+            "deterministic"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 5
+        },
+        {
+          "environment": "recursive_coarse_graining",
+          "declared": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "child_matters",
+            "quotient_positive",
+            "quotient_counterfactual",
+            "deterministic"
+          ],
+          "built": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "quotient_positive",
+            "quotient_counterfactual",
+            "child_matters"
+          ],
+          "judge_assignments": [
+            "deterministic"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 2
+        },
+        {
+          "environment": "recursive_holonomy_gluing",
+          "declared": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "explicit_expand",
+            "path_consistency",
+            "curved_section",
+            "deterministic"
+          ],
+          "built": [
+            "local_visible",
+            "configured",
+            "assembled_sat",
+            "assembled_unsat",
+            "opaque_twin",
+            "explicit_expand",
+            "curved_section"
+          ],
+          "judge_assignments": [
+            "deterministic",
+            "path_consistency"
+          ],
+          "uncovered": [],
+          "unknown_built": [],
+          "pass_threshold": 1,
+          "new_test_count": 5
+        }
+      ]
+    },
+    {
+      "id": "judge_network_import_names",
+      "method": "Matched direct from-network imports against top-level declarations in the adjacent network source, excluding strings/comments.",
+      "status": "all_declared",
+      "environments": [
+        {
+          "environment": "recursive_gluing",
+          "imported": [
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_instances",
+            "cartesian_size",
+            "evaluate_solve_fn",
+            "parse_solve_output"
+          ],
+          "missing": []
+        },
+        {
+          "environment": "recursive_gluing_discovery",
+          "imported": [
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_grammars",
+            "compact_input_bytes",
+            "public_grammar",
+            "summary_cells",
+            "unfolded_occurrences",
+            "verify_certificate",
+            "compact_summaries"
+          ],
+          "missing": []
+        },
+        {
+          "environment": "recursive_maze_gluing",
+          "imported": [
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_mazes",
+            "public_maze",
+            "verify_certificate"
+          ],
+          "missing": []
+        },
+        {
+          "environment": "recursive_distributed_gluing",
+          "imported": [
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_jobs",
+            "public_job",
+            "verify_certificate"
+          ],
+          "missing": []
+        },
+        {
+          "environment": "recursive_epistemic_gluing",
+          "imported": [
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_models",
+            "public_model",
+            "verify_certificate"
+          ],
+          "missing": []
+        },
+        {
+          "environment": "recursive_compiler_bootstrap",
+          "imported": [
+            "BootstrapMachine",
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_items",
+            "public_instance",
+            "verify_certificate"
+          ],
+          "missing": []
+        },
+        {
+          "environment": "recursive_error_correcting_codes",
+          "imported": [
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_items",
+            "public_instance",
+            "verify_certificate"
+          ],
+          "missing": []
+        },
+        {
+          "environment": "recursive_coarse_graining",
+          "imported": [
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_items",
+            "public_instance",
+            "verify_certificate"
+          ],
+          "missing": []
+        },
+        {
+          "environment": "recursive_holonomy_gluing",
+          "imported": [
+            "CHECK_NAMES",
+            "OracleBudgetExceeded",
+            "build_grade_items",
+            "public_instance",
+            "verify_certificate",
+            "paths_agree"
+          ],
+          "missing": []
+        }
+      ],
+      "limitations": "Textual symbol existence is not importability or signature compatibility."
+    },
+    {
+      "id": "strict_pass_thresholds",
+      "method": "Read pass_threshold text from all nine config.yaml files and inspected shared/judge_lib.py score_from_accuracy and judge hidden-check fractions.",
+      "status": "all_nine_require_1.0",
+      "limitations": "YAML and generated judges were not executed."
+    },
+    {
+      "id": "agent_facing_text",
+      "method": "Scanned prompt.md, solver.py, and visible_tests.py of compiler/codes/coarse/holonomy for the current readiness test forbidden-theory tokens; read their protocol examples and inferred-presentation descriptions.",
+      "status": "no_forbidden_tokens_in_12_source_files",
+      "files": [
+        "envs/cat_theo/recursive_holonomy_gluing/files/prompt.md",
+        "envs/cat_theo/recursive_holonomy_gluing/files/solver.py",
+        "envs/cat_theo/recursive_holonomy_gluing/files/visible_tests.py",
+        "envs/cat_theo/recursive_compiler_bootstrap/files/prompt.md",
+        "envs/cat_theo/recursive_compiler_bootstrap/files/solver.py",
+        "envs/cat_theo/recursive_compiler_bootstrap/files/visible_tests.py",
+        "envs/cat_theo/recursive_error_correcting_codes/files/prompt.md",
+        "envs/cat_theo/recursive_error_correcting_codes/files/solver.py",
+        "envs/cat_theo/recursive_error_correcting_codes/files/visible_tests.py",
+        "envs/cat_theo/recursive_coarse_graining/files/prompt.md",
+        "envs/cat_theo/recursive_coarse_graining/files/solver.py",
+        "envs/cat_theo/recursive_coarse_graining/files/visible_tests.py"
+      ],
+      "limitations": "Generated substitution and behavioral fixture compatibility require isolated Python execution."
+    },
+    {
+      "id": "design_json_and_accounting",
+      "method": "Parsed the current experimental-design JSON using JSON.parse; counted diagnostic rows and three screen rows per member; deduplicated by environment,difficulty,seed; summed current CHECK_NAMES counts.",
+      "status": "parsed_and_counts_match",
+      "path": "docs/decisions/2026-10-26-recursive-gluing-experimental-design.json",
+      "observed": {
+        "diagnostic_episodes": 18,
+        "diagnostic_checks": 196,
+        "family_screen_episodes": 24,
+        "family_screen_checks": 234,
+        "unique_episodes": 38,
+        "unique_checks": 386
+      }
+    },
+    {
+      "id": "workflow_dependencies",
+      "method": "Read workflow, requirements, selected tests, and inspected import paths through generation, inventory, study, gate and shared modules.",
+      "status": "source_reviewed_not_executed",
+      "host_test_dependencies": [
+        "PyYAML>=6.0",
+        "pytest>=8.0"
+      ],
+      "runtime_gate_dependency": "shared/judge_lib.py imports torch; full generated-judge behavior belongs to the separate container gate.",
+      "limitations": "Dependency inspection is not proof that a fresh hosted run succeeds. Optional telemetry/provider paths and unselected tests are not certified."
+    },
+    {
+      "id": "source_semantic_review",
+      "method": "Manual reading of controls, public projections, compiler source/seed/VM and stage checks, finite-field elimination, quotient compatibility, transport verification, expanded CSP projections, modal reachability, and evidence/rival reporting.",
+      "status": "reviewed_with_limits",
+      "limitations": "No generated instance or candidate certificate was executed. Static conclusions concern code construction and remaining competing explanations."
+    }
+  ],
+  "corrections_in_final_review": [
+    {
+      "paths": [
+        "tools/recursive_references.py",
+        "tools/recursive_gluing_study.py",
+        "tools/recursive_necessity_baselines.py"
+      ],
+      "change": "Updated stale threshold/pinning documentation and clarified diagnostic decision labels and all-nine rival scope."
+    },
+    {
+      "paths": [
+        "envs/cat_theo/recursive_holonomy_gluing/files/network.py",
+        "tests/test_recursive_holonomy_gluing.py"
+      ],
+      "change": "Transport table parsing rejects IndexError, KeyError, and RecursionError; added missing/malformed/oversized-table regression and corrected the incomplete stub expectation."
+    },
+    {
+      "paths": [
+        "envs/cat_theo/recursive_error_correcting_codes/files/prompt.md",
+        "envs/cat_theo/recursive_coarse_graining/files/prompt.md"
+      ],
+      "change": "Removed contradictory identity defaults for permutations omitted in inferred mode."
+    },
+    {
+      "paths": [
+        "tests/test_recursive_compiler_bootstrap.py",
+        "tests/test_recursive_error_correcting_codes.py",
+        "tests/test_recursive_coarse_graining.py",
+        "tests/test_recursive_holonomy_gluing.py"
+      ],
+      "change": "Replaced unmeasured fixed reference-accuracy report writes with positive/negative certificate assertions on held-out seeds; corrected a compiler rejection-indicator assertion."
+    },
+    {
+      "paths": [
+        "tests/test_recursive_epistemic_gluing.py",
+        "tests/test_recursive_apps_readiness.py"
+      ],
+      "change": "Stopped overwriting a historically dated metric artifact; narrowed the readiness test description to the evidence those tests can supply."
+    }
+  ],
+  "research_status": {
+    "scientific_maturity": "not_established",
+    "model_capability_claims": "none_established_for_this_revision",
+    "known_limits": [
+      "Direct CSP, state search, modal evaluation, elimination, and partition enumeration remain legitimate rivals.",
+      "Maze interfaces and worker topology remain explicit; broader latent structure recovery is not established.",
+      "Several new structural subtasks remain separable from legacy puzzles.",
+      "The minimal L1 bootstrap relationship requires runtime confirmation; finite semantic probes do not prove universal compiler correctness.",
+      "Parity-code and quotient families are narrow, and epistemic nesting is factorized.",
+      "Holonomy uses two loops and remains excluded from scored campaigns.",
+      "Training/evaluation splits and cross-domain transfer interventions have not been run."
+    ]
+  },
+  "file_digests": [
+    {
+      "path": ".github/workflows/recursive-structural-validation.yml",
+      "bytes": 1709,
+      "sha256": "f9287fecf7e6644ee9a83eae51708b97d84353754e486a4eca74ae855d8dae94"
+    },
+    {
+      "path": "arena/diffing.py",
+      "bytes": 2278,
+      "sha256": "f802358f26431fc0e89393f8408285e0f711a9c62f01e5ac4611dab1038ebc67"
+    },
+    {
+      "path": "arena/docker_backend.py",
+      "bytes": 11702,
+      "sha256": "0afd41696e1b01b18ecf0d85a9e98f35424982b25ae910a397cba21e620d6cce"
+    },
+    {
+      "path": "arena/episode_id.py",
+      "bytes": 502,
+      "sha256": "913e39d399f292de432238f25d34d9631bed133626d34ef6854a4705a6599f01"
+    },
+    {
+      "path": "arena/providers.py",
+      "bytes": 51393,
+      "sha256": "5fde9ebea8a9e13e0d218789046e74901af5d6de26c7ca0d670148272e385671"
+    },
+    {
+      "path": "arena/secrets.py",
+      "bytes": 10898,
+      "sha256": "cf3bd2f995a90128b3027ab5e0722813b9d36c59e2930d9fb5e1305eb2948b69"
+    },
+    {
+      "path": "docs/decisions/2026-10-26-recursive-gluing-experimental-design.json",
+      "bytes": 31529,
+      "sha256": "6737c8471ca6e564dd006e28d776d7b441bf5b92e1fa953304f1f3d71ba644a7"
+    },
+    {
+      "path": "docs/decisions/2026-10-26-recursive-gluing-experimental-design.md",
+      "bytes": 5750,
+      "sha256": "da1a8cf4253942bc1a100de8213bdc206f59fca10142b8ff2bab700586dc2872"
+    },
+    {
+      "path": "docs/reports/2026-10-28-recursive-structural-rebuild.md",
+      "bytes": 17142,
+      "sha256": "28307d2246c33b1a35afca034964f0a30cd1cd02d2f174e2be3a04db3010d8e8"
+    },
+    {
+      "path": "env_runner.py",
+      "bytes": 43233,
+      "sha256": "8c7fe22787de5b36ef5adf654186b25052719cff8bfa082be32bcdac22a0c85b"
+    },
+    {
+      "path": "envs/cat_theo/recursive_coarse_graining/config.yaml",
+      "bytes": 2780,
+      "sha256": "8d0b7c21a53fdd33249b16e35cae074c8ca468b153ce68badc870737142e1386"
+    },
+    {
+      "path": "envs/cat_theo/recursive_coarse_graining/files/judge.py",
+      "bytes": 4594,
+      "sha256": "bd6471b0861b01d6a3ff387708992008fd919ac0845628e3ed1dc9f884485622"
+    },
+    {
+      "path": "envs/cat_theo/recursive_coarse_graining/files/network.py",
+      "bytes": 17537,
+      "sha256": "bd18d8957777d0c01335017cccd357d5cb918dd84b36515628ab18ca0b1f63a8"
+    },
+    {
+      "path": "envs/cat_theo/recursive_coarse_graining/files/prompt.md",
+      "bytes": 2472,
+      "sha256": "7bda6db4610b1fee442cd79a27b9115b1721d45973af08b4dfece71fe37e62aa"
+    },
+    {
+      "path": "envs/cat_theo/recursive_coarse_graining/files/solver.py",
+      "bytes": 475,
+      "sha256": "e73b72e2c5a2c6c3b820f6d45f290e96b0fb2cb983d0c0b6dc8359e8dab8f128"
+    },
+    {
+      "path": "envs/cat_theo/recursive_coarse_graining/files/visible_tests.py",
+      "bytes": 1041,
+      "sha256": "67e9406f930610c50860e2ca4286ebe0a021732d43a0dab4a27acc95e3e3d073"
+    },
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/config.yaml",
+      "bytes": 2766,
+      "sha256": "88c6205b5f3087f71eb494e671ee21270305fd750eabfbaad5aa02997ade673a"
+    },
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/judge.py",
+      "bytes": 4860,
+      "sha256": "fd6271c3b50ce9f371b15904e900a0b51e0501647b38f28e421140ae8845f895"
+    },
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/network.py",
+      "bytes": 28768,
+      "sha256": "b77e35b1672d2ae073931a10a08425aed88b793e62f11eb75e26bb895b9399d7"
+    },
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/prompt.md",
+      "bytes": 4613,
+      "sha256": "3507af4bb8a1cf3d61f9ce180acc1c4d017cb65046b1a40bf01e5a604d1ffc94"
+    },
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/solver.py",
+      "bytes": 192,
+      "sha256": "0bc82317715fadb5c4551696d245288ef09bb7472daf1add73957dd463c60c8f"
+    },
+    {
+      "path": "envs/cat_theo/recursive_compiler_bootstrap/files/visible_tests.py",
+      "bytes": 910,
+      "sha256": "c0c689083d2a551041fd7f2ef7a1ddda0b13bbe2b7684801127aaeee8903e8f5"
+    },
+    {
+      "path": "envs/cat_theo/recursive_distributed_gluing/config.yaml",
+      "bytes": 3299,
+      "sha256": "ef8e21e6496e424b8ac57796c4aa644f487c879afce28e32c96e2df5f2a00d68"
+    },
+    {
+      "path": "envs/cat_theo/recursive_distributed_gluing/files/judge.py",
+      "bytes": 4671,
+      "sha256": "d09da2003502db94b8cdf04daa0959eb1e7eb887767e9111431aeacfbed07b2c"
+    },
+    {
+      "path": "envs/cat_theo/recursive_distributed_gluing/files/network.py",
+      "bytes": 20862,
+      "sha256": "c398a3f42102bd6f2dd77941c486f2de8ecde39ee71623a71d91fc847f2895a0"
+    },
+    {
+      "path": "envs/cat_theo/recursive_distributed_gluing/files/prompt.md",
+      "bytes": 2877,
+      "sha256": "daca40e9893c1bc45706d0e7aaa594c8ffd71162108a8ffe3b70042b92828bf7"
+    },
+    {
+      "path": "envs/cat_theo/recursive_distributed_gluing/files/solver.py",
+      "bytes": 1376,
+      "sha256": "a5072de34e9de9a0349e07953ca3d26542a4d34f7ce11cdd281835e6f2b6c3bc"
+    },
+    {
+      "path": "envs/cat_theo/recursive_distributed_gluing/files/visible_tests.py",
+      "bytes": 1013,
+      "sha256": "ea83a513a177c0cf474df5dcf32855604f44284c83de0118a866af74090bfca0"
+    },
+    {
+      "path": "envs/cat_theo/recursive_epistemic_gluing/config.yaml",
+      "bytes": 3580,
+      "sha256": "2e48173876b5dd4ff5a59cb0bbf7250c78b396e73dca6f168f060e5db71ab100"
+    },
+    {
+      "path": "envs/cat_theo/recursive_epistemic_gluing/files/judge.py",
+      "bytes": 4822,
+      "sha256": "c90c6c70f1bc0e6e1c6e4ee3564e5e3945e9180081584a872efe1727625d4466"
+    },
+    {
+      "path": "envs/cat_theo/recursive_epistemic_gluing/files/network.py",
+      "bytes": 35957,
+      "sha256": "c169ecbbcff4f5d60803f42e925a08a05980e6d01afa432ab5fc5df2bab59d8f"
+    },
+    {
+      "path": "envs/cat_theo/recursive_epistemic_gluing/files/prompt.md",
+      "bytes": 3849,
+      "sha256": "423d2d61c6068037e46b318cded8c7a132dc2d27260dc8e1b73a2383d33749a0"
+    },
+    {
+      "path": "envs/cat_theo/recursive_epistemic_gluing/files/solver.py",
+      "bytes": 1654,
+      "sha256": "75d4de8bce01568004311df8466966b3f9f461af0e0c2595ad96020b2c3d7037"
+    },
+    {
+      "path": "envs/cat_theo/recursive_epistemic_gluing/files/visible_tests.py",
+      "bytes": 888,
+      "sha256": "47821747a590897cc75c275ef9d14b3b04e24b0219fefbe1733e72852a5477e0"
+    },
+    {
+      "path": "envs/cat_theo/recursive_error_correcting_codes/config.yaml",
+      "bytes": 2680,
+      "sha256": "e16d94aae623d24b8d9d5326151031ad50b3b8412696c9dd39f551aed0309bf3"
+    },
+    {
+      "path": "envs/cat_theo/recursive_error_correcting_codes/files/judge.py",
+      "bytes": 4601,
+      "sha256": "3db2c56cf9df3ff20ce4615ec9d8c497db9838684f1644166a2fcf6b8052985b"
+    },
+    {
+      "path": "envs/cat_theo/recursive_error_correcting_codes/files/network.py",
+      "bytes": 24627,
+      "sha256": "0d73af93e58afa4fccd95ca84e5eede1bb1a3d6d9cf97780ad7f7cf7545757f4"
+    },
+    {
+      "path": "envs/cat_theo/recursive_error_correcting_codes/files/prompt.md",
+      "bytes": 2942,
+      "sha256": "c76f4bd004c815d52f48603b4921af3d863cca099961dbd7be1dd7040a2b19ba"
+    },
+    {
+      "path": "envs/cat_theo/recursive_error_correcting_codes/files/solver.py",
+      "bytes": 467,
+      "sha256": "bf0abadd71dbc522d0aac710aa1cfdb39f0ba83e8083921a30dd0cdd22ce8999"
+    },
+    {
+      "path": "envs/cat_theo/recursive_error_correcting_codes/files/visible_tests.py",
+      "bytes": 908,
+      "sha256": "4166723fe977c133e30b8746d284f82663ac1415e5e1816a46137f7e1abe834f"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing/config.yaml",
+      "bytes": 3691,
+      "sha256": "cfeb7ec304b7a608bd2b07f179e376ef705666558246d30f041dbd9e92f58356"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing/files/judge.py",
+      "bytes": 5373,
+      "sha256": "07d9f00691e95ed5d2d13bae5e3352a13a7221a0fb8159bcb69b0d280e7ce47c"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing/files/network.py",
+      "bytes": 28118,
+      "sha256": "767f5aad9544f0e09f78504cf97f1eaa43e08033c99af63615760405e6def0bf"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing/files/prompt.md",
+      "bytes": 2245,
+      "sha256": "807ec0ec8c31f856e2f1bf12772eeb727c1824f64d65b9d0b227731f33fddf44"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing/files/solver.py",
+      "bytes": 2551,
+      "sha256": "4c1e093125495ac5bb3fee10264f402c216decce786acd24c0304674a2723ea0"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing/files/visible_tests.py",
+      "bytes": 1877,
+      "sha256": "2dc85f9bd8748f05fcf3f9764f5fd1ca41ed3502203cefcb9f297e07e1fd93a2"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing_discovery/config.yaml",
+      "bytes": 4070,
+      "sha256": "5cb73842b6d7ec918519c846ddbd959bc21ee17ae155ea9cc9004b77c0917b24"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing_discovery/files/judge.py",
+      "bytes": 5625,
+      "sha256": "6c35bc144f1fc20dd3509b05b2fbea465faf5a2f647f39098b608b3c26b764fd"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing_discovery/files/network.py",
+      "bytes": 32438,
+      "sha256": "aa901f360cf42cae9e6fb44cfa05af9739e53408395780e4b50ee7e80735bb21"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing_discovery/files/prompt.md",
+      "bytes": 3625,
+      "sha256": "b998addbcf96eee65aca6d78ccf0befc2e4c952d4d7ba0e12fd199a1c26509fc"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing_discovery/files/solver.py",
+      "bytes": 1592,
+      "sha256": "5ed34393beb1169c649915df72f9afeab81a64760a1beb77fe877593a51324c5"
+    },
+    {
+      "path": "envs/cat_theo/recursive_gluing_discovery/files/visible_tests.py",
+      "bytes": 2067,
+      "sha256": "2b53ffed465567b7def49ed84a3c37d35a40b1ecb9de69d26cfc98de1b8f32e8"
+    },
+    {
+      "path": "envs/cat_theo/recursive_holonomy_gluing/config.yaml",
+      "bytes": 3067,
+      "sha256": "23f40836bb5bdea7be7af59a61fd331eff133373779999b24c903f2c6a2c4825"
+    },
+    {
+      "path": "envs/cat_theo/recursive_holonomy_gluing/files/judge.py",
+      "bytes": 5138,
+      "sha256": "087d9a15ce9ba2336673cf1e672baec68460cc425d0dd13dd4325cd1f05d5247"
+    },
+    {
+      "path": "envs/cat_theo/recursive_holonomy_gluing/files/network.py",
+      "bytes": 25749,
+      "sha256": "3ec4a31b2f2479cf00548fa6745eeb1ac70a159febdc021035f0243ba69305ba"
+    },
+    {
+      "path": "envs/cat_theo/recursive_holonomy_gluing/files/prompt.md",
+      "bytes": 2003,
+      "sha256": "79e67b69a194dc1d33e84aa954ff820bfa3e1c3cbbd1ffb2fd9f7b8fc0e53bdc"
+    },
+    {
+      "path": "envs/cat_theo/recursive_holonomy_gluing/files/solver.py",
+      "bytes": 277,
+      "sha256": "05b87f209f020443bd23af3ea7339a5b9bb63d4710e3ef1434e33113008857e9"
+    },
+    {
+      "path": "envs/cat_theo/recursive_holonomy_gluing/files/visible_tests.py",
+      "bytes": 1029,
+      "sha256": "1dea6e1a7b690055ea8a9af9848beeb33b0c9b06e20c1f2d2b2bb677f75d7313"
+    },
+    {
+      "path": "envs/cat_theo/recursive_maze_gluing/config.yaml",
+      "bytes": 3616,
+      "sha256": "40c8389fc608521ece96d05d07a1c34518e4522fc4c3f78bafe6939e5caf9fdf"
+    },
+    {
+      "path": "envs/cat_theo/recursive_maze_gluing/files/judge.py",
+      "bytes": 4768,
+      "sha256": "ac5a28d7b9554df89a964d6cdea8be05e5a463991488cff980341a77625c8ac0"
+    },
+    {
+      "path": "envs/cat_theo/recursive_maze_gluing/files/network.py",
+      "bytes": 18205,
+      "sha256": "72c94a2c1bc3e7a7f844cd926c59e98d9617963135f9fcce091b2e62503339b0"
+    },
+    {
+      "path": "envs/cat_theo/recursive_maze_gluing/files/prompt.md",
+      "bytes": 2742,
+      "sha256": "9301194779be0311954c4e9de60c379eec6995bd01bc40a75ec2dbd3096f77bc"
+    },
+    {
+      "path": "envs/cat_theo/recursive_maze_gluing/files/solver.py",
+      "bytes": 1118,
+      "sha256": "05580d8702a41965cb75a91468ed314b9305d42333b100b64e7da76f22c0f6e9"
+    },
+    {
+      "path": "envs/cat_theo/recursive_maze_gluing/files/visible_tests.py",
+      "bytes": 1335,
+      "sha256": "ec9fde49332ce2e609f120f5c0a4412d2bd68aa37976dd9837e4ea8d33ed7ee3"
+    },
+    {
+      "path": "generate_env.py",
+      "bytes": 58442,
+      "sha256": "e89d1c03baec7bfeaa23bb349e69c829d429617fe7b2f7b1d92792276e1aa762"
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 26,
+      "sha256": "40453e0be46498e1e5a16060f5d85b3e98f6174e2495edad03c894856da4d6d3"
+    },
+    {
+      "path": "shared/evaluator_views.py",
+      "bytes": 13784,
+      "sha256": "11c80d3bdf4fa622985b90b3693c90d71d784e227fe8fe15aebefcee7d5a1d82"
+    },
+    {
+      "path": "shared/generation_manifest.py",
+      "bytes": 22615,
+      "sha256": "3573fc39f44572ba31bcdab1caa329c8db4a1814ee44b37aa337ea038f72ad36"
+    },
+    {
+      "path": "shared/information_policy.py",
+      "bytes": 10318,
+      "sha256": "a711a264c81d8e748ef5df8ad1ea09f930ede4d5fe66f432eafa7c9dbb6f6ee2"
+    },
+    {
+      "path": "shared/judge_lib.py",
+      "bytes": 20567,
+      "sha256": "e394579de0f084f4c0084ef33bbeaa09e7554b1b30febb6f06b40953d5632a45"
+    },
+    {
+      "path": "shared/latent_spec.py",
+      "bytes": 23189,
+      "sha256": "308a8722d04df49570e5ddf388f779c7a6aef81a2d47c02719c739fdfee27eb6"
+    },
+    {
+      "path": "shared/patch_validator.py",
+      "bytes": 7380,
+      "sha256": "3e29ab5514ba2102dd89ebfecec3358603f525db8426819803c9a65165ed981f"
+    },
+    {
+      "path": "shared/source_validator.py",
+      "bytes": 4465,
+      "sha256": "8cf693cf1031e0ef541a0bf6d04f1bafe0fa43ff59a8cf3eaebcd1d5377a6973"
+    },
+    {
+      "path": "shared/tool_state.py",
+      "bytes": 7482,
+      "sha256": "89d12d5161401a495928a29c8b5e21fb2efbdd1ac8bbee103ab2cff1718c2009"
+    },
+    {
+      "path": "tests/test_instance_oracle_reference.py",
+      "bytes": 19901,
+      "sha256": "47755ff1e1e6e509170ba4e025febbd849026451c51653879447200b069c6091"
+    },
+    {
+      "path": "tests/test_recursive_apps_readiness.py",
+      "bytes": 19827,
+      "sha256": "7ed0fbe70ececbe5caf5ce4a70c992cc5f286b2ca431d658bed146062ba0f03a"
+    },
+    {
+      "path": "tests/test_recursive_coarse_graining.py",
+      "bytes": 7310,
+      "sha256": "680162fa4fb15347833a779f5b757338a9790a35f848b53b9ae8388d124cfa66"
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "bytes": 8488,
+      "sha256": "249a4b15d01f2c52e7f49f69fad41cfab1c0a96dc0e9ce46ae42a4d7780daeb1"
+    },
+    {
+      "path": "tests/test_recursive_distributed_gluing.py",
+      "bytes": 6651,
+      "sha256": "fb68f7a62ebb60e5e81a5d77b57c5be3c021fff8ca86a0de14bd773cd1c4d4d0"
+    },
+    {
+      "path": "tests/test_recursive_epistemic_gluing.py",
+      "bytes": 30959,
+      "sha256": "b4932686f57949b923152fcf4780d9b2b5deb07bf3c863e8f478676b1bb58f8c"
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "bytes": 8070,
+      "sha256": "2a394db6eb3bbe51b8c68d059c0f1a30591cc2b4d1b0438008c01e264ee1c542"
+    },
+    {
+      "path": "tests/test_recursive_gluing.py",
+      "bytes": 20826,
+      "sha256": "b0d31d6c8b9290927b752cbbb33ebfc88475ebc6fd8fb00a642689ec058ac065"
+    },
+    {
+      "path": "tests/test_recursive_gluing_discovery.py",
+      "bytes": 24544,
+      "sha256": "c6c7c4e06830bc14b76e7feab7bcef1982412bf49021cdb078e257e0900a0391"
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "bytes": 61688,
+      "sha256": "fa209b07eda6726085ef28a765f2f92367a3e06c7e6c1c1f9d5037db38d3e1d0"
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "bytes": 10661,
+      "sha256": "97c2c6c89b6635d1723ba90097f24b59429d044f12010fece65310e7489571da"
+    },
+    {
+      "path": "tests/test_recursive_maze_gluing.py",
+      "bytes": 10154,
+      "sha256": "181084bb0ffa3f1dad5f4a26a2d907f45f52c86a4c60d55635b2cb5f03da49c6"
+    },
+    {
+      "path": "tools/campaign_progress.py",
+      "bytes": 1489,
+      "sha256": "5a06c577fd0866124c43041caca5127d94f16dde2df459664411dea5d92f4515"
+    },
+    {
+      "path": "tools/campaign_telemetry.py",
+      "bytes": 7303,
+      "sha256": "b902103de12756f9650d1d232b8bd0ed2179eca02f996c5ffcb93129a71f6585"
+    },
+    {
+      "path": "tools/instance_oracle_gate.py",
+      "bytes": 43378,
+      "sha256": "f9eaef8e6fc0382e11f816b73f1eb604f46ed7a40e08ec9d75887f4d06f66cca"
+    },
+    {
+      "path": "tools/judge_preflight.py",
+      "bytes": 8334,
+      "sha256": "4c5937c4e3734f10353cca6f8dd6dd2968f9dae9d3e4fe972e1edda68f816803"
+    },
+    {
+      "path": "tools/oracle_preflight.py",
+      "bytes": 10604,
+      "sha256": "a2fc64a1deb7710590185515d61637d9555917bd51f0fd42af4d273eb1c72e90"
+    },
+    {
+      "path": "tools/public_bayes_oracle.py",
+      "bytes": 11032,
+      "sha256": "7445647ef1e55a97009edb34fbc4db52c31414d4e7d57a82dbb664d4eaeedf69"
+    },
+    {
+      "path": "tools/recursive_gluing_study.py",
+      "bytes": 124495,
+      "sha256": "0a3a7eff2aa6cf4a7b4f75cb958f057ee1e3fd1de207f5b3b15f4fb1d5dbf563"
+    },
+    {
+      "path": "tools/recursive_necessity_baselines.py",
+      "bytes": 27792,
+      "sha256": "2e7e8751f476b8a21c72bb4a81b604e42a720ee7a6d1d34b88c50b6461a7088b"
+    },
+    {
+      "path": "tools/recursive_references.py",
+      "bytes": 13704,
+      "sha256": "483cdc64d224be94a04b96691c3143f6ce53a7ff871ad98a79b57cfa01ee50d8"
+    },
+    {
+      "path": "tools/run_suite.py",
+      "bytes": 89680,
+      "sha256": "68b70e671a8b53ed5af6af32cf3587dc014bce1ad35b9c622801dd2df74c1223"
+    },
+    {
+      "path": "tools/suite_inventory.py",
+      "bytes": 37501,
+      "sha256": "49bac72fbad3d74228963d7c4c51d38c06879e156ec76f817ec57b1287bd30b7"
+    }
+  ]
+}

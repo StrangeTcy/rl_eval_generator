@@ -1,8 +1,8 @@
 """Leakage, depth honesty, shortcut, and control regressions for the four apps.
 
-Passing these tests is generator/oracle correctness and shortcut resistance.
-It is not a model-performance result and does not make the suite a validated
-benchmark.
+Passing these tests supports generator/oracle correctness and rejection of
+the named ablations. It does not establish resistance to other shortcuts or
+model performance and does not make the suite a validated benchmark.
 
 `flat` is a generator branch (a Python constant). It is not a config level and
 cannot be selected by `generate_env.py --difficulty` or `tools/suite_inventory.py`.
@@ -464,3 +464,12 @@ def test_regime_polarity_is_not_a_depth_label() -> None:
     crs_d3 = CRS.generate_instance(depth=3, regime=CRS.RECURSIVE, representation=CRS.REVEALED, seed=0)
     assert crs_d2["depth"] == 2 and crs_d3["depth"] == 3
     assert CRS.true_table_and_fixed(crs_d2)[1] is CRS.true_table_and_fixed(crs_d3)[1] is True
+
+@pytest.mark.parametrize("environment", (
+    "recursive_gluing", "recursive_gluing_discovery", "recursive_maze_gluing",
+    "recursive_distributed_gluing", "recursive_epistemic_gluing",
+    "recursive_compiler_bootstrap", "recursive_error_correcting_codes",
+    "recursive_coarse_graining", "recursive_holonomy_gluing",
+))
+def test_structural_global_checks_cannot_be_sacrificed_for_pass(environment):
+    assert _config(environment)["scoring"]["pass_threshold"] == 1.0

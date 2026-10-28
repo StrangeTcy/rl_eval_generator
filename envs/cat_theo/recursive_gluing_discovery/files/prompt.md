@@ -79,3 +79,9 @@ unfolded copy.
 ```bash
 python visible_tests.py
 ```
+
+Leaf and wiring tables are finite relations; do not assume that each input
+has exactly one output. Hidden compositions can contain branching or partial
+relations. Report every realizable interface pair, including all alternatives.
+Checks include matched instances differing only in their closing relation.
+Direct relation composition and explicit expansion are permitted algorithms.

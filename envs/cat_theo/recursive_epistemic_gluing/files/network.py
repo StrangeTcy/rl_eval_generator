@@ -20,7 +20,7 @@ CYCLIC_SAT = "cyclic_sat"
 CYCLIC_UNSAT = "cyclic_unsat"
 TRANSPARENT = "transparent"
 OPAQUE = "opaque"
-PUBLIC_KEYS = ("agents", "frames", "levels", "actual", "query", "bundle", "nested_bundle")
+PUBLIC_KEYS = ("agents", "frames", "levels", "actual", "query", "bundle", "nested_bundle", "knowledge_probe")
 CHECK_NAMES = (
     "local_visible",
     "configured",
@@ -30,6 +30,8 @@ CHECK_NAMES = (
     "order_heldout",
     "neg_deep",
     "neg_recursive",
+    "modal_positive",
+    "modal_counterfactual",
     "deterministic",
 )
 
@@ -58,8 +60,8 @@ class OracleBudgetExceeded(RuntimeError):
 def public_model(model: Mapping[str, Any]) -> dict[str, Any]:
     out = {}
     for key in PUBLIC_KEYS:
-        if key == "nested_bundle":
-            out[key] = model.get("nested_bundle")
+        if key == "nested_bundle" or key == "knowledge_probe":
+            out[key] = model.get(key)
         else:
             out[key] = model[key]
     return out
@@ -136,6 +138,8 @@ def generate_model(
 ) -> dict[str, Any]:
     if depth < 1 or order < 0:
         raise ValueError("depth/order")
+    if order >= 2:
+        return KnowledgeProbe().generate(depth, order, regime, opacity, seed)
     rng = random.Random(seed)
     used: set[str] = set()
 
@@ -242,6 +246,7 @@ def relabel_model(model: Mapping[str, Any], seed: int) -> dict[str, Any]:
         "levels": list(model["levels"]),
         "actual": actual,
         "query": copy.deepcopy(model["query"]),
+        "knowledge_probe": model.get("knowledge_probe"),
         "bundle": bundle,
         "nested_bundle": nested,
         "meta": dict(model.get("meta") or {}),
@@ -311,28 +316,42 @@ def atom_at(model: Mapping[str, Any], atom: str, chain: tuple[str, ...]) -> bool
     return False
 
 
-def eval_formula(model: Mapping[str, Any], formula: Any, chain: tuple[str, ...], budget: list[int]) -> bool:
+def eval_formula(model: Mapping[str, Any], formula: Any, chain: tuple[str, ...], budget: list[int], cache=None) -> bool:
+    if cache is None:
+        cache = {}
+    key = (repr(formula), chain)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
     budget[0] -= 1
     if budget[0] < 0:
         raise OracleBudgetExceeded("epistemic oracle exceeded step budget; refusing to call this unsat")
     if isinstance(formula, str):
-        return atom_at(model, formula, chain)
-    if not isinstance(formula, list) or not formula:
+        value = atom_at(model, formula, chain)
+        cache[key] = value
+        return value
+    if not formula:
         raise ValueError("bad formula")
     head = formula[0]
     if head == "not":
-        return not eval_formula(model, formula[1], chain, budget)
+        value = not eval_formula(model, formula[1], chain, budget, cache)
+        cache[key] = value
+        return value
     if head == "and":
-        return eval_formula(model, formula[1], chain, budget) and eval_formula(
-            model, formula[2], chain, budget
+        value = eval_formula(model, formula[1], chain, budget, cache) and eval_formula(
+            model, formula[2], chain, budget, cache
         )
+        cache[key] = value
+        return value
     if head == "K":
         agent = formula[1]
         body = formula[2]
         for other in all_chains(model):
             if related(model, agent, chain, other):
-                if not eval_formula(model, body, other, budget):
+                if not eval_formula(model, body, other, budget, cache):
+                    cache[key] = False
                     return False
+        cache[key] = True
         return True
     raise ValueError(f"unknown connective {head}")
 
@@ -535,6 +554,8 @@ def reference_certificate(model: Mapping[str, Any]) -> dict[str, Any]:
                 cert["joint_world"] = outer_j
             if inner_j is not None:
                 cert["joint_inner"] = inner_j
+    if model.get("knowledge_probe") is not None:
+        cert["reachability"] = KnowledgeProbe().certificate(model)
     return cert
 
 
@@ -551,6 +572,9 @@ def verify_certificate(model: Mapping[str, Any], raw: Any) -> tuple[bool, str]:
     claimed_q, err = _require_bool(raw, "query_value")
     if err:
         return False, err
+    if model.get("knowledge_probe") is not None:
+        if not KnowledgeProbe().verify(model, raw.get("reachability")):
+            return 0, "modal reachability certificate failed"
     true_q = query_value(model)
     if len(model["levels"]) == 1:
         flat_q = query_value(flatten_model(model))
@@ -873,21 +897,21 @@ def build_grade_models(
         (
             "assembled_sat",
             generate_model(
-                depth=max(depth, 1),
+                depth=max(depth, 2),
                 regime=CYCLIC_SAT,
                 opacity=opacity,
-                order=max(order, 1),
-                seed=seed + 11,
+                order=max(order, 3),
+                seed=2 * (seed + 11) + 1,
             ),
         ),
         (
             "assembled_unsat",
             generate_model(
-                depth=max(depth, 1),
+                depth=max(depth, 2),
                 regime=CYCLIC_UNSAT,
                 opacity=opacity,
-                order=max(order, 1),
-                seed=seed + 13,
+                order=max(order, 3),
+                seed=2 * (seed + 11) + 1,
             ),
         ),
         ("opaque_twin", relabel_model(configured, seed + 99)),
@@ -897,12 +921,15 @@ def build_grade_models(
                 depth=max(depth, 2),
                 regime=regime if regime != TREE else CYCLIC_SAT,
                 opacity=opacity,
-                order=2,
+                order=max(3, order + 1),
                 seed=seed + 17,
             ),
         ),
         ("neg_deep", handwritten_neg_deep()),
         ("neg_recursive", handwritten_neg_recursive()),
+        ("modal_positive", KnowledgeProbe().generate(1, max(3, order + 1), TREE, OPAQUE, 2 * seed + 1)),
+        ("modal_counterfactual", KnowledgeProbe().counterfactual(
+            KnowledgeProbe().generate(1, max(3, order + 1), TREE, OPAQUE, 2 * seed + 1))),
     ]
 
 
@@ -926,3 +953,99 @@ def grade_solver(
     except Exception:
         checks["deterministic"] = False
     return checks
+
+
+
+class KnowledgeProbe:
+    """Alternating-agent reachability with a boundary reached at exact modal depth."""
+
+    def sequence(self, count, index=0):
+        if count == 0:
+            return ()
+        return (("ann", "bob", "cara", "dan")[index % 4],) + self.sequence(count - 1, index + 1)
+
+    def partition(self, worlds, agent, index=0):
+        if not worlds:
+            return ()
+        if index % 4 == agent and worlds[1:]:
+            return (tuple(worlds[:2]),) + self.partition(worlds[2:], agent, index + 2)
+        return ((worlds[0],),) + self.partition(worlds[1:], agent, index + 1)
+
+    def formula(self, agents, atom):
+        if not agents:
+            return atom
+        return "K", agents[0], self.formula(agents[1:], atom)
+
+    def generate(self, depth, order, regime, opacity, seed):
+        model = handwritten_neg_deep()
+        frame = model["frames"]["outer"]
+        count = max(3, order)
+        worlds = tuple(map(str, range(count + 1)))
+        frame["worlds"] = worlds
+        frame["atoms"]["p"] = worlds if seed % 2 else worlds[:-1]
+        frame["indist"]["ann"] = self.partition(worlds, 0)
+        frame["indist"]["bob"] = self.partition(worlds, 1)
+        frame["indist"]["cara"] = self.partition(worlds, 2)
+        frame["indist"]["dan"] = self.partition(worlds, 3)
+        agents = self.sequence(count)
+        model["query"] = self.formula(agents, "p")
+        model["knowledge_probe"] = agents, "p"
+        model["actual"] = (worlds[0],)
+        model["bundle"]["ann"] = worlds[0]
+        model["bundle"]["bob"] = worlds[0]
+        model["bundle"]["cara"] = worlds[0]
+        model["bundle"]["dan"] = worlds[0]
+        if depth == 1 and regime == CYCLIC_UNSAT:
+            model["bundle"]["dan"] = worlds[-1]
+        if depth > 1:
+            nested = handwritten_neg_deep()
+            inner = nested["frames"]["outer"]
+            inner["atoms"]["p"] = ()
+            inner["atoms"]["q"] = ("w0",)
+            model["frames"]["inner"] = inner
+            model["levels"] = ("outer",) + ("inner",) * (depth - 1)
+            model["actual"] += ("w0",) * (depth - 1)
+            model["nested_bundle"] = nested["bundle"]
+            if regime != CYCLIC_UNSAT:
+                model["nested_bundle"]["dan"] = "w3"
+        if regime == TREE:
+            model["bundle"] = None
+            model["nested_bundle"] = None
+        return relabel_model(model, seed) if opacity == OPAQUE else model
+
+    def successors(self, frame, agent, states):
+        if not states:
+            return set()
+        return cell_of(frame, agent, states[0]) | self.successors(frame, agent, states[1:])
+
+    def layers(self, frame, agents, states):
+        if not agents:
+            return (tuple(sorted(states)),)
+        next_states = tuple(self.successors(frame, agents[0], tuple(states)))
+        return (tuple(sorted(states)),) + self.layers(frame, agents[1:], next_states)
+
+    def certificate(self, model):
+        agents, atom = model["knowledge_probe"]
+        return self.layers(model["frames"][model["levels"][0]], agents, (model["actual"][0],))
+
+    def verify(self, model, raw):
+        try:
+            return self.same_layers(tuple(raw), self.certificate(model))
+        except TypeError:
+            return 0
+
+    def same_layers(self, submitted, expected):
+        if not expected:
+            return int(not submitted)
+        if not submitted or tuple(sorted(submitted[0])) != tuple(sorted(expected[0])):
+            return 0
+        return self.same_layers(submitted[1:], expected[1:])
+
+    def counterfactual(self, model):
+        foil = copy.deepcopy(model)
+        frame = foil["frames"][foil["levels"][0]]
+        terminal = frame["worlds"][-1]
+        values = set(frame["atoms"]["p"])
+        values.symmetric_difference_update((terminal,))
+        frame["atoms"]["p"] = tuple(sorted(values))
+        return foil

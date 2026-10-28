@@ -119,15 +119,77 @@ def test_depth_is_block_count() -> None:
         inf = NET.generate_instance(depth=depth, regime=NET.REC_COMP, representation=NET.INFERRED, seed=0)
         pub_i = NET.public_instance(inf)
         assert "perms" not in pub_i
-        assert "meta" not in pub_i
+    assert "meta" not in pub_i
 
 
-def test_heldout() -> None:
-    n_unsat = 0
-    for seed in range(10_000, 10_006):
-        inst = NET.generate_instance(depth=2, regime=NET.REC_COMP, representation=NET.REVEALED, seed=seed)
-        assert NET.stacked_satisfiable(inst) is False
-        n_unsat += 1
-    (ROOT / "docs" / "audits" / "2026-10-16-codes-baselines.json").write_text(
-        json.dumps({"n": n_unsat, "local_only_unsat_acc": 0.0, "reference_acc": 1.0}, indent=2) + "\n"
+def test_inferred_presentation_is_identifiable_from_calibration() -> None:
+    inst = NET.generate_instance(
+        depth=2, regime=NET.REC_COMP, representation=NET.INFERRED, seed=3
     )
+    public = NET.public_instance(inst)
+    assert "perms" not in public
+    cert = NET.reference_certificate(inst)
+    assert "perms" in cert
+    assert NET.verify_certificate(inst, cert)[0]
+    wrong = dict(cert)
+    wrong["perms"] = {name: [0, 1] for name in inst["blocks"]}
+    assert NET.verify_certificate(inst, wrong)[0] is False
+
+
+@pytest.mark.parametrize("seed", tuple(range(10_000, 10_006)))
+def test_heldout(seed):
+    inst = NET.generate_instance(depth=2, regime=NET.REC_COMP, representation=NET.REVEALED, seed=seed)
+    assert not NET.stacked_satisfiable(inst)
+    assert NET.verify_certificate(inst, NET.reference_certificate(inst))[0]
+    assert not NET.verify_certificate(inst, NET.arm_local_only(inst))[0]
+
+@pytest.mark.parametrize("depth,blocked", ((1, 0), (2, 1), (3, 0), (3, 1)))
+def test_structural_elimination_agrees_with_exhaustive_rival(depth, blocked):
+    inst = NET.CodePresentation().parent_control(depth, NET.INFERRED, 41, blocked)
+    linear = NET.reference_certificate(NET.public_instance(inst))
+    exhaustive = NET.enumeration_certificate(inst)
+    assert linear["status"] == exhaustive["status"]
+    assert (linear["status"] == "sat") == NET.stacked_satisfiable(inst)
+    assert NET.verify_certificate(inst, linear)[0]
+    assert NET.verify_certificate(inst, exhaustive)[0]
+
+
+def test_structural_linear_solver_extends_past_enumeration_budget():
+    inst = NET.CodePresentation().parent_control(8, NET.REVEALED, 41, 1)
+    assert NET.reference_certificate(inst)["status"] == "unsat"
+    assert NET.verify_certificate(inst, NET.reference_certificate(inst))[0]
+    with pytest.raises(NET.OracleBudgetExceeded):
+        NET.stacked_satisfiable(inst, budget=10)
+
+
+def test_structural_calibration_ambiguity_and_distinguishing_probe():
+    probe = NET.CodePresentation()
+    ambiguous = probe.identification(41)
+    identified = probe.identification(41, 1)
+    a, syndrome, corrections = probe.invariants(ambiguous)
+    b, _, _ = probe.invariants(identified)
+    assert probe.width(a) == 2
+    assert probe.width(b) == 1
+    assert set(b).issubset(a)
+    assert probe.verify(ambiguous, (a, syndrome, corrections))
+    assert not probe.verify(ambiguous, (a[:1], syndrome, corrections))
+
+
+def test_structural_coordinate_twin_changes_math_and_preserves_verdict():
+    inst = NET.CodePresentation().parent_control(3, NET.INFERRED, 41, 1)
+    twin = NET.relabel_instance(inst, 97)
+    assert inst["blocks"] != twin["blocks"]
+    assert inst["calibration"] != twin["calibration"]
+    assert NET.reference_certificate(inst)["status"] == NET.reference_certificate(twin)["status"]
+    assert NET.verify_certificate(twin, NET.reference_certificate(NET.public_instance(twin)))[0]
+
+
+def test_structural_codeword_shape_and_field_domain_are_mandatory():
+    inst = NET.example_visible_instance()
+    cert = NET.reference_certificate(inst)
+    cert["blocks"]["A"] = (0,)
+    assert not NET.verify_certificate(inst, cert)[0]
+    cert["blocks"]["A"] = (0, 0, 0)
+    assert not NET.verify_certificate(inst, cert)[0]
+    cert["blocks"]["A"] = (0.5, 0)
+    assert not NET.verify_certificate(inst, cert)[0]

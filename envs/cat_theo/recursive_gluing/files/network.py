@@ -49,6 +49,8 @@ CHECK_NAMES = (
     "cyclic_unsat_generated",
     "relabel_twin",
     "heldout_large",
+    "branching_sat",
+    "branching_unsat",
     "deterministic",
 )
 
@@ -393,10 +395,11 @@ def generate_instance(
                 }
             )
 
-    if regime != CYCLIC_UNSAT:
-        leaf = "root" + "/R" * depth
-        true_leaf = frames[leaf][hidden[leaf]]
-        regions[leaf]["domain"] = [true_leaf]
+    # Pin both polarities identically: domain sizes must not reveal the verdict.
+    leaf = "root" + "/R" * depth
+    true_leaf = frames[leaf][hidden[leaf]]
+    regions[leaf]["domain"] = regions[leaf]["domain"][:1]
+    regions[leaf]["domain"][0] = true_leaf
 
     for overlap in overlaps:
         left_dom = set(regions[overlap["left"]]["domain"])
@@ -663,6 +666,8 @@ def build_grade_instances(
             ),
         ),
         ("relabel_twin", relabel_instance(configured, seed + 99)),
+        ("branching_sat", MonotoneCycle().generate(depth + 3, seed + 41)),
+        ("branching_unsat", MonotoneCycle().generate(depth + 3, seed + 41, 1)),
         (
             "heldout_large",
             generate_instance(
@@ -675,6 +680,27 @@ def build_grade_instances(
         ),
     ]
     return items
+
+
+class MonotoneCycle:
+    """A nonfunctional relation chain with a single closing intervention."""
+
+    def chain(self, count, regions, position=0):
+        regions[str(position)] = {"domain": ["0", "1"]}
+        if position + 1 == count:
+            return ()
+        edge = {"left": str(position), "right": str(position + 1),
+                "pairs": (("0", "0"), ("0", "1"), ("1", "1"))}
+        return (edge,) + self.chain(count, regions, position + 1)
+
+    def generate(self, count, seed, obstructed=0):
+        if count < 3:
+            raise ValueError("a cycle needs at least three regions")
+        regions = {}
+        edges = self.chain(count, regions)
+        closing = {"left": str(count - 1), "right": "0",
+                   "pairs": (("0", "1"),) if obstructed else (("1", "0"),)}
+        return relabel_instance({"regions": regions, "overlaps": edges + (closing,)}, seed)
 
 
 def grade_solver(

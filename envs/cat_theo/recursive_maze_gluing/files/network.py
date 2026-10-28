@@ -27,6 +27,8 @@ CHECK_NAMES = (
     "assembled_unsat",
     "opaque_twin",
     "decoy_heldout",
+    "composition_sat",
+    "composition_unsat",
     "deterministic",
 )
 
@@ -200,6 +202,9 @@ def relabel_maze(maze: Mapping[str, Any], seed: int) -> dict[str, Any]:
 def child_tile(maze: Mapping[str, Any], remaining: int, shaft: Mapping[str, Any]) -> str:
     if remaining <= 1:
         return shaft["child"]
+    selected = (maze.get("nesting") or {}).get("by_depth", {}).get(str(remaining))
+    if selected is not None:
+        return selected
     return str((maze.get("nesting") or {}).get("deeper") or maze["root"])
 
 
@@ -230,7 +235,7 @@ def replay_route(maze: Mapping[str, Any], steps: list, max_steps: int = 10_000) 
     tiles = maze["tiles"]
     root = maze["root"]
     depth = int(maze["depth"])
-    stack: list[tuple[str, int]] = [(root, depth)]
+    stack = ((root, depth, None, 0),)
     room = tiles[root]["entrance"]
     orient = int(maze["start_orientation"])
     cleared = False
@@ -240,7 +245,7 @@ def replay_route(maze: Mapping[str, Any], steps: list, max_steps: int = 10_000) 
     for i, raw in enumerate(steps):
         if not isinstance(raw, dict) or "op" not in raw:
             return False, f"step {i} malformed"
-        tile_name, remaining = stack[-1]
+        tile_name, remaining = stack[-1][:2]
         tile = tiles[tile_name]
         op = raw["op"]
         if op == "move":
@@ -252,11 +257,11 @@ def replay_route(maze: Mapping[str, Any], steps: list, max_steps: int = 10_000) 
                     break
             if found is None:
                 return False, f"step {i}: no edge {room}->{dest}"
-            key = (tuple(stack), room, dest)
+            key = (MazeControls().occurrence(stack), room, dest)
             if key in used:
                 return False, f"step {i}: reused edge"
-            if dest == tile["exit"] and len(stack) == 1 and _must_clear(tile) and not cleared:
-                return False, f"step {i}: root exit still sealed"
+            if dest == tile["exit"] and _must_clear(tile) and not stack[-1][3]:
+                return False, f"step {i}: tile exit still sealed"
             used.add(key)
             room = dest
             orient ^= int(found["flip"])
@@ -274,31 +279,16 @@ def replay_route(maze: Mapping[str, Any], steps: list, max_steps: int = 10_000) 
                 return False, f"step {i}: no shaft at {room}"
             child = child_tile(maze, remaining, shaft)
             child_rem = remaining - 1 if maze["tiles"][child].get("shafts") else 0
-            stack.append((child, child_rem))
+            stack += ((child, child_rem, shaft["return"], 0),)
             room = tiles[child]["entrance"]
             orient ^= int(shaft["flip"])
         elif op == "ascend":
             if len(stack) == 1 or room != tile["exit"]:
                 return False, f"step {i}: illegal ascend"
-            child_name, _ = stack.pop()
-            parent_name, parent_rem = stack[-1]
-            parent = tiles[parent_name]
-            matched = next(
-                (
-                    s
-                    for s in (parent.get("shafts") or [])
-                    if child_tile(maze, parent_rem, s) == child_name
-                ),
-                None,
-            )
-            if matched is None:
-                matched = next(
-                    (s for s in (parent.get("shafts") or []) if s["child"] == child_name),
-                    None,
-                )
-            if matched is None:
-                return False, f"step {i}: no parent shaft"
-            room = matched["return"]
+            return_room = stack[-1][2]
+            stack = stack[:-1]
+            stack = stack[:-1] + (stack[-1][:3] + (1,),)
+            room = return_room
             if len(stack) == 1:
                 cleared = True
         else:
@@ -314,17 +304,17 @@ def replay_route(maze: Mapping[str, Any], steps: list, max_steps: int = 10_000) 
 
 def _neighbours(maze: Mapping[str, Any], state: tuple) -> list[tuple[tuple, dict]]:
     stack, room, orient, cleared, used = state
-    tile_name, remaining = stack[-1]
+    tile_name, remaining = stack[-1][:2]
     tile = maze["tiles"][tile_name]
     out: list[tuple[tuple, dict]] = []
     for edge in tile["edges"]:
         if edge["from"] != room:
             continue
         dest = edge["to"]
-        key = (stack, room, dest)
+        key = (MazeControls().occurrence(stack), room, dest)
         if key in used:
             continue
-        if dest == tile["exit"] and len(stack) == 1 and _must_clear(tile) and not cleared:
+        if dest == tile["exit"] and _must_clear(tile) and not stack[-1][3]:
             continue
         nxt = (
             stack,
@@ -340,7 +330,7 @@ def _neighbours(maze: Mapping[str, Any], state: tuple) -> list[tuple[tuple, dict
                 continue
             child = child_tile(maze, remaining, shaft)
             child_rem = remaining - 1 if maze["tiles"][child].get("shafts") else 0
-            new_stack = stack + ((child, child_rem),)
+            new_stack = stack + ((child, child_rem, shaft["return"], 0),)
             nxt = (
                 new_stack,
                 maze["tiles"][child]["entrance"],
@@ -348,26 +338,13 @@ def _neighbours(maze: Mapping[str, Any], state: tuple) -> list[tuple[tuple, dict
                 cleared,
                 used,
             )
-            out.append((nxt, {"op": "descend", "child": child}))
+            out.append((nxt, {"op": "descend", "child": shaft["child"]}))
     if len(stack) > 1 and room == tile["exit"]:
         parent_stack = stack[:-1]
-        parent_name, parent_rem = parent_stack[-1]
-        child_name = tile_name
-        parent = maze["tiles"][parent_name]
-        matched = next(
-            (
-                s
-                for s in (parent.get("shafts") or [])
-                if child_tile(maze, parent_rem, s) == child_name
-            ),
-            None,
-        )
-        if matched is None and parent.get("shafts"):
-            matched = parent["shafts"][0]
-        if matched is not None:
-            new_cleared = cleared or len(parent_stack) == 1
-            nxt = (parent_stack, matched["return"], orient, new_cleared, used)
-            out.append((nxt, {"op": "ascend"}))
+        parent_stack = parent_stack[:-1] + (parent_stack[-1][:3] + (1,),)
+        new_cleared = cleared or parent_stack == parent_stack[:1]
+        nxt = (parent_stack, stack[-1][2], orient, new_cleared, used)
+        out.append((nxt, {"op": "ascend"}))
     return out
 
 
@@ -376,7 +353,7 @@ def shortest_route(maze: Mapping[str, Any], max_nodes: int = 50_000) -> Optional
     root = maze["root"]
     depth = int(maze["depth"])
     start = (
-        ((root, depth),),
+        ((root, depth, None, 0),),
         tiles[root]["entrance"],
         int(maze["start_orientation"]),
         False,
@@ -509,6 +486,8 @@ def build_grade_mazes(
             ),
         ),
         ("opaque_twin", relabel_maze(configured, seed + 99)),
+        ("composition_sat", MazeControls().composition(max(2, depth), seed + 31)),
+        ("composition_unsat", MazeControls().composition(max(2, depth), seed + 31, 1)),
         (
             "decoy_heldout",
             generate_maze(
@@ -548,3 +527,32 @@ def grade_solver(
     except Exception:
         checks["deterministic"] = False
     return checks
+
+
+class MazeControls:
+    """Mixed tile compositions with an orientation counterfactual."""
+
+    def occurrence(self, stack):
+        if not stack:
+            return ()
+        return (stack[0][:3],) + self.occurrence(stack[1:])
+
+    def schedule(self, remaining, seed, result):
+        if remaining <= 1:
+            return result, 0
+        selected = (remaining + seed) % 2
+        result[str(remaining)] = "turn" if selected else "inner_keep"
+        result, parity = self.schedule(remaining - 1, seed, result)
+        return result, parity ^ selected
+
+    def composition(self, depth, seed, blocked=0):
+        maze = generate_maze(depth=depth, regime=CYCLIC_SAT, opacity=OPAQUE,
+                             ambiguity=CLEAN, seed=seed)
+        turn = copy.deepcopy(maze["tiles"]["inner_keep"])
+        turn["edges"][0]["flip"] = 1
+        maze["tiles"]["turn"] = turn
+        schedule, parity = self.schedule(depth, seed, {})
+        maze["nesting"]["by_depth"] = schedule
+        maze["goal_orientation"] = parity ^ blocked
+        maze.pop("meta", None)
+        return maze

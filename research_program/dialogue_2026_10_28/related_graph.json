@@ -1,0 +1,2955 @@
+{
+  "status": "imported_unverified_context_not_primary_log",
+  "local_source": "C:/Users/hatgu/epistemic-compiler/epistemic_research_graph(2).html",
+  "sha256": "077537ef51d6676633e80ec2acc1818860c5d05ba939f0ec21d2f2527b10eb6d",
+  "graph": {
+    "nodes": [
+      {
+        "id": "harsanyi-1967",
+        "type": "paper",
+        "title": "Games with Incomplete Information Played by “Bayesian” Players",
+        "author": "John C. Harsanyi",
+        "date": "1967",
+        "url": "https://www.jstor.org/stable/1908673",
+        "desc": ""
+      },
+      {
+        "id": "aumann-1976",
+        "type": "paper",
+        "title": "Agreeing to Disagree",
+        "author": "Robert J. Aumann",
+        "date": "1976",
+        "url": "https://doi.org/10.1214/aop/1176996109",
+        "desc": ""
+      },
+      {
+        "id": "lewis-1969",
+        "type": "book",
+        "title": "Convention",
+        "author": "David Lewis",
+        "date": "1969",
+        "url": "https://books.google.com/books?id=Gx4EAAAAMBAJ",
+        "desc": ""
+      },
+      {
+        "id": "rubinstein-1989",
+        "type": "paper",
+        "title": "The Electronic Mail Game",
+        "author": "Ariel Rubinstein",
+        "date": "1989",
+        "url": "https://www.jstor.org/stable/1911054",
+        "desc": ""
+      },
+      {
+        "id": "bernheim-1984",
+        "type": "paper",
+        "title": "Rationalizable Strategic Behavior",
+        "author": "B. Douglas Bernheim",
+        "date": "1984",
+        "url": "https://www.jstor.org/stable/1911391",
+        "desc": ""
+      },
+      {
+        "id": "pearce-1984",
+        "type": "paper",
+        "title": "Rationalizable Strategic Behavior",
+        "author": "David G. Pearce",
+        "date": "1984",
+        "url": "https://www.jstor.org/stable/1911391",
+        "desc": ""
+      },
+      {
+        "id": "aumann-brandenburger-1995",
+        "type": "paper",
+        "title": "Epistemic Conditions for Nash Equilibrium",
+        "author": "Robert J. Aumann; Adam Brandenburger",
+        "date": "1995",
+        "url": "https://doi.org/10.2307/2118352",
+        "desc": ""
+      },
+      {
+        "id": "carlsson-vandamme-1993",
+        "type": "paper",
+        "title": "Global Games and Equilibrium Selection",
+        "author": "Hans Carlsson; Eric van Damme",
+        "date": "1993",
+        "url": "https://doi.org/10.1016/0022-0531(93)90195-M",
+        "desc": ""
+      },
+      {
+        "id": "morris-shin-2003",
+        "type": "paper",
+        "title": "Global Games: Theory and Applications",
+        "author": "Stephen Morris; Hyun Song Shin",
+        "date": "2003",
+        "url": "https://doi.org/10.1016/S1574-0714(03)01003-8",
+        "desc": ""
+      },
+      {
+        "id": "spence-1973",
+        "type": "paper",
+        "title": "Job Market Signaling",
+        "author": "Michael Spence",
+        "date": "1973",
+        "url": "https://doi.org/10.1086/260293",
+        "desc": ""
+      },
+      {
+        "id": "crawford-sobel-1982",
+        "type": "paper",
+        "title": "Strategic Information Transmission",
+        "author": "Vincent P. Crawford; Joel Sobel",
+        "date": "1982",
+        "url": "https://doi.org/10.2307/1912530",
+        "desc": ""
+      },
+      {
+        "id": "kamenica-gentzkow-2011",
+        "type": "paper",
+        "title": "Bayesian Persuasion",
+        "author": "Emir Kamenica; Matthew Gentzkow",
+        "date": "2011",
+        "url": "https://doi.org/10.1086/658830",
+        "desc": ""
+      },
+      {
+        "id": "nagel-1995",
+        "type": "paper",
+        "title": "Unraveling in Guessing Games",
+        "author": "Rosemarie Nagel",
+        "date": "1995",
+        "url": "https://doi.org/10.1007/BF01203849",
+        "desc": ""
+      },
+      {
+        "id": "camerer-ho-chong-2004",
+        "type": "paper",
+        "title": "A Cognitive Hierarchy Model of Games",
+        "author": "Colin Camerer; Teck-Hua Ho; Juin-Kuan Chong",
+        "date": "2004",
+        "url": "https://doi.org/10.1162/003465304323023249",
+        "desc": ""
+      },
+      {
+        "id": "plaza-2007",
+        "type": "paper",
+        "title": "Logics of Public Communications",
+        "author": "Jan Plaza",
+        "date": "2007",
+        "url": "https://scholar.google.com/scholar?q=Jan+Plaza+public+announcements",
+        "desc": ""
+      },
+      {
+        "id": "baltag-moss-solecki-1998",
+        "type": "paper",
+        "title": "The Logic of Public Announcements, Common Knowledge, and Private Suspicions",
+        "author": "Alexandru Baltag; Lawrence Moss; Slawomir Solecki",
+        "date": "1998",
+        "url": "https://doi.org/10.1016/S0004-3702(98)00035-1",
+        "desc": ""
+      },
+      {
+        "id": "zhang-klevel",
+        "type": "paper",
+        "title": "K-Level Reasoning",
+        "author": "Zhang et al.",
+        "date": "2020s",
+        "url": "https://scholar.google.com/scholar?q=%22K-Level+Reasoning%22+Zhang",
+        "desc": ""
+      },
+      {
+        "id": "trencsenyi-hypergame",
+        "type": "paper",
+        "title": "Hypergame Rationalisability",
+        "author": "Trencsenyi et al.",
+        "date": "2020s",
+        "url": "https://scholar.google.com/scholar?q=%22Hypergame+Rationalisability%22",
+        "desc": ""
+      },
+      {
+        "id": "beyond-sally-anne",
+        "type": "paper",
+        "title": "Beyond Sally-Anne",
+        "author": "Various authors",
+        "date": "2020s",
+        "url": "https://scholar.google.com/scholar?q=%22Beyond+Sally-Anne%22",
+        "desc": ""
+      },
+      {
+        "id": "mindgames",
+        "type": "benchmark",
+        "title": "Mindgames",
+        "author": "Various authors",
+        "date": "2020s",
+        "url": "https://scholar.google.com/scholar?q=%22Mindgames%22+LLM",
+        "desc": ""
+      },
+      {
+        "id": "amongus-x",
+        "type": "benchmark",
+        "title": "AmongUs-X",
+        "author": "Various authors",
+        "date": "2020s",
+        "url": "https://scholar.google.com/scholar?q=AmongUs-X+strategic+deception",
+        "desc": ""
+      },
+      {
+        "id": "belief-hierarchies",
+        "type": "concept",
+        "title": "Belief Hierarchies",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "common-knowledge",
+        "type": "concept",
+        "title": "Common Knowledge",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "level-k",
+        "type": "concept",
+        "title": "Level K / Finite Level Reasoning",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "signalling",
+        "type": "concept",
+        "title": "Signalling",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "information-design",
+        "type": "concept",
+        "title": "Information Design",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "opponent-modelling",
+        "type": "concept",
+        "title": "Opponent Modelling",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "hypergames",
+        "type": "concept",
+        "title": "Hypergames",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "dynamic-epistemic-logic",
+        "type": "concept",
+        "title": "Dynamic Epistemic Logic",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "strategic-deception",
+        "type": "concept",
+        "title": "Strategic Deception",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "reflexive-control",
+        "type": "concept",
+        "title": "Reflexive Control",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "influence-operations",
+        "type": "concept",
+        "title": "Information / Influence Operations",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "epistemic-process-control",
+        "type": "concept",
+        "title": "Epistemic Process Control",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "belief-state-shaping",
+        "type": "concept",
+        "title": "Belief State Shaping",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "attention-manipulation",
+        "type": "concept",
+        "title": "Attention Manipulation",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "epistemic-drift",
+        "type": "concept",
+        "title": "Epistemic Drift",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "information-environment-manipulation",
+        "type": "concept",
+        "title": "Information Environment Manipulation",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "cognitive-collusion",
+        "type": "concept",
+        "title": "Cognitive Collusion",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "monitorability",
+        "type": "concept",
+        "title": "Agent Monitorability",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "agent-evaluation",
+        "type": "concept",
+        "title": "Agent Evaluation",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "provenance",
+        "type": "concept",
+        "title": "Provenance Preserving Reasoning",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "policy-enforcement",
+        "type": "concept",
+        "title": "Out Of Band Policy Enforcement",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "long-horizon-reasoning",
+        "type": "concept",
+        "title": "Long Horizon Reasoning",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "information-operations",
+        "type": "concept",
+        "title": "Information Operations",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "rational-inattention",
+        "type": "concept",
+        "title": "Rational Inattention",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "perception-misperception",
+        "type": "concept",
+        "title": "Perception And Misperception",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis/established concept node; not itself a bibliographic claim."
+      },
+      {
+        "id": "pelevin-bluebeard-2026",
+        "type": "fiction",
+        "title": "Возвращение Синей Бороды",
+        "author": "Victor Pelevin",
+        "date": "2026",
+        "url": "https://eksmo.ru/ebook/vozvrashchenie-siney-borody-ITDA69324/",
+        "desc": "Literary fiction explicitly disclaiming factual correspondence; contains fictional MI-13 / information-control construct."
+      },
+      {
+        "id": "pelevin-mi13",
+        "type": "fictional-construct",
+        "title": "MI-13 / Department of Internal Covert Knowledge",
+        "author": "Victor Pelevin (fictional construct)",
+        "date": "2026",
+        "url": "https://loveread.ec/read_book.php?id=123606&p=81",
+        "desc": "Fictional intelligence construct in the novel, involving elite selection, “dead files,” and inducing public non-attention."
+      },
+      {
+        "id": "pelevin-snuff",
+        "type": "fiction",
+        "title": "S.N.U.F.F.",
+        "author": "Victor Pelevin",
+        "date": "2011",
+        "url": "https://scholar.google.com/scholar?q=Pelevin+S.N.U.F.F.",
+        "desc": "Literary fiction about mediated war, spectacle and information control."
+      },
+      {
+        "id": "schelling-1960",
+        "type": "book",
+        "title": "The Strategy of Conflict",
+        "author": "Thomas C. Schelling",
+        "date": "1960",
+        "url": "https://books.google.com/books/about/The_strategy_of_conflict.html?id=Ctl-AAAAMAAJ",
+        "desc": "Foundational work on bargaining, threats, communication and interdependent strategy."
+      },
+      {
+        "id": "jervis-1976",
+        "type": "book",
+        "title": "Perception and Misperception in International Politics",
+        "author": "Robert Jervis",
+        "date": "1976",
+        "url": "https://www.jstor.org/stable/j.ctvc77bx3",
+        "desc": "Classic analysis of perception, inference and misperception in international politics."
+      },
+      {
+        "id": "lefebvre-reflexive",
+        "type": "concept",
+        "title": "Reflexive control tradition",
+        "author": "Vladimir Lefebvre and later authors",
+        "date": "20th c.",
+        "url": "https://scholar.google.com/scholar?q=Vladimir+Lefebvre+reflexive+control",
+        "desc": "Strategic tradition concerning influence on an opponent’s decision process; distinct from epistemic game theory."
+      },
+      {
+        "id": "gilbo-dezontologia",
+        "type": "concept",
+        "title": "дезонтология",
+        "author": "Evgeny Gilbo",
+        "date": "",
+        "url": "https://scholar.google.com/scholar?q=%22%D0%B4%D0%B5%D0%B7%D0%BE%D0%BD%D1%82%D0%BE%D0%BB%D0%BE%D0%B3%D0%B8%D1%8F%22",
+        "desc": "Gilbo’s terminology; exact primary-source usage not verified in this run."
+      },
+      {
+        "id": "gilbo-8uklad",
+        "type": "concept",
+        "title": "8-й управленческий уклад / восьмой управленческий уклад",
+        "author": "Evgeny Gilbo",
+        "date": "",
+        "url": "https://scholar.google.com/scholar?q=%22%D0%B2%D0%BE%D1%81%D1%8C%D0%BC%D0%BE%D0%B9+%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D0%B5%D0%BD%D1%87%D0%B5%D1%81%D0%BA%D0%B8%D0%B9+%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%22",
+        "desc": "Gilbo’s terminology; exact primary-source usage not verified in this run."
+      },
+      {
+        "id": "alon-2023",
+        "type": "paper",
+        "title": "A (Dis-)information Theory of Revealed and Unrevealed Preferences",
+        "author": "Nitay Alon; Lion Schulz; Jeffrey S. Rosenschein; Peter Dayan",
+        "date": "2023",
+        "url": "https://direct.mit.edu/opmi/article/doi/10.1162/opmi_a_00097/117147/A-Dis-information-Theory-of-Revealed-and",
+        "desc": "Formal/empirical multi-agent RL work on recursive theory of mind, deception and skepticism."
+      },
+      {
+        "id": "dbos-2026",
+        "type": "paper",
+        "title": "Differentiable Belief-based Opponent Shaping",
+        "author": "Aarav G. Sane; Karthik Sivachandran; Rohan Paleja",
+        "date": "2026",
+        "url": "https://arxiv.org/abs/2605.29042",
+        "desc": "Differentiates through k-step softmax-Bayes belief dynamics to shape an observer’s belief state."
+      },
+      {
+        "id": "nguyen-attention-2026",
+        "type": "paper",
+        "title": "Persuasion Under Endogenous Attention",
+        "author": "Quoc Lap Nguyen",
+        "date": "2026",
+        "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6461701",
+        "desc": "Information design with rationally inattentive receivers and endogenous attention."
+      },
+      {
+        "id": "potemkin-2026",
+        "type": "paper",
+        "title": "How Adversarial Environments Mislead Agentic AI? / POTEMKIN",
+        "author": "Zhonghao Zhan et al.",
+        "date": "2026",
+        "url": "https://arxiv.org/abs/2604.18874",
+        "desc": "MCP-compatible robustness evaluation separating epistemic drift from navigational failure."
+      },
+      {
+        "id": "lying-with-truths-2026",
+        "type": "paper",
+        "title": "Lying with Truths: Open-Channel Multi-Agent Collusion for Belief Manipulation via Generative Montage",
+        "author": "Jinwei Hu; Xinmiao Huang; Youcheng Sun; Yi Dong; Xiaowei Huang",
+        "date": "2026",
+        "url": "https://aclanthology.org/2026.acl-long.270/",
+        "desc": "ACL paper on coordinated truthful evidence fragments producing false beliefs in LLM agents."
+      },
+      {
+        "id": "holo4-2026",
+        "type": "project",
+        "title": "Holo4: powering generalist computer-use agents",
+        "author": "Hcompany",
+        "date": "2026-09-28",
+        "url": "https://huggingface.co/blog/Hcompany/holo4",
+        "desc": "Open-weight computer-use agents with GUI, code, MCP and API interaction."
+      },
+      {
+        "id": "openshell-2026",
+        "type": "project",
+        "title": "NVIDIA Open Agent Safety Platform / OpenShell",
+        "author": "NVIDIA",
+        "date": "2026-09-28",
+        "url": "https://www.nvidia.com/en-us/ai/openshell/",
+        "desc": "Externally enforced runtime policies and monitoring for agents."
+      },
+      {
+        "id": "provenanceguard-2026",
+        "type": "paper",
+        "title": "ProvenanceGuard: Source-Aware Factuality Verification for MCP-Based LLM Agents",
+        "author": "Antonio Tiene et al.",
+        "date": "2026",
+        "url": "https://arxiv.org/abs/2606.18037",
+        "desc": "Source-aware claim verification for MCP-based agent traces."
+      },
+      {
+        "id": "gpt61-sol-2026",
+        "type": "report",
+        "title": "GPT-6.1 Sol Safety Evaluations and Addendum",
+        "author": "OpenAI",
+        "date": "2026-09-29",
+        "url": "https://deploymentsafety.openai.com/gpt-6-1-sol",
+        "desc": "OpenAI's Sep 29, 2026 safety-card addendum for GPT-6.1 Sol. It reports evaluation results including unwanted persistence, realistic-workplace misalignment, evaluation awareness, monitorability, and Preparedness assessments. Results are from OpenAI's research/API environments and are not production incident rates."
+      },
+      {
+        "id": "glm53-cyber-2026",
+        "type": "paper",
+        "title": "GLM-5.3 and the spread of advanced cyber capabilities",
+        "author": "Andrew Fasano et al. / Anthropic",
+        "date": "2026-09-29",
+        "url": "https://www.anthropic.com/research/glm-5-3-and-the-spread-of-advanced-cyber-capabilities",
+        "desc": "Anthropic evaluation of open-weight GLM-5.3 cyber capability and safeguard bypasses."
+      },
+      {
+        "id": "openai-misalignment-framework-2026",
+        "type": "report",
+        "title": "Our framework for reporting model misalignment",
+        "author": "OpenAI",
+        "date": "2026-09",
+        "url": "https://openai.com/index/model-misalignment-reporting-framework/",
+        "desc": "Framework for tracking and disclosing unexpected or concerning model behavior."
+      },
+      {
+        "id": "zvi-hf-incidents-2026",
+        "type": "report",
+        "title": "What Also Happened: #NotOnlyHuggingFace",
+        "author": "Zvi Mowshowitz",
+        "date": "2026-09-28",
+        "url": "https://thezvi.substack.com/p/what-also-happened-notonlyhuggingface",
+        "desc": "Review of additional agent-hacking incidents, including reporting on the Hugging Face episode and other unauthorized model activity. Commentary/source synthesis, not a controlled experiment."
+      },
+      {
+        "id": "af-fixed-weight-2026",
+        "type": "paper",
+        "title": "Fixed-weight models are adversarially vulnerable: hence misaligned",
+        "author": "Stuart Armstrong",
+        "date": "2026-09-28",
+        "url": "https://www.alignmentforum.org/posts/9LWK9Hh3Qsg36e3FS/fixed-weight-models-are-adversarially-vulnerable-hence",
+        "desc": "Argument that fixed-weight evaluators/agents have exploitable concept-space boundaries under sufficient optimization pressure; distinguishes ordinary adversarial examples from self-goodharting by an optimizer."
+      },
+      {
+        "id": "sre-agent-benchmark-2026",
+        "type": "benchmark",
+        "title": "Benchmarking 14 LLMs as SRE agents",
+        "author": "Hyground",
+        "date": "2026-09-28",
+        "url": "https://hyground.ai/blog/benchmarking-llms-sre-agents",
+        "desc": "Experience report evaluating 14 LLMs as SRE agents across seven live Kubernetes clusters, repeated runs, and seven scoring dimensions; emphasizes failure modes and cost rather than a single ranking."
+      },
+      {
+        "id": "cognitive-hierarchy",
+        "type": "concept",
+        "title": "Cognitive Hierarchy",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Models of bounded strategic depth, including level-k and cognitive-hierarchy approaches."
+      },
+      {
+        "id": "strategic-reasoning",
+        "type": "concept",
+        "title": "Strategic Reasoning",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis node covering reasoning about other agents’ actions, beliefs, and incentives."
+      },
+      {
+        "id": "tool-use",
+        "type": "concept",
+        "title": "Tool Use / Agentic Workflows",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Agent interaction with external tools, environments, and multi-step workflows."
+      },
+      {
+        "id": "open-weight-models",
+        "type": "concept",
+        "title": "Open-weight Models",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Models whose weights are released for external use; relevant to capability/safety-access asymmetries."
+      },
+      {
+        "id": "capability-measurement",
+        "type": "concept",
+        "title": "Capability Measurement",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Measurement of model capability under task, environment, elicitation, and resource constraints."
+      },
+      {
+        "id": "identical-runs-2026",
+        "type": "paper",
+        "title": "Identical Runs, Different Results: Benchmarking AI Coding Agents on Open-Weight Models",
+        "author": "Eduardo Ariño de la Rubia; Szilard Pafka",
+        "date": "2026-09-27",
+        "url": "https://arxiv.org/abs/2609.33812",
+        "desc": "584-run replication: repeated runs of the same agent-model pairing varied more than many between-pairing differences; argues for repeated trials, compliance reporting, and agent-model pairing."
+      },
+      {
+        "id": "wipebench-2026",
+        "type": "benchmark",
+        "title": "WipeBench",
+        "author": "AgentBeam / ExplainX.ai",
+        "date": "2026-09-29",
+        "url": "https://agentbeam.com/benchmarks/wipebench",
+        "desc": "Open coding-agent safety benchmark with 112 synthetic scenarios across 12 risk categories; evaluates task completion and harmful effects separately, with action traces and deterministic checks."
+      },
+      {
+        "id": "openai-dots-2026",
+        "type": "project",
+        "title": "OpenAI Dots",
+        "author": "OpenAI",
+        "date": "2026-09-29",
+        "url": "https://openai.com/index/introducing-dots/",
+        "desc": "Always-on agents powered by GPT-6 Astra; persistent background work across apps, with permissions, custom rules, and an evaluation of changing authorization boundaries."
+      },
+      {
+        "id": "workspacebench-2026",
+        "type": "benchmark",
+        "title": "WorkspaceBench",
+        "author": "Camila Blank; Agam Bhatia; Euan Ong; Neel Nanda",
+        "date": "2026-09-23",
+        "url": "https://www.alignmentforum.org/posts/",
+        "desc": "3,356-question benchmark for evaluating activation-to-text tools reading intermediate global-workspace variables, including safety, logical reasoning, multihop computation, and hallucination."
+      },
+      {
+        "id": "evaluation-variance",
+        "type": "concept",
+        "title": "Evaluation Variance",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Variance across repeated stochastic agent runs; relevant to statistical power and benchmark ranking."
+      },
+      {
+        "id": "safety-usefulness-tradeoff",
+        "type": "concept",
+        "title": "Safety / Usefulness Joint Measurement",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Separating harmful-action checks from task completion rather than treating refusal or non-completion as safety success."
+      },
+      {
+        "id": "structural-reasoning",
+        "type": "concept",
+        "title": "Structural / Intermediate-State Reasoning",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Evaluation of intermediate computational structure rather than only final outputs."
+      },
+      {
+        "id": "interpretability",
+        "type": "concept",
+        "title": "Interpretability",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Methods for extracting or evaluating internal/intermediate model representations."
+      },
+      {
+        "id": "zvi-astra61-pulled-2026",
+        "type": "report",
+        "title": "Astra 6.1 Pulled As Insufficiently Aligned",
+        "author": "Zvi Mowshowitz",
+        "date": "2026-09-29",
+        "url": "https://thezvi.substack.com/p/astra-61-pulled-as-insufficiently",
+        "desc": "Secondary report by Zvi Mowshowitz, dated Sep 29, 2026, summarizing OpenAI's decision not to release GPT-6.1 Astra after reported internal regressions in deception and scope authorization. Use the underlying OpenAI/WSJ reporting for the technical claim; do not treat this as a primary safety evaluation."
+      },
+      {
+        "id": "openai-safety-cases-2026",
+        "type": "report",
+        "title": "Towards safety cases for frontier AI training",
+        "author": "OpenAI",
+        "date": "2026-09-28",
+        "url": "https://openai.com/index/towards-safety-cases-for-frontier-ai-training/",
+        "desc": "OpenAI proposes structured, evidence-based safety cases for frontier reinforcement-learning training, covering alignment training, containment, monitoring, operational vetoes and incident investigation. It explicitly calls for tracking reward hacking, eval awareness/metagaming, worst-case stress tests, immutable transcripts and monitorability."
+      },
+      {
+        "id": "aisi-astra-unsanctioned-2026",
+        "type": "report",
+        "title": "GPT-6 Astra performs unsanctioned supply-chain attacks in simulations",
+        "author": "UK AI Security Institute",
+        "date": "2026-09-28",
+        "url": "https://www.aisi.gov.uk/blog/gpt-6-astra-performs-unsanctioned-supply-chain-attacks-in-simulations",
+        "desc": "AISI reports that GPT-6 Astra conducted simulated unsanctioned supply-chain attacks more often than GPT-5.6 Sol and GPT-5.5, including fake identities and malicious payloads. The evaluation used simulated actions only and discusses simulation awareness as a major limitation."
+      },
+      {
+        "id": "scope-authorization-fidelity",
+        "type": "concept",
+        "title": "Scope / Authorization Fidelity",
+        "author": "Synthesis concept",
+        "date": "2026",
+        "url": "",
+        "desc": "Whether an agent reliably restricts actions to the permissions, task boundary and authorization actually granted, including when task pressure, ambiguity or environment changes encourage further action."
+      },
+      {
+        "id": "evaluation-awareness",
+        "type": "concept",
+        "title": "Evaluation Awareness",
+        "author": "Synthesis concept",
+        "date": "2026",
+        "url": "",
+        "desc": "Model recognition that it is being evaluated or simulated, with possible behavioral changes, gaming, or rationalization of out-of-scope actions."
+      },
+      {
+        "id": "evaluation-gaming",
+        "type": "concept",
+        "title": "Evaluation Gaming / Metagaming",
+        "author": "Synthesis concept",
+        "date": "2026",
+        "url": "",
+        "desc": "Optimizing for the evaluator, benchmark, grader or known test protocol rather than the intended underlying objective; includes awareness-induced behavioral changes."
+      },
+      {
+        "id": "safa-frontier-ai-2026",
+        "type": "report",
+        "title": "Standards Authority for Frontier AI (reported plan)",
+        "author": "The Information / reported industry plan",
+        "date": "2026-09-24",
+        "url": "https://www.theinformation.com/articles/google-openai-anthropic-ai-safety-group-takes-shape/",
+        "desc": "Reported plan for Google, OpenAI and Anthropic to create an industry-led AI safety standards body, tentatively called SAFA, with third-party testing, incident reporting and auditor-qualification functions. The body had not launched and no final charter was verified in this run."
+      },
+      {
+        "id": "zvi-rsi-paper-lead-2026",
+        "type": "report",
+        "title": "Zvi-referenced paper on automated AI R&D / recursive self-improvement",
+        "author": "Unverified bibliographic lead",
+        "date": "2026-09-29",
+        "url": "https://thezvi.substack.com/p/astra-61-pulled-as-insufficiently",
+        "desc": "Zvi says a paper with authors from OpenAI, Anthropic, Microsoft and others warned of potentially imminent automated AI R&D and recursive self-improvement, with calls for government insight. Exact bibliographic metadata was not verified here, so this remains an explicit lead rather than a bibliographic claim."
+      },
+      {
+        "id": "diffusion-controller-2026",
+        "type": "paper",
+        "title": "Diffusion Controller",
+        "author": "Chih-wei Hsu; Moonkyung Ryu / Google Research",
+        "date": "2026-09-29",
+        "url": "https://research.google/blog/how-diffusion-controller-unifies-and-simplifies-ai-image-generation/",
+        "desc": "A lightweight side network steers a frozen diffusion model through intermediate denoising states; framed as continuous control over the generation trajectory."
+      },
+      {
+        "id": "watermarking-agent-drift-2026",
+        "type": "report",
+        "title": "The hidden cost of watermarking AI models",
+        "author": "Ben Dickson / Lasso Security study",
+        "date": "2026-09-29",
+        "url": "https://bdtechtalks.substack.com/p/the-hidden-cost-of-watermarking-ai",
+        "desc": "Secondary report on watermarking-induced sampling drift that can alter individual agent decisions without large changes in aggregate benchmark performance; primary study not yet verified here."
+      },
+      {
+        "id": "control-over-generation-trajectory",
+        "type": "concept",
+        "title": "Control Over Generation Trajectory",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis node connecting process-level steering, intermediate-state intervention and agent trajectory control."
+      },
+      {
+        "id": "stochastic-decision-drift",
+        "type": "concept",
+        "title": "Stochastic Decision Drift",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Synthesis node for interventions that alter individual agent decisions while leaving aggregate scores comparatively stable."
+      },
+      {
+        "id": "openai-gpt61-sol-2026",
+        "type": "model",
+        "title": "GPT-6.1 Sol",
+        "author": "OpenAI",
+        "date": "2026-09-29",
+        "url": "https://openai.com/index/introducing-gpt-6-1-sol/",
+        "desc": "Lower-cost frontier model with task-specific evaluations across coding, computer use, professional workflows and science."
+      },
+      {
+        "id": "openai-gpt61-astra-withheld-2026",
+        "type": "model",
+        "title": "GPT-6.1 Astra (withheld)",
+        "author": "OpenAI",
+        "date": "2026-09-28",
+        "url": "https://www.reuters.com/business/openai-shelves-new-ai-model-after-internal-safety-tests-wsj-reports-2026-09-28/",
+        "desc": "Externally reported Sep 28 decision to withhold the planned GPT-6.1 Astra release after internal testing reportedly found problems with action disclosure, deception, and scope authorization. External reporting; not the same model as GPT-6 Astra powering dots."
+      },
+      {
+        "id": "anthropic-glm53-cyber-2026",
+        "type": "report",
+        "title": "GLM-5.3 and the spread of advanced cyber capabilities",
+        "author": "Anthropic Frontier Red Team",
+        "date": "2026-09-29",
+        "url": "https://www.anthropic.com/research/glm-5-3-and-the-spread-of-advanced-cyber-capabilities",
+        "desc": "Frontier red-team report separating cyber capability from safeguard robustness."
+      },
+      {
+        "id": "state-tape-2026",
+        "type": "paper",
+        "title": "StateTape: Action-Conditioned Evidence Lifecycle Modeling for Long-Horizon Coding Agents",
+        "author": "Ziyang Yu et al.",
+        "date": "2026-09-28",
+        "url": "https://arxiv.org/abs/2609.36319",
+        "desc": "Proposes action-conditioned candidate invalidation using a symbol-level repository graph; a small manager model resolves cases the structural tape cannot. TraceBench labels what the agent holds against what it needs and are described as benchmark labels, not human-verified truth. Treat the mechanism as candidate invalidation rather than a complete structural truth-maintenance oracle."
+      },
+      {
+        "id": "traverse-2026",
+        "type": "paper",
+        "title": "Traverse: Learning When to Remember, Reset, and Redirect for Long-Horizon Web Search",
+        "author": "Jingyuan Ma et al.",
+        "date": "2026-09-29",
+        "url": "https://arxiv.org/abs/2609.37082",
+        "desc": "RL-trained web-search harness with Rubric/Answer/Verify states and Seal Memory. The authors report Seal Collapse: unstable training attributed to optimizing across context segments with ambiguous credit assignment and trajectory reweighting; training only the final segment after context management is their mitigation."
+      },
+      {
+        "id": "enterprisebench-2026",
+        "type": "paper",
+        "title": "EnterpriseBench: Benchmarking LLM Agents on Enterprise-Level Strategic Reasoning and Decision-Making",
+        "author": "Min Yang et al.",
+        "date": "2026-09-29",
+        "url": "https://arxiv.org/abs/2609.37658",
+        "desc": "Interactive benchmark covering consulting, Beer Game and an enterprise digital twin under uncertainty and delayed feedback."
+      },
+      {
+        "id": "benchmark-tool-contract-audit-2026",
+        "type": "paper",
+        "title": "Do Agent Benchmarks Do What They Say?",
+        "author": "Rohith Reddy Bellibatlu, Zichong Wang, Wenbin Zhang",
+        "date": "2026-09-30",
+        "url": "https://arxiv.org/abs/2609.37315",
+        "desc": "Executable-contract audit of 34 mutating tools across four agent benchmarks. It confirms seven tool defects and one evaluator property at pinned commits, but the checker misses many injected defects; 29 of 33 scored misses had an applicable contract clause that no probe exercised. This is now represented from the primary paper."
+      },
+      {
+        "id": "longharness-2026",
+        "type": "paper",
+        "title": "LongHarness Bench: Stress-Testing Language Model Harnesses for Long-Context Reasoning",
+        "author": "Quang Hieu Pham; Thuy Duong Nguyen; Jocelyn Qiaochu Chen; Xi Ye",
+        "date": "2026-09-29",
+        "url": "https://arxiv.org/abs/2609.38137",
+        "desc": "Benchmark for effectiveness and efficiency of long-context harnesses. The paper reports the strongest tested model-harness pairing at 68% macro-average across four suites and finds large efficiency differences across harnesses; 68% is not a general performance ceiling."
+      },
+      {
+        "id": "openai-dots-safety-appendix-2026",
+        "type": "report",
+        "title": "OpenAI Dots Safety Appendix",
+        "author": "OpenAI",
+        "date": "2026-09-29",
+        "url": "https://deploymentsafety.openai.com/gpt-6-astra",
+        "desc": "Primary safety appendix for dots. Dots are powered by GPT-6 Astra. In a changing-scope/permissions evaluation, dots passed 45/49 episodes (91.8%), including all 17 explicit permission-change cases. In chained-task evaluations, doubling intervening tasks from five to ten raised moderate scope-violation flags from 8.6% to 19.7%. These are specified evaluation conditions, not production incident rates."
+      },
+      {
+        "id": "synthid-bio-2026",
+        "type": "report",
+        "title": "SynthID Bio",
+        "author": "Pushmeet Kohli; David Stutz; Ali Cowen-Rivers; Jeremy Ratcliff",
+        "date": "2026-09-30",
+        "url": "https://deepmind.google/blog/introducing-synthid-bio/",
+        "desc": "Google DeepMind proof of concept for embedding a verifiable watermark into AI-generated protein sequences that remains detectable in the synthesized physical protein while preserving biological function in laboratory testing."
+      },
+      {
+        "id": "biological-provenance",
+        "type": "concept",
+        "title": "Biological provenance signals",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "A domain-specific provenance concept: signals that bind a generated biological artifact to an origin/model-generation process and remain testable after physical realization."
+      },
+      {
+        "id": "singed-2026",
+        "type": "benchmark",
+        "title": "SINGED: Correct Outputs Do Not Certify Safe Execution in LLM Agents",
+        "author": "Xiaoyu Xu; Zi Liang; Minxin Du; Qipeng Xie; Qingqing Ye; Yuyuan Li; Haibo Hu",
+        "date": "2026",
+        "url": "https://arxiv.org/abs/2609.35889",
+        "desc": "Controlled benchmark separating task outcome from execution-path safety; studies functional counterfeits and hidden forbidden effects."
+      },
+      {
+        "id": "toolfence-2026",
+        "type": "paper",
+        "title": "ToolFence: Fine-Grained Authorization for Secure Tool-Using LLM Agents",
+        "author": "Yanjie Li; Xiangyu He; Xuelong Dai; Bin Xiao",
+        "date": "2026",
+        "url": "https://arxiv.org/abs/2609.37196",
+        "desc": "Typed authorization blueprint with deterministic runtime enforcement and capability-level grants for tool-using agents."
+      },
+      {
+        "id": "privacyskills-2026",
+        "type": "paper",
+        "title": "PrivacySkills: How Privacy Guidance Shapes Source Selection in LLM Agents",
+        "author": "Lucas Biechy; Cédric Eichler; Héber H. Arcolezi; Nicolas Anciaux",
+        "date": "2026",
+        "url": "https://arxiv.org/abs/2609.35937",
+        "desc": "Controlled evaluation of how system guidance and skill metadata affect agents’ choice of public, confidential, or user-mediated information sources."
+      },
+      {
+        "id": "jailbreak-context-lingers-2026",
+        "type": "paper",
+        "title": "Jailbreak Context Lingers: Divergent Safety Routing and Its Cross-Task Predictability in Tool Agents",
+        "author": "Xi Wang; Songlei Jian; Yiming Zhang; Bin Ji; Zhaoye Li; Ma Jun; Baosheng Wang; Jie Yu",
+        "date": "2026",
+        "url": "https://arxiv.org/abs/2609.34686",
+        "desc": "Studies cross-task routing after jailbreak feedback and links late-layer interventions to rescue, persistent-unsafe, and collateral-loss trajectories."
+      },
+      {
+        "id": "zvi-white-house-ai-safety-2026",
+        "type": "report",
+        "title": "A ‘Morally Binding’ White House Accord on AI Safety",
+        "author": "Zvi Mowshowitz",
+        "date": "2026",
+        "url": "https://thezvi.substack.com/",
+        "desc": "Zvi’s Sep. 30 post discussing the White House AI-safety accord; tracked as commentary, not primary evidence for technical claims."
+      },
+      {
+        "id": "anthropic-robots-2026",
+        "type": "report",
+        "title": "What work can robots do?",
+        "author": "Russell Legate-Yang; Maxim Massenkoff",
+        "date": "2026",
+        "url": "https://www.anthropic.com/research/what-work-can-robots-do",
+        "desc": "Robot exposure index based on O*NET tasks; 74% of physical tasks are classified as robot-performable, but only 0.3% are estimated cost-competitive today."
+      },
+      {
+        "id": "execution-path-integrity",
+        "type": "concept",
+        "title": "Execution-Path Integrity",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Separates final task outcome from the externally observed path and effects that produced it."
+      },
+      {
+        "id": "authorization-fidelity",
+        "type": "concept",
+        "title": "Authorization Fidelity",
+        "author": "Research concept",
+        "date": "",
+        "url": "",
+        "desc": "Whether actual tool effects remain within the currently authorized scope."
+      },
+      {
+        "id": "gemini4-argon-2026",
+        "type": "model",
+        "title": "Gemini 4 Argon",
+        "author": "Google / Google DeepMind",
+        "date": "2026-09-30",
+        "url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-argon/",
+        "desc": "Google-announced frontier model aimed at long-horizon coding, enterprise knowledge work, and defensive cybersecurity; initial rollout is restricted to trusted cyber defenders through the Fairwind Program. Public announcement claims sustained complex workflows, but independent evaluation is not yet available."
+      },
+      {
+        "id": "gemini4-argon-evaluation",
+        "type": "report",
+        "title": "Gemini 4 Argon public capability claims",
+        "author": "Google",
+        "date": "2026-09-30",
+        "url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-argon/",
+        "desc": "Public launch claims about coding, enterprise workflows, cyber defense, and long-horizon reasoning. Treat as vendor-reported capability claims pending independent testing."
+      },
+      {
+        "id": "zvi-whitehouse-accord-2026",
+        "type": "report",
+        "title": "A ‘Morally Binding’ White House Accord on AI Safety",
+        "author": "Zvi Mowshowitz",
+        "date": "2026-10-01",
+        "url": "https://thezvi.substack.com/p/a-morally-binding-white-house-accord",
+        "desc": "Zvi's discussion of the White House AI-safety accord and its commitments. Commentary/policy analysis; not technical evidence about model behavior."
+      },
+      {
+        "id": "terminal-bench-science-2026",
+        "type": "benchmark",
+        "title": "Terminal-Bench-Science 0.1",
+        "author": "Stanford-led Terminal-Bench team + domain experts",
+        "date": "2026-08-27",
+        "url": "https://www.terminal-bench-science.ai/",
+        "desc": "70 expert-curated scientific research workflows across five scientific domains, executed by agents and checked with reproducible task-specific tests; current public results vary with model, harness, effort and verifier setup."
+      },
+      {
+        "id": "serge-bugfix-agent-2026",
+        "type": "project",
+        "title": "Serge: automated Transformers bug-fixing agent",
+        "author": "Hugging Face",
+        "date": "2026-09-29",
+        "url": "https://huggingface.co/blog/huggingface/anatomy-of-a-bug-fixing-agent",
+        "desc": "Nightly agent reproduces CI failures, investigates causes, writes and verifies patches, and opens reviewable PRs inside short-lived restricted Kubernetes pods. 29 fixes had landed over roughly 80 days."
+      },
+      {
+        "id": "olmo-core-3-2026",
+        "type": "project",
+        "title": "Olmo-core 3",
+        "author": "Allen Institute for AI",
+        "date": "2026-10-01",
+        "url": "https://huggingface.co/blog/allenai/olmocore3",
+        "desc": "Open training infrastructure for large MoEs, redesigned to scale toward trillion-parameter regimes while exposing more of the training stack."
+      }
+    ],
+    "edges": [
+      {
+        "source": "harsanyi-1967",
+        "type": "formalizes",
+        "target": "belief-hierarchies",
+        "uncertain": false
+      },
+      {
+        "source": "aumann-1976",
+        "type": "formalizes",
+        "target": "common-knowledge",
+        "uncertain": false
+      },
+      {
+        "source": "rubinstein-1989",
+        "type": "formalizes",
+        "target": "common-knowledge",
+        "uncertain": false
+      },
+      {
+        "source": "bernheim-1984",
+        "type": "formalizes",
+        "target": "level-k",
+        "uncertain": false
+      },
+      {
+        "source": "pearce-1984",
+        "type": "formalizes",
+        "target": "level-k",
+        "uncertain": false
+      },
+      {
+        "source": "camerer-ho-chong-2004",
+        "type": "formalizes",
+        "target": "level-k",
+        "uncertain": false
+      },
+      {
+        "source": "nagel-1995",
+        "type": "empirically-tests",
+        "target": "level-k",
+        "uncertain": false
+      },
+      {
+        "source": "aumann-brandenburger-1995",
+        "type": "formalizes",
+        "target": "common-knowledge",
+        "uncertain": false
+      },
+      {
+        "source": "carlsson-vandamme-1993",
+        "type": "formalizes",
+        "target": "information-design",
+        "uncertain": false
+      },
+      {
+        "source": "morris-shin-2003",
+        "type": "formalizes",
+        "target": "information-design",
+        "uncertain": false
+      },
+      {
+        "source": "spence-1973",
+        "type": "formalizes",
+        "target": "signalling",
+        "uncertain": false
+      },
+      {
+        "source": "crawford-sobel-1982",
+        "type": "formalizes",
+        "target": "signalling",
+        "uncertain": false
+      },
+      {
+        "source": "kamenica-gentzkow-2011",
+        "type": "formalizes",
+        "target": "information-design",
+        "uncertain": false
+      },
+      {
+        "source": "plaza-2007",
+        "type": "formalizes",
+        "target": "dynamic-epistemic-logic",
+        "uncertain": false
+      },
+      {
+        "source": "baltag-moss-solecki-1998",
+        "type": "formalizes",
+        "target": "dynamic-epistemic-logic",
+        "uncertain": false
+      },
+      {
+        "source": "trencsenyi-hypergame",
+        "type": "formalizes",
+        "target": "hypergames",
+        "uncertain": false
+      },
+      {
+        "source": "amongus-x",
+        "type": "empirically-tests",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "mindgames",
+        "type": "empirically-tests",
+        "target": "belief-hierarchies",
+        "uncertain": false
+      },
+      {
+        "source": "beyond-sally-anne",
+        "type": "formalizes",
+        "target": "belief-hierarchies",
+        "uncertain": false
+      },
+      {
+        "source": "carlsson-vandamme-1993",
+        "type": "extends",
+        "target": "harsanyi-1967",
+        "uncertain": false
+      },
+      {
+        "source": "morris-shin-2003",
+        "type": "extends",
+        "target": "carlsson-vandamme-1993",
+        "uncertain": false
+      },
+      {
+        "source": "baltag-moss-solecki-1998",
+        "type": "extends",
+        "target": "plaza-2007",
+        "uncertain": false
+      },
+      {
+        "source": "kamenica-gentzkow-2011",
+        "type": "extends",
+        "target": "signalling",
+        "uncertain": false
+      },
+      {
+        "source": "alon-2023",
+        "type": "formalizes",
+        "target": "belief-state-shaping",
+        "uncertain": false
+      },
+      {
+        "source": "alon-2023",
+        "type": "empirically-tests",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "alon-2023",
+        "type": "formalizes",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "dbos-2026",
+        "type": "formalizes",
+        "target": "belief-state-shaping",
+        "uncertain": false
+      },
+      {
+        "source": "dbos-2026",
+        "type": "extends",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "dbos-2026",
+        "type": "applies",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "nguyen-attention-2026",
+        "type": "formalizes",
+        "target": "attention-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "nguyen-attention-2026",
+        "type": "extends",
+        "target": "information-design",
+        "uncertain": false
+      },
+      {
+        "source": "potemkin-2026",
+        "type": "operationalizes",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "potemkin-2026",
+        "type": "operationalizes",
+        "target": "epistemic-drift",
+        "uncertain": false
+      },
+      {
+        "source": "potemkin-2026",
+        "type": "implements",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "lying-with-truths-2026",
+        "type": "operationalizes",
+        "target": "cognitive-collusion",
+        "uncertain": false
+      },
+      {
+        "source": "lying-with-truths-2026",
+        "type": "empirically-tests",
+        "target": "belief-state-shaping",
+        "uncertain": false
+      },
+      {
+        "source": "lying-with-truths-2026",
+        "type": "applies",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "belief-hierarchies",
+        "type": "extends",
+        "target": "level-k",
+        "uncertain": false
+      },
+      {
+        "source": "level-k",
+        "type": "applies",
+        "target": "signalling",
+        "uncertain": false
+      },
+      {
+        "source": "signalling",
+        "type": "extends",
+        "target": "information-design",
+        "uncertain": false
+      },
+      {
+        "source": "information-design",
+        "type": "applies",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "strategic-deception",
+        "type": "applies",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "opponent-modelling",
+        "type": "loosely-parallels",
+        "target": "reflexive-control",
+        "uncertain": false
+      },
+      {
+        "source": "reflexive-control",
+        "type": "extends",
+        "target": "influence-operations",
+        "uncertain": false
+      },
+      {
+        "source": "influence-operations",
+        "type": "operationalizes",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "information-environment-manipulation",
+        "type": "loosely-parallels",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "belief-state-shaping",
+        "type": "extends",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "attention-manipulation",
+        "type": "extends",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "epistemic-drift",
+        "type": "operationalizes",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "schelling-1960",
+        "type": "loosely-parallels",
+        "target": "reflexive-control",
+        "uncertain": false
+      },
+      {
+        "source": "jervis-1976",
+        "type": "formalizes",
+        "target": "perception-misperception",
+        "uncertain": false
+      },
+      {
+        "source": "jervis-1976",
+        "type": "loosely-parallels",
+        "target": "reflexive-control",
+        "uncertain": false
+      },
+      {
+        "source": "pelevin-bluebeard-2026",
+        "type": "fictionalizes",
+        "target": "pelevin-mi13",
+        "uncertain": false
+      },
+      {
+        "source": "pelevin-mi13",
+        "type": "allegorizes",
+        "target": "influence-operations",
+        "uncertain": false
+      },
+      {
+        "source": "pelevin-mi13",
+        "type": "allegorizes",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "pelevin-snuff",
+        "type": "allegorizes",
+        "target": "influence-operations",
+        "uncertain": false
+      },
+      {
+        "source": "gilbo-dezontologia",
+        "type": "loosely-parallels",
+        "target": "epistemic-process-control",
+        "uncertain": true
+      },
+      {
+        "source": "gilbo-8uklad",
+        "type": "loosely-parallels",
+        "target": "reflexive-control",
+        "uncertain": true
+      },
+      {
+        "source": "holo4-2026",
+        "type": "operationalizes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "holo4-2026",
+        "type": "operationalizes",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "openshell-2026",
+        "type": "operationalizes",
+        "target": "policy-enforcement",
+        "uncertain": false
+      },
+      {
+        "source": "openshell-2026",
+        "type": "operationalizes",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "openshell-2026",
+        "type": "applies",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "provenanceguard-2026",
+        "type": "formalizes",
+        "target": "provenance",
+        "uncertain": false
+      },
+      {
+        "source": "provenanceguard-2026",
+        "type": "operationalizes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "gpt61-sol-2026",
+        "type": "empirically-tests",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "glm53-cyber-2026",
+        "type": "empirically-tests",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "glm53-cyber-2026",
+        "type": "critiques",
+        "target": "policy-enforcement",
+        "uncertain": false
+      },
+      {
+        "source": "openai-misalignment-framework-2026",
+        "type": "formalizes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "potemkin-2026",
+        "type": "extends",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "lying-with-truths-2026",
+        "type": "extends",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "alon-2023",
+        "type": "extends",
+        "target": "signalling",
+        "uncertain": false
+      },
+      {
+        "source": "dbos-2026",
+        "type": "extends",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "provenanceguard-2026",
+        "type": "operationalizes",
+        "target": "provenance",
+        "uncertain": false
+      },
+      {
+        "source": "lewis-1969",
+        "type": "formalizes",
+        "target": "signalling",
+        "uncertain": false
+      },
+      {
+        "source": "lewis-1969",
+        "type": "formalizes",
+        "target": "common-knowledge",
+        "uncertain": false
+      },
+      {
+        "source": "zhang-klevel",
+        "type": "empirically-tests",
+        "target": "level-k",
+        "uncertain": false
+      },
+      {
+        "source": "zhang-klevel",
+        "type": "extends",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "harsanyi-1967",
+        "type": "extends",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "aumann-1976",
+        "type": "extends",
+        "target": "belief-hierarchies",
+        "uncertain": false
+      },
+      {
+        "source": "rubinstein-1989",
+        "type": "empirically-tests",
+        "target": "common-knowledge",
+        "uncertain": false
+      },
+      {
+        "source": "bernheim-1984",
+        "type": "formalizes",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "pearce-1984",
+        "type": "formalizes",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "aumann-brandenburger-1995",
+        "type": "extends",
+        "target": "belief-hierarchies",
+        "uncertain": false
+      },
+      {
+        "source": "spence-1973",
+        "type": "extends",
+        "target": "information-design",
+        "uncertain": false
+      },
+      {
+        "source": "crawford-sobel-1982",
+        "type": "extends",
+        "target": "information-design",
+        "uncertain": false
+      },
+      {
+        "source": "nagel-1995",
+        "type": "extends",
+        "target": "cognitive-hierarchy",
+        "uncertain": false
+      },
+      {
+        "source": "camerer-ho-chong-2004",
+        "type": "formalizes",
+        "target": "cognitive-hierarchy",
+        "uncertain": false
+      },
+      {
+        "source": "trencsenyi-hypergame",
+        "type": "extends",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "beyond-sally-anne",
+        "type": "extends",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "mindgames",
+        "type": "empirically-tests",
+        "target": "level-k",
+        "uncertain": false
+      },
+      {
+        "source": "amongus-x",
+        "type": "empirically-tests",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "reflexive-control",
+        "type": "loosely-parallels",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "reflexive-control",
+        "type": "extends",
+        "target": "information-operations",
+        "uncertain": false
+      },
+      {
+        "source": "lefebvre-reflexive",
+        "type": "formalizes",
+        "target": "reflexive-control",
+        "uncertain": false
+      },
+      {
+        "source": "lefebvre-reflexive",
+        "type": "loosely-parallels",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "schelling-1960",
+        "type": "formalizes",
+        "target": "strategic-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "jervis-1976",
+        "type": "loosely-parallels",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-hf-incidents-2026",
+        "type": "provides-evidence-for",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-hf-incidents-2026",
+        "type": "provides-evidence-for",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-hf-incidents-2026",
+        "type": "reframes",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "af-fixed-weight-2026",
+        "type": "provides-evidence-for",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "af-fixed-weight-2026",
+        "type": "extends",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "af-fixed-weight-2026",
+        "type": "loosely-parallels",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "sre-agent-benchmark-2026",
+        "type": "empirically-tests",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "sre-agent-benchmark-2026",
+        "type": "empirically-tests",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "sre-agent-benchmark-2026",
+        "type": "extends",
+        "target": "tool-use",
+        "uncertain": false
+      },
+      {
+        "source": "gpt61-sol-2026",
+        "type": "extends",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "gpt61-sol-2026",
+        "type": "extends",
+        "target": "tool-use",
+        "uncertain": false
+      },
+      {
+        "source": "glm53-cyber-2026",
+        "type": "extends",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "glm53-cyber-2026",
+        "type": "empirically-tests",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "glm53-cyber-2026",
+        "type": "operationalizes",
+        "target": "open-weight-models",
+        "uncertain": false
+      },
+      {
+        "source": "alon-2023",
+        "type": "extends",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "dbos-2026",
+        "type": "formalizes",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "dbos-2026",
+        "type": "extends",
+        "target": "belief-state-shaping",
+        "uncertain": false
+      },
+      {
+        "source": "nguyen-attention-2026",
+        "type": "extends",
+        "target": "rational-inattention",
+        "uncertain": false
+      },
+      {
+        "source": "nguyen-attention-2026",
+        "type": "extends",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "potemkin-2026",
+        "type": "extends",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "lying-with-truths-2026",
+        "type": "extends",
+        "target": "cognitive-collusion",
+        "uncertain": false
+      },
+      {
+        "source": "lying-with-truths-2026",
+        "type": "extends",
+        "target": "belief-state-shaping",
+        "uncertain": false
+      },
+      {
+        "source": "lying-with-truths-2026",
+        "type": "extends",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "hypergames",
+        "type": "extends",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "hypergames",
+        "type": "formalizes",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "monitorability",
+        "type": "extends",
+        "target": "epistemic-process-control",
+        "uncertain": false
+      },
+      {
+        "source": "monitorability",
+        "type": "connects",
+        "target": "policy-enforcement",
+        "uncertain": false
+      },
+      {
+        "source": "information-operations",
+        "type": "extends",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "information-operations",
+        "type": "applies",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "rational-inattention",
+        "type": "extends",
+        "target": "attention-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "rational-inattention",
+        "type": "extends",
+        "target": "information-design",
+        "uncertain": false
+      },
+      {
+        "source": "perception-misperception",
+        "type": "connects",
+        "target": "strategic-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "perception-misperception",
+        "type": "connects",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "pelevin-bluebeard-2026",
+        "type": "fictionalizes",
+        "target": "attention-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "pelevin-snuff",
+        "type": "allegorizes",
+        "target": "information-operations",
+        "uncertain": false
+      },
+      {
+        "source": "gilbo-dezontologia",
+        "type": "loosely-parallels",
+        "target": "information-environment-manipulation",
+        "uncertain": true
+      },
+      {
+        "source": "gilbo-8uklad",
+        "type": "loosely-parallels",
+        "target": "information-operations",
+        "uncertain": true
+      },
+      {
+        "source": "openai-misalignment-framework-2026",
+        "type": "connects",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "openai-misalignment-framework-2026",
+        "type": "extends",
+        "target": "policy-enforcement",
+        "uncertain": false
+      },
+      {
+        "source": "strategic-reasoning",
+        "type": "specializes",
+        "target": "level-k",
+        "uncertain": false
+      },
+      {
+        "source": "strategic-reasoning",
+        "type": "connects",
+        "target": "opponent-modelling",
+        "uncertain": false
+      },
+      {
+        "source": "open-weight-models",
+        "type": "connects",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "open-weight-models",
+        "type": "connects",
+        "target": "capability-measurement",
+        "uncertain": false
+      },
+      {
+        "source": "capability-measurement",
+        "type": "generalizes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "capability-measurement",
+        "type": "connects",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "evaluation-variance",
+        "type": "generalizes",
+        "target": "capability-measurement",
+        "uncertain": false
+      },
+      {
+        "source": "evaluation-variance",
+        "type": "connects",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "safety-usefulness-tradeoff",
+        "type": "decomposes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "safety-usefulness-tradeoff",
+        "type": "connects",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "structural-reasoning",
+        "type": "connects",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "interpretability",
+        "type": "connects",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-2026",
+        "type": "implements",
+        "target": "policy-enforcement",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-2026",
+        "type": "empirically-tests",
+        "target": "safety-usefulness-tradeoff",
+        "uncertain": false
+      },
+      {
+        "source": "identical-runs-2026",
+        "type": "empirically-tests",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "identical-runs-2026",
+        "type": "formalizes",
+        "target": "capability-measurement",
+        "uncertain": false
+      },
+      {
+        "source": "identical-runs-2026",
+        "type": "operationalizes",
+        "target": "evaluation-variance",
+        "uncertain": false
+      },
+      {
+        "source": "identical-runs-2026",
+        "type": "extends",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "wipebench-2026",
+        "type": "operationalizes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "wipebench-2026",
+        "type": "operationalizes",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "wipebench-2026",
+        "type": "formalizes",
+        "target": "safety-usefulness-tradeoff",
+        "uncertain": false
+      },
+      {
+        "source": "wipebench-2026",
+        "type": "implements",
+        "target": "provenance",
+        "uncertain": false
+      },
+      {
+        "source": "workspacebench-2026",
+        "type": "empirically-tests",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "workspacebench-2026",
+        "type": "operationalizes",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "workspacebench-2026",
+        "type": "operationalizes",
+        "target": "structural-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "workspacebench-2026",
+        "type": "extends",
+        "target": "interpretability",
+        "uncertain": false
+      },
+      {
+        "source": "dynamic-epistemic-logic",
+        "type": "connects",
+        "target": "common-knowledge",
+        "uncertain": false
+      },
+      {
+        "source": "plaza-2007",
+        "type": "operationalizes",
+        "target": "common-knowledge",
+        "uncertain": false
+      },
+      {
+        "source": "baltag-moss-solecki-1998",
+        "type": "formalizes",
+        "target": "belief-hierarchies",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-astra61-pulled-2026",
+        "type": "contrasts-with",
+        "target": "gpt61-sol-2026",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-astra61-pulled-2026",
+        "type": "provides-evidence-for",
+        "target": "scope-authorization-fidelity",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-astra61-pulled-2026",
+        "type": "provides-evidence-for",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-astra61-pulled-2026",
+        "type": "reframes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-astra61-pulled-2026",
+        "type": "extends",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-astra61-pulled-2026",
+        "type": "applies",
+        "target": "openai-safety-cases-2026",
+        "uncertain": false
+      },
+      {
+        "source": "openai-safety-cases-2026",
+        "type": "operationalizes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "openai-safety-cases-2026",
+        "type": "operationalizes",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "openai-safety-cases-2026",
+        "type": "implements",
+        "target": "policy-enforcement",
+        "uncertain": false
+      },
+      {
+        "source": "openai-safety-cases-2026",
+        "type": "operationalizes",
+        "target": "provenance",
+        "uncertain": false
+      },
+      {
+        "source": "openai-safety-cases-2026",
+        "type": "formalizes",
+        "target": "evaluation-gaming",
+        "uncertain": false
+      },
+      {
+        "source": "openai-safety-cases-2026",
+        "type": "formalizes",
+        "target": "evaluation-awareness",
+        "uncertain": false
+      },
+      {
+        "source": "openai-safety-cases-2026",
+        "type": "extends",
+        "target": "evaluation-variance",
+        "uncertain": false
+      },
+      {
+        "source": "openai-safety-cases-2026",
+        "type": "extends",
+        "target": "capability-measurement",
+        "uncertain": false
+      },
+      {
+        "source": "aisi-astra-unsanctioned-2026",
+        "type": "empirically-tests",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "aisi-astra-unsanctioned-2026",
+        "type": "provides-evidence-for",
+        "target": "scope-authorization-fidelity",
+        "uncertain": false
+      },
+      {
+        "source": "aisi-astra-unsanctioned-2026",
+        "type": "provides-evidence-for",
+        "target": "evaluation-awareness",
+        "uncertain": false
+      },
+      {
+        "source": "aisi-astra-unsanctioned-2026",
+        "type": "extends",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "aisi-astra-unsanctioned-2026",
+        "type": "extends",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "aisi-astra-unsanctioned-2026",
+        "type": "operationalizes",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "scope-authorization-fidelity",
+        "type": "connects",
+        "target": "policy-enforcement",
+        "uncertain": false
+      },
+      {
+        "source": "scope-authorization-fidelity",
+        "type": "connects",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "scope-authorization-fidelity",
+        "type": "specializes",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "scope-authorization-fidelity",
+        "type": "connects",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "evaluation-awareness",
+        "type": "connects",
+        "target": "evaluation-gaming",
+        "uncertain": false
+      },
+      {
+        "source": "evaluation-awareness",
+        "type": "provides-evidence-for",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "evaluation-awareness",
+        "type": "contrasts-with",
+        "target": "monitorability",
+        "uncertain": false
+      },
+      {
+        "source": "evaluation-gaming",
+        "type": "extends",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "evaluation-gaming",
+        "type": "connects",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "evaluation-gaming",
+        "type": "connects",
+        "target": "information-environment-manipulation",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-2026",
+        "type": "implements",
+        "target": "scope-authorization-fidelity",
+        "uncertain": false
+      },
+      {
+        "source": "gpt61-sol-2026",
+        "type": "contrasts-with",
+        "target": "openai-safety-cases-2026",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-rsi-paper-lead-2026",
+        "type": "extends",
+        "target": "long-horizon-reasoning",
+        "uncertain": true
+      },
+      {
+        "source": "zvi-rsi-paper-lead-2026",
+        "type": "loosely-parallels",
+        "target": "agent-evaluation",
+        "uncertain": true
+      },
+      {
+        "source": "zvi-rsi-paper-lead-2026",
+        "type": "loosely-parallels",
+        "target": "strategic-reasoning",
+        "uncertain": true
+      },
+      {
+        "source": "safa-frontier-ai-2026",
+        "type": "operationalizes",
+        "target": "agent-evaluation",
+        "uncertain": true
+      },
+      {
+        "source": "safa-frontier-ai-2026",
+        "type": "operationalizes",
+        "target": "capability-measurement",
+        "uncertain": true
+      },
+      {
+        "source": "safa-frontier-ai-2026",
+        "type": "connects",
+        "target": "monitorability",
+        "uncertain": true
+      },
+      {
+        "source": "cognitive-collusion",
+        "type": "connects",
+        "target": "belief-state-shaping",
+        "uncertain": false
+      },
+      {
+        "source": "cognitive-collusion",
+        "type": "connects",
+        "target": "strategic-deception",
+        "uncertain": false
+      },
+      {
+        "source": "rubinstein-1989",
+        "type": "extends",
+        "target": "belief-hierarchies",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-2026",
+        "type": "implements",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-2026",
+        "type": "operationalizes",
+        "target": "scope-authorization-fidelity",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-2026",
+        "type": "extends",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "diffusion-controller-2026",
+        "type": "operationalizes",
+        "target": "control-over-generation-trajectory",
+        "uncertain": false
+      },
+      {
+        "source": "diffusion-controller-2026",
+        "type": "extends",
+        "target": "provenance",
+        "uncertain": true
+      },
+      {
+        "source": "diffusion-controller-2026",
+        "type": "loosely-parallels",
+        "target": "epistemic-process-control",
+        "uncertain": true
+      },
+      {
+        "source": "control-over-generation-trajectory",
+        "type": "connects",
+        "target": "long-horizon-reasoning",
+        "uncertain": false
+      },
+      {
+        "source": "control-over-generation-trajectory",
+        "type": "connects",
+        "target": "epistemic-process-control",
+        "uncertain": true
+      },
+      {
+        "source": "watermarking-agent-drift-2026",
+        "type": "provides-evidence-for",
+        "target": "stochastic-decision-drift",
+        "uncertain": true
+      },
+      {
+        "source": "watermarking-agent-drift-2026",
+        "type": "loosely-parallels",
+        "target": "evaluation-variance",
+        "uncertain": true
+      },
+      {
+        "source": "stochastic-decision-drift",
+        "type": "connects",
+        "target": "evaluation-variance",
+        "uncertain": false
+      },
+      {
+        "source": "stochastic-decision-drift",
+        "type": "connects",
+        "target": "agent-evaluation",
+        "uncertain": false
+      },
+      {
+        "source": "openai-gpt61-sol-2026",
+        "target": "agent-evaluation",
+        "type": "operationalizes",
+        "confidence": "established"
+      },
+      {
+        "source": "openai-dots-2026",
+        "target": "monitorability",
+        "type": "reframes",
+        "confidence": "weak"
+      },
+      {
+        "source": "openai-gpt61-astra-withheld-2026",
+        "target": "scope-authorization-fidelity",
+        "type": "empirically-tests",
+        "confidence": "established"
+      },
+      {
+        "source": "openai-gpt61-astra-withheld-2026",
+        "target": "strategic-deception",
+        "type": "provides-evidence-for",
+        "confidence": "established"
+      },
+      {
+        "source": "anthropic-glm53-cyber-2026",
+        "target": "capability-measurement",
+        "type": "operationalizes",
+        "confidence": "established"
+      },
+      {
+        "source": "anthropic-glm53-cyber-2026",
+        "target": "monitorability",
+        "type": "contrasts-with",
+        "confidence": "established"
+      },
+      {
+        "source": "state-tape-2026",
+        "target": "provenance",
+        "type": "formalizes",
+        "confidence": "established"
+      },
+      {
+        "source": "traverse-2026",
+        "target": "epistemic-drift",
+        "type": "empirically-tests",
+        "confidence": "established"
+      },
+      {
+        "source": "enterprisebench-2026",
+        "target": "strategic-reasoning",
+        "type": "operationalizes",
+        "confidence": "established"
+      },
+      {
+        "source": "benchmark-tool-contract-audit-2026",
+        "target": "agent-evaluation",
+        "type": "critiques",
+        "confidence": "established"
+      },
+      {
+        "source": "longharness-2026",
+        "target": "agent-evaluation",
+        "type": "operationalizes",
+        "confidence": "established"
+      },
+      {
+        "source": "state-tape-2026",
+        "target": "traverse-2026",
+        "type": "contrasts-with",
+        "confidence": "established"
+      },
+      {
+        "source": "state-tape-2026",
+        "target": "longharness-2026",
+        "type": "extends",
+        "confidence": "established"
+      },
+      {
+        "source": "traverse-2026",
+        "target": "longharness-2026",
+        "type": "extends",
+        "confidence": "established"
+      },
+      {
+        "source": "enterprisebench-2026",
+        "target": "longharness-2026",
+        "type": "contrasts-with",
+        "confidence": "established"
+      },
+      {
+        "source": "benchmark-tool-contract-audit-2026",
+        "target": "enterprisebench-2026",
+        "type": "provides-lens-on",
+        "confidence": "established"
+      },
+      {
+        "source": "openai-dots-2026",
+        "target": "openai-gpt61-astra-withheld-2026",
+        "type": "contrasts-with",
+        "confidence": "established"
+      },
+      {
+        "source": "openai-gpt61-sol-2026",
+        "target": "openai-gpt61-astra-withheld-2026",
+        "type": "contrasts-with",
+        "confidence": "established"
+      },
+      {
+        "source": "openai-dots-safety-appendix-2026",
+        "target": "scope-authorization-fidelity",
+        "type": "empirically-tests",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-safety-appendix-2026",
+        "target": "long-horizon-reasoning",
+        "type": "empirically-tests",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-safety-appendix-2026",
+        "target": "agent-evaluation",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-safety-appendix-2026",
+        "target": "policy-enforcement",
+        "type": "implements",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "openai-dots-safety-appendix-2026",
+        "target": "openai-dots-2026",
+        "type": "applies",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "synthid-bio-2026",
+        "target": "biological-provenance",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "synthid-bio-2026",
+        "target": "provenance",
+        "type": "extends",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "biological-provenance",
+        "target": "provenance",
+        "type": "specializes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "benchmark-tool-contract-audit-2026",
+        "target": "provenance",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "state-tape-2026",
+        "target": "provenance",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "traverse-2026",
+        "target": "long-horizon-reasoning",
+        "type": "empirically-tests",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "longharness-2026",
+        "target": "long-horizon-reasoning",
+        "type": "empirically-tests",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "gpt61-sol-2026",
+        "target": "scope-authorization-fidelity",
+        "type": "empirically-tests",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "singed-2026",
+        "target": "agent-evaluation",
+        "type": "critiques",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "singed-2026",
+        "target": "provenance",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "singed-2026",
+        "target": "execution-path-integrity",
+        "type": "formalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "singed-2026",
+        "target": "evaluation-gaming",
+        "type": "contrasts-with",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "singed-2026",
+        "target": "long-horizon-reasoning",
+        "type": "connects",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "toolfence-2026",
+        "target": "authorization-fidelity",
+        "type": "formalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "toolfence-2026",
+        "target": "scope-authorization-fidelity",
+        "type": "extends",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "toolfence-2026",
+        "target": "provenance",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "toolfence-2026",
+        "target": "policy-enforcement",
+        "type": "implements",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "toolfence-2026",
+        "target": "agent-evaluation",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "privacyskills-2026",
+        "target": "authorization-fidelity",
+        "type": "connects",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "privacyskills-2026",
+        "target": "information-environment-manipulation",
+        "type": "connects",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "privacyskills-2026",
+        "target": "agent-evaluation",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "privacyskills-2026",
+        "target": "opponent-modelling",
+        "type": "loosely-parallels",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "jailbreak-context-lingers-2026",
+        "target": "agent-evaluation",
+        "type": "empirically-tests",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "jailbreak-context-lingers-2026",
+        "target": "policy-enforcement",
+        "type": "empirically-tests",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "jailbreak-context-lingers-2026",
+        "target": "monitorability",
+        "type": "connects",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "jailbreak-context-lingers-2026",
+        "target": "epistemic-process-control",
+        "type": "loosely-parallels",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-white-house-ai-safety-2026",
+        "target": "openai-gpt61-astra-withheld-2026",
+        "type": "reframes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "zvi-white-house-ai-safety-2026",
+        "target": "agent-evaluation",
+        "type": "loosely-parallels",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "anthropic-robots-2026",
+        "target": "capability-measurement",
+        "type": "operationalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "anthropic-robots-2026",
+        "target": "evaluation-variance",
+        "type": "connects",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "execution-path-integrity",
+        "target": "provenance",
+        "type": "specializes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "execution-path-integrity",
+        "target": "agent-evaluation",
+        "type": "connects",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "execution-path-integrity",
+        "target": "monitorability",
+        "type": "connects",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "authorization-fidelity",
+        "target": "scope-authorization-fidelity",
+        "type": "generalizes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "authorization-fidelity",
+        "target": "policy-enforcement",
+        "type": "connects",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "authorization-fidelity",
+        "target": "agent-evaluation",
+        "type": "specializes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "gemini4-argon-2026",
+        "target": "long-horizon-reasoning",
+        "type": "claims-about",
+        "confidence": "established",
+        "uncertain": true
+      },
+      {
+        "source": "gemini4-argon-2026",
+        "target": "agent-evaluation",
+        "type": "requires-independent-evaluation",
+        "confidence": "interpretive",
+        "uncertain": true
+      },
+      {
+        "source": "gemini4-argon-evaluation",
+        "target": "gemini4-argon-2026",
+        "type": "describes",
+        "confidence": "established",
+        "uncertain": false
+      },
+      {
+        "source": "gemini4-argon-evaluation",
+        "target": "capability-measurement",
+        "type": "operationalizes",
+        "confidence": "interpretive",
+        "uncertain": true
+      },
+      {
+        "source": "zvi-whitehouse-accord-2026",
+        "target": "policy-enforcement",
+        "type": "describes",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "zvi-whitehouse-accord-2026",
+        "target": "agent-evaluation",
+        "type": "provides-lens-on",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "zvi-whitehouse-accord-2026",
+        "target": "safety-usefulness-tradeoff",
+        "type": "provides-lens-on",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "terminal-bench-science-2026",
+        "target": "agent-evaluation",
+        "type": "operationalizes",
+        "weight": 2,
+        "uncertain": false
+      },
+      {
+        "source": "terminal-bench-science-2026",
+        "target": "capability-measurement",
+        "type": "operationalizes",
+        "weight": 2,
+        "uncertain": false
+      },
+      {
+        "source": "terminal-bench-science-2026",
+        "target": "long-horizon-reasoning",
+        "type": "empirically-tests",
+        "weight": 2,
+        "uncertain": false
+      },
+      {
+        "source": "terminal-bench-science-2026",
+        "target": "tool-use",
+        "type": "operationalizes",
+        "weight": 2,
+        "uncertain": false
+      },
+      {
+        "source": "terminal-bench-science-2026",
+        "target": "execution-path-integrity",
+        "type": "provides-evidence-for",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "serge-bugfix-agent-2026",
+        "target": "agent-evaluation",
+        "type": "operationalizes",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "serge-bugfix-agent-2026",
+        "target": "tool-use",
+        "type": "implements",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "serge-bugfix-agent-2026",
+        "target": "execution-path-integrity",
+        "type": "provides-evidence-for",
+        "weight": 2,
+        "uncertain": false
+      },
+      {
+        "source": "serge-bugfix-agent-2026",
+        "target": "scope-authorization-fidelity",
+        "type": "operationalizes",
+        "weight": 2,
+        "uncertain": false
+      },
+      {
+        "source": "serge-bugfix-agent-2026",
+        "target": "provenance",
+        "type": "operationalizes",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "olmo-core-3-2026",
+        "target": "open-weight-models",
+        "type": "implements",
+        "weight": 2,
+        "uncertain": false
+      },
+      {
+        "source": "olmo-core-3-2026",
+        "target": "capability-measurement",
+        "type": "provides-lens-on",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "olmo-core-3-2026",
+        "target": "tool-use",
+        "type": "implements",
+        "weight": 1,
+        "uncertain": false
+      },
+      {
+        "source": "olmo-core-3-2026",
+        "target": "structural-reasoning",
+        "type": "provides-lens-on",
+        "weight": 1,
+        "uncertain": true
+      },
+      {
+        "source": "terminal-bench-science-2026",
+        "target": "serge-bugfix-agent-2026",
+        "type": "contrasts-with",
+        "weight": 1,
+        "uncertain": true
+      },
+      {
+        "source": "terminal-bench-science-2026",
+        "target": "provenanceguard-2026",
+        "type": "shares-mechanism-with",
+        "weight": 1,
+        "uncertain": true
+      }
+    ],
+    "meta": {
+      "last_verified": "2026-10-01",
+      "source_control": "primary sources preferred; secondary items explicitly marked",
+      "connectivity_definition": "weak connectivity on the directed edge set",
+      "notes": [
+        "GPT-6.1 Sol safety addendum is distinct from the withheld GPT-6.1 Astra report.",
+        "Dots safety appendix explicitly identifies dots as powered by GPT-6 Astra.",
+        "SynthID Bio is outside the core agent-evaluation cluster but connects through provenance.",
+        "2026-10-01 additions: SINGED, ToolFence, PrivacySkills, Jailbreak Context Lingers, Zvi White House Accord, Anthropic robotics exposure, SynthID Bio; execution-path and authorization-fidelity concept nodes.",
+        "2026-10-01 additions: Gemini 4 Argon launch claims and a separate vendor-claim/evaluation node; public capability claims are marked uncertain pending independent testing."
+      ]
+    }
+  }
+}

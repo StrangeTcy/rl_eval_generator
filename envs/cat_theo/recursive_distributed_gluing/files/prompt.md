@@ -55,3 +55,16 @@ number without a legal trace is not a solution.
 ```bash
 python visible_tests.py
 ```
+
+## Worker rules and endpoint presentations
+
+A worker may supply `rule = [a,b,c]`. A leaf compute produces
+(a*input+b) modulo modulus. A worker with a child produces
+(a*input+b+c*last_received) modulo modulus. Without rule, the original
+leaf input+1 and parent input+last_received rules apply.
+
+Send/receive endpoints may be the role parent or child, or that endpoint's
+explicit worker identifier. These are equivalent presentations of the same
+communication. A non-root worker cannot execute any instruction until its
+parent has spawned it. Lock capacity is a semantic parameter: an otherwise
+identical job can deadlock with one permit and complete with two.

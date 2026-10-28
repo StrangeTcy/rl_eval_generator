@@ -570,7 +570,7 @@ def test_report_classifies_outcomes_without_inventing_scores(tmp_path: Path) -> 
         ("scored", {"verdict": "PASS", "score": 1.0, "failure_mode": "pass"}, study.OUTCOME_VALIDATED_SUCCESS),
         ("scored", {"verdict": "FAIL", "score": 0.4, "failure_mode": "underfit"}, study.OUTCOME_SCORED_FAILURE),
         ("scored", {"verdict": "FAIL", "score": 0.0, "failure_mode": "patch_invalid"}, study.OUTCOME_MALFORMED),
-        ("scored", {"verdict": "FAIL", "score": 0.5, "failure_mode": "underfit", "checks": {"obstructed_cycle": False}}, study.OUTCOME_WRONG_DECISION),
+        ("scored", {"verdict": "FAIL", "score": 0.5, "failure_mode": "underfit", "checks": {"obstructed_cycle": False}}, study.OUTCOME_SCORED_FAILURE),
         ("paused_provider_error", {"failure_mode": "api_error"}, study.OUTCOME_PROVIDER),
         ("infrastructure_error", {"failure_mode": "controller_error"}, study.OUTCOME_INFRASTRUCTURE),
         ("infrastructure_error", {"failure_mode": "judge_runtime_error"}, study.OUTCOME_ORACLE),
@@ -1318,3 +1318,37 @@ def test_a_refused_dispatch_is_annotated_inside_actions(monkeypatch, capsys, tmp
     captured = capsys.readouterr()
     assert "::error title=Recursive gluing study refused the dispatch::" in captured.out
     assert "no study block" in captured.err
+
+def test_structural_evidence_keeps_all_five_claims_separate():
+    evidence = study.StudyEvidence()
+    claims = evidence.claims(({"outcome": study.OUTCOME_VALIDATED_SUCCESS},))
+    assert set(claims) == {
+        "competence", "shortcut_resistance", "structural_inference",
+        "compositional_generalization", "cross_domain_transfer",
+    }
+    assert claims["competence"]["validated_instances"] == 1
+    assert claims["shortcut_resistance"]["status"] == "not_established_by_model_scores"
+    assert claims["cross_domain_transfer"]["status"] == "not_measured"
+    assert set(evidence.controls) == set(study.FAMILY)
+
+
+def test_structural_missing_control_is_not_a_passing_pair():
+    evidence = study.StudyEvidence()
+    rows = evidence.pairs("recursive_gluing", {"branching_sat": 1})
+    assert rows[0]["status"] == "unobserved"
+    rows = evidence.pairs("recursive_gluing", {"branching_sat": 1, "branching_unsat": 0})
+    assert rows[0]["status"] == "failed_control"
+    rows = evidence.pairs("recursive_gluing", {"branching_sat": 1, "branching_unsat": 1})
+    assert rows[0]["status"] == "both_checks_passed"
+
+
+def test_structural_failed_certificate_does_not_imply_wrong_decision():
+    row = {"status": "scored", "verdict": "FAIL", "score": 0.5, "failure_mode": "underfit"}
+    final = {"checks": {"assembled_unsat": 0}}
+    assert study.classify_result(row, final, decision_checks=("assembled_unsat",)) == study.OUTCOME_SCORED_FAILURE
+    row["failure_mode"] = "incorrect_satisfiability_decision"
+    assert study.classify_result(row, final) == study.OUTCOME_WRONG_DECISION
+
+
+def test_structural_holonomy_remains_outside_campaign_gate():
+    assert set(reference_environments()).isdisjoint(("recursive_holonomy_gluing",))

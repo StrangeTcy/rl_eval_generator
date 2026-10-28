@@ -51,6 +51,8 @@ environments:
   epistemic_fragmented_observation: envs/epistemic_fragmented_observation/config.yaml
   epistemic_silence: envs/epistemic_silence/config.yaml
   epistemic_type_games: envs/epistemic_type_games/config.yaml
+  epistemic_deception: envs/epistemic_deception/config.yaml
+  epistemic_signaling: envs/epistemic_signaling/config.yaml
 
   # Recurrent-depth environments
   rd_state_carry: envs/recurrent_depth/state_carry/config.yaml

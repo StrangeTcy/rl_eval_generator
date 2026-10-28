@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 
 import pytest
+import ast
+import copy
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -290,6 +292,24 @@ def test_baselines_separate_copy_from_compact() -> None:
         seed=1,
     )
     assert NET.evaluate_solver(NET.arm_expanded, shallow) is True
+
+
+def test_expanded_baseline_constructs_the_certificate_independently() -> None:
+    names = StructuralNames()
+    names.visit(ast.parse(inspect.getsource(NET.arm_expanded)))
+    assert names.names.isdisjoint(("reference_certificate", "compact_summaries"))
+    grammar = NET.generate_grammar(
+        depth=3,
+        interface_size=5,
+        regime=NET.CYCLIC_UNSAT,
+        opacity=NET.OPAQUE,
+        ambiguity=NET.DECOY,
+        seed=12,
+    )
+    expanded = NET.arm_expanded(grammar)
+    compact = NET.reference_certificate(grammar)
+    assert expanded == compact
+    assert NET.verify_certificate(grammar, expanded)[0]
 
 
 def test_relabel_preserves_sat_and_changes_labels() -> None:
@@ -600,3 +620,38 @@ def test_visible_tests_pass_on_baseline() -> None:
         assert proc.returncode == 0, proc.stdout + proc.stderr
     finally:
         shutil.rmtree(generated, ignore_errors=True)
+
+@pytest.mark.parametrize("depth,blocked", ((1, 0), (2, 1), (3, 0), (3, 1)))
+def test_structural_branching_expansion_agrees(depth, blocked):
+    grammar = NET.RelationAlgebra().control(depth, 104729, blocked)
+    assert NET.local_tables_nonempty(grammar)
+    expanded = NET.arm_expanded(grammar)
+    compact = NET.reference_certificate(grammar)
+    assert expanded == compact
+    assert NET.verify_certificate(grammar, expanded)[0]
+    assert (expanded["status"] == "unsat") == blocked
+    wrong = copy.deepcopy(expanded)
+    wrong["realizable"]["stem"][str(depth)] = []
+    assert not NET.verify_certificate(grammar, wrong)[0]
+
+
+class StructuralNames(ast.NodeVisitor):
+    def __init__(self):
+        self.names = set()
+
+    def visit_Name(self, node):
+        self.names.add(node.id)
+
+    def visit_Attribute(self, node):
+        self.names.add(node.attr)
+        self.generic_visit(node)
+
+
+def test_structural_expanded_solver_has_no_target_answer_dependency():
+    names = StructuralNames()
+    names.visit(ast.parse(inspect.getsource(NET.arm_expanded)))
+    names.visit(ast.parse(inspect.getsource(NET.expanded_summaries)))
+    names.visit(ast.parse(inspect.getsource(NET.expanded_root_pairs)))
+    names.visit(ast.parse(inspect.getsource(NET.expand_grammar)))
+    names.visit(ast.parse(inspect.getsource(NET._csp_solution)))
+    assert names.names.isdisjoint(("reference_certificate", "compact_summaries", "compose_branch", "compose"))
