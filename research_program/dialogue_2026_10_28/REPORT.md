@@ -1,5 +1,8 @@
 # Delivery report
 
+> Runtime update, 2026-10-28: [109 hosted tests passed](RUNTIME_VALIDATION.md), including all mapped tests for the 28 covered OP entries. Implementation completeness remains 15 source-implemented and 13 partial. The pre-runtime account below is preserved as historical evidence; its statements about tests being unexecuted are superseded by the linked execution record. Broader experiment and integration gaps remain.
+
+
 This delivery replaces the earlier graph-only framing with a program grounded in the complete corrected dialogue and adds two interactive game mechanisms.
 
 ## Delivered artifacts

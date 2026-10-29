@@ -120,7 +120,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -181,7 +181,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -235,7 +235,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -288,7 +288,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -314,13 +314,13 @@
         "spence-1973"
       ],
       "proposed_discriminating_experiment": "Reverse the profitability of a misleading recommendation through audit probability and penalties.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/strategic.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "strategy",
@@ -353,10 +353,49 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP005_OP010_OP020_disclosed_audit_changes_response_law",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_incentives_reverse_bad_sender_action",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_boundary_tie_does_not_recommend",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP006",
@@ -408,7 +447,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -434,13 +473,13 @@
         "kamenica-gentzkow-2011"
       ],
       "proposed_discriminating_experiment": "Compare assertion and truthful-certificate channels under explicit sender policy and receiver information.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/strategic.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "selection",
@@ -472,10 +511,41 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP007_OP023_OP075_certificate_keeps_evidence_but_changes_truth",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_truthful_certificate_preserves_policy_but_changes_truth_semantics",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP008",
@@ -500,7 +570,7 @@
         "cognitive-hierarchy"
       ],
       "proposed_discriminating_experiment": "Specify base policies and compute depth-dependent actions; compare capped enumeration at equal compute.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P2",
       "rationale": "Requires a distinct generator, intervention contract, or independent source validation beyond the present vertical slices.",
       "implementation": [
@@ -509,7 +579,7 @@
         "arena/epistemic_control/planning.py",
         "arena/epistemic_control/reference_semantics.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "recursion",
@@ -544,10 +614,57 @@
         "python -m unittest discover -s tests -p test_epistemic_control_math.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP008_depth_changes_defender_decision_at_fixed_truth",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP008_OP010_probe_filters_hidden_profiles_without_teaching",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_depth_changes_map_decision_and_is_not_parity",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_recursive_selection_has_independent_exact_fractions",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP009",
@@ -606,7 +723,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -641,7 +758,7 @@
         "opponent-modelling"
       ],
       "proposed_discriminating_experiment": "Announce versus hide audit probability; infer persistent sender disposition from the changed response law.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -650,7 +767,7 @@
         "arena/epistemic_control/planning.py",
         "arena/epistemic_control/semantics.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "adaptive",
@@ -689,10 +806,66 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+              "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP005_OP010_OP020_disclosed_audit_changes_response_law",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP010_OP033_complete_truthful_teaching_changes_target_decision",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP008_OP010_probe_filters_hidden_profiles_without_teaching",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_blind_protocol_does_not_change_sender_likelihood",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_protocol_change_identifies_different_causes",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP011",
@@ -717,7 +890,7 @@
         "hypergames"
       ],
       "proposed_discriminating_experiment": "Pair private versus public objective disclosure; demand a computed response reversal, not deeper prose.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P2",
       "rationale": "Requires a distinct generator, intervention contract, or independent source validation beyond the present vertical slices.",
       "implementation": [
@@ -725,7 +898,7 @@
         "arena/epistemic_control/game.py",
         "arena/epistemic_control/reference_semantics.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "recursion",
@@ -759,10 +932,57 @@
         "python -m unittest discover -s tests -p test_epistemic_control_math.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP011_speaker_selection_changes_interpretation_of_same_true_message",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_topology_changes_selection_law_not_just_word_order",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_source_objectives_overlap_under_positive_floor",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_reference_expansion_reproduces_hand_fixture",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP012",
@@ -823,7 +1043,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -885,7 +1105,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -939,7 +1159,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -964,7 +1184,7 @@
         "information-environment-manipulation"
       ],
       "proposed_discriminating_experiment": "Measure selected tests and opportunity cost with all test descriptions available; compare informative versus decoy first-row choices.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -972,7 +1192,7 @@
         "arena/inquiry/presenter.py",
         "arena/inquiry/baselines.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "inquiry",
@@ -1007,10 +1227,41 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP015_OP035_OP039_query_order_keeps_all_supplied_hypotheses",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_order_changes_baseline_but_not_oracle",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP016",
@@ -1069,7 +1320,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -1124,7 +1375,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -1158,14 +1409,14 @@
         "opponent-modelling"
       ],
       "proposed_discriminating_experiment": "Infer sincere sensor error separately from incentive-driven action changes; swap identities and reliability rates.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/strategic.py",
         "arena/inquiry/finite.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "inquiry",
@@ -1199,10 +1450,49 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP018_supplied_noise_changes_source_posterior",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_noise_zero_is_an_accurate_sincere_control",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_identical_positive_report_leaves_error_strategy_ambiguous",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP019",
@@ -1235,7 +1525,7 @@
         "structural-reasoning"
       ],
       "proposed_discriminating_experiment": "Use a hidden grammar with a paid candidate-testing interface; score held-out predictions and compare enumerative search.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P1",
       "rationale": "Preserve the idea or correction without promoting it into measured evidence.",
       "implementation": [
@@ -1244,7 +1534,7 @@
         "arena/recursive_programs/reference.py",
         "arena/recursive_programs/session.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "latent",
@@ -1282,10 +1572,81 @@
         "python -m unittest discover -s tests -p test_recursive_programs.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_OP070_text_session_identifies_rules_and_scores_compositions",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_early_stopping_preserves_unspent_budget_and_ambiguity",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_malformed_and_repeated_queries_do_not_consume_evidence_budget",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_OP045_invalid_transport_actions_reach_unscored_response_limit",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs.RuleIdentification.test_three_basis_observations_identify_local_rule",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs.RuleIdentification.test_independent_candidate_filter_uses_only_public_observations",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_short_budget_reports_ambiguity_and_separates_bayes_regret",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP020",
@@ -1309,14 +1670,14 @@
         "opponent-modelling"
       ],
       "proposed_discriminating_experiment": "Fit a fixed response rate to low-audit data; evaluate at a disclosed high audit rate and compare with the strategic model.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/strategic.py",
         "arena/inquiry/baselines.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "adaptive",
@@ -1349,10 +1710,41 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP005_OP010_OP020_disclosed_audit_changes_response_law",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_blind_protocol_does_not_change_sender_likelihood",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP021",
@@ -1404,7 +1796,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -1457,7 +1849,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -1491,13 +1883,13 @@
         "information-design"
       ],
       "proposed_discriminating_experiment": "Use a true precheck certificate that can conceal failed final quality; keep literal falsity, intent probability, and decision quality separate.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/strategic.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "selection",
@@ -1529,10 +1921,41 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP007_OP023_OP075_certificate_keeps_evidence_but_changes_truth",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_truthful_certificate_preserves_policy_but_changes_truth_semantics",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP024",
@@ -1593,7 +2016,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -1627,14 +2050,14 @@
         "attention-manipulation"
       ],
       "proposed_discriminating_experiment": "Charge for each requested observation; withhold unselected outcomes; describe only observable acquisition behavior.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/diagnostic.py",
         "arena/inquiry/finite.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "inquiry",
@@ -1669,10 +2092,49 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP025_OP045_two_observations_identify_world_and_replay",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_repeated_test_and_exhausted_budget_fail",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.ExactExperiments.test_optimal_action_can_be_to_stop",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP026",
@@ -1740,7 +2202,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -1802,7 +2264,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -1836,7 +2298,7 @@
         "agent-evaluation"
       ],
       "proposed_discriminating_experiment": "Reuse public diagnostic actions but add a constrained presenter whose utility opposes or supports inquiry.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -1844,7 +2306,7 @@
         "arena/inquiry/diagnostic.py",
         "arena/inquiry/trial.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "inquiry",
@@ -1879,10 +2341,41 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP028_OP040_OP059_presenter_changes_first_row_cost",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.IndependentReference.test_two_role_permutation_cannot_change_semantic_case",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP029",
@@ -1934,7 +2427,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -1996,7 +2489,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -2065,7 +2558,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -2134,7 +2627,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -2157,7 +2650,7 @@
       ],
       "graph_nodes": [],
       "proposed_discriminating_experiment": "Use a specified learner update and compare model-aware versus stop-gradient interventions; do not equate posterior shaping with arbitrary process modification.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P2",
       "rationale": "Requires a distinct generator, intervention contract, or independent source validation beyond the present vertical slices.",
       "implementation": [
@@ -2166,7 +2659,7 @@
         "arena/epistemic_control/game.py",
         "arena/epistemic_control/reference_semantics.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "adaptive",
@@ -2203,10 +2696,73 @@
         "python -m unittest discover -s tests -p test_epistemic_control_math.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP010_OP033_complete_truthful_teaching_changes_target_decision",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP033_frozen_feedback_does_not_change_target_decision",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP033_planner_values_two_step_teaching_beyond_one_step",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_math.TeachingMath.test_audited_truthful_teaching_updates_objective_belief",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_math.TeachingMath.test_two_teaches_change_final_decision_one_does_not",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_math.TeachingMath.test_ambiguous_teaching_reduces_credibility",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP034",
@@ -2239,13 +2795,13 @@
         "epistemic-drift"
       ],
       "proposed_discriminating_experiment": "Deliver independent final-quality evidence; score updated quality forecasts and compare against no-update and always-disbelieve baselines.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/strategic.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "recovery",
@@ -2278,10 +2834,49 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP034_OP052_reveal_updates_quality_without_certifying_intent",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_recovery_is_once_after_report",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.IndependentReference.test_public_reference_updates_after_recovery",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP035",
@@ -2314,7 +2909,7 @@
         "agent-evaluation"
       ],
       "proposed_discriminating_experiment": "Permute complete public experiment rows; paired world and noise seeds; compare first action and finite-horizon regret.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -2322,7 +2917,7 @@
         "arena/inquiry/presenter.py",
         "arena/inquiry/reference.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "inquiry",
@@ -2357,10 +2952,41 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP015_OP035_OP039_query_order_keeps_all_supplied_hypotheses",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_order_changes_baseline_but_not_oracle",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP036",
@@ -2428,7 +3054,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -2498,7 +3124,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -2532,7 +3158,7 @@
         "capability-measurement"
       ],
       "proposed_discriminating_experiment": "Preserve separate regret, Brier, decision loss, cost, invalid-response, and recovery records.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -2541,7 +3167,7 @@
         "arena/inquiry/trial.py",
         "arena/inquiry/session.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "measurement",
@@ -2579,10 +3205,49 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP038_OP055_OP074_uncertain_forecast_beats_false_certainty_in_expectation",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_always_distrust_does_not_get_a_free_pass",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.Transport.test_eof_is_unscored",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP039",
@@ -2613,14 +3278,14 @@
       ],
       "graph_nodes": [],
       "proposed_discriminating_experiment": "Hold complete experiment semantics fixed, including costs and prior; suppress world-dependent presenter selection.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/diagnostic.py",
         "arena/inquiry/presenter.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "methodology",
@@ -2655,10 +3320,49 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP015_OP035_OP039_query_order_keeps_all_supplied_hypotheses",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_presenter_can_only_permute_all_facts",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_world_seed_does_not_change_public_view_or_identity",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP040",
@@ -2691,7 +3395,7 @@
         "opponent-modelling"
       ],
       "proposed_discriminating_experiment": "Evaluate a constrained presenter action, a fixed intervention on a defender, and a private-information sender choice separately.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -2701,7 +3405,7 @@
         "arena/inquiry/session.py",
         "arena/inquiry/trial.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "measurement",
@@ -2740,10 +3444,57 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP028_OP040_OP059_presenter_changes_first_row_cost",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_incorrect_sender_policy_loses_utility",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.Transport.test_deployment_port",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.IndependentReference.test_two_role_permutation_cannot_change_semantic_case",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP041",
@@ -2812,7 +3563,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -2863,7 +3614,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -2906,7 +3657,7 @@
         "rational-inattention"
       ],
       "proposed_discriminating_experiment": "Vary priors and costs; include stopping; compare cheapest-test and all-binary-outcomes heuristics with a finite-horizon oracle.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -2914,7 +3665,7 @@
         "arena/inquiry/diagnostic.py",
         "arena/inquiry/strategic.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "inquiry",
@@ -2951,10 +3702,57 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP043_horizon_can_reverse_stop_into_complementary_queries",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.ExactExperiments.test_action_value_accounts_for_cost_and_horizon",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.ExactExperiments.test_decision_prior_changes_best_partition",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.ExactExperiments.test_optimal_action_can_be_to_stop",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP044",
@@ -3013,7 +3811,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3047,7 +3845,7 @@
         "provenance"
       ],
       "proposed_discriminating_experiment": "Rebuild outcomes and scores from a private controller configuration plus raw actions; reject missing, illegal, or appended actions.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -3057,7 +3855,7 @@
         "arena/recursive_programs/game.py",
         "arena/recursive_programs/session.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "infrastructure",
@@ -3101,10 +3899,74 @@
         "python -m unittest discover -s tests -p test_recursive_programs.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+              "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP025_OP045_two_observations_identify_world_and_replay",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP045_source_replay_reconstructs_reports_and_scores",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP045_OP053_seeded_truth_actions_and_scores_reproduce_through_replay",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_OP045_invalid_transport_actions_reach_unscored_response_limit",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_replay_recomputes_and_rejects_missing_or_extra_actions",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_replay_reconstructs_and_rejects_incomplete_or_appended_actions",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP046",
@@ -3162,7 +4024,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3215,7 +4077,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3275,7 +4137,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3335,7 +4197,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3404,7 +4266,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3472,7 +4334,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3504,13 +4366,13 @@
       ],
       "graph_nodes": [],
       "proposed_discriminating_experiment": "Cross independently supplied correction with useful presentation; report initial and corrected forecasts separately.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/strategic.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "recovery",
@@ -3542,10 +4404,41 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP034_OP052_reveal_updates_quality_without_certifying_intent",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.IndependentReference.test_public_reference_updates_after_recovery",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP053",
@@ -3587,7 +4480,7 @@
         "provenance"
       ],
       "proposed_discriminating_experiment": "Hash canonical probability rows, costs, prior, protocol, and version; keep rendered order and private world seed out of public identity.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -3596,7 +4489,7 @@
         "arena/recursive_programs/game.py",
         "arena/recursive_programs/session.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "infrastructure",
@@ -3639,10 +4532,74 @@
         "python -m unittest discover -s tests -p test_recursive_programs.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+              "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP053_semantic_identity_ignores_hidden_seed_and_preserves_contract",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP045_OP053_seeded_truth_actions_and_scores_reproduce_through_replay",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP053_private_rule_seed_is_not_public_identity_or_truth_evidence",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_world_seed_does_not_change_public_view_or_identity",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_public_view_has_no_hidden_seed_dependence",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_recursive_programs.StructuralAxes.test_no_evidence_public_view_is_independent_of_private_rule_seed",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP054",
@@ -3664,7 +4621,7 @@
       ],
       "graph_nodes": [],
       "proposed_discriminating_experiment": "Reject extra fields, nonfinite or out-of-range forecasts, duplicate tests, injected text, invalid budgets, and post-terminal actions.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -3673,7 +4630,7 @@
         "arena/inquiry/session.py",
         "arena/inquiry/trial.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "infrastructure",
@@ -3713,10 +4670,65 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP054_invalid_source_actions_preserve_state_and_budget",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP054_bounded_transport_remains_unscored_after_invalid_responses",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_malformed_probability_vectors_leave_state_intact",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_terminal_actions_cannot_be_revised",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.Transport.test_controller_initialization_is_not_echoed",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP055",
@@ -3747,14 +4759,14 @@
       ],
       "graph_nodes": [],
       "proposed_discriminating_experiment": "Report realized Brier and exact expected excess risk separately; never demand certainty about an observationally ambiguous hidden cause.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/diagnostic.py",
         "arena/inquiry/strategic.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "measurement",
@@ -3790,10 +4802,49 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP038_OP055_OP074_uncertain_forecast_beats_false_certainty_in_expectation",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_identical_positive_report_leaves_error_strategy_ambiguous",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_always_distrust_does_not_get_a_free_pass",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP056",
@@ -3852,7 +4903,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3914,7 +4965,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -3982,7 +5033,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4007,14 +5058,14 @@
         "opponent-modelling"
       ],
       "proposed_discriminating_experiment": "Allow only a permutation of complete fact rows; expose public task plus a separately assigned target profile and goal.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/diagnostic.py",
         "arena/inquiry/presenter.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "inquiry",
@@ -4049,10 +5100,49 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP028_OP040_OP059_presenter_changes_first_row_cost",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_presenter_can_only_permute_all_facts",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.IndependentReference.test_two_role_permutation_cannot_change_semantic_case",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP060",
@@ -4102,7 +5192,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4153,7 +5243,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4204,7 +5294,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4255,7 +5345,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4323,7 +5413,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4392,7 +5482,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4451,7 +5541,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4502,7 +5592,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4571,7 +5661,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4631,7 +5721,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4656,7 +5746,7 @@
         "structural-reasoning"
       ],
       "proposed_discriminating_experiment": "Reuse active recursive-gluing controls; add future transfer to a separately generated non-gluing rule language.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P2",
       "rationale": "Active recursive-gluing workstream owns the implementation; this program records transfer requirements.",
       "implementation": [
@@ -4665,7 +5755,7 @@
         "arena/recursive_programs/reference.py",
         "arena/recursive_programs/session.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "recursion",
@@ -4710,10 +5800,73 @@
         "python -m unittest discover -s tests -p test_recursive_programs.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_OP070_text_session_identifies_rules_and_scores_compositions",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP070_correct_targets_do_not_prove_consistent_rule_certificate",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP070_nonlinear_observations_are_outside_the_supplied_rule_family",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs.HandDerivedComposition.test_nested_reduction_and_path_expansion_agree_on_manual_value",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs.HandDerivedComposition.test_same_leaves_and_operator_counts_different_composition",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              },
+              {
+                "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_complete_identification_supports_direct_and_unseen_compositions",
+                "outcome": "ok",
+                "suite": "recursive-programs",
+                "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+                "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP071",
@@ -4774,7 +5927,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4836,7 +5989,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4899,7 +6052,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -4933,7 +6086,7 @@
         "agent-evaluation"
       ],
       "proposed_discriminating_experiment": "Author wrong-posterior, always-distrust, stationary-opponent, invalid-action, and replay-tampering regressions.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
@@ -4946,7 +6099,7 @@
         "arena/inquiry/trial.py",
         "arena/epistemic_control/game.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "infrastructure",
@@ -4994,10 +6147,90 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+              "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP038_OP055_OP074_uncertain_forecast_beats_false_certainty_in_expectation",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP074_budget_stop_and_post_terminal_rejection",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP074_invalid_actions_preserve_open_state",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP074_seed_identity_and_hidden_profile_information_boundary",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP074_wrong_forecast_is_penalized_without_changing_attack_payoff",
+                "outcome": "ok",
+                "suite": "epistemic-control",
+                "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+                "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_always_distrust_does_not_get_a_free_pass",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_malformed_probability_vectors_leave_state_intact",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.DiagnosticProtocol.test_replay_recomputes_and_rejects_missing_or_extra_actions",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP075",
@@ -5030,13 +6263,13 @@
         "strategic-deception"
       ],
       "proposed_discriminating_experiment": "Score intentional misleading, sincere-error, and literal-falsehood event probabilities separately under matched reports.",
-      "experiment_status": "proposed_by_this_mission_unexecuted",
+      "experiment_status": "bounded_behavior_tests_passed; broader_research_experiment_not_established",
       "priority": "P0",
       "rationale": "Directly addresses an audited measurement gap or is required to make the initial games interpretable.",
       "implementation": [
         "arena/inquiry/strategic.py"
       ],
-      "implementation_evidence": "source_reconciled_runtime_pending",
+      "implementation_evidence": "source_reconciled_with_passed_hosted_behavior_tests",
       "research_interpretation": {
         "status": "interpretation_by_this_mission",
         "mechanism_group": "selection",
@@ -5070,10 +6303,57 @@
         "python -m unittest discover -s tests -p test_inquiry_games.py -v"
       ],
       "runtime_validation": {
-        "result": "not_run",
-        "execution_records": [],
-        "note": "The mapped tests must execute successfully before this result changes. A passing result establishes only implemented_behavior; implementation_status and missing_parts remain independent."
-      }
+        "result": "passed",
+        "scope": "Only implemented_behavior and the listed bounded regression cases; does not establish missing_parts or evaluated-model capability.",
+        "execution_records": [
+          {
+            "run_id": 40714553198,
+            "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+            "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+            "runner": "GitHub-hosted ubuntu-latest",
+            "python": "3.11.17",
+            "commands": [
+              "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v"
+            ],
+            "tests": [
+              {
+                "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP007_OP023_OP075_certificate_keeps_evidence_but_changes_truth",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_identical_positive_report_leaves_error_strategy_ambiguous",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_protocol_change_identifies_different_causes",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              },
+              {
+                "id": "test_inquiry_games.StrategicMechanism.test_truthful_certificate_preserves_policy_but_changes_truth_semantics",
+                "outcome": "ok",
+                "suite": "inquiry",
+                "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+                "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+                "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+              }
+            ]
+          }
+        ],
+        "note": "All mapped tests executed and passed. Implementation completeness remains independent of runtime result."
+      },
+      "prior_experiment_status": "proposed_by_this_mission_unexecuted"
     },
     {
       "id": "OP076",
@@ -5123,7 +6403,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     },
     {
@@ -5183,7 +6463,7 @@
       "runtime_validation": {
         "result": "not_run",
         "execution_records": [],
-        "note": "No test is assigned to the absent proposed experiment. Related tests under other OP entries do not validate this missing experiment."
+        "note": "No test result is attributed to this unimplemented experiment. Related legacy components do not constitute implementation of this OP."
       }
     }
   ],
@@ -24822,7 +26102,7 @@
       "status": "mentioned_in_source_not_fetched_or_verified_this_mission"
     }
   ],
-  "measurement_status": "runtime_validation_pending; no model capability results inferred",
+  "measurement_status": "109 hosted regression tests passed; 28 OP entries have evidence for mapped bounded behavior; zero model capability experiments",
   "coverage_note": "Passages partition every line including housekeeping, code drafts, repeated prose, quarantined numerical claims, and model-news tangents. Opportunity spans identify conceptual sources; repeated passages retain raw text even when not assigned a new opportunity.",
   "prior_measurement_status": "no new environment or model execution",
   "runtime_reconciliation": {
@@ -24845,6 +26125,7 @@
     "status_scope": "Implementation status applies to the specifically described opportunity experiment, not the existence of all related prior code or documentation. Related implementations are recorded separately and methodological restatements are not double-counted.",
     "command_context": "Run listed commands only on the GitHub-hosted Linux validation runner, from the checked-out repository root. Local Python execution is prohibited by the user. Focused unittest discovery does not load the repository pytest completion hook.",
     "validation_policy": "Runtime result is independent of implementation completeness. Passing bounded tests cannot remove documented missing experiments or establish model capability.",
-    "validation_state": "All rows are not_run until execution evidence is attached."
+    "validation_state": "109 tests passed, 0 failed, 0 skipped on GitHub-hosted Python 3.11.17; 28 covered rows passed and 49 absent rows not_run.",
+    "execution_record": "runtime_validation/results.json"
   }
 }

@@ -1,0 +1,226 @@
+{
+  "schema": "op-hosted-execution/1",
+  "run_id": 40714553198,
+  "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+  "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+  "branch": "codex/op-runtime-validation-20261028",
+  "execution_location": "GitHub-hosted ubuntu-latest",
+  "status": "completed",
+  "tests_expected": 109,
+  "local_python_execution": "none",
+  "commands": [
+    "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+    "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+    "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v"
+  ],
+  "file_hashes": [
+    {
+      "path": "arena/inquiry/baselines.py",
+      "local_sha256": "6233524f17ccf7926086d24f69ba19b0e76eb40d18067cc9a75616c75d4d5bab",
+      "git_lf_sha256": "6233524f17ccf7926086d24f69ba19b0e76eb40d18067cc9a75616c75d4d5bab"
+    },
+    {
+      "path": "arena/inquiry/diagnostic.py",
+      "local_sha256": "d0d241b7302a89e7f32128f1173deaad08721f361741264de6d5b0547ce37cb4",
+      "git_lf_sha256": "d0d241b7302a89e7f32128f1173deaad08721f361741264de6d5b0547ce37cb4"
+    },
+    {
+      "path": "arena/inquiry/finite.py",
+      "local_sha256": "bc332353f525f0c5b8c3dec8d755a953c3f0704c8e7e9fa2bcfd3130f5634171",
+      "git_lf_sha256": "bc332353f525f0c5b8c3dec8d755a953c3f0704c8e7e9fa2bcfd3130f5634171"
+    },
+    {
+      "path": "arena/inquiry/presenter.py",
+      "local_sha256": "797f71b683e071a3729106d3844e6a82dba177f88994329dcab689deb2c57e2f",
+      "git_lf_sha256": "797f71b683e071a3729106d3844e6a82dba177f88994329dcab689deb2c57e2f"
+    },
+    {
+      "path": "arena/inquiry/reference.py",
+      "local_sha256": "26c31d260ecab4a64ab4c8199cd56ca7b1014302e844365ef81cc359e2949ca3",
+      "git_lf_sha256": "26c31d260ecab4a64ab4c8199cd56ca7b1014302e844365ef81cc359e2949ca3"
+    },
+    {
+      "path": "arena/inquiry/session.py",
+      "local_sha256": "8ada4766d2be9b740fccba3bff64dcee4fcb63c60bcd1bc41e379988f0070bd9",
+      "git_lf_sha256": "8ada4766d2be9b740fccba3bff64dcee4fcb63c60bcd1bc41e379988f0070bd9"
+    },
+    {
+      "path": "arena/inquiry/strategic.py",
+      "local_sha256": "63153fe28915e3eac79249cb5d0efcfbb04a4a69805dd865943e0ccab6eff4dd",
+      "git_lf_sha256": "63153fe28915e3eac79249cb5d0efcfbb04a4a69805dd865943e0ccab6eff4dd"
+    },
+    {
+      "path": "arena/inquiry/trial.py",
+      "local_sha256": "b8e981752d9131cf2f98b8faf496d34d004d12496ca8475cf8c99e17c5a1f415",
+      "git_lf_sha256": "b8e981752d9131cf2f98b8faf496d34d004d12496ca8475cf8c99e17c5a1f415"
+    },
+    {
+      "path": "arena/inquiry/__init__.py",
+      "local_sha256": "2b48bea364a2e2f768af8234cebf8e8332ee5a416736b58f9b1e5f5809498a73",
+      "git_lf_sha256": "2b48bea364a2e2f768af8234cebf8e8332ee5a416736b58f9b1e5f5809498a73"
+    },
+    {
+      "path": "arena/inquiry/__main__.py",
+      "local_sha256": "9fd53bc11c09644b48777d3ab2de814b8790db4e7a348ccbcc3c9f43f492e941",
+      "git_lf_sha256": "9fd53bc11c09644b48777d3ab2de814b8790db4e7a348ccbcc3c9f43f492e941"
+    },
+    {
+      "path": "arena/recursive_programs/game.py",
+      "local_sha256": "2aade1e5ae39ec95d8ea695f536625590734de750c5dfceb2f522177b24b4d66",
+      "git_lf_sha256": "2aade1e5ae39ec95d8ea695f536625590734de750c5dfceb2f522177b24b4d66"
+    },
+    {
+      "path": "arena/recursive_programs/reference.py",
+      "local_sha256": "5cb52268c3261742e54eaff8ef3869f662a6192690bf86c2f5aa5fd6121072a8",
+      "git_lf_sha256": "5cb52268c3261742e54eaff8ef3869f662a6192690bf86c2f5aa5fd6121072a8"
+    },
+    {
+      "path": "arena/recursive_programs/semantics.py",
+      "local_sha256": "a62777cfb986f0d780b3b080d326e44ec478eb867091fb7bce58d873e25d061d",
+      "git_lf_sha256": "a62777cfb986f0d780b3b080d326e44ec478eb867091fb7bce58d873e25d061d"
+    },
+    {
+      "path": "arena/recursive_programs/session.py",
+      "local_sha256": "8ba2433896c24548bd54c8bb19b9d0c02bb83d4c74d4c832a1d4bc1006bcf2b2",
+      "git_lf_sha256": "8ba2433896c24548bd54c8bb19b9d0c02bb83d4c74d4c832a1d4bc1006bcf2b2"
+    },
+    {
+      "path": "arena/recursive_programs/__init__.py",
+      "local_sha256": "12f681b144217b8e7c63eedcd98e59e70c1ad94b4936f308b186b3e7fa32ae51",
+      "git_lf_sha256": "12f681b144217b8e7c63eedcd98e59e70c1ad94b4936f308b186b3e7fa32ae51"
+    },
+    {
+      "path": "arena/recursive_programs/__main__.py",
+      "local_sha256": "cd15d726751eefca50b1152feb9bdda9e3cbc680e084a76c10e4c692008cdb24",
+      "git_lf_sha256": "cd15d726751eefca50b1152feb9bdda9e3cbc680e084a76c10e4c692008cdb24"
+    },
+    {
+      "path": "arena/epistemic_control/game.py",
+      "local_sha256": "32ea6c8ae74e0079cf88aea2c539951152073214708abec6648cb5ea84bd547f",
+      "git_lf_sha256": "32ea6c8ae74e0079cf88aea2c539951152073214708abec6648cb5ea84bd547f"
+    },
+    {
+      "path": "arena/epistemic_control/planning.py",
+      "local_sha256": "499bafb893e9ec07d6a0cf795b9a6b4535993646c2eecf713924b737f256b2d2",
+      "git_lf_sha256": "499bafb893e9ec07d6a0cf795b9a6b4535993646c2eecf713924b737f256b2d2"
+    },
+    {
+      "path": "arena/epistemic_control/reference_semantics.py",
+      "local_sha256": "d1ab0728a889315a74a5293ea94945a30fc33006d49fdd9fb8a86a9dfbb8c675",
+      "git_lf_sha256": "d1ab0728a889315a74a5293ea94945a30fc33006d49fdd9fb8a86a9dfbb8c675"
+    },
+    {
+      "path": "arena/epistemic_control/semantics.py",
+      "local_sha256": "2d216f5b5b09be088c4e342acab1422d8af0fb8646524019f512c7d7ea2194da",
+      "git_lf_sha256": "2d216f5b5b09be088c4e342acab1422d8af0fb8646524019f512c7d7ea2194da"
+    },
+    {
+      "path": "arena/epistemic_control/__init__.py",
+      "local_sha256": "5e29420633767e0643610fb542928d3e2adcf517e47e3609310949b8d6d22b0f",
+      "git_lf_sha256": "5e29420633767e0643610fb542928d3e2adcf517e47e3609310949b8d6d22b0f"
+    },
+    {
+      "path": "tests/test_inquiry_games.py",
+      "local_sha256": "970b67a26f2def0d989bc8ff859ef5d7b413a639c0989e33e82361ec9f45b248",
+      "git_lf_sha256": "970b67a26f2def0d989bc8ff859ef5d7b413a639c0989e33e82361ec9f45b248"
+    },
+    {
+      "path": "tests/test_inquiry_op_validation.py",
+      "local_sha256": "49907545bab14e7906b55b3cdd1c8f682ddc24017e28905ded4259bfa7a03aac",
+      "git_lf_sha256": "49907545bab14e7906b55b3cdd1c8f682ddc24017e28905ded4259bfa7a03aac"
+    },
+    {
+      "path": "tests/test_recursive_programs.py",
+      "local_sha256": "eb13f5ef85269b6b0ea102e9fb09da7340990e6d182a714c291e084b4e5298f9",
+      "git_lf_sha256": "eb13f5ef85269b6b0ea102e9fb09da7340990e6d182a714c291e084b4e5298f9"
+    },
+    {
+      "path": "tests/test_recursive_programs_op_validation.py",
+      "local_sha256": "6ae24af022ae0b81a0469addda6b52322c1a58728d12450ef36fb00a285cf47b",
+      "git_lf_sha256": "6ae24af022ae0b81a0469addda6b52322c1a58728d12450ef36fb00a285cf47b"
+    },
+    {
+      "path": "tests/test_epistemic_control_math.py",
+      "local_sha256": "9a039ee4b2310a5e2ffc8382ac6de4e2a510c0fb3312bc891f64366a77937f27",
+      "git_lf_sha256": "9a039ee4b2310a5e2ffc8382ac6de4e2a510c0fb3312bc891f64366a77937f27"
+    },
+    {
+      "path": "tests/test_epistemic_control_op_validation.py",
+      "local_sha256": "ca99da9697be016abfa7a54ebf7798c6e99e483f86fc08f85b32cb92483cb5fc",
+      "git_lf_sha256": "ca99da9697be016abfa7a54ebf7798c6e99e483f86fc08f85b32cb92483cb5fc"
+    },
+    {
+      "path": "arena/__init__.py",
+      "local_sha256": "e77cd08d38fc818b6b42005ae069f1f866200baf5338ca3736f6767818a8bb43",
+      "git_lf_sha256": "d91789146d14f6a0db15c487909ba30043cacb466abfcbd823ec1edc3debcbb6"
+    },
+    {
+      "path": "arena/providers.py",
+      "local_sha256": "5fde9ebea8a9e13e0d218789046e74901af5d6de26c7ca0d670148272e385671",
+      "git_lf_sha256": "de298c3a74a0ce6e8b1b45aaee53094ae75134be805459526f2e68875be9c6b9"
+    },
+    {
+      "path": "arena/secrets.py",
+      "local_sha256": "cf3bd2f995a90128b3027ab5e0722813b9d36c59e2930d9fb5e1305eb2948b69",
+      "git_lf_sha256": "f672800548262c71fb93cc6acbb68ed811440626c2eb3ae9382f3c258051cd34"
+    },
+    {
+      "path": "research_program/dialogue_2026_10_28/inventory.json",
+      "local_sha256": "5735b7d66e3ed1f6d187f9086806be6bb1ee3322284c0cdd2c227b5469780a85",
+      "git_lf_sha256": "5735b7d66e3ed1f6d187f9086806be6bb1ee3322284c0cdd2c227b5469780a85"
+    }
+  ],
+  "infrastructure_notes": [
+    "Anaconda app launch did not expose a targetable window; no repository Python or tests were executed locally. User subsequently prohibited local Python execution.",
+    "GitHub tree-write API returned HTTP 404; no test was run by that request.",
+    "First SSH push closed the connection; retry succeeded."
+  ],
+  "conclusion": "success",
+  "tests_passed": 109,
+  "tests_failed": 0,
+  "tests_skipped": 0,
+  "suites": [
+    {
+      "suite": "epistemic-control",
+      "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+      "exit_code": 0,
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 0.048,
+      "python": "Python 3.11.17",
+      "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+      "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+      "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+      "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936"
+    },
+    {
+      "suite": "inquiry",
+      "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+      "exit_code": 0,
+      "passed": 48,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 0.106,
+      "python": "Python 3.11.17",
+      "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+      "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+      "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+      "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581"
+    },
+    {
+      "suite": "recursive-programs",
+      "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+      "exit_code": 0,
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 0.015,
+      "python": "Python 3.11.17",
+      "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+      "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+      "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+      "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f"
+    }
+  ]
+}

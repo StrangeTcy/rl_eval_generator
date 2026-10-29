@@ -1,0 +1,47 @@
+name: OP runtime validation (hosted, no providers)
+run-name: OP runtime validation - ${{ github.ref_name }}
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-behaviors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: inquiry
+            pattern: test_inquiry*.py
+          - suite: recursive-programs
+            pattern: test_recursive_programs*.py
+          - suite: epistemic-control
+            pattern: test_epistemic_control*.py
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run existing and OP-tagged behavior tests
+        shell: bash
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/commit.txt
+          python --version > evidence/python-version.txt 2>&1
+          python -m platform > evidence/platform.txt
+          printf '%s\n' 'python -m unittest discover -s tests -p "${{ matrix.pattern }}" -v' > evidence/command.txt
+          set +e
+          python -m unittest discover -s tests -p "${{ matrix.pattern }}" -v > evidence/unittest.txt 2>&1
+          result=$?
+          printf '%s\n' "$result" > evidence/exit-code.txt
+          cat evidence/unittest.txt
+          exit "$result"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: op-validation-${{ matrix.suite }}
+          path: evidence/
+          if-no-files-found: error

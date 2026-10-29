@@ -1,5 +1,8 @@
 # Recursive rule discovery and composition
 
+> Runtime update, 2026-10-28: [109 hosted tests passed](RUNTIME_VALIDATION.md), including all mapped tests for the 28 covered OP entries. Implementation completeness remains 15 source-implemented and 13 partial. The pre-runtime account below is preserved as historical evidence; its statements about tests being unexecuted are superseded by the linked execution record. Broader experiment and integration gaps remain.
+
+
 Status: source implemented; regression specifications authored; runtime and model performance unverified. This family adds a recursively composed task with hidden local semantics. It does not supply the recursive opponent modelling handled by the separate epistemic-control workstream, and it does not modify recursive-gluing.
 
 ## Source and scientific purpose

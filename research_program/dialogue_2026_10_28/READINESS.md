@@ -1,5 +1,8 @@
 # Readiness and validation
 
+> Runtime update, 2026-10-28: [109 hosted tests passed](RUNTIME_VALIDATION.md), including all mapped tests for the 28 covered OP entries. Implementation completeness remains 15 source-implemented and 13 partial. The pre-runtime account below is preserved as historical evidence; its statements about tests being unexecuted are superseded by the linked execution record. Broader experiment and integration gaps remain.
+
+
 **Current state: source implementation reviewed; tests authored; runtime unverified.** No repository code, new environment, model evaluation, package installation, or test suite was executed after reading the mission's execution restriction. Initial shell reads loaded the mission attachment and existing notes before that restriction was known; subsequent work used file APIs only. No suitable isolated execution runner is exposed by the available tools.
 
 ## Authored checks

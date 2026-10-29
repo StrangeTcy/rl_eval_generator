@@ -11,11 +11,12 @@ The earlier `research_program/` documents describe a graph-derived program. They
 - [EVIDENCE_MAP.md](EVIDENCE_MAP.md): capabilities, observations, rival explanations, and claim limits.
 - [READINESS.md](READINESS.md): exact validation obligations and execution status.
 - [readiness_plan.json](readiness_plan.json) and [static_review.json](static_review.json): prospective isolated checks and completed source/artifact inspection.
-- [REPORT.md](REPORT.md): implemented changes, static findings, unexecuted work, and unresolved questions.
+- [RUNTIME_VALIDATION.md](RUNTIME_VALIDATION.md): hosted execution results, per-OP evidence, limitations and the highest-value remaining infrastructure gap.
+- [REPORT.md](REPORT.md): historical source-delivery report before runtime validation.
 - [related_graph.json](related_graph.json): the 118-node/301-edge source graph, retaining its original descriptions and uncertainty metadata as unverified context.
 - [source_manifest.json](source_manifest.json): inspected file hashes and unresolved source references.
 - [Game implementation and interface](../../arena/inquiry/README.md).
 
-The implementation is [arena/inquiry](../../arena/inquiry). Source presence is not runtime readiness: **the new tests have not been run**. No provider campaign or deployment occurred.
+The implementations are [inquiry](../../arena/inquiry), [recursive programs](../../arena/recursive_programs), and [epistemic control](../../arena/epistemic_control). **109 hosted tests passed; 0 failed; 0 skipped.** The inventory records 15 source-implemented, 13 partial and 49 absent experiments. All 28 covered entries have runtime evidence for their mapped bounded behaviors. No model/provider campaign occurred, and Python was not executed locally for validation.
 
 Every log passage is preserved, including conversation housekeeping, repeated drafts, rejected formalisms, model-news tangents, and incompatible numerical claims. Opportunity extraction separates the source idea from this mission's interpretation and proposed experiment. A recorded assistant claim that it built or tested code is not evidence that such code or a run exists.

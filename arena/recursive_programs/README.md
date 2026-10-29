@@ -1,5 +1,8 @@
 # Recursive program discovery
 
+> Current runtime evidence: [hosted validation report](../../research_program/dialogue_2026_10_28/RUNTIME_VALIDATION.md). All focused tests passed on GitHub-hosted Python 3.11.17; no local validation Python was run. The source-delivery notes below predate this run, and their unexecuted-test status is historical. Remaining capability and integration limits still apply.
+
+
 This is an implemented, unexecuted environment for learning hidden local interpreter rules from shallow observations and predicting nested compositions. It is separate from recursive-gluing and from recursive opponent modelling.
 
 The complete contract, difficulty axes, hand-derived controls, and readiness obligations are in [RECURSIVE_PROGRAMS.md](../../research_program/dialogue_2026_10_28/RECURSIVE_PROGRAMS.md).

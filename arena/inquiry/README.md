@@ -1,5 +1,8 @@
 # Observable inquiry games
 
+> Current runtime evidence: [hosted validation report](../../research_program/dialogue_2026_10_28/RUNTIME_VALIDATION.md). All focused tests passed on GitHub-hosted Python 3.11.17; no local validation Python was run. The source-delivery notes below predate this run, and their unexecuted-test status is historical. Remaining capability and integration limits still apply.
+
+
 Status: implemented source and authored regression suite; **not executed or campaign-ready**. The mission prohibits local commands and tests. No isolated Python runner is available through the current tools.
 
 This package adds two interactive mechanisms beside the existing Arena tracks. It uses ordinary classes, tuples, exact fractions, bounded recursive decision trees, and a closed text protocol. It changes no `core.py`, provider code, registry entry, or recursive-gluing file. These are specialized interactive games, not generated patching tasks; adding them to `envs/registry.yaml` would misrepresent their interface.

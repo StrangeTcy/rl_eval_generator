@@ -1,0 +1,508 @@
+{
+  "schema": "op-runtime-validation-results/1",
+  "run_id": 40714553198,
+  "url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/40714553198",
+  "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+  "branch": "codex/op-runtime-validation-20261028",
+  "runner": "GitHub-hosted ubuntu-latest",
+  "python": "3.11.17",
+  "local_repository_python_executions": 0,
+  "model_provider_calls": 0,
+  "passed": 109,
+  "failed": 0,
+  "skipped": 0,
+  "existing_tests": 78,
+  "new_tests": 31,
+  "op_entries_with_bounded_runtime_evidence": 28,
+  "source_implemented_entries": 15,
+  "partial_entries": 13,
+  "absent_entries": 49,
+  "production_code_changes": [],
+  "unresolved_test_failures": [],
+  "suites": [
+    {
+      "suite": "epistemic-control",
+      "command": "python -m unittest discover -s tests -p \"test_epistemic_control*.py\" -v",
+      "exit_code": 0,
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 0.048,
+      "python": "Python 3.11.17",
+      "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+      "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+      "log": "runtime_validation/run-40714553198/op-validation-epistemic-control/unittest.txt",
+      "log_sha256": "109ee56696ac15f7102acc06ab86ebb4008fb3285837a8c306814d7fe49a9936",
+      "tests": [
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_depth_changes_map_decision_and_is_not_parity",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_literal_truth_conditioning",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_positive_floor_preserves_depth_sensitive_case",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_recursive_selection_has_independent_exact_fractions",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_reference_agreement_with_distinct_menu_power_and_prior",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_reference_expansion_reproduces_hand_fixture",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_source_objectives_overlap_under_positive_floor",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_topology_changes_selection_law_not_just_word_order",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_true_message_can_be_impossible_under_a_pragmatic_model",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.RecursiveCommunicationMath.test_uniform_truthful_fallback_for_zero_preference",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.TeachingMath.test_ambiguous_teaching_reduces_credibility",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.TeachingMath.test_audited_truthful_teaching_updates_objective_belief",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_math.TeachingMath.test_two_teaches_change_final_decision_one_does_not",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP008_OP010_probe_filters_hidden_profiles_without_teaching",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP008_depth_changes_defender_decision_at_fixed_truth",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP010_OP033_complete_truthful_teaching_changes_target_decision",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP011_speaker_selection_changes_interpretation_of_same_true_message",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP033_frozen_feedback_does_not_change_target_decision",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP033_planner_values_two_step_teaching_beyond_one_step",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP074_budget_stop_and_post_terminal_rejection",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP074_invalid_actions_preserve_open_state",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP074_seed_identity_and_hidden_profile_information_boundary",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_epistemic_control_op_validation.EpistemicControlOPValidation.test_OP074_wrong_forecast_is_penalized_without_changing_attack_payoff",
+          "outcome": "ok"
+        }
+      ]
+    },
+    {
+      "suite": "inquiry",
+      "command": "python -m unittest discover -s tests -p \"test_inquiry*.py\" -v",
+      "exit_code": 0,
+      "passed": 48,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 0.106,
+      "python": "Python 3.11.17",
+      "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+      "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+      "log": "runtime_validation/run-40714553198/op-validation-inquiry/unittest.txt",
+      "log_sha256": "034111834aa217a3d8bfac3fb52093bf2fe599360547e0d358ab30c46d052581",
+      "tests": [
+        {
+          "id": "test_inquiry_games.DiagnosticProtocol.test_malformed_probability_vectors_leave_state_intact",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.DiagnosticProtocol.test_order_changes_baseline_but_not_oracle",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.DiagnosticProtocol.test_presenter_can_only_permute_all_facts",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.DiagnosticProtocol.test_repeated_test_and_exhausted_budget_fail",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.DiagnosticProtocol.test_replay_recomputes_and_rejects_missing_or_extra_actions",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.DiagnosticProtocol.test_terminal_actions_cannot_be_revised",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.DiagnosticProtocol.test_world_seed_does_not_change_public_view_or_identity",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.ExactExperiments.test_action_value_accounts_for_cost_and_horizon",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.ExactExperiments.test_conditioning_uses_likelihood_and_prior",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.ExactExperiments.test_decision_prior_changes_best_partition",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.ExactExperiments.test_invalid_horizon_and_probabilities",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.ExactExperiments.test_optimal_action_can_be_to_stop",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.ExactExperiments.test_two_complementary_tests_identify_four_worlds",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.ExactExperiments.test_zero_probability_branch_is_rejected",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.IndependentReference.test_blind_truthful_source_reference",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.IndependentReference.test_diagnostic_reference_uses_only_rendered_observations",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.IndependentReference.test_extra_probe_after_source_terminal_is_rejected",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.IndependentReference.test_public_reference_updates_after_recovery",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.IndependentReference.test_skewed_prior_and_short_budget",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.IndependentReference.test_source_reference_derives_response_law_from_payoffs",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.IndependentReference.test_two_role_permutation_cannot_change_semantic_case",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_always_distrust_does_not_get_a_free_pass",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_blind_protocol_does_not_change_sender_likelihood",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_boundary_tie_does_not_recommend",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_identical_positive_report_leaves_error_strategy_ambiguous",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_incentives_reverse_bad_sender_action",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_incorrect_sender_policy_loses_utility",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_noise_zero_is_an_accurate_sincere_control",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_protocol_change_identifies_different_causes",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_public_view_has_no_hidden_seed_dependence",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_recovery_is_once_after_report",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.StrategicMechanism.test_truthful_certificate_preserves_policy_but_changes_truth_semantics",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.Transport.test_controller_initialization_is_not_echoed",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.Transport.test_deployment_port",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_games.Transport.test_eof_is_unscored",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP005_OP010_OP020_disclosed_audit_changes_response_law",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP007_OP023_OP075_certificate_keeps_evidence_but_changes_truth",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP015_OP035_OP039_query_order_keeps_all_supplied_hypotheses",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP018_supplied_noise_changes_source_posterior",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP025_OP045_two_observations_identify_world_and_replay",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP028_OP040_OP059_presenter_changes_first_row_cost",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP034_OP052_reveal_updates_quality_without_certifying_intent",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP038_OP055_OP074_uncertain_forecast_beats_false_certainty_in_expectation",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP043_horizon_can_reverse_stop_into_complementary_queries",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP045_source_replay_reconstructs_reports_and_scores",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP053_semantic_identity_ignores_hidden_seed_and_preserves_contract",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP054_bounded_transport_remains_unscored_after_invalid_responses",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_inquiry_op_validation.InquiryOPValidation.test_OP054_invalid_source_actions_preserve_state_and_budget",
+          "outcome": "ok"
+        }
+      ]
+    },
+    {
+      "suite": "recursive-programs",
+      "command": "python -m unittest discover -s tests -p \"test_recursive_programs*.py\" -v",
+      "exit_code": 0,
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 0.015,
+      "python": "Python 3.11.17",
+      "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+      "commit": "6c8e94c4fee0593930194fc056e28f5647dd05f1",
+      "log": "runtime_validation/run-40714553198/op-validation-recursive-programs/unittest.txt",
+      "log_sha256": "5d22c9cc0ba6a8e83e619a08a0c9cf184250617c6c5cfaef36c77f048e7cb78f",
+      "tests": [
+        {
+          "id": "test_recursive_programs.HandDerivedComposition.test_associative_flattening_is_a_valid_control",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.HandDerivedComposition.test_nested_reduction_and_path_expansion_agree_on_manual_value",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.HandDerivedComposition.test_reference_rejects_trailing_or_incomplete_expressions",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.HandDerivedComposition.test_repeated_subtree_has_distinct_expanded_and_unique_size",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.HandDerivedComposition.test_same_leaves_and_operator_counts_different_composition",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.HandDerivedComposition.test_shallow_rule_knowledge_does_not_solve_nested_composition",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_closed_episode_cannot_accept_more_queries",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_complete_identification_supports_direct_and_unseen_compositions",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_controller_rule_seed_is_not_echoed",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_free_basis_examples_reduce_queries_needed_for_chain_transfer",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_invalid_model_does_not_close_episode",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_larger_repertoire_and_three_operators_have_an_identifying_basis",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_nested_probe_and_invalid_residue_cannot_reveal_target",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_repeated_or_exhausted_probe_is_rejected",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_replay_reconstructs_and_rejects_incomplete_or_appended_actions",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_short_budget_reports_ambiguity_and_separates_bayes_regret",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.ProtocolAndEndToEndSpecifications.test_transport_eof_is_unscored",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.RuleIdentification.test_candidate_repertoire_scales_cubically_per_operator",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.RuleIdentification.test_conflicting_observations_are_rejected",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.RuleIdentification.test_independent_candidate_filter_uses_only_public_observations",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.RuleIdentification.test_local_offset_can_be_known_while_recursive_result_is_ambiguous",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.RuleIdentification.test_observation_only_solver_finds_manual_recursive_answers",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.RuleIdentification.test_three_basis_observations_identify_local_rule",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.StructuralAxes.test_chain_and_balanced_branching_scale_differently",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.StructuralAxes.test_every_active_operator_appears_in_a_public_target",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.StructuralAxes.test_free_demonstrations_do_not_consume_paid_queries",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.StructuralAxes.test_invalid_or_inapplicable_axes_are_rejected",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.StructuralAxes.test_no_evidence_public_view_is_independent_of_private_rule_seed",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.StructuralAxes.test_repetition_exposes_a_compression_control",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs.StructuralAxes.test_transfer_programs_are_one_level_deeper",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_OP045_invalid_transport_actions_reach_unscored_response_limit",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_OP070_text_session_identifies_rules_and_scores_compositions",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_early_stopping_preserves_unspent_budget_and_ambiguity",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP019_malformed_and_repeated_queries_do_not_consume_evidence_budget",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP045_OP053_seeded_truth_actions_and_scores_reproduce_through_replay",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP053_private_rule_seed_is_not_public_identity_or_truth_evidence",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP070_correct_targets_do_not_prove_consistent_rule_certificate",
+          "outcome": "ok"
+        },
+        {
+          "id": "test_recursive_programs_op_validation.RecursiveProgramOpportunityValidation.test_OP070_nonlinear_observations_are_outside_the_supplied_rule_family",
+          "outcome": "ok"
+        }
+      ]
+    }
+  ]
+}
