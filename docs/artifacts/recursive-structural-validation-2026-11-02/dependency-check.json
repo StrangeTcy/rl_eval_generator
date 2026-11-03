@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-03",
+  "python_candidates": [
+    {"path": "C:/Users/hatgu/anaconda3/envs/hyge/python.exe", "python": "3.12.13", "pytest": "9.1.1", "PyYAML": "6.0.3", "torch": false},
+    {"path": "C:/Users/hatgu/anaconda3/python.exe", "python": "3.13.9", "pytest": true, "PyYAML": true, "torch": false},
+    {"path": "C:/Users/hatgu/anaconda3/envs/omnibus/python.exe", "python": "3.11.17", "pytest": "9.1.1", "PyYAML": false, "torch": false},
+    {"path": "C:/Users/hatgu/anaconda3/envs/epi-comp/python.exe", "python": "3.13.16", "pytest": false, "PyYAML": true, "torch": false}
+  ],
+  "local_package_search": "No torch package/module or PyTorch wheel found in inspected Anaconda trees or local pip-cache listing.",
+  "docker_command": "docker version",
+  "docker_result": "command not found",
+  "network_install": "not attempted; explicit authorization was not provided"
+}

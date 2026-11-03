@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="1.937" timestamp="2026-11-02T15:38:39.251054+03:00" hostname="TCY_Desktop"><testcase classname="tests.test_recursive_gluing_study" name="test_reasoning_pilot_steps_run_in_order_under_set_u" time="1.586" /></testsuite></testsuites>

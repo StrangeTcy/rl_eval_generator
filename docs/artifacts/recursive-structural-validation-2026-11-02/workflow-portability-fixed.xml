@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.824" timestamp="2026-11-02T15:36:57.873485+03:00" hostname="TCY_Desktop"><testcase classname="tests.test_recursive_gluing_study" name="test_reasoning_pilot_steps_run_in_order_under_set_u" time="1.355"><failure message="AssertionError: Traceback (most recent call last):&#10;    File &quot;C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\tools\recursive_gluing_study.py&quot;, line 59, in &lt;module&gt;&#10;      from arena.secrets import provider_environment_name  # noqa: E402&#10;      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\__init__.py&quot;, line 3, in &lt;module&gt;&#10;      from .providers import PROVIDERS, Completion, ProviderClient, ProviderError&#10;    File &quot;C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\providers.py&quot;, line 22, in &lt;module&gt;&#10;      from .secrets import (&#10;    File &quot;C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\secrets.py&quot;, line 24, in &lt;module&gt;&#10;      Path.home() / &quot;.config&quot; / &quot;rl_eval_generator&quot; / SECRET_FILE_NAME,&#10;      ^^^^^^^^^^^&#10;    File &quot;C:\Users\hatgu\anaconda3\envs\hyge\Lib\pathlib.py&quot;, line 1202, in home&#10;      return cls(&quot;~&quot;).expanduser()&#10;             ^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;C:\Users\hatgu\anaconda3\envs\hyge\Lib\pathlib.py&quot;, line 1406, in expanduser&#10;      raise RuntimeError(&quot;Could not determine home directory.&quot;)&#10;  RuntimeError: Could not determine home directory.&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['bash', '-euo', 'pipefail', '-c', 'set -euo pipefail\nPLAN_ARGS=(\n  --scope &quot;$SCOPE&quot;\n  --seed...r\n    raise RuntimeError(&quot;Could not determine home directory.&quot;)\nRuntimeError: Could not determine home directory.\n').returncode">tests\test_recursive_gluing_study.py:935: in test_reasoning_pilot_steps_run_in_order_under_set_u
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\tools\recursive_gluing_study.py", line 59, in &lt;module&gt;
+E         from arena.secrets import provider_environment_name  # noqa: E402
+E         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\__init__.py", line 3, in &lt;module&gt;
+E         from .providers import PROVIDERS, Completion, ProviderClient, ProviderError
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\providers.py", line 22, in &lt;module&gt;
+E         from .secrets import (
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\secrets.py", line 24, in &lt;module&gt;
+E         Path.home() / ".config" / "rl_eval_generator" / SECRET_FILE_NAME,
+E         ^^^^^^^^^^^
+E       File "C:\Users\hatgu\anaconda3\envs\hyge\Lib\pathlib.py", line 1202, in home
+E         return cls("~").expanduser()
+E                ^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\Users\hatgu\anaconda3\envs\hyge\Lib\pathlib.py", line 1406, in expanduser
+E         raise RuntimeError("Could not determine home directory.")
+E     RuntimeError: Could not determine home directory.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['bash', '-euo', 'pipefail', '-c', 'set -euo pipefail\nPLAN_ARGS=(\n  --scope "$SCOPE"\n  --seed...r\n    raise RuntimeError("Could not determine home directory.")\nRuntimeError: Could not determine home directory.\n').returncode</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,12 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____________ test_reasoning_pilot_steps_run_in_order_under_set_u _____________
+tests\test_recursive_gluing_study.py:932: in test_reasoning_pilot_steps_run_in_order_under_set_u
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+E   AssertionError: Python was not found; run without arguments to install from the Microsoft Store, or disable this shortcut from Settings > Apps > Advanced app settings > App execution aliases.
+E     
+E   assert 49 == 0
+E    +  where 49 = CompletedProcess(args=['bash', '-euo', 'pipefail', '-c', 'set -euo pipefail\nPLAN_ARGS=(\n  --scope "$SCOPE"\n  --seed...the Microsoft Store, or disable this shortcut from Settings > Apps > Advanced app settings > App execution aliases.\n').returncode
+=========================== short test summary info ===========================
+FAILED tests/test_recursive_gluing_study.py::test_reasoning_pilot_steps_run_in_order_under_set_u
+EXIT_STATUS=1

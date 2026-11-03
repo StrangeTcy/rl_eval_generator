@@ -1,0 +1,181 @@
+{
+  "definitions": [
+    {
+      "path": "tests/test_recursive_apps_readiness.py",
+      "name": "test_structural_global_checks_cannot_be_sacrificed_for_pass",
+      "line": 474
+    },
+    {
+      "path": "tests/test_recursive_coarse_graining.py",
+      "name": "test_structural_quotient_and_single_transition_obstruction",
+      "line": 156
+    },
+    {
+      "path": "tests/test_recursive_coarse_graining.py",
+      "name": "test_structural_quotient_twin_and_wrong_prediction",
+      "line": 171
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_l1_compiler_compiles_itself",
+      "line": 144
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_bootstrap_json_and_alternative_source",
+      "line": 152
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_bootstrap_rejects_corruption_and_truncation",
+      "line": 169
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_invalid_source_is_not_a_compiler_counterexample",
+      "line": 179
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_depth_does_real_work_or_fails_explicitly",
+      "line": 186
+    },
+    {
+      "path": "tests/test_recursive_distributed_gluing.py",
+      "name": "test_structural_capacity_changes_global_schedulability",
+      "line": 133
+    },
+    {
+      "path": "tests/test_recursive_distributed_gluing.py",
+      "name": "test_structural_explicit_endpoints_survive_renaming",
+      "line": 144
+    },
+    {
+      "path": "tests/test_recursive_distributed_gluing.py",
+      "name": "test_structural_worker_rules_and_spawn_causality",
+      "line": 153
+    },
+    {
+      "path": "tests/test_recursive_epistemic_gluing.py",
+      "name": "test_structural_modal_depth_boundary_and_minimal_counterfactual",
+      "line": 681
+    },
+    {
+      "path": "tests/test_recursive_epistemic_gluing.py",
+      "name": "test_structural_reachability_requires_all_layers_but_allows_row_order",
+      "line": 695
+    },
+    {
+      "path": "tests/test_recursive_epistemic_gluing.py",
+      "name": "test_structural_threewise_inner_cells_do_not_settle_global_intersection",
+      "line": 705
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_elimination_agrees_with_exhaustive_rival",
+      "line": 147
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_linear_solver_extends_past_enumeration_budget",
+      "line": 157
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_calibration_ambiguity_and_distinguishing_probe",
+      "line": 165
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_coordinate_twin_changes_math_and_preserves_verdict",
+      "line": 178
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_codeword_shape_and_field_domain_are_mandatory",
+      "line": 187
+    },
+    {
+      "path": "tests/test_recursive_gluing.py",
+      "name": "test_structural_branching_closing_intervention",
+      "line": 496
+    },
+    {
+      "path": "tests/test_recursive_gluing.py",
+      "name": "test_structural_alternative_global_assignment_is_accepted",
+      "line": 511
+    },
+    {
+      "path": "tests/test_recursive_gluing.py",
+      "name": "test_structural_rival_recorder_rejects_false_unsat_and_preserves_exhaustion",
+      "line": 527
+    },
+    {
+      "path": "tests/test_recursive_gluing_discovery.py",
+      "name": "test_structural_branching_expansion_agrees",
+      "line": 625
+    },
+    {
+      "path": "tests/test_recursive_gluing_discovery.py",
+      "name": "test_structural_expanded_solver_has_no_target_answer_dependency",
+      "line": 650
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "name": "test_structural_evidence_keeps_all_five_claims_separate",
+      "line": 1344
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "name": "test_structural_missing_control_is_not_a_passing_pair",
+      "line": 1357
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "name": "test_structural_failed_certificate_does_not_imply_wrong_decision",
+      "line": 1367
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "name": "test_structural_holonomy_remains_outside_campaign_gate",
+      "line": 1375
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_direct_transport_rival_and_public_calibration",
+      "line": 194
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_curved_transport_can_have_a_global_section",
+      "line": 203
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_second_loop_and_complete_section_set_are_mandatory",
+      "line": 218
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_equal_nonidentity_paths_are_not_flat",
+      "line": 231
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_malformed_transport_is_rejected",
+      "line": 241
+    },
+    {
+      "path": "tests/test_recursive_maze_gluing.py",
+      "name": "test_structural_mixed_tiles_and_orientation_counterfactual",
+      "line": 243
+    },
+    {
+      "path": "tests/test_recursive_maze_gluing.py",
+      "name": "test_structural_clearing_does_not_reset_edge_identity",
+      "line": 256
+    }
+  ],
+  "count": 35,
+  "execution": "pytest -k structural selection recorded in structural-tests-final.xml"
+}

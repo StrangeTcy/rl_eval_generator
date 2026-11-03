@@ -1,0 +1,59 @@
+{
+  "recursive_gluing": {
+    "checks": 11,
+    "positive_all_accepted": true,
+    "deterministic_all": true,
+    "wrong_status_all_rejected": true,
+    "malformed_all_rejected": true
+  },
+  "recursive_gluing_discovery": {
+    "checks": 9,
+    "positive_all_accepted": true,
+    "deterministic_all": true,
+    "wrong_status_all_rejected": true,
+    "malformed_all_rejected": true
+  },
+  "recursive_maze_gluing": {
+    "checks": 8,
+    "positive_all_accepted": true,
+    "deterministic_all": true,
+    "wrong_status_all_rejected": true,
+    "malformed_all_rejected": true
+  },
+  "recursive_distributed_gluing": {
+    "checks": 8,
+    "positive_all_accepted": true,
+    "deterministic_all": true,
+    "wrong_status_all_rejected": true,
+    "malformed_all_rejected": true
+  },
+  "recursive_epistemic_gluing": {
+    "checks": 10,
+    "positive_all_accepted": true,
+    "deterministic_all": true,
+    "wrong_status_all_rejected": true,
+    "malformed_all_rejected": true
+  },
+  "recursive_compiler_bootstrap": {
+    "checks": 6,
+    "positive_all_accepted": true,
+    "deterministic_all": true,
+    "wrong_status_all_rejected": true,
+    "malformed_all_rejected": true
+  },
+  "recursive_error_correcting_codes": {
+    "checks": 8,
+    "positive_all_accepted": true,
+    "deterministic_all": true,
+    "wrong_status_all_rejected": true,
+    "malformed_all_rejected": true
+  },
+  "recursive_coarse_graining": {
+    "checks": 8,
+    "positive_all_accepted": true,
+    "deterministic_all": true,
+    "wrong_status_all_rejected": true,
+    "malformed_all_rejected": true
+  }
+}
+EXIT_STATUS=0

@@ -1,0 +1,311 @@
+{
+  "recursive_gluing": {
+    "requested_depth": 2,
+    "seed": 41,
+    "network_sha256": "767f5aad9544f0e09f78504cf97f1eaa43e08033c99af63615760405e6def0bf",
+    "checks": 11,
+    "strategies": {
+      "expanded_csp": {
+        "independence": "reference",
+        "n": 11,
+        "accepted": 11,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 11
+        },
+        "runtime_seconds": {
+          "sum": 0.003198999969754368,
+          "mean": 0.0002908181790685789,
+          "max": 0.0010806000209413469
+        }
+      },
+      "spanning_forest": {
+        "independence": "local_constraint_ablation",
+        "n": 11,
+        "accepted": 3,
+        "success_rate": 0.2727272727272727,
+        "outcomes": {
+          "accepted": 3,
+          "rejected": 8
+        },
+        "runtime_seconds": {
+          "sum": 0.002954399969894439,
+          "mean": 0.000268581815444949,
+          "max": 0.0017510000034235418
+        }
+      }
+    }
+  },
+  "recursive_gluing_discovery": {
+    "requested_depth": 2,
+    "seed": 41,
+    "network_sha256": "aa901f360cf42cae9e6fb44cfa05af9739e53408395780e4b50ee7e80735bb21",
+    "checks": 9,
+    "strategies": {
+      "compact_relations": {
+        "independence": "reference",
+        "n": 9,
+        "accepted": 9,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 9
+        },
+        "runtime_seconds": {
+          "sum": 0.001335600041784346,
+          "mean": 0.00014840000464270511,
+          "max": 0.00016140000661835074
+        }
+      },
+      "expanded_csp": {
+        "independence": "independent_answer_construction",
+        "n": 9,
+        "accepted": 9,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 9
+        },
+        "runtime_seconds": {
+          "sum": 0.018367799988482147,
+          "mean": 0.0020408666653869054,
+          "max": 0.0024517999845556915
+        }
+      },
+      "copy_leaf": {
+        "independence": "local_template",
+        "n": 9,
+        "accepted": 1,
+        "success_rate": 0.1111111111111111,
+        "outcomes": {
+          "accepted": 1,
+          "rejected": 8
+        },
+        "runtime_seconds": {
+          "sum": 0.0009142999770119786,
+          "mean": 0.00010158888633466429,
+          "max": 0.00011329998960718513
+        }
+      }
+    }
+  },
+  "recursive_maze_gluing": {
+    "requested_depth": 2,
+    "seed": 41,
+    "network_sha256": "4ba04c730517be855e1b7fdef6e28b7b078b4ab6c807a588c2e9ae9ce83fda9f",
+    "checks": 8,
+    "strategies": {
+      "full_state_bfs": {
+        "independence": "reference_search",
+        "n": 8,
+        "accepted": 8,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 8
+        },
+        "runtime_seconds": {
+          "sum": 0.0011550000053830445,
+          "mean": 0.00014437500067288056,
+          "max": 0.00021379999816417694
+        }
+      },
+      "ignore_orientation": {
+        "independence": "search_with_ablation",
+        "n": 8,
+        "accepted": 7,
+        "success_rate": 0.875,
+        "outcomes": {
+          "accepted": 7,
+          "rejected": 1
+        },
+        "runtime_seconds": {
+          "sum": 0.0017488001030869782,
+          "mean": 0.00021860001288587227,
+          "max": 0.00031590001890435815
+        }
+      }
+    }
+  },
+  "recursive_distributed_gluing": {
+    "requested_depth": 2,
+    "seed": 41,
+    "network_sha256": "b2108b9d9d82d03570ea011b5e59665321f212b6f4257361c3901906bea337e0",
+    "checks": 8,
+    "strategies": {
+      "scheduler_bfs": {
+        "independence": "reference_search",
+        "n": 8,
+        "accepted": 8,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 8
+        },
+        "runtime_seconds": {
+          "sum": 0.002510500024072826,
+          "mean": 0.00031381250300910324,
+          "max": 0.0007207000162452459
+        }
+      },
+      "ignore_capacity": {
+        "independence": "search_with_ablation",
+        "n": 8,
+        "accepted": 7,
+        "success_rate": 0.875,
+        "outcomes": {
+          "accepted": 7,
+          "rejected": 1
+        },
+        "runtime_seconds": {
+          "sum": 0.0028112000436522067,
+          "mean": 0.00035140000545652583,
+          "max": 0.000769799982663244
+        }
+      }
+    }
+  },
+  "recursive_epistemic_gluing": {
+    "requested_depth": 2,
+    "seed": 41,
+    "network_sha256": "c169ecbbcff4f5d60803f42e925a08a05980e6d01afa432ab5fc5df2bab59d8f",
+    "checks": 10,
+    "strategies": {
+      "finite_modal_evaluation": {
+        "independence": "reference_enumeration",
+        "n": 10,
+        "accepted": 10,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 10
+        },
+        "runtime_seconds": {
+          "sum": 0.005513299955055118,
+          "mean": 0.0005513299955055117,
+          "max": 0.0014378000050783157
+        }
+      },
+      "actual_facts": {
+        "independence": "reference_conditioned_negative_control",
+        "n": 10,
+        "accepted": 8,
+        "success_rate": 0.8,
+        "outcomes": {
+          "accepted": 8,
+          "rejected": 2
+        },
+        "runtime_seconds": {
+          "sum": 0.005291700013913214,
+          "mean": 0.0005291700013913214,
+          "max": 0.0014214999973773956
+        }
+      }
+    }
+  },
+  "recursive_compiler_bootstrap": {
+    "requested_depth": 2,
+    "seed": 41,
+    "network_sha256": "b77e35b1672d2ae073931a10a08425aed88b793e62f11eb75e26bb895b9399d7",
+    "checks": 6,
+    "strategies": {
+      "known_l1_compiler": {
+        "independence": "reference_program",
+        "n": 6,
+        "accepted": 6,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 6
+        },
+        "runtime_seconds": {
+          "sum": 8.93285619985545,
+          "mean": 1.488809366642575,
+          "max": 1.5941963999648578
+        }
+      },
+      "local_decoder": {
+        "independence": "reference_conditioned_negative_control",
+        "n": 6,
+        "accepted": 4,
+        "success_rate": 0.6666666666666666,
+        "outcomes": {
+          "accepted": 4,
+          "rejected": 2
+        },
+        "runtime_seconds": {
+          "sum": 8.349333300138824,
+          "mean": 1.3915555500231374,
+          "max": 1.603506900020875
+        }
+      }
+    }
+  },
+  "recursive_error_correcting_codes": {
+    "requested_depth": 2,
+    "seed": 41,
+    "network_sha256": "0d73af93e58afa4fccd95ca84e5eede1bb1a3d6d9cf97780ad7f7cf7545757f4",
+    "checks": 8,
+    "strategies": {
+      "field_elimination": {
+        "independence": "reference",
+        "n": 8,
+        "accepted": 8,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 8
+        },
+        "runtime_seconds": {
+          "sum": 0.0021842000423930585,
+          "mean": 0.0002730250052991323,
+          "max": 0.00034770002821460366
+        }
+      },
+      "exhaustive_coordinates": {
+        "independence": "independent_search_shared_assignment_predicate",
+        "n": 8,
+        "accepted": 8,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 8
+        },
+        "runtime_seconds": {
+          "sum": 0.15280550002353266,
+          "mean": 0.019100687502941582,
+          "max": 0.07738730002893135
+        }
+      }
+    }
+  },
+  "recursive_coarse_graining": {
+    "requested_depth": 2,
+    "seed": 41,
+    "network_sha256": "bd18d8957777d0c01335017cccd357d5cb918dd84b36515628ab18ca0b1f63a8",
+    "checks": 8,
+    "strategies": {
+      "matrix_and_partition_enumeration": {
+        "independence": "reference_direct_algorithm",
+        "n": 8,
+        "accepted": 8,
+        "success_rate": 1.0,
+        "outcomes": {
+          "accepted": 8
+        },
+        "runtime_seconds": {
+          "sum": 0.010165999934542924,
+          "mean": 0.0012707499918178655,
+          "max": 0.0056650000042282045
+        }
+      },
+      "local_table": {
+        "independence": "nuisance_certified_ablation",
+        "n": 8,
+        "accepted": 2,
+        "success_rate": 0.25,
+        "outcomes": {
+          "accepted": 2,
+          "rejected": 6
+        },
+        "runtime_seconds": {
+          "sum": 0.008994099975097924,
+          "mean": 0.0011242624968872406,
+          "max": 0.005354299966711551
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,145 @@
+*** Error compiling 'envs/cat_theo/recursive_gluing\\files\\judge.py'...
+  File "envs/cat_theo/recursive_gluing\files\judge.py", line 32
+    PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+                     ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_gluing\\files\\solver.py'...
+  File "envs/cat_theo/recursive_gluing\files\solver.py", line 11
+    class %%MODEL_CLASS%%:
+          ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_gluing\\files\\visible_tests.py'...
+  File "envs/cat_theo/recursive_gluing\files\visible_tests.py", line 1
+    from solver import %%MODEL_CLASS%%
+                       ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_gluing_discovery\\files\\judge.py'...
+  File "envs/cat_theo/recursive_gluing_discovery\files\judge.py", line 34
+    PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+                     ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_gluing_discovery\\files\\solver.py'...
+  File "envs/cat_theo/recursive_gluing_discovery\files\solver.py", line 11
+    class %%MODEL_CLASS%%:
+          ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_gluing_discovery\\files\\visible_tests.py'...
+  File "envs/cat_theo/recursive_gluing_discovery\files\visible_tests.py", line 1
+    from solver import %%MODEL_CLASS%%
+                       ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_maze_gluing\\files\\judge.py'...
+  File "envs/cat_theo/recursive_maze_gluing\files\judge.py", line 31
+    PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+                     ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_maze_gluing\\files\\solver.py'...
+  File "envs/cat_theo/recursive_maze_gluing\files\solver.py", line 10
+    class %%MODEL_CLASS%%:
+          ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_maze_gluing\\files\\visible_tests.py'...
+  File "envs/cat_theo/recursive_maze_gluing\files\visible_tests.py", line 1
+    from solver import %%MODEL_CLASS%%
+                       ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_distributed_gluing\\files\\judge.py'...
+  File "envs/cat_theo/recursive_distributed_gluing\files\judge.py", line 31
+    PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+                     ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_distributed_gluing\\files\\solver.py'...
+  File "envs/cat_theo/recursive_distributed_gluing\files\solver.py", line 9
+    class %%MODEL_CLASS%%:
+          ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_distributed_gluing\\files\\visible_tests.py'...
+  File "envs/cat_theo/recursive_distributed_gluing\files\visible_tests.py", line 1
+    from solver import %%MODEL_CLASS%%
+                       ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_epistemic_gluing\\files\\judge.py'...
+  File "envs/cat_theo/recursive_epistemic_gluing\files\judge.py", line 31
+    PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+                     ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_epistemic_gluing\\files\\solver.py'...
+  File "envs/cat_theo/recursive_epistemic_gluing\files\solver.py", line 10
+    class %%MODEL_CLASS%%:
+          ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_epistemic_gluing\\files\\visible_tests.py'...
+  File "envs/cat_theo/recursive_epistemic_gluing\files\visible_tests.py", line 1
+    from solver import %%MODEL_CLASS%%
+                       ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_compiler_bootstrap\\files\\judge.py'...
+  File "envs/cat_theo/recursive_compiler_bootstrap\files\judge.py", line 32
+    PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+                     ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_compiler_bootstrap\\files\\solver.py'...
+  File "envs/cat_theo/recursive_compiler_bootstrap\files\solver.py", line 4
+    class %%MODEL_CLASS%%:
+          ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_compiler_bootstrap\\files\\visible_tests.py'...
+  File "envs/cat_theo/recursive_compiler_bootstrap\files\visible_tests.py", line 1
+    from solver import %%MODEL_CLASS%%
+                       ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_error_correcting_codes\\files\\judge.py'...
+  File "envs/cat_theo/recursive_error_correcting_codes\files\judge.py", line 31
+    PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+                     ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_error_correcting_codes\\files\\solver.py'...
+  File "envs/cat_theo/recursive_error_correcting_codes\files\solver.py", line 4
+    class %%MODEL_CLASS%%:
+          ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_error_correcting_codes\\files\\visible_tests.py'...
+  File "envs/cat_theo/recursive_error_correcting_codes\files\visible_tests.py", line 1
+    from solver import %%MODEL_CLASS%%
+                       ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_coarse_graining\\files\\judge.py'...
+  File "envs/cat_theo/recursive_coarse_graining\files\judge.py", line 31
+    PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
+                     ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_coarse_graining\\files\\solver.py'...
+  File "envs/cat_theo/recursive_coarse_graining\files\solver.py", line 4
+    class %%MODEL_CLASS%%:
+          ^
+SyntaxError: invalid syntax
+
+*** Error compiling 'envs/cat_theo/recursive_coarse_graining\\files\\visible_tests.py'...
+  File "envs/cat_theo/recursive_coarse_graining\files\visible_tests.py", line 1
+    from solver import %%MODEL_CLASS%%
+                       ^
+SyntaxError: invalid syntax
+
+EXIT_STATUS=1

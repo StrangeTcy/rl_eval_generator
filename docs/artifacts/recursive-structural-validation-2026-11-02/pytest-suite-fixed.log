@@ -1,0 +1,22 @@
+..........................................................F............. [ 23%]
+........................................................................ [ 46%]
+........................................................................ [ 69%]
+................................................F....................... [ 92%]
+.........................                                                [100%]
+================================== FAILURES ===================================
+__________ test_replay_rejects_descend_when_nesting_depth_exhausted ___________
+tests\test_recursive_maze_gluing.py:188: in test_replay_rejects_descend_when_nesting_depth_exhausted
+    assert ok, reason
+E   AssertionError: step 2: tile exit still sealed
+E   assert False
+_____________ test_reasoning_pilot_steps_run_in_order_under_set_u _____________
+tests\test_recursive_gluing_study.py:864: in test_reasoning_pilot_steps_run_in_order_under_set_u
+    (workdir / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
+..\anaconda3\envs\hyge\Lib\pathlib.py:1386: in symlink_to
+    os.symlink(target, self, target_is_directory)
+E   OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\hatgu\\rl_eval_generator\\tools' -> 'C:\\Users\\hatgu\\AppData\\Local\\Temp\\pytest-of-hatgu\\pytest-13\\test_reasoning_pilot_steps_run0\\repo\\tools'
+=========================== short test summary info ===========================
+FAILED tests/test_recursive_maze_gluing.py::test_replay_rejects_descend_when_nesting_depth_exhausted
+FAILED tests/test_recursive_gluing_study.py::test_reasoning_pilot_steps_run_in_order_under_set_u
+2 failed, 311 passed in 202.32s (0:03:22)
+EXIT_STATUS=1

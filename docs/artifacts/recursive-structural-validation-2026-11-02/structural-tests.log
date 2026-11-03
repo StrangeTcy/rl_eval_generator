@@ -1,0 +1,11 @@
+............F..............................................              [100%]
+================================== FAILURES ===================================
+___________ test_structural_capacity_changes_global_schedulability ____________
+tests\test_recursive_distributed_gluing.py:138: in test_structural_capacity_changes_global_schedulability
+    assert not NET.job_satisfiable(unsat)
+E   AssertionError: assert not True
+E    +  where True = <function job_satisfiable at 0x00000286D30A2CA0>({'modulus': 4, 'input': 3, 'lock_count': 1, 'workers': {'mkhfm': {'parent': None, 'child': 'swjri', 'program': ('spawn...: {'parent': 'mxysa', 'child': None, 'program': ['lock', 'compute', 'unlock', 'send:parent'], 'rule': (3, 1, 1)}}, ...})
+E    +    where <function job_satisfiable at 0x00000286D30A2CA0> = NET.job_satisfiable
+=========================== short test summary info ===========================
+FAILED tests/test_recursive_distributed_gluing.py::test_structural_capacity_changes_global_schedulability
+EXIT_STATUS=1

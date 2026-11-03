@@ -1,0 +1,2119 @@
+{
+  "schema_version": 1,
+  "seed": 41,
+  "depth": 2,
+  "environments": {
+    "recursive_gluing": {
+      "checks": 11,
+      "positive_all_accepted": true,
+      "deterministic_all": true,
+      "wrong_status_all_rejected": true,
+      "malformed_all_rejected": true,
+      "rows": [
+        {
+          "check": "local_path_sat",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "configured",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "solvable_cycle",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "obstructed_cycle",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "sat output is missing an assignment mapping",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "nested_recursive",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "cyclic_sat_generated",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "cyclic_unsat_generated",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "sat output is missing an assignment mapping",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "relabel_twin",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "branching_sat",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "branching_unsat",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "sat output is missing an assignment mapping",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        },
+        {
+          "check": "heldout_large",
+          "positive_accepted": true,
+          "positive_reason": "",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "output is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat output is missing an assignment mapping"
+            }
+          ]
+        }
+      ]
+    },
+    "recursive_gluing_discovery": {
+      "checks": 9,
+      "positive_all_accepted": true,
+      "deterministic_all": true,
+      "wrong_status_all_rejected": true,
+      "malformed_all_rejected": true,
+      "rows": [
+        {
+          "check": "local_visible",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a closed realisable root pair exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        },
+        {
+          "check": "configured",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a closed realisable root pair exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        },
+        {
+          "check": "assembled_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a closed realisable root pair exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        },
+        {
+          "check": "assembled_unsat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "realizable summaries are missing or malformed",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        },
+        {
+          "check": "opaque_twin",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a closed realisable root pair exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        },
+        {
+          "check": "branching_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a closed realisable root pair exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        },
+        {
+          "check": "branching_unsat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "realizable summaries are missing or malformed",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        },
+        {
+          "check": "decoy_heldout",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "realizable summaries are missing or malformed",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        },
+        {
+          "check": "heldout_twist",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a closed realisable root pair exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "certificate is not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status must be 'sat' or 'unsat'"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "realizable summaries are missing or malformed"
+            }
+          ]
+        }
+      ]
+    },
+    "recursive_maze_gluing": {
+      "checks": 8,
+      "positive_all_accepted": true,
+      "deterministic_all": true,
+      "wrong_status_all_rejected": true,
+      "malformed_all_rejected": true,
+      "rows": [
+        {
+          "check": "local_visible",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a route exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs steps"
+            }
+          ]
+        },
+        {
+          "check": "configured",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a route exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs steps"
+            }
+          ]
+        },
+        {
+          "check": "assembled_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a route exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs steps"
+            }
+          ]
+        },
+        {
+          "check": "assembled_unsat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "sat needs steps",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs steps"
+            }
+          ]
+        },
+        {
+          "check": "opaque_twin",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a route exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs steps"
+            }
+          ]
+        },
+        {
+          "check": "composition_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a route exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs steps"
+            }
+          ]
+        },
+        {
+          "check": "composition_unsat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "sat needs steps",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs steps"
+            }
+          ]
+        },
+        {
+          "check": "decoy_heldout",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "status unsat but a route exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs steps"
+            }
+          ]
+        }
+      ]
+    },
+    "recursive_distributed_gluing": {
+      "checks": 8,
+      "positive_all_accepted": true,
+      "deterministic_all": true,
+      "wrong_status_all_rejected": true,
+      "malformed_all_rejected": true,
+      "rows": [
+        {
+          "check": "local_visible",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "unsat but a schedule exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs trace"
+            }
+          ]
+        },
+        {
+          "check": "configured",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "unsat but a schedule exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs trace"
+            }
+          ]
+        },
+        {
+          "check": "assembled_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "unsat but a schedule exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs trace"
+            }
+          ]
+        },
+        {
+          "check": "assembled_unsat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "sat needs trace",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs trace"
+            }
+          ]
+        },
+        {
+          "check": "opaque_twin",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "unsat but a schedule exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs trace"
+            }
+          ]
+        },
+        {
+          "check": "lock_capacity_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "unsat but a schedule exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs trace"
+            }
+          ]
+        },
+        {
+          "check": "lock_capacity_unsat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "sat needs trace",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs trace"
+            }
+          ]
+        },
+        {
+          "check": "address_twin",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "unsat but a schedule exists",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "sat needs trace"
+            }
+          ]
+        }
+      ]
+    },
+    "recursive_epistemic_gluing": {
+      "checks": 10,
+      "positive_all_accepted": true,
+      "deterministic_all": true,
+      "wrong_status_all_rejected": true,
+      "malformed_all_rejected": true,
+      "rows": [
+        {
+          "check": "local_visible",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "configured",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "assembled_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "assembled_unsat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "opaque_twin",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "order_heldout",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "neg_deep",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "neg_recursive",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "modal_positive",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        },
+        {
+          "check": "modal_counterfactual",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "query_value missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "query_value missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "query_value missing"
+            }
+          ]
+        }
+      ]
+    },
+    "recursive_compiler_bootstrap": {
+      "checks": 6,
+      "positive_all_accepted": true,
+      "deterministic_all": true,
+      "wrong_status_all_rejected": true,
+      "malformed_all_rejected": true,
+      "rows": [
+        {
+          "check": "local_visible",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "equivalent missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "equivalent missing"
+            }
+          ]
+        },
+        {
+          "check": "configured",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "equivalent missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "equivalent missing"
+            }
+          ]
+        },
+        {
+          "check": "assembled_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "equivalent missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "equivalent missing"
+            }
+          ]
+        },
+        {
+          "check": "assembled_unsat",
+          "positive_accepted": true,
+          "positive_reason": "decoder fails on well-formed source",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "equivalent missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "equivalent missing"
+            }
+          ]
+        },
+        {
+          "check": "opaque_twin",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "equivalent missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "equivalent missing"
+            }
+          ]
+        },
+        {
+          "check": "path_vs_local",
+          "positive_accepted": true,
+          "positive_reason": "decoder fails on well-formed source",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "equivalent missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "equivalent missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "equivalent missing"
+            }
+          ]
+        }
+      ]
+    },
+    "recursive_error_correcting_codes": {
+      "checks": 8,
+      "positive_all_accepted": true,
+      "deterministic_all": true,
+      "wrong_status_all_rejected": true,
+      "malformed_all_rejected": true,
+      "rows": [
+        {
+          "check": "local_visible",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "checked linear system",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "calibration ambiguity or corruption invariant failed"
+            }
+          ]
+        },
+        {
+          "check": "configured",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "checked linear system",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "calibration ambiguity or corruption invariant failed"
+            }
+          ]
+        },
+        {
+          "check": "assembled_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "checked linear system",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "calibration ambiguity or corruption invariant failed"
+            }
+          ]
+        },
+        {
+          "check": "assembled_unsat",
+          "positive_accepted": true,
+          "positive_reason": "checked linear system",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "calibration ambiguity or corruption invariant failed",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "calibration ambiguity or corruption invariant failed"
+            }
+          ]
+        },
+        {
+          "check": "opaque_twin",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "checked linear system",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "calibration ambiguity or corruption invariant failed"
+            }
+          ]
+        },
+        {
+          "check": "parent_positive",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "checked linear system",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "calibration ambiguity or corruption invariant failed"
+            }
+          ]
+        },
+        {
+          "check": "parent_counterfactual",
+          "positive_accepted": true,
+          "positive_reason": "checked linear system",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "calibration ambiguity or corruption invariant failed",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "calibration ambiguity or corruption invariant failed"
+            }
+          ]
+        },
+        {
+          "check": "explicit_expand",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "checked linear system",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "status"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "calibration ambiguity or corruption invariant failed"
+            }
+          ]
+        }
+      ]
+    },
+    "recursive_coarse_graining": {
+      "checks": 8,
+      "positive_all_accepted": true,
+      "deterministic_all": true,
+      "wrong_status_all_rejected": true,
+      "malformed_all_rejected": true,
+      "rows": [
+        {
+          "check": "local_visible",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "table/fixed missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            }
+          ]
+        },
+        {
+          "check": "configured",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "table/fixed missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            }
+          ]
+        },
+        {
+          "check": "assembled_sat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "table/fixed missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            }
+          ]
+        },
+        {
+          "check": "assembled_unsat",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "table/fixed missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            }
+          ]
+        },
+        {
+          "check": "opaque_twin",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "table/fixed missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            }
+          ]
+        },
+        {
+          "check": "quotient_positive",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "table/fixed missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            }
+          ]
+        },
+        {
+          "check": "quotient_counterfactual",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "table/fixed missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            }
+          ]
+        },
+        {
+          "check": "child_matters",
+          "positive_accepted": true,
+          "positive_reason": "ok",
+          "deterministic_reference": true,
+          "wrong_status_accepted": false,
+          "wrong_status_reason": "table/fixed missing",
+          "malformed": [
+            {
+              "case": "null",
+              "accepted": false,
+              "reason": "not a dict"
+            },
+            {
+              "case": "empty_object",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "missing_status",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            },
+            {
+              "case": "sat_without_certificate",
+              "accepted": false,
+              "reason": "table/fixed missing"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
