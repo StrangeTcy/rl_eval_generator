@@ -39,8 +39,12 @@ jobs:
 
       - name: Check evidence classification and candidate controls
         run: |
-          node tools/recursive_structural_production_gate.mjs --self-test
-          node --test tests/test_recursive_structural_production_gate.mjs
+          set -euo pipefail
+          mkdir -p docs/artifacts/recursive-structural-production-gate
+          node tools/recursive_structural_production_gate.mjs --self-test \
+            2>&1 | tee docs/artifacts/recursive-structural-production-gate/launch-preflight.log
+          node --test tests/test_recursive_structural_production_gate.mjs \
+            2>&1 | tee docs/artifacts/recursive-structural-production-gate/node-tests.log
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
