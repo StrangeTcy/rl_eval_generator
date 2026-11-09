@@ -1,6 +1,9 @@
 name: Recursive structural production judge gate
 
 on:
+  push:
+    branches:
+      - codex/recursive-production-20261109
   workflow_dispatch:
     inputs:
       ref:
@@ -12,16 +15,32 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: recursive-structural-production-${{ inputs.ref || github.ref }}
+  cancel-in-progress: false
+
 jobs:
   production-gate:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    env:
+      GATE_TEST_REF: ${{ inputs.ref || github.ref }}
     steps:
       - name: Check out the requested ref
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check evidence classification and candidate controls
+        run: |
+          node tools/recursive_structural_production_gate.mjs --self-test
+          node --test tests/test_recursive_structural_production_gate.mjs
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -40,82 +59,16 @@ jobs:
           python -m pip install --index-url https://download.pytorch.org/whl/cpu \
             torch==2.5.1 torchvision==0.20.1
 
-      - name: Record exact hosted environment
-        run: |
-          set -euo pipefail
-          mkdir -p docs/artifacts/recursive-structural-production-gate
-          python - <<'PY'
-          import importlib.metadata as metadata
-          import json
-          import platform
-          import sys
-          import torch
-          from pathlib import Path
-
-          packages = {}
-          for name in ("PyYAML", "pytest", "torch", "torchvision"):
-              try:
-                  packages[name] = metadata.version(name)
-              except metadata.PackageNotFoundError:
-                  packages[name] = None
-          record = {
-              "commit": __import__("subprocess").check_output(
-                  ["git", "rev-parse", "HEAD"], text=True
-              ).strip(),
-              "ref": __import__("subprocess").check_output(
-                  ["git", "symbolic-ref", "--short", "-q", "HEAD"],
-                  text=True,
-              ).strip(),
-              "python": sys.version,
-              "python_executable": sys.executable,
-              "platform": platform.platform(),
-              "runner_os": "ubuntu-22.04",
-              "packages": packages,
-              "torch_version": torch.__version__,
-              "torch_cuda_available": bool(torch.cuda.is_available()),
-              "torch_smoke": {
-                  "tensor_sum": float(torch.tensor([1.0, 2.0]).sum()),
-                  "save_load": None,
-              },
-          }
-          path = Path("docs/artifacts/recursive-structural-production-gate/environment.json")
-          path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-          PY
-
       - name: Execute all eight production judge environments
         id: gate
         continue-on-error: true
         run: |
-          set +e
-          python tools/recursive_structural_production_gate.py \
+          set -euo pipefail
+          mkdir -p docs/artifacts/recursive-structural-production-gate
+          node tools/recursive_structural_production_gate.mjs \
             --output docs/artifacts/recursive-structural-production-gate \
-            > docs/artifacts/recursive-structural-production-gate/production-judge.log 2>&1
-          status=$?
-          printf '%s\n' "$status" \
-            > docs/artifacts/recursive-structural-production-gate/exit-code.txt
-          exit "$status"
-
-      - name: Write hosted command record
-        if: always()
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
-
-          out = Path("docs/artifacts/recursive-structural-production-gate")
-          record = {
-              "command": "python tools/recursive_structural_production_gate.py --output docs/artifacts/recursive-structural-production-gate",
-              "exit_code": int((out / "exit-code.txt").read_text().strip())
-              if (out / "exit-code.txt").is_file() else None,
-              "workflow_run_id": os.environ.get("GITHUB_RUN_ID"),
-              "workflow_sha": subprocess.check_output(
-                  ["git", "rev-parse", "HEAD"], text=True
-              ).strip(),
-          }
-          (out / "commands.json").write_text(json.dumps(record, indent=2) + "\n")
-          PY
+            --frozen-inputs tools/fixtures/recursive-structural-production \
+            2>&1 | tee docs/artifacts/recursive-structural-production-gate/hosted-console.log
 
       - name: Upload production-gate evidence
         if: always()
@@ -127,5 +80,5 @@ jobs:
           retention-days: 30
 
       - name: Fail the workflow when the gate did not pass
-        if: steps.gate.outcome == 'failure'
+        if: always() && steps.gate.outcome != 'success'
         run: exit 1
