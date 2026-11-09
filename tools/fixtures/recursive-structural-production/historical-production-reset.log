@@ -1,0 +1,472 @@
+ENV=recursive_gluing COMMAND=reset
+{
+  "episode_id": "gate_recursive_gluing",
+  "observation": "Episode initialized. Inspect the workspace and proceed.",
+  "reward": 0.0,
+  "done": false,
+  "info": {
+    "env": "recursive_gluing",
+    "difficulty": "easy,easy,easy,easy",
+    "seed": 41,
+    "interventions": [],
+    "generation_id": "G897ad087b392722f",
+    "pair_id": "Pb48f171e5d2ee7fe",
+    "pair_id_basis": "latent_spec",
+    "provenance": "recorded",
+    "step": 0,
+    "max_steps": 1,
+    "workspace": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_gluing\\env\\agent\\workspace",
+    "episode_dir": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_gluing",
+    "sandbox": "local",
+    "patchable_files": [
+      "solver.py"
+    ],
+    "required_files": [
+      "solver.py"
+    ],
+    "agent_image": null,
+    "judge_image": null,
+    "agent_image_id": null,
+    "judge_image_id": null,
+    "agent_image_digest": null,
+    "judge_image_digest": null
+  }
+}
+RESET_EXIT_STATUS=0
+ENV=recursive_gluing COMMAND=submit
+{
+  "observation": "{\n  \"verdict\": \"FAIL\",\n  \"score\": 0.0,\n  \"failure_mode\": \"judge_runtime_error\",\n  \"notes\": [\n    \"Judge exited 1 without a valid JSON verdict\",\n    \"Traceback (most recent call last):\\n  File \\\"C:\\\\Users\\\\hatgu\\\\rl_eval_generator\\\\.episodes\\\\gate_recursive_gluing\\\\env\\\\judge\\\\judge.py\\\", line 7, in <module>\\n    import torch\\nModuleNotFoundError: No module named 'torch'\\n\"\n  ]\n}",
+  "reward": 0.0,
+  "done": true,
+  "info": {
+    "sandbox": "local",
+    "returncode": 1,
+    "judge_result": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "judge_runtime_error",
+      "notes": [
+        "Judge exited 1 without a valid JSON verdict",
+        "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_gluing\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+      ]
+    },
+    "judge_stdout": "",
+    "judge_stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_gluing\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+    "episode_id": "gate_recursive_gluing",
+    "step": 0
+  }
+}
+SUBMIT_EXIT_STATUS=0
+ENV=recursive_gluing_discovery COMMAND=reset
+{
+  "episode_id": "gate_recursive_gluing_discovery",
+  "observation": "Episode initialized. Inspect the workspace and proceed.",
+  "reward": 0.0,
+  "done": false,
+  "info": {
+    "env": "recursive_gluing_discovery",
+    "difficulty": "easy,easy,easy,easy,easy",
+    "seed": 41,
+    "interventions": [],
+    "generation_id": "G67bf138886649041",
+    "pair_id": "P661201a49d001069",
+    "pair_id_basis": "latent_spec",
+    "provenance": "recorded",
+    "step": 0,
+    "max_steps": 1,
+    "workspace": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_gluing_discovery\\env\\agent\\workspace",
+    "episode_dir": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_gluing_discovery",
+    "sandbox": "local",
+    "patchable_files": [
+      "solver.py"
+    ],
+    "required_files": [
+      "solver.py"
+    ],
+    "agent_image": null,
+    "judge_image": null,
+    "agent_image_id": null,
+    "judge_image_id": null,
+    "agent_image_digest": null,
+    "judge_image_digest": null
+  }
+}
+RESET_EXIT_STATUS=0
+ENV=recursive_gluing_discovery COMMAND=submit
+{
+  "observation": "{\n  \"verdict\": \"FAIL\",\n  \"score\": 0.0,\n  \"failure_mode\": \"judge_runtime_error\",\n  \"notes\": [\n    \"Judge exited 1 without a valid JSON verdict\",\n    \"Traceback (most recent call last):\\n  File \\\"C:\\\\Users\\\\hatgu\\\\rl_eval_generator\\\\.episodes\\\\gate_recursive_gluing_discovery\\\\env\\\\judge\\\\judge.py\\\", line 7, in <module>\\n    import torch\\nModuleNotFoundError: No module named 'torch'\\n\"\n  ]\n}",
+  "reward": 0.0,
+  "done": true,
+  "info": {
+    "sandbox": "local",
+    "returncode": 1,
+    "judge_result": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "judge_runtime_error",
+      "notes": [
+        "Judge exited 1 without a valid JSON verdict",
+        "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_gluing_discovery\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+      ]
+    },
+    "judge_stdout": "",
+    "judge_stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_gluing_discovery\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+    "episode_id": "gate_recursive_gluing_discovery",
+    "step": 0
+  }
+}
+SUBMIT_EXIT_STATUS=0
+ENV=recursive_maze_gluing COMMAND=reset
+{
+  "episode_id": "gate_recursive_maze_gluing",
+  "observation": "Episode initialized. Inspect the workspace and proceed.",
+  "reward": 0.0,
+  "done": false,
+  "info": {
+    "env": "recursive_maze_gluing",
+    "difficulty": "easy,easy,easy,easy",
+    "seed": 41,
+    "interventions": [],
+    "generation_id": "Gd9c3c1ba9e7073ce",
+    "pair_id": "P7b90fce5e325f8ee",
+    "pair_id_basis": "latent_spec",
+    "provenance": "recorded",
+    "step": 0,
+    "max_steps": 1,
+    "workspace": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_maze_gluing\\env\\agent\\workspace",
+    "episode_dir": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_maze_gluing",
+    "sandbox": "local",
+    "patchable_files": [
+      "solver.py"
+    ],
+    "required_files": [
+      "solver.py"
+    ],
+    "agent_image": null,
+    "judge_image": null,
+    "agent_image_id": null,
+    "judge_image_id": null,
+    "agent_image_digest": null,
+    "judge_image_digest": null
+  }
+}
+RESET_EXIT_STATUS=0
+ENV=recursive_maze_gluing COMMAND=submit
+{
+  "observation": "{\n  \"verdict\": \"FAIL\",\n  \"score\": 0.0,\n  \"failure_mode\": \"judge_runtime_error\",\n  \"notes\": [\n    \"Judge exited 1 without a valid JSON verdict\",\n    \"Traceback (most recent call last):\\n  File \\\"C:\\\\Users\\\\hatgu\\\\rl_eval_generator\\\\.episodes\\\\gate_recursive_maze_gluing\\\\env\\\\judge\\\\judge.py\\\", line 7, in <module>\\n    import torch\\nModuleNotFoundError: No module named 'torch'\\n\"\n  ]\n}",
+  "reward": 0.0,
+  "done": true,
+  "info": {
+    "sandbox": "local",
+    "returncode": 1,
+    "judge_result": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "judge_runtime_error",
+      "notes": [
+        "Judge exited 1 without a valid JSON verdict",
+        "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_maze_gluing\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+      ]
+    },
+    "judge_stdout": "",
+    "judge_stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_maze_gluing\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+    "episode_id": "gate_recursive_maze_gluing",
+    "step": 0
+  }
+}
+SUBMIT_EXIT_STATUS=0
+ENV=recursive_distributed_gluing COMMAND=reset
+{
+  "episode_id": "gate_recursive_distributed_gluing",
+  "observation": "Episode initialized. Inspect the workspace and proceed.",
+  "reward": 0.0,
+  "done": false,
+  "info": {
+    "env": "recursive_distributed_gluing",
+    "difficulty": "easy,easy,easy",
+    "seed": 41,
+    "interventions": [],
+    "generation_id": "G35499d168189db70",
+    "pair_id": "P9f7ccb7e7a6264bf",
+    "pair_id_basis": "latent_spec",
+    "provenance": "recorded",
+    "step": 0,
+    "max_steps": 1,
+    "workspace": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_distributed_gluing\\env\\agent\\workspace",
+    "episode_dir": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_distributed_gluing",
+    "sandbox": "local",
+    "patchable_files": [
+      "solver.py"
+    ],
+    "required_files": [
+      "solver.py"
+    ],
+    "agent_image": null,
+    "judge_image": null,
+    "agent_image_id": null,
+    "judge_image_id": null,
+    "agent_image_digest": null,
+    "judge_image_digest": null
+  }
+}
+RESET_EXIT_STATUS=0
+ENV=recursive_distributed_gluing COMMAND=submit
+{
+  "observation": "{\n  \"verdict\": \"FAIL\",\n  \"score\": 0.0,\n  \"failure_mode\": \"judge_runtime_error\",\n  \"notes\": [\n    \"Judge exited 1 without a valid JSON verdict\",\n    \"Traceback (most recent call last):\\n  File \\\"C:\\\\Users\\\\hatgu\\\\rl_eval_generator\\\\.episodes\\\\gate_recursive_distributed_gluing\\\\env\\\\judge\\\\judge.py\\\", line 7, in <module>\\n    import torch\\nModuleNotFoundError: No module named 'torch'\\n\"\n  ]\n}",
+  "reward": 0.0,
+  "done": true,
+  "info": {
+    "sandbox": "local",
+    "returncode": 1,
+    "judge_result": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "judge_runtime_error",
+      "notes": [
+        "Judge exited 1 without a valid JSON verdict",
+        "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_distributed_gluing\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+      ]
+    },
+    "judge_stdout": "",
+    "judge_stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_distributed_gluing\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+    "episode_id": "gate_recursive_distributed_gluing",
+    "step": 0
+  }
+}
+SUBMIT_EXIT_STATUS=0
+ENV=recursive_epistemic_gluing COMMAND=reset
+{
+  "episode_id": "gate_recursive_epistemic_gluing",
+  "observation": "Episode initialized. Inspect the workspace and proceed.",
+  "reward": 0.0,
+  "done": false,
+  "info": {
+    "env": "recursive_epistemic_gluing",
+    "difficulty": "easy,easy,easy,easy",
+    "seed": 41,
+    "interventions": [],
+    "generation_id": "Gf9720eed16f97022",
+    "pair_id": "P69eeca05254c99ef",
+    "pair_id_basis": "latent_spec",
+    "provenance": "recorded",
+    "step": 0,
+    "max_steps": 1,
+    "workspace": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_epistemic_gluing\\env\\agent\\workspace",
+    "episode_dir": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_epistemic_gluing",
+    "sandbox": "local",
+    "patchable_files": [
+      "solver.py"
+    ],
+    "required_files": [
+      "solver.py"
+    ],
+    "agent_image": null,
+    "judge_image": null,
+    "agent_image_id": null,
+    "judge_image_id": null,
+    "agent_image_digest": null,
+    "judge_image_digest": null
+  }
+}
+RESET_EXIT_STATUS=0
+ENV=recursive_epistemic_gluing COMMAND=submit
+{
+  "observation": "{\n  \"verdict\": \"FAIL\",\n  \"score\": 0.0,\n  \"failure_mode\": \"judge_runtime_error\",\n  \"notes\": [\n    \"Judge exited 1 without a valid JSON verdict\",\n    \"Traceback (most recent call last):\\n  File \\\"C:\\\\Users\\\\hatgu\\\\rl_eval_generator\\\\.episodes\\\\gate_recursive_epistemic_gluing\\\\env\\\\judge\\\\judge.py\\\", line 7, in <module>\\n    import torch\\nModuleNotFoundError: No module named 'torch'\\n\"\n  ]\n}",
+  "reward": 0.0,
+  "done": true,
+  "info": {
+    "sandbox": "local",
+    "returncode": 1,
+    "judge_result": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "judge_runtime_error",
+      "notes": [
+        "Judge exited 1 without a valid JSON verdict",
+        "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_epistemic_gluing\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+      ]
+    },
+    "judge_stdout": "",
+    "judge_stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_epistemic_gluing\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+    "episode_id": "gate_recursive_epistemic_gluing",
+    "step": 0
+  }
+}
+SUBMIT_EXIT_STATUS=0
+ENV=recursive_compiler_bootstrap COMMAND=reset
+{
+  "episode_id": "gate_recursive_compiler_bootstrap",
+  "observation": "Episode initialized. Inspect the workspace and proceed.",
+  "reward": 0.0,
+  "done": false,
+  "info": {
+    "env": "recursive_compiler_bootstrap",
+    "difficulty": "easy,easy,easy",
+    "seed": 41,
+    "interventions": [],
+    "generation_id": "Gecb4f8718241c5ba",
+    "pair_id": "Pe4901a6fdd53887e",
+    "pair_id_basis": "latent_spec",
+    "provenance": "recorded",
+    "step": 0,
+    "max_steps": 1,
+    "workspace": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_compiler_bootstrap\\env\\agent\\workspace",
+    "episode_dir": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_compiler_bootstrap",
+    "sandbox": "local",
+    "patchable_files": [
+      "solver.py"
+    ],
+    "required_files": [
+      "solver.py"
+    ],
+    "agent_image": null,
+    "judge_image": null,
+    "agent_image_id": null,
+    "judge_image_id": null,
+    "agent_image_digest": null,
+    "judge_image_digest": null
+  }
+}
+RESET_EXIT_STATUS=0
+ENV=recursive_compiler_bootstrap COMMAND=submit
+{
+  "observation": "{\n  \"verdict\": \"FAIL\",\n  \"score\": 0.0,\n  \"failure_mode\": \"judge_runtime_error\",\n  \"notes\": [\n    \"Judge exited 1 without a valid JSON verdict\",\n    \"Traceback (most recent call last):\\n  File \\\"C:\\\\Users\\\\hatgu\\\\rl_eval_generator\\\\.episodes\\\\gate_recursive_compiler_bootstrap\\\\env\\\\judge\\\\judge.py\\\", line 7, in <module>\\n    import torch\\nModuleNotFoundError: No module named 'torch'\\n\"\n  ]\n}",
+  "reward": 0.0,
+  "done": true,
+  "info": {
+    "sandbox": "local",
+    "returncode": 1,
+    "judge_result": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "judge_runtime_error",
+      "notes": [
+        "Judge exited 1 without a valid JSON verdict",
+        "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_compiler_bootstrap\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+      ]
+    },
+    "judge_stdout": "",
+    "judge_stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_compiler_bootstrap\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+    "episode_id": "gate_recursive_compiler_bootstrap",
+    "step": 0
+  }
+}
+SUBMIT_EXIT_STATUS=0
+ENV=recursive_error_correcting_codes COMMAND=reset
+{
+  "episode_id": "gate_recursive_error_correcting_codes",
+  "observation": "Episode initialized. Inspect the workspace and proceed.",
+  "reward": 0.0,
+  "done": false,
+  "info": {
+    "env": "recursive_error_correcting_codes",
+    "difficulty": "easy,easy,easy",
+    "seed": 41,
+    "interventions": [],
+    "generation_id": "Ga8145689f63a6e9e",
+    "pair_id": "P08b1b5d7ae14fd15",
+    "pair_id_basis": "latent_spec",
+    "provenance": "recorded",
+    "step": 0,
+    "max_steps": 1,
+    "workspace": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_error_correcting_codes\\env\\agent\\workspace",
+    "episode_dir": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_error_correcting_codes",
+    "sandbox": "local",
+    "patchable_files": [
+      "solver.py"
+    ],
+    "required_files": [
+      "solver.py"
+    ],
+    "agent_image": null,
+    "judge_image": null,
+    "agent_image_id": null,
+    "judge_image_id": null,
+    "agent_image_digest": null,
+    "judge_image_digest": null
+  }
+}
+RESET_EXIT_STATUS=0
+ENV=recursive_error_correcting_codes COMMAND=submit
+{
+  "observation": "{\n  \"verdict\": \"FAIL\",\n  \"score\": 0.0,\n  \"failure_mode\": \"judge_runtime_error\",\n  \"notes\": [\n    \"Judge exited 1 without a valid JSON verdict\",\n    \"Traceback (most recent call last):\\n  File \\\"C:\\\\Users\\\\hatgu\\\\rl_eval_generator\\\\.episodes\\\\gate_recursive_error_correcting_codes\\\\env\\\\judge\\\\judge.py\\\", line 7, in <module>\\n    import torch\\nModuleNotFoundError: No module named 'torch'\\n\"\n  ]\n}",
+  "reward": 0.0,
+  "done": true,
+  "info": {
+    "sandbox": "local",
+    "returncode": 1,
+    "judge_result": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "judge_runtime_error",
+      "notes": [
+        "Judge exited 1 without a valid JSON verdict",
+        "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_error_correcting_codes\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+      ]
+    },
+    "judge_stdout": "",
+    "judge_stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_error_correcting_codes\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+    "episode_id": "gate_recursive_error_correcting_codes",
+    "step": 0
+  }
+}
+SUBMIT_EXIT_STATUS=0
+ENV=recursive_coarse_graining COMMAND=reset
+{
+  "episode_id": "gate_recursive_coarse_graining",
+  "observation": "Episode initialized. Inspect the workspace and proceed.",
+  "reward": 0.0,
+  "done": false,
+  "info": {
+    "env": "recursive_coarse_graining",
+    "difficulty": "easy,easy,easy",
+    "seed": 41,
+    "interventions": [],
+    "generation_id": "Ge955d1e2cc12f0b7",
+    "pair_id": "P7c8bdda64083b0b5",
+    "pair_id_basis": "latent_spec",
+    "provenance": "recorded",
+    "step": 0,
+    "max_steps": 1,
+    "workspace": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_coarse_graining\\env\\agent\\workspace",
+    "episode_dir": "C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_coarse_graining",
+    "sandbox": "local",
+    "patchable_files": [
+      "solver.py"
+    ],
+    "required_files": [
+      "solver.py"
+    ],
+    "agent_image": null,
+    "judge_image": null,
+    "agent_image_id": null,
+    "judge_image_id": null,
+    "agent_image_digest": null,
+    "judge_image_digest": null
+  }
+}
+RESET_EXIT_STATUS=0
+ENV=recursive_coarse_graining COMMAND=submit
+{
+  "observation": "{\n  \"verdict\": \"FAIL\",\n  \"score\": 0.0,\n  \"failure_mode\": \"judge_runtime_error\",\n  \"notes\": [\n    \"Judge exited 1 without a valid JSON verdict\",\n    \"Traceback (most recent call last):\\n  File \\\"C:\\\\Users\\\\hatgu\\\\rl_eval_generator\\\\.episodes\\\\gate_recursive_coarse_graining\\\\env\\\\judge\\\\judge.py\\\", line 7, in <module>\\n    import torch\\nModuleNotFoundError: No module named 'torch'\\n\"\n  ]\n}",
+  "reward": 0.0,
+  "done": true,
+  "info": {
+    "sandbox": "local",
+    "returncode": 1,
+    "judge_result": {
+      "verdict": "FAIL",
+      "score": 0.0,
+      "failure_mode": "judge_runtime_error",
+      "notes": [
+        "Judge exited 1 without a valid JSON verdict",
+        "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_coarse_graining\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+      ]
+    },
+    "judge_stdout": "",
+    "judge_stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\hatgu\\rl_eval_generator\\.episodes\\gate_recursive_coarse_graining\\env\\judge\\judge.py\", line 7, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+    "episode_id": "gate_recursive_coarse_graining",
+    "step": 0
+  }
+}
+SUBMIT_EXIT_STATUS=0

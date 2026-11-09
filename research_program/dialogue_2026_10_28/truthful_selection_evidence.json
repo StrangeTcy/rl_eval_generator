@@ -1,0 +1,31 @@
+{
+  "schema": "epistemic-opportunity-supplement/1",
+  "date": "2026-11-09",
+  "opportunities": ["OP007", "OP023"],
+  "status": "bounded_extension_runtime_passed",
+  "prior_opportunity_statuses_preserved": "partial",
+  "implemented": [
+    "Finite truthful-message selection laws normalized within each world",
+    "Exact conditional posterior, expected Brier and decision-regret scoring",
+    "Matched literal content with changed selection probabilities",
+    "Distinct supplied priors with shared evidence and uninformative-law controls"
+  ],
+  "implementation": [
+    "../../arena/inquiry/selection_laws.mjs",
+    "../../tools/truthful_selection_study.mjs"
+  ],
+  "tests": "../../tests/test_truthful_selection.mjs",
+  "report": "TRUTHFUL_SELECTION_REPORT.md",
+  "evidence": "runtime_validation/truthful-selection-20261109-final/",
+  "summary": "runtime_validation/truthful-selection-20261109-final-summary.json",
+  "tests_passed": 14,
+  "cases": 63,
+  "scripted_answers": 126,
+  "replay": "passed",
+  "independent_oracle": "Concrete uniform-ticket enumeration of the finite selection sample space",
+  "remaining": [
+    "Unknown selection-policy inference and its identifiability contract",
+    "Independent external-policy execution and model measurement",
+    "Free-form framing, false-message and instruction conditions"
+  ]
+}

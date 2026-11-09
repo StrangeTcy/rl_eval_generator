@@ -1,7 +1,11 @@
 /** Evidence regressions only; production execution remains on the hosted runner. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { candidateSource, casePassed, judgeCompleted } from '../tools/recursive_structural_production_gate.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { candidateSource, casePassed, judgeCompleted, FrozenArchive, LaunchEvidence } from '../tools/recursive_structural_production_gate.mjs';
 
 const complete = {
   variant: 'valid',
@@ -158,4 +162,31 @@ test('reference construction preserves operator.index and the unchanged supplied
   assert.match(source, /import time/);
   assert.doesNotMatch(source, /def index\(|from __future__/);
   assert.equal(candidateSource('recursive_compiler_bootstrap', original, network, 'wrong_baseline').startsWith(original), true);
+});
+
+test('all launch sources and frozen archives reproduce the historical reset identities', () => {
+  const launch = LaunchEvidence.inspect();
+  assert.equal(launch.fixtures.length, 8);
+  assert.equal(launch.fixtures.every(row => row.verified_files > 0), true);
+  assert.equal(launch.sources.some(row => row.path.endsWith('/historical-production-reset.log')), true);
+  assert.equal(launch.sources.some(row => row.historical_comparison === 'source_changed'), false);
+  assert.throws(() => FrozenArchive.read(Buffer.from('truncated archive')), /Missing ZIP directory/);
+});
+
+test('missing reset evidence and altered historical identities prevent launch', t => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'recursive-launch-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const launch = LaunchEvidence.inspect();
+  [...launch.sources.map(row => row.path), ...launch.fixtures.map(row => row.archive)].forEach(filename => {
+    const destination = path.join(scratch, filename);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(path.join(root, filename), destination);
+  });
+  const logPath = path.join(scratch, 'tools/fixtures/recursive-structural-production/historical-production-reset.log');
+  const log = fs.readFileSync(logPath, 'utf8');
+  fs.writeFileSync(logPath, log.replace(launch.identities.recursive_gluing.generation_id, 'G0000000000000000'));
+  assert.throws(() => LaunchEvidence.inspect(scratch), /Frozen identity differs/);
+  fs.unlinkSync(logPath);
+  assert.throws(() => LaunchEvidence.inspect(scratch), /ENOENT.*historical-production-reset\.log/);
 });

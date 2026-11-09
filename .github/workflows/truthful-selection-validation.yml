@@ -1,0 +1,67 @@
+name: Truthful selection finite-model validation
+
+on:
+  push:
+    branches:
+      - codex/recursive-production-20261109
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truthful-selection-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  finite-model-validation:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      EVIDENCE_DIR: docs/artifacts/truthful-selection-validation
+    steps:
+      - name: Check out the requested revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run regressions, the finite study and complete replay
+        id: validation
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          node --version > "$EVIDENCE_DIR/node-version.txt"
+          printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/commit.txt"
+          set +e
+          node --test --test-reporter=tap tests/test_truthful_selection.mjs > "$EVIDENCE_DIR/tests.tap" 2>&1
+          test_status=$?
+          printf '%s\n' "$test_status" > "$EVIDENCE_DIR/tests.exit-code"
+          cat "$EVIDENCE_DIR/tests.tap"
+          node tools/truthful_selection_study.mjs run "$EVIDENCE_DIR/study" > "$EVIDENCE_DIR/study-summary.json" 2> "$EVIDENCE_DIR/study.stderr"
+          study_status=$?
+          printf '%s\n' "$study_status" > "$EVIDENCE_DIR/study.exit-code"
+          cat "$EVIDENCE_DIR/study-summary.json" "$EVIDENCE_DIR/study.stderr"
+          node tools/truthful_selection_study.mjs replay "$EVIDENCE_DIR/study" > "$EVIDENCE_DIR/replay.json" 2> "$EVIDENCE_DIR/replay.stderr"
+          replay_status=$?
+          printf '%s\n' "$replay_status" > "$EVIDENCE_DIR/replay.exit-code"
+          cat "$EVIDENCE_DIR/replay.json" "$EVIDENCE_DIR/replay.stderr"
+          test "$test_status" -eq 0 && test "$study_status" -eq 0 && test "$replay_status" -eq 0
+
+      - name: Upload finite-model evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthful-selection-validation
+          path: docs/artifacts/truthful-selection-validation/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail the workflow when validation did not pass
+        if: always() && steps.validation.outcome != 'success'
+        run: exit 1

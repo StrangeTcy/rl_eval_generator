@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: a literally identical message reverses the optimal decision under selection laws
+ok 1 - a literally identical message reverses the optimal decision under selection laws
+  ---
+  duration_ms: 3.6174
+  type: 'test'
+  ...
+# Subtest: content-only inference has hand-derived excess and decision regret
+ok 2 - content-only inference has hand-derived excess and decision regret
+  ---
+  duration_ms: 0.7286
+  type: 'test'
+  ...
+# Subtest: selection rows are separately normalized even when their totals differ
+ok 3 - selection rows are separately normalized even when their totals differ
+  ---
+  duration_ms: 0.5314
+  type: 'test'
+  ...
+# Subtest: distinct sincere priors preserve disagreement with identical public evidence
+ok 4 - distinct sincere priors preserve disagreement with identical public evidence
+  ---
+  duration_ms: 0.3324
+  type: 'test'
+  ...
+# Subtest: uninformative selection is a true null for every declared prior
+ok 5 - uninformative selection is a true null for every declared prior
+  ---
+  duration_ms: 0.6244
+  type: 'test'
+  ...
+# Subtest: all 63 prospective cases agree with an independent concrete-ticket oracle
+ok 6 - all 63 prospective cases agree with an independent concrete-ticket oracle
+  ---
+  duration_ms: 11.3531
+  type: 'test'
+  ...
+# Subtest: false messages, empty laws and impossible observations are rejected
+ok 7 - false messages, empty laws and impossible observations are rejected
+  ---
+  duration_ms: 0.6528
+  type: 'test'
+  ...
+# Subtest: malformed answers are atomic and tied decisions receive zero regret
+ok 8 - malformed answers are atomic and tied decisions receive zero regret
+  ---
+  duration_ms: 0.5948
+  type: 'test'
+  ...
+# Subtest: literal-only singleton evidence yields certainty and zero optimal risk
+ok 9 - literal-only singleton evidence yields certainty and zero optimal risk
+  ---
+  duration_ms: 0.4272
+  type: 'test'
+  ...
+# Subtest: three-world selection is supported with exact proper scoring
+ok 10 - three-world selection is supported with exact proper scoring
+  ---
+  duration_ms: 0.8816
+  type: 'test'
+  ...
+# Subtest: task identity is stable across key order and input mutations
+ok 11 - task identity is stable across key order and input mutations
+  ---
+  duration_ms: 0.6324
+  type: 'test'
+  ...
+# Subtest: unequal row totals can be answered exactly beyond six-digit denominators
+ok 12 - unequal row totals can be answered exactly beyond six-digit denominators
+  ---
+  duration_ms: 1.38
+  type: 'test'
+  ...
+# Subtest: study persists all cases, replays scores, rejects resealed semantic corruption
+ok 13 - study persists all cases, replays scores, rejects resealed semantic corruption
+  ---
+  duration_ms: 34.7856
+  type: 'test'
+  ...
+# Subtest: exact arithmetic keeps signed differences and rejects invalid fractions
+ok 14 - exact arithmetic keeps signed differences and rejects invalid fractions
+  ---
+  duration_ms: 0.3441
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 163.7085

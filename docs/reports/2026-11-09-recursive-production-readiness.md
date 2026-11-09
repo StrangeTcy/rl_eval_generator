@@ -47,11 +47,24 @@ node --check tools/recursive_structural_production_gate.mjs
 node --check tests/test_recursive_structural_production_gate.mjs
 ```
 
-Results: 14 JavaScript regression tests passed, and the original eight
+Results: 16 JavaScript regression tests passed, and the original eight
 evidence-classification/source-preservation assertions passed. A separate
 digest comparison found no changed reviewed recursive environment source
 against `docs/artifacts/recursive-structural-validation-2026-11-02/validation-record.json`,
 allowing the same line-ending normalization as the hosted harness.
+
+Launch preflight now reads all 58 required source files and verifies all eight
+frozen ZIP archives without executing Python. It checks each recorded file
+hash, the complete tree and judge hashes, the historical generation/pair IDs,
+and the reconstructed generation ID. Regression cases remove the reset log
+or alter its recorded identity in a temporary copy; both prevent launch.
+
+The historical reset log was absent from the working tree. Its exact 19,805
+bytes were recovered from the parent Git revision into
+`tools/fixtures/recursive-structural-production/historical-production-reset.log`.
+The launch depends on that retained fixture and does not require restoring the
+absent historical path in the working tree. The preflight result is retained
+as `launch-preflight.json` during hosted production execution.
 
 These checks validate evidence handling and candidate construction. They do
 not execute the Python judges or establish environment production validity.

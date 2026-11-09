@@ -9,9 +9,12 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
+import { inflateRawSync } from 'node:zlib';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EVIDENCE = 'docs/artifacts/recursive-structural-validation-2026-11-02';
+const FROZEN_INPUTS = 'tools/fixtures/recursive-structural-production';
+const RESET_EVIDENCE = `${FROZEN_INPUTS}/historical-production-reset.log`;
 const REVIEW = 'docs/reports/2026-10-28-structural-source-review.json';
 const ENVIRONMENTS = [
   ['recursive_gluing', 'easy,easy,easy,easy'],
@@ -152,20 +155,20 @@ export function candidateSource(environment, original, network, variant) {
     '        return certificate\n';
 }
 
-function frozenIdentifiers() {
-  const log = fs.readFileSync(path.join(ROOT, EVIDENCE, 'eight-gate-production.log'), 'utf8');
+function frozenIdentifiers(root = ROOT) {
+  const log = fs.readFileSync(path.join(root, RESET_EVIDENCE), 'utf8');
   return Object.fromEntries(ENVIRONMENTS.map(([environment, difficulty]) => {
     const body = log.split(`ENV=${environment} COMMAND=reset`)[1]?.split('RESET_EXIT_STATUS=')[0];
     if (!body) throw new Error(`Missing frozen reset evidence: ${environment}`);
     const record = JSON.parse(body.trim());
     if (record.info.seed !== 41 || record.info.difficulty !== difficulty) throw new Error(`Frozen settings mismatch: ${environment}`);
     return [environment, { generation_id: record.info.generation_id, pair_id: record.info.pair_id,
-      seed: 41, difficulty, source: `${EVIDENCE}/eight-gate-production.log` }];
+      seed: 41, difficulty, source: RESET_EVIDENCE }];
   }));
 }
 
-function sourceRecord() {
-  const prior = readJson(path.join(ROOT, EVIDENCE, 'validation-record.json'));
+function sourceRecord(root = ROOT) {
+  const prior = readJson(path.join(root, EVIDENCE, 'validation-record.json'));
   const sourceFiles = [
     ...Object.keys(prior.source_hashes).filter(name => name.startsWith('envs/cat_theo/recursive_')),
     'env_runner.py', 'generate_env.py', 'pyproject.toml', 'requirements.txt', 'requirements.lock',
@@ -174,10 +177,10 @@ function sourceRecord() {
     'shared/Dockerfile.judge', '.github/workflows/recursive-structural-production-gate.yml',
     'tools/recursive_structural_production_gate.mjs', REVIEW, `${EVIDENCE}/validation-record.json`,
     'tests/test_recursive_structural_production_gate.mjs',
-    `${EVIDENCE}/eight-gate-production.log`,
+    RESET_EVIDENCE,
   ];
   return sourceFiles.map(filename => {
-    const bytes = fs.readFileSync(path.join(ROOT, filename));
+    const bytes = fs.readFileSync(path.join(root, filename));
     const text = bytes.toString('utf8').replace(/\r\n/g, '\n');
     const expected = prior.source_hashes[filename] ?? null;
     const raw = digest(bytes);
@@ -187,6 +190,84 @@ function sourceRecord() {
       historical_comparison: expected === null ? 'additional_execution_source' : expected === raw ? 'exact_bytes' :
         expected === lf || expected === crlf ? 'line_endings_only' : 'source_changed' };
   });
+}
+
+/** Read only stored/deflated ZIP entries; no extraction, subprocess, or Python. */
+export class FrozenArchive {
+  static read(bytes) {
+    const end = bytes.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    if (end < 0 || end + 22 > bytes.length) throw new Error('Missing ZIP directory');
+    if (bytes.readUInt16LE(end + 4) !== 0 || bytes.readUInt16LE(end + 6) !== 0 ||
+        bytes.readUInt16LE(end + 8) !== bytes.readUInt16LE(end + 10)) throw new Error('Unsupported split ZIP');
+    const count = bytes.readUInt16LE(end + 10);
+    let offset = bytes.readUInt32LE(end + 16);
+    const entries = new Map();
+    for (let index = 0; index < count; index++) {
+      if (bytes.readUInt32LE(offset) !== 0x02014b50) throw new Error('Invalid ZIP directory entry');
+      const flags = bytes.readUInt16LE(offset + 8);
+      const method = bytes.readUInt16LE(offset + 10);
+      const packedSize = bytes.readUInt32LE(offset + 20);
+      const size = bytes.readUInt32LE(offset + 24);
+      const nameSize = bytes.readUInt16LE(offset + 28);
+      const extraSize = bytes.readUInt16LE(offset + 30);
+      const commentSize = bytes.readUInt16LE(offset + 32);
+      const local = bytes.readUInt32LE(offset + 42);
+      const name = bytes.subarray(offset + 46, offset + 46 + nameSize).toString('utf8').replace(/\\/g, '/');
+      if ((flags & 1) !== 0 || ![0, 8].includes(method)) throw new Error('Unsupported encrypted/compressed ZIP');
+      if (entries.has(name) || name.startsWith('/') || name.split('/').includes('..')) throw new Error('Ambiguous ZIP path');
+      if (bytes.readUInt32LE(local) !== 0x04034b50) throw new Error('Invalid ZIP local entry');
+      const start = local + 30 + bytes.readUInt16LE(local + 26) + bytes.readUInt16LE(local + 28);
+      const packed = bytes.subarray(start, start + packedSize);
+      if (packed.length !== packedSize) throw new Error('Truncated ZIP payload');
+      const unpacked = method === 8 ? inflateRawSync(packed, { maxOutputLength: 64 * 1024 * 1024 }) : packed;
+      if (unpacked.length !== size) throw new Error('ZIP payload length mismatch');
+      entries.set(name, unpacked);
+      offset += 46 + nameSize + extraSize + commentSize;
+    }
+    return entries;
+  }
+}
+
+export class LaunchEvidence {
+  static inspect(root = ROOT, frozenInputs = path.join(root, FROZEN_INPUTS)) {
+    const sources = sourceRecord(root);
+    if (sources.some(row => row.historical_comparison === 'source_changed')) throw new Error('Reviewed environment source changed');
+    const identities = frozenIdentifiers(root);
+    const fixtures = ENVIRONMENTS.map(([environment, difficulty]) => {
+      const archivePath = path.join(frozenInputs, `${environment}.zip`);
+      const bytes = fs.readFileSync(archivePath);
+      const entries = FrozenArchive.read(bytes);
+      const manifest = JSON.parse(entries.get('env/generation.json').toString('utf8'));
+      const state = JSON.parse(entries.get('state.json').toString('utf8'));
+      if (manifest.generation_id !== identities[environment].generation_id || manifest.pair_id !== identities[environment].pair_id ||
+          state.provenance.generation_id !== manifest.generation_id || state.provenance.pair_id !== manifest.pair_id ||
+          state.seed !== 41 || state.difficulty !== difficulty || manifest.interventions.length !== 0) {
+        throw new Error(`Frozen identity differs from historical reset evidence: ${environment}`);
+      }
+      const files = Object.entries(manifest.files).map(([name, expected]) => {
+        const key = name.startsWith('agent/workspace/') ? `original_workspace/${name.slice('agent/workspace/'.length)}` : `env/${name}`;
+        const actual = digest(entries.get(key));
+        if (actual !== expected) throw new Error(`Frozen file hash differs: ${environment}/${name}`);
+        return `${name}:${actual}`;
+      });
+      const treeHash = digest(files.sort().join('\n'));
+      const judgeHash = digest(Object.entries(manifest.judge_files).map(([name, hash]) => `${name}:${hash}`).sort().join('\n'));
+      if (treeHash !== manifest.tree_sha256 || treeHash !== state.provenance.tree_sha256 ||
+          judgeHash !== manifest.judge_sha256 || judgeHash !== state.provenance.judge_sha256 ||
+          Object.entries(manifest.judge_files).some(([name, hash]) => manifest.files[name] !== hash)) {
+        throw new Error(`Frozen tree or judge identity differs: ${environment}`);
+      }
+      const generation = 'G' + digest(JSON.stringify(canonical({ env: manifest.environment,
+        config_path: manifest.config_path, config_sha256: manifest.config_sha256, seed: manifest.seed,
+        difficulty_vector: manifest.difficulty_vector, intervention_vector: [],
+        generator_version: manifest.generator_version, tree_sha256: treeHash }))).slice(0, 16);
+      if (generation !== manifest.generation_id || manifest.pair_id_basis !== 'latent_spec' ||
+          'P' + manifest.latent_spec_sha256.slice(0, 16) !== manifest.pair_id) throw new Error(`Frozen provenance cannot be reproduced: ${environment}`);
+      return { environment, archive: path.relative(root, archivePath).split(path.sep).join('/'),
+        sha256: digest(bytes), generation_id: generation, pair_id: manifest.pair_id, verified_files: files.length };
+    });
+    return { sources, identities, fixtures };
+  }
 }
 
 function stageEvidence(record) {
@@ -225,7 +306,7 @@ async function runGate() {
     throw new Error('This harness executes only on a GitHub-hosted Actions runner. No local execution is supported.');
   }
   const output = path.resolve(ROOT, argument('--output', 'docs/artifacts/recursive-structural-production-gate'));
-  const frozenInputs = path.resolve(ROOT, argument('--frozen-inputs', 'tools/fixtures/recursive-structural-production'));
+  const frozenInputs = path.resolve(ROOT, argument('--frozen-inputs', FROZEN_INPUTS));
   within(ROOT, output);
   fs.mkdirSync(output, { recursive: true });
   const commands = [];
@@ -251,8 +332,10 @@ async function runGate() {
     fs.appendFileSync(path.join(output, 'production-judge.log'), `${JSON.stringify(row)}\n`);
     return { ...row, stdout_text: stdout, stderr_text: stderr };
   }
-  const expected = frozenIdentifiers();
-  const sources = sourceRecord();
+  const launch = LaunchEvidence.inspect(ROOT, frozenInputs);
+  const expected = launch.identities;
+  const sources = launch.sources;
+  writeJson(path.join(output, 'launch-preflight.json'), launch);
   const commit = command('git', ['rev-parse', 'HEAD'], output, {}, 30000).stdout_text.trim();
   const packages = command('python', ['-m', 'pip', 'list', '--format=json'], output, {}, 60000);
   const python = command('python', ['--version'], output, {}, 30000);
@@ -495,7 +578,8 @@ function selfTest() {
   if (!source.includes('from operator import index') || source.includes('def index(') || source.includes('from __future__')) {
     throw new Error('Reference import sanitization changed operator.index semantics');
   }
-  process.stdout.write('PASS: eight evidence-classification and source-preservation regression assertions\n');
+  const launch = LaunchEvidence.inspect();
+  process.stdout.write(`PASS: eight evidence-classification/source-preservation assertions; ${launch.sources.length} launch sources and ${launch.fixtures.length} frozen archives verified\n`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
