@@ -2,6 +2,11 @@
 
 Date: 2026-11-09
 
+The subsequent hosted run passed all 72 controls. See the
+[completed two-track report](2026-11-09-two-track-continuation.md) for the
+tested revision, run links, independent artifact audit, and remaining limits.
+The preparation record below is retained for provenance.
+
 The hosted workflow now executes the JavaScript evidence harness already
 present in the working tree. The previous workflow still selected the older
 Python harness, so the preserved frozen-instance checks and eight-variant

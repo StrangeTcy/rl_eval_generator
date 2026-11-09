@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-11-09T16:22:02.417Z",
+  "commit": "a7979ef6ce58f9993ccaaa569ddd7d3f12783310",
+  "run_url": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/42647776111",
+  "input_results_sha256": "55c801e2759b866e34d47b4ece3ab4db9da5051fba32563ee67eb15c709ddd60",
+  "passed": true,
+  "counts": {
+    "cases": 72,
+    "cases_verified": 72,
+    "environments": 8,
+    "summary_passes": 8,
+    "expected_positive_passes": 16,
+    "expected_negative_rejections": 56,
+    "source_rejections": 8,
+    "behavioral_rejections": 48,
+    "frozen_identities_verified": 72,
+    "metadata_noninterference_pairs": 8,
+    "fresh_repetition_pairs": 8,
+    "source_and_fixture_blobs_matching_commit": 66,
+    "source_and_fixture_blobs_checked": 66
+  },
+  "case_failures": [],
+  "pair_failures": [],
+  "source_failures": [],
+  "scope": "Independent artifact audit: raw per-case judge JSON and runner responses, expected exits/outcomes, preserved outputs, submitted source hashes, recomputed frozen file/tree identity, paired output/source comparison, and exact Git blob hashes. No Python re-execution or model capability claim."
+}
