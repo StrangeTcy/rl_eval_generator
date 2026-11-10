@@ -7,7 +7,7 @@ apiKeyEnv: INCEPTION_API_KEY
 wireApi: chat_completions
 reasoningEffort: high
 minIntervalMs: 200
-maxOutputTokens: 8192
+maxOutputTokens: 32768
 timeoutMs: 120000
 maxTurns: 32
 # Absolute campaign ceiling. The workflow starts with a smaller selected bound.

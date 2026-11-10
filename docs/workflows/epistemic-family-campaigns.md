@@ -59,8 +59,9 @@ chat history or a provider response ID.
 | `resume_run_attempt` | The source run's attempt number; initially 1. |
 
 The default pairwise plan can require more than the initial 512-request bound.
-Use the plan to choose the live bound before starting. Each request allows at
-most 8,192 output tokens and 120 seconds; each episode allows at most 32 turns.
+Use the plan to choose the live bound before starting. Mercury requests allow
+at most 32,768 output tokens; Atria requests allow 8,192. Both have a 120-second
+timeout, and each episode allows at most 32 turns.
 The runner reserves capacity for all 32 turns before starting an episode, so it
 can pause with fewer than 32 requests remaining. It similarly reserves enough
 time for an entire episode before starting it.
