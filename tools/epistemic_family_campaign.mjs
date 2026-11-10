@@ -135,11 +135,14 @@ export class Campaign {
         events.forEach((event, index) => {
           const item = ledger.at(index);
           if (!item.response || Contract.hash(item.request.request) !== Contract.hash(ModelPolicy.request(manifest.profile, event.view)) || Contract.hash(item.response.transport) !== Contract.hash(event.transport)) throw new Error('episode request or transport mismatch');
-          let decoded, failure = null;
-          try { decoded = ModelPolicy.decode(manifest.profile, item.response.transport); } catch (error) { failure = error.message; }
+          let decoded, failure = null, outcome = null;
+          try { decoded = ModelPolicy.decode(manifest.profile, item.response.transport); } catch (error) {
+            failure = error.message;
+            outcome = ['output_limit', 'invalid_output', 'refusal'].includes(error.episodeStatus) ? error.episodeStatus : 'policy_failure';
+          }
           if (Object.hasOwn(event, 'action')) {
             if (failure || Contract.hash(decoded.action) !== Contract.hash(event.action)) throw new Error('recorded action differs from provider response');
-          } else if (failure !== event.failure) throw new Error('recorded provider failure mismatch');
+          } else if (failure !== event.failure || outcome !== event.outcome || saved.record.status !== outcome) throw new Error('recorded provider failure outcome mismatch');
         });
       } else if (state.executionMode !== 'reference' || saved.record.policy !== 'reference') throw new Error('episode execution mode mismatch');
       return saved;

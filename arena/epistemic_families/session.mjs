@@ -35,7 +35,11 @@ export class Session {
           action = JSON.parse(execution.stdout);
           Contract.object(action, 'JSON action');
         }
-      } catch (error) { status = 'policy_failure'; failure = error.message; transport = Contract.serializable(error.transport ?? transport); events.push({ view, transport, failure }); break; }
+      } catch (error) {
+        status = ['output_limit', 'invalid_output', 'refusal'].includes(error.episodeStatus) ? error.episodeStatus : 'policy_failure';
+        failure = error.message; transport = Contract.serializable(error.transport ?? transport);
+        events.push({ view, transport, failure, outcome: status }); break;
+      }
       try {
         const response = Contract.serializable(game.submit(structuredClone(action)));
         events.push({ view, action, response, transport });
@@ -53,19 +57,26 @@ export class Session {
   static async replay(record) {
     if (record.protocol !== PROTOCOL) throw new Error('unsupported record protocol');
     const module = await Catalog.load(record.family), configuration = Catalog.options(module.definition, record.configuration), game = module.create(configuration);
-    let terminal = null;
+    let terminal = null, outcome = 'turn_limit', failure = null;
     record.events.forEach((event, index) => {
+      if (outcome !== 'turn_limit') throw new Error('event after episode outcome');
       if (JSON.stringify(game.view()) !== JSON.stringify(event.view)) throw new Error(`view mismatch at ${index}`);
-      if (!Object.hasOwn(event, 'action')) { if (!event.failure || index !== record.events.length - 1) throw new Error('invalid policy failure record'); return; }
+      if (!Object.hasOwn(event, 'action')) {
+        if (!event.failure || index !== record.events.length - 1 || !['policy_failure', 'output_limit', 'invalid_output', 'refusal'].includes(event.outcome) || record.status !== event.outcome || record.failure !== event.failure) throw new Error('invalid policy failure outcome record');
+        outcome = event.outcome; failure = event.failure;
+        return;
+      }
       let response, error = null;
       try { response = game.submit(structuredClone(event.action)); } catch (caught) { error = caught; }
       if (event.failure) {
         if (!error || error.message !== event.failure || JSON.stringify(game.view()) !== JSON.stringify(event.view)) throw new Error('invalid-action replay mismatch');
+        outcome = 'invalid_action'; failure = event.failure;
       } else {
         if (error || JSON.stringify(response) !== JSON.stringify(event.response)) throw new Error(`response mismatch at ${index}`);
-        if (game.done) terminal = response;
+        if (game.done) { terminal = response; outcome = 'completed'; }
       }
     });
+    if (record.status !== outcome || record.failure !== failure) throw new Error('episode outcome mismatch');
     if (JSON.stringify(terminal) !== JSON.stringify(record.terminal) || JSON.stringify(game.audit()) !== JSON.stringify(record.audit)) throw new Error('terminal/audit mismatch');
     if ((record.status === 'completed') !== game.done) throw new Error('completion mismatch');
     return { status: 'passed', family: record.family, events: record.events.length, episodeStatus: record.status };

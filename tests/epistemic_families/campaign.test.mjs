@@ -23,7 +23,8 @@ class Fixture {
       counter.views.push(view);
       assert.equal(body.messages.length, 2);
       const action = responseMode === 'invalid' ? { kind: 'not_an_action' } : (await Catalog.load(view.family)).reference(view);
-      return { status: responseMode === 'http_error' ? 503 : 200, text: async () => JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(action) } }], usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 } }) };
+      const cutoff = responseMode === 'cutoff_once' && counter.requests === 1;
+      return { status: responseMode === 'http_error' ? 503 : 200, text: async () => JSON.stringify({ choices: [{ finish_reason: cutoff ? 'length' : 'stop', message: { role: 'assistant', content: cutoff ? null : JSON.stringify(action) } }], usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 } }) };
     } });
   }
 }
@@ -103,15 +104,56 @@ test('insufficient request allowance pauses before HTTP and a saved bound cannot
 });
 
 test('transport failure is recorded and replayed, and later resume never retries it', async () => {
-  const fixture = Fixture.create({ families: ['memory_inquiry'] });
+  const fixture = Fixture.create({ families: ['memory_inquiry'], attempts: 2 });
   const counter = { requests: 0, views: [] }, dependencies = { apiKey: 'test', policyFactory: Fixture.factory(counter, 'http_error') };
-  const options = { executionMode: 'live', maxRequests: 32 };
+  const options = { executionMode: 'live', maxRequests: 64 };
   const summary = await Campaign.run(fixture.profileFile, fixture.directory, options, dependencies);
   assert.equal(summary.status, 'failed');
   assert.equal(summary.recorded, 1);
+  assert.equal(summary.remaining, 1);
   assert.equal(summary.families.at(0).outcomes.at(0).status, 'policy_failure');
   assert.equal((await Campaign.verify(fixture.profileFile, fixture.directory)).status, 'passed');
   await Campaign.run(fixture.profileFile, fixture.directory, options, dependencies);
+  assert.equal(counter.requests, 1);
+});
+
+test('a token cutoff records one outcome, continues to the next case, and is never billed again on resume', async () => {
+  const fixture = Fixture.create({ families: ['memory_inquiry'], attempts: 2 });
+  const counter = { requests: 0, views: [] }, dependencies = { apiKey: 'test', policyFactory: Fixture.factory(counter, 'cutoff_once') };
+  const options = { executionMode: 'live', maxRequests: 64 };
+  const summary = await Campaign.run(fixture.profileFile, fixture.directory, options, dependencies);
+  assert.equal(summary.status, 'completed');
+  assert.equal(summary.recorded, 2);
+  assert.deepEqual(summary.families.at(0).outcomes.map(row => row.status), ['output_limit', 'completed']);
+  assert.equal(summary.families.at(0).outcomes.at(0).metrics, null);
+  assert.equal(Campaign.unseal(path.join(fixture.directory, 'state.json')).halt, null);
+  const cutoffFile = path.join(fixture.directory, 'episodes', 'memory_inquiry-0-0', 'record.json');
+  const cutoffBytes = fs.readFileSync(cutoffFile), before = counter.requests;
+  assert.ok(before > 1);
+  const resumed = await Campaign.run(fixture.profileFile, fixture.directory, options, dependencies);
+  assert.equal(resumed.status, 'completed');
+  assert.equal(counter.requests, before);
+  assert.deepEqual(fs.readFileSync(cutoffFile), cutoffBytes);
+  assert.equal((await Campaign.verify(fixture.profileFile, fixture.directory)).status, 'passed');
+});
+
+test('resealing a service failure as an output cutoff cannot bypass the campaign halt', async () => {
+  const fixture = Fixture.create({ families: ['memory_inquiry'] });
+  const counter = { requests: 0, views: [] }, dependencies = { apiKey: 'test', policyFactory: Fixture.factory(counter, 'http_error') };
+  const options = { executionMode: 'live', maxRequests: 32 };
+  await Campaign.run(fixture.profileFile, fixture.directory, options, dependencies);
+  const file = path.join(fixture.directory, 'episodes', 'memory_inquiry-0-0', 'record.json');
+  const saved = Campaign.unseal(file);
+  saved.record.status = 'output_limit';
+  saved.record.events.at(-1).outcome = 'output_limit';
+  saved.replay.episodeStatus = 'output_limit';
+  Campaign.seal(file, saved);
+  const stateFile = path.join(fixture.directory, 'state.json'), state = Campaign.unseal(stateFile);
+  state.recorded.at(0).sha256 = Contract.hash(saved);
+  state.halt = null;
+  Campaign.seal(stateFile, state);
+  await assert.rejects(Campaign.verify(fixture.profileFile, fixture.directory), /failure outcome mismatch/);
+  await assert.rejects(Campaign.run(fixture.profileFile, fixture.directory, options, dependencies), /failure outcome mismatch/);
   assert.equal(counter.requests, 1);
 });
 

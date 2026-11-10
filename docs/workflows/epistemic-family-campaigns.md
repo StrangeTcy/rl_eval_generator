@@ -69,6 +69,12 @@ It bounds generated tokens by request count times the per-request cap; input
 tokens and monetary cost are separate. Recorded usage is whatever the provider
 reports. Missing usage is not counted as zero measured consumption.
 
+Token-limit cutoffs, refusals and invalid model output end the current episode
+without producing a score; the campaign records the outcome and continues to
+the next case. Transport failures, unsuccessful HTTP responses and malformed
+provider responses halt the campaign. Raw response evidence is retained for
+both kinds of outcome, and replay verifies the recorded classification.
+
 The matrix describes coverage of configured axis levels. These public fixtures
 and repeated attempts are not independent structural samples, and their level
 names do not establish empirical difficulty. Reports retain each family's

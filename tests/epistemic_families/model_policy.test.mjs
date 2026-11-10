@@ -99,19 +99,69 @@ test('complete fenced JSON is accepted and no reasoning item becomes an action',
   assert.throws(() => ModelPolicy.decode(Fixture.profile('atria'), Fixture.transport(responses)), /no assistant text/);
 });
 
-test('truncated completions, refusals, and incomplete responses cannot be scored', () => {
+test('known token cutoffs and refusals are model outcomes while unknown incomplete responses remain service failures', () => {
   const chat = Fixture.response('mercury', { kind: 'advance' });
   chat.choices.at(0).finish_reason = 'length';
-  assert.throws(() => ModelPolicy.decode(Fixture.profile(), Fixture.transport(chat)), /not finished/);
+  chat.choices.at(0).message.content = null;
+  assert.throws(() => ModelPolicy.decode(Fixture.profile(), Fixture.transport(chat)), error => error.episodeStatus === 'output_limit');
   chat.choices.at(0).finish_reason = 'stop';
   chat.choices.at(0).message.refusal = 'refused';
-  assert.throws(() => ModelPolicy.decode(Fixture.profile(), Fixture.transport(chat)), /refused/);
+  assert.throws(() => ModelPolicy.decode(Fixture.profile(), Fixture.transport(chat)), error => error.episodeStatus === 'refusal');
   const responses = Fixture.response('atria', { kind: 'advance' });
   responses.status = 'incomplete';
-  assert.throws(() => ModelPolicy.decode(Fixture.profile('atria'), Fixture.transport(responses)), /incomplete/);
+  assert.throws(() => ModelPolicy.decode(Fixture.profile('atria'), Fixture.transport(responses)), error => /incomplete/.test(error.message) && error.episodeStatus === undefined);
+  responses.incomplete_details = { reason: 'max_output_tokens' };
+  assert.throws(() => ModelPolicy.decode(Fixture.profile('atria'), Fixture.transport(responses)), error => error.episodeStatus === 'output_limit');
+  responses.incomplete_details = null;
   responses.status = 'completed';
   responses.output.at(1).content = [{ type: 'refusal', refusal: 'refused' }];
-  assert.throws(() => ModelPolicy.decode(Fixture.profile('atria'), Fixture.transport(responses)), /refused/);
+  assert.throws(() => ModelPolicy.decode(Fixture.profile('atria'), Fixture.transport(responses)), error => error.episodeStatus === 'refusal');
+});
+
+test('malformed model actions are outcomes but malformed provider envelopes and errors still fail the service', () => {
+  ['not JSON', '[]', 'null', '"text"'].forEach(content => {
+    const payload = Fixture.response('mercury', {});
+    payload.choices.at(0).message.content = content;
+    assert.throws(() => ModelPolicy.decode(Fixture.profile(), Fixture.transport(payload)), error => error.episodeStatus === 'invalid_output');
+  });
+  [{}, { choices: [{ finish_reason: 'length' }] }, { error: { message: 'service failure' }, choices: [{ finish_reason: 'length', message: { content: null } }] }].forEach(payload => {
+    assert.throws(() => ModelPolicy.decode(Fixture.profile(), Fixture.transport(payload)), error => error.episodeStatus === undefined);
+  });
+  assert.throws(() => ModelPolicy.decode(Fixture.profile(), { httpStatus: 200, raw: 'not JSON', usage: null, error: null }), error => error.episodeStatus === undefined);
+  const cutoff = Fixture.response('mercury', {});
+  cutoff.choices.at(0).finish_reason = 'length';
+  [503, undefined, NaN, '200', null].forEach(httpStatus => {
+    const transport = { ...Fixture.transport(cutoff), httpStatus };
+    assert.throws(() => ModelPolicy.decode(Fixture.profile(), transport), error => error.episodeStatus === undefined);
+  });
+});
+
+test('token cutoff episodes retain raw usage and replay without inventing an action or terminal metrics', async () => {
+  const payload = Fixture.response('mercury', {});
+  payload.choices.at(0).finish_reason = 'length';
+  payload.choices.at(0).message.content = null;
+  payload.usage = { prompt_tokens: 977, completion_tokens: 7913, total_tokens: 8890 };
+  const policy = new ModelPolicy(Fixture.profile(), { apiKey: 'secret', fetchImpl: async () => new Response(JSON.stringify(payload)) });
+  const record = await Session.run('memory_inquiry', {}, policy);
+  assert.equal(record.status, 'output_limit');
+  assert.equal(record.terminal, null);
+  assert.equal(record.events.length, 1);
+  assert.equal(Object.hasOwn(record.events.at(0), 'action'), false);
+  assert.equal(record.events.at(0).outcome, 'output_limit');
+  assert.deepEqual(record.events.at(0).transport.usage, { inputTokens: 977, outputTokens: 7913, totalTokens: 8890 });
+  assert.equal(record.events.at(0).transport.raw, JSON.stringify(payload));
+  assert.equal((await Session.replay(record)).episodeStatus, 'output_limit');
+  record.status = 'invalid_output';
+  await assert.rejects(Session.replay(record), /outcome record/);
+});
+
+test('successful action-only traces cannot be relabeled as output cutoffs', async () => {
+  const record = await Session.run('memory_inquiry', {}, 'reference', { maxTurns: 1 });
+  assert.equal(record.status, 'turn_limit');
+  assert.equal((await Session.replay(record)).episodeStatus, 'turn_limit');
+  record.status = 'output_limit';
+  record.failure = 'provider reached the output token limit';
+  await assert.rejects(Session.replay(record), /episode outcome mismatch/);
 });
 
 test('missing or malformed usage remains unknown rather than being recorded as zero', () => {
