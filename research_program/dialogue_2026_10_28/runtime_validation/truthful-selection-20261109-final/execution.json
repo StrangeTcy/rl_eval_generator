@@ -1,0 +1,53 @@
+{
+  "schema": "local-execution-evidence/1",
+  "date": "2026-11-09",
+  "cwd": "C:\\Users\\hatgu\\rl_eval_generator",
+  "activation": "call C:\\Users\\hatgu\\anaconda3\\Scripts\\activate.bat epi-comp",
+  "shell": "cmd.exe /d /s /c",
+  "runtime": "Node v24.19.0",
+  "commands": [
+    {
+      "command": "node tools/truthful_selection_study.mjs run research_program/dialogue_2026_10_28/runtime_validation/truthful-selection-20261109-final",
+      "stdout": "../truthful-selection-20261109-final-summary.json",
+      "exit_code": 0
+    },
+    {
+      "command": "node --test --test-reporter=tap tests/test_truthful_selection.mjs",
+      "stdout": "tests.tap",
+      "exit_code": 0,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "command": "node tools/truthful_selection_study.mjs replay research_program/dialogue_2026_10_28/runtime_validation/truthful-selection-20261109-final",
+      "stdout": "replay.json",
+      "exit_code": 0,
+      "cases_checked": 63,
+      "answers_checked": 126
+    },
+    {
+      "command": "node --version",
+      "stdout": "node-version.txt",
+      "exit_code": 0
+    },
+    {
+      "command": "node tools/truthful_selection_study.mjs show 9 favors-1 common",
+      "stdout": "example-public.json",
+      "exit_code": 0
+    },
+    {
+      "command": "node tools/truthful_selection_study.mjs score 9 favors-1 common \"answer 1 1/10 9/10\"",
+      "stdout": "example-score.json",
+      "exit_code": 0
+    }
+  ],
+  "sha256": {
+    "arena/inquiry/selection_laws.mjs": "60b7d66a41cf0caa1ba51f3421affb22fef31fd99371cd05d08db39910f15ed5",
+    "tools/truthful_selection_study.mjs": "c7becd84b93af3b42b7dfebfae5de7da11da0f2c05bddde703b3643e8ab83201",
+    "tests/test_truthful_selection.mjs": "c3340b7e8cf861d9767cb2f843f0147acb6cbcde90235379aa6ff4a552b38944",
+    "tests.tap": "1fc54eee791e244f66c7536100676bec7a7f6ea9117e8fc7e11e52b9178bb9ed",
+    "records.json": "6f94abee437cc4df2eec3d021d8e52db4be1f55f53746d807d4c0bfc03d29c16"
+  },
+  "scope": "Deterministic supplied-law controls and proper-scoring implementation; no external model calls or capability claim."
+}

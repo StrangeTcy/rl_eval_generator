@@ -552,7 +552,20 @@ class SchedulerControls:
         job = generate_job(depth=depth, regime=TREE, opacity=OPAQUE,
                            seed=seed, lock_count=capacity)
         root = job["workers"][job["root"]]
-        root["program"] = ("spawn", "lock", "recv:child", "compute", "unlock")
+        # Hold one permit while a request is forwarded down the chain.  The
+        # leaf must acquire the second permit before receiving that request;
+        # with one permit this is a genuine wait-for-lock deadlock, while two
+        # permits permit the request/response rendezvous to complete.
+        root["program"] = ("spawn", "lock", "send:child", "recv:child", "compute", "unlock")
+        for name, spec in job["workers"].items():
+            if name == job["root"]:
+                continue
+            if spec["child"] is None:
+                spec["program"] = ("lock", "recv:parent", "compute", "unlock", "send:parent")
+            else:
+                spec["program"] = (
+                    "spawn", "recv:parent", "send:child", "recv:child", "send:parent"
+                )
         job.pop("meta", None)
         return job
 

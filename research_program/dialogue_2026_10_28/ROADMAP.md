@@ -1,5 +1,15 @@
 # Research portfolio
 
+**2026-11-09 update:** the truthful-subset selection and sincere-disagreement
+expansion cards now have a bounded finite implementation. See
+[the executed report](TRUTHFUL_SELECTION_REPORT.md) and
+[supplemental evidence](truthful_selection_evidence.json): 14 tests pass, all 63
+cases agree with an independent concrete-ticket oracle, and 126 scripted answers
+replay. Unknown-law inference and evaluated-model measurements remain open.
+The earlier portfolio and execution restrictions below describe their original
+delivery; this continuation was authorized by the user's request to develop both
+repository directions.
+
 The first implementation portfolio is **sequential diagnostic inquiry plus adaptive strategic communication**. These address a concrete gap between a static answer and an action that changes what is observed next. They extend existing T1, belief-inference, and signaling work without duplicating the recursive-gluing workstream.
 
 All experiment specifications below are prospective. No new model performance has been measured. Exact opportunity IDs, source spans, quotations, and relationships are in `inventory.json`; the complete primary source is `source.md`.

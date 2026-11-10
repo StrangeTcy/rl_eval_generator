@@ -1,0 +1,6432 @@
+{
+  "schema": "truthful-selection-record/1",
+  "designSha256": "69c352327ee7f9225fe12c58e2852970f2ea1fbfdd2b555cb38eadd82e26f8e8",
+  "cases": [
+    {
+      "severity": 2,
+      "law": "favors-0",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "1c112f85bf6ff4b1d48dc634ed1a436f0b68d7bd5a52f4e13ae6922b55a25bf6",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "1c112f85bf6ff4b1d48dc634ed1a436f0b68d7bd5a52f4e13ae6922b55a25bf6",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "1c112f85bf6ff4b1d48dc634ed1a436f0b68d7bd5a52f4e13ae6922b55a25bf6",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "4/9",
+            "forecastExcess": "1/18",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 2,
+      "law": "favors-0",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "ac8714cfe5c7d55723cf9bc628759af709d7a2a3cbd12f8e138054b06e034af0",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 4/5 1/5",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ac8714cfe5c7d55723cf9bc628759af709d7a2a3cbd12f8e138054b06e034af0",
+            "posterior": [
+              "4/5",
+              "1/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "8/25",
+            "bayesBrier": "8/25",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ac8714cfe5c7d55723cf9bc628759af709d7a2a3cbd12f8e138054b06e034af0",
+            "posterior": [
+              "4/5",
+              "1/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "16/45",
+            "bayesBrier": "8/25",
+            "forecastExcess": "8/225",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 2,
+      "law": "favors-0",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "1682848e59d1955eeda1e90dcfbf16b5f16c68ed58c38c51fb3a9573fca403e1",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "1682848e59d1955eeda1e90dcfbf16b5f16c68ed58c38c51fb3a9573fca403e1",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "1682848e59d1955eeda1e90dcfbf16b5f16c68ed58c38c51fb3a9573fca403e1",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "5/9",
+            "bayesBrier": "1/2",
+            "forecastExcess": "1/18",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 2,
+      "law": "favors-1",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "4e291235c866f8ee5f3a946d294fc4f546da3c9c02482e875c3995c0b3a804a3",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "4e291235c866f8ee5f3a946d294fc4f546da3c9c02482e875c3995c0b3a804a3",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "4e291235c866f8ee5f3a946d294fc4f546da3c9c02482e875c3995c0b3a804a3",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "2/3",
+            "decisionRegret": "1/3",
+            "expectedBrier": "1/2",
+            "bayesBrier": "4/9",
+            "forecastExcess": "1/18",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 2,
+      "law": "favors-1",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "881e36131f611fcc673296fa98d98c42f852dbbaf434bd799d976a8fdc7b9949",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "881e36131f611fcc673296fa98d98c42f852dbbaf434bd799d976a8fdc7b9949",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "881e36131f611fcc673296fa98d98c42f852dbbaf434bd799d976a8fdc7b9949",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "5/9",
+            "bayesBrier": "1/2",
+            "forecastExcess": "1/18",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 2,
+      "law": "favors-1",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "dad00e04619944a5df20764944b4e4654a09c1e86252aec1cd5cb50535547309",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/5 4/5",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "dad00e04619944a5df20764944b4e4654a09c1e86252aec1cd5cb50535547309",
+            "posterior": [
+              "1/5",
+              "4/5"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "8/25",
+            "bayesBrier": "8/25",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "dad00e04619944a5df20764944b4e4654a09c1e86252aec1cd5cb50535547309",
+            "posterior": [
+              "1/5",
+              "4/5"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "16/45",
+            "bayesBrier": "8/25",
+            "forecastExcess": "8/225",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 2,
+      "law": "uninformative",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "384f93da2a1a51ebb5d039a91dc96f7c2ca952558c52dddc126d25db88fd411e",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "384f93da2a1a51ebb5d039a91dc96f7c2ca952558c52dddc126d25db88fd411e",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "384f93da2a1a51ebb5d039a91dc96f7c2ca952558c52dddc126d25db88fd411e",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 2,
+      "law": "uninformative",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "5d1a9006246a0b98b97f10dfb59af90888bc165882b230f68915e1b1bf117219",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "5d1a9006246a0b98b97f10dfb59af90888bc165882b230f68915e1b1bf117219",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "5d1a9006246a0b98b97f10dfb59af90888bc165882b230f68915e1b1bf117219",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 2,
+      "law": "uninformative",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "e8e16372a506d598df5269e110323b12a42b0a995b84c5d810aeb9333e099dad",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "e8e16372a506d598df5269e110323b12a42b0a995b84c5d810aeb9333e099dad",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "e8e16372a506d598df5269e110323b12a42b0a995b84c5d810aeb9333e099dad",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "favors-0",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "331f5672ed5f529d20c5823581407043006114c35f1a282c72d24ee0d13dc08e",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 3/4 1/4",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "331f5672ed5f529d20c5823581407043006114c35f1a282c72d24ee0d13dc08e",
+            "posterior": [
+              "3/4",
+              "1/4"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/4",
+            "decisionRegret": "0",
+            "expectedBrier": "3/8",
+            "bayesBrier": "3/8",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "331f5672ed5f529d20c5823581407043006114c35f1a282c72d24ee0d13dc08e",
+            "posterior": [
+              "3/4",
+              "1/4"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/4",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "3/8",
+            "forecastExcess": "1/8",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "favors-0",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "9ec7db39f768e9fda018015b14273428706a39ec726a35e0d523feda5611c65a",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 6/7 1/7",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "9ec7db39f768e9fda018015b14273428706a39ec726a35e0d523feda5611c65a",
+            "posterior": [
+              "6/7",
+              "1/7"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/7",
+            "decisionRegret": "0",
+            "expectedBrier": "12/49",
+            "bayesBrier": "12/49",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "9ec7db39f768e9fda018015b14273428706a39ec726a35e0d523feda5611c65a",
+            "posterior": [
+              "6/7",
+              "1/7"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/7",
+            "decisionRegret": "0",
+            "expectedBrier": "20/63",
+            "bayesBrier": "12/49",
+            "forecastExcess": "32/441",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "favors-0",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "7d98d1d85595615fb011aa32bb10f9b8bbac3939c692ca2ea158a74321de706e",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 3/5 2/5",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "7d98d1d85595615fb011aa32bb10f9b8bbac3939c692ca2ea158a74321de706e",
+            "posterior": [
+              "3/5",
+              "2/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "2/5",
+            "decisionRegret": "0",
+            "expectedBrier": "12/25",
+            "bayesBrier": "12/25",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "7d98d1d85595615fb011aa32bb10f9b8bbac3939c692ca2ea158a74321de706e",
+            "posterior": [
+              "3/5",
+              "2/5"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "3/5",
+            "decisionRegret": "1/5",
+            "expectedBrier": "28/45",
+            "bayesBrier": "12/25",
+            "forecastExcess": "32/225",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "favors-1",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "144c38457bd93c8b8068154a13a64c2a2ab7516e9ba7965d46f3536cfd64afd1",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/4 3/4",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "144c38457bd93c8b8068154a13a64c2a2ab7516e9ba7965d46f3536cfd64afd1",
+            "posterior": [
+              "1/4",
+              "3/4"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/4",
+            "decisionRegret": "0",
+            "expectedBrier": "3/8",
+            "bayesBrier": "3/8",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "144c38457bd93c8b8068154a13a64c2a2ab7516e9ba7965d46f3536cfd64afd1",
+            "posterior": [
+              "1/4",
+              "3/4"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "3/4",
+            "decisionRegret": "1/2",
+            "expectedBrier": "1/2",
+            "bayesBrier": "3/8",
+            "forecastExcess": "1/8",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "favors-1",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "927d317b49144eecb7be691da70098db37667463e23e010237d3448d80d51bf7",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 2/5 3/5",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "927d317b49144eecb7be691da70098db37667463e23e010237d3448d80d51bf7",
+            "posterior": [
+              "2/5",
+              "3/5"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "2/5",
+            "decisionRegret": "0",
+            "expectedBrier": "12/25",
+            "bayesBrier": "12/25",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "927d317b49144eecb7be691da70098db37667463e23e010237d3448d80d51bf7",
+            "posterior": [
+              "2/5",
+              "3/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "3/5",
+            "decisionRegret": "1/5",
+            "expectedBrier": "28/45",
+            "bayesBrier": "12/25",
+            "forecastExcess": "32/225",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "favors-1",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "4fde2bb17ee5204c8c018b1300853c781446d64a08828ee31a8747016cfe1865",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/7 6/7",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "4fde2bb17ee5204c8c018b1300853c781446d64a08828ee31a8747016cfe1865",
+            "posterior": [
+              "1/7",
+              "6/7"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/7",
+            "decisionRegret": "0",
+            "expectedBrier": "12/49",
+            "bayesBrier": "12/49",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "4fde2bb17ee5204c8c018b1300853c781446d64a08828ee31a8747016cfe1865",
+            "posterior": [
+              "1/7",
+              "6/7"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/7",
+            "decisionRegret": "0",
+            "expectedBrier": "20/63",
+            "bayesBrier": "12/49",
+            "forecastExcess": "32/441",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "uninformative",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "ed37799e3278b0f1cdd8e13b41c9d74b14a0b0984759303f8c2cee71efc2d0a7",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ed37799e3278b0f1cdd8e13b41c9d74b14a0b0984759303f8c2cee71efc2d0a7",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ed37799e3278b0f1cdd8e13b41c9d74b14a0b0984759303f8c2cee71efc2d0a7",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "uninformative",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "c4f892fe111ddbb63c658ac8f51c839f98f4d91267a9160888ad3cb925af3644",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "c4f892fe111ddbb63c658ac8f51c839f98f4d91267a9160888ad3cb925af3644",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "c4f892fe111ddbb63c658ac8f51c839f98f4d91267a9160888ad3cb925af3644",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 3,
+      "law": "uninformative",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "68957655449b5cb00ac59c69067c013c9d56367266e8380f8d080ebb6a7508cb",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            0,
+            3
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "68957655449b5cb00ac59c69067c013c9d56367266e8380f8d080ebb6a7508cb",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "68957655449b5cb00ac59c69067c013c9d56367266e8380f8d080ebb6a7508cb",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "favors-0",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            4,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "38d5e4f7a7797a1c6356f3b8678ac0e857284b4ad881721ffc66a324f9c06c95",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            4,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 4/5 1/5",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "38d5e4f7a7797a1c6356f3b8678ac0e857284b4ad881721ffc66a324f9c06c95",
+            "posterior": [
+              "4/5",
+              "1/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "8/25",
+            "bayesBrier": "8/25",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "38d5e4f7a7797a1c6356f3b8678ac0e857284b4ad881721ffc66a324f9c06c95",
+            "posterior": [
+              "4/5",
+              "1/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "8/25",
+            "forecastExcess": "9/50",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "favors-0",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            4,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "7e535cf9ef6ebb2cd82e08515ed584b9887b3787e8ff3e5973f216d654e917fa",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            4,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 8/9 1/9",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "7e535cf9ef6ebb2cd82e08515ed584b9887b3787e8ff3e5973f216d654e917fa",
+            "posterior": [
+              "8/9",
+              "1/9"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/9",
+            "decisionRegret": "0",
+            "expectedBrier": "16/81",
+            "bayesBrier": "16/81",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "7e535cf9ef6ebb2cd82e08515ed584b9887b3787e8ff3e5973f216d654e917fa",
+            "posterior": [
+              "8/9",
+              "1/9"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/9",
+            "decisionRegret": "0",
+            "expectedBrier": "8/27",
+            "bayesBrier": "16/81",
+            "forecastExcess": "8/81",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "favors-0",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            4,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "57e674d8379f68c97e0f22b704eaba0cbc5df243c363c42aac2461630e6007bf",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            4,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "57e674d8379f68c97e0f22b704eaba0cbc5df243c363c42aac2461630e6007bf",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "57e674d8379f68c97e0f22b704eaba0cbc5df243c363c42aac2461630e6007bf",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "2/3",
+            "decisionRegret": "1/3",
+            "expectedBrier": "2/3",
+            "bayesBrier": "4/9",
+            "forecastExcess": "2/9",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "favors-1",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "e1af0faf8dbd8a3ce1058af68117cb0119daceafca22345f043565221bae7a17",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/5 4/5",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "e1af0faf8dbd8a3ce1058af68117cb0119daceafca22345f043565221bae7a17",
+            "posterior": [
+              "1/5",
+              "4/5"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "8/25",
+            "bayesBrier": "8/25",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "e1af0faf8dbd8a3ce1058af68117cb0119daceafca22345f043565221bae7a17",
+            "posterior": [
+              "1/5",
+              "4/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "4/5",
+            "decisionRegret": "3/5",
+            "expectedBrier": "1/2",
+            "bayesBrier": "8/25",
+            "forecastExcess": "9/50",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "favors-1",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "606209f89fff051ed1ba736c5654b44bb49c121a7cbfc04a8dcffd1f2b1db5a5",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "606209f89fff051ed1ba736c5654b44bb49c121a7cbfc04a8dcffd1f2b1db5a5",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "606209f89fff051ed1ba736c5654b44bb49c121a7cbfc04a8dcffd1f2b1db5a5",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "2/3",
+            "decisionRegret": "1/3",
+            "expectedBrier": "2/3",
+            "bayesBrier": "4/9",
+            "forecastExcess": "2/9",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "favors-1",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "30d243d967124c125ab5a8670802a0e1eae45f5920a66c42be72eed20eac4237",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/9 8/9",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "30d243d967124c125ab5a8670802a0e1eae45f5920a66c42be72eed20eac4237",
+            "posterior": [
+              "1/9",
+              "8/9"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/9",
+            "decisionRegret": "0",
+            "expectedBrier": "16/81",
+            "bayesBrier": "16/81",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "30d243d967124c125ab5a8670802a0e1eae45f5920a66c42be72eed20eac4237",
+            "posterior": [
+              "1/9",
+              "8/9"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/9",
+            "decisionRegret": "0",
+            "expectedBrier": "8/27",
+            "bayesBrier": "16/81",
+            "forecastExcess": "8/81",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "uninformative",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "ca19a0609a390af8c85b0b54ccf334f67f9bce9135f43c77416ed2b7cb1aa805",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ca19a0609a390af8c85b0b54ccf334f67f9bce9135f43c77416ed2b7cb1aa805",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ca19a0609a390af8c85b0b54ccf334f67f9bce9135f43c77416ed2b7cb1aa805",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "uninformative",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "cae3a96cd687cad66e4edaf1e5638d9afe9b172166572fa8d09e786ff780ab14",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "cae3a96cd687cad66e4edaf1e5638d9afe9b172166572fa8d09e786ff780ab14",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "cae3a96cd687cad66e4edaf1e5638d9afe9b172166572fa8d09e786ff780ab14",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 4,
+      "law": "uninformative",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "4b257b952d65fc6e74e5aa6b9ce2a0899f2615b53c8b95798c9e3be2ef30fc36",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            1,
+            0,
+            4
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "4b257b952d65fc6e74e5aa6b9ce2a0899f2615b53c8b95798c9e3be2ef30fc36",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "4b257b952d65fc6e74e5aa6b9ce2a0899f2615b53c8b95798c9e3be2ef30fc36",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "favors-0",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            5,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "b0a30ba3dc871e2c32fb987b3349a30e3ed2096b245351c58850a2efd1a05c1c",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            5,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 5/6 1/6",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "b0a30ba3dc871e2c32fb987b3349a30e3ed2096b245351c58850a2efd1a05c1c",
+            "posterior": [
+              "5/6",
+              "1/6"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/6",
+            "decisionRegret": "0",
+            "expectedBrier": "5/18",
+            "bayesBrier": "5/18",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "b0a30ba3dc871e2c32fb987b3349a30e3ed2096b245351c58850a2efd1a05c1c",
+            "posterior": [
+              "5/6",
+              "1/6"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/6",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "5/18",
+            "forecastExcess": "2/9",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "favors-0",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            5,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "da6832bb86994ce962e49e1b0a5a7994ca1cf300ca2a8d722d23821dbf8c9a74",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            5,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 10/11 1/11",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "da6832bb86994ce962e49e1b0a5a7994ca1cf300ca2a8d722d23821dbf8c9a74",
+            "posterior": [
+              "10/11",
+              "1/11"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/11",
+            "decisionRegret": "0",
+            "expectedBrier": "20/121",
+            "bayesBrier": "20/121",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "da6832bb86994ce962e49e1b0a5a7994ca1cf300ca2a8d722d23821dbf8c9a74",
+            "posterior": [
+              "10/11",
+              "1/11"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/11",
+            "decisionRegret": "0",
+            "expectedBrier": "28/99",
+            "bayesBrier": "20/121",
+            "forecastExcess": "128/1089",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "favors-0",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            5,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "8e7a5648599db5f4b9ddbd5161dc1a556242a4c25cf32e354a481ada2d6e0b29",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            5,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 5/7 2/7",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "8e7a5648599db5f4b9ddbd5161dc1a556242a4c25cf32e354a481ada2d6e0b29",
+            "posterior": [
+              "5/7",
+              "2/7"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "2/7",
+            "decisionRegret": "0",
+            "expectedBrier": "20/49",
+            "bayesBrier": "20/49",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "8e7a5648599db5f4b9ddbd5161dc1a556242a4c25cf32e354a481ada2d6e0b29",
+            "posterior": [
+              "5/7",
+              "2/7"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "5/7",
+            "decisionRegret": "3/7",
+            "expectedBrier": "44/63",
+            "bayesBrier": "20/49",
+            "forecastExcess": "128/441",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "favors-1",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            5,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "63b143b66da48a3ed817666ef0ab50a796a451deca1ea29e19ca248080089466",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            5,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/6 5/6",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "63b143b66da48a3ed817666ef0ab50a796a451deca1ea29e19ca248080089466",
+            "posterior": [
+              "1/6",
+              "5/6"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/6",
+            "decisionRegret": "0",
+            "expectedBrier": "5/18",
+            "bayesBrier": "5/18",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "63b143b66da48a3ed817666ef0ab50a796a451deca1ea29e19ca248080089466",
+            "posterior": [
+              "1/6",
+              "5/6"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "5/6",
+            "decisionRegret": "2/3",
+            "expectedBrier": "1/2",
+            "bayesBrier": "5/18",
+            "forecastExcess": "2/9",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "favors-1",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            5,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "477a42b0895c15bd329eb3ca524e08b58d5ec520d556512fe0e59710d0feb37b",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            5,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 2/7 5/7",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "477a42b0895c15bd329eb3ca524e08b58d5ec520d556512fe0e59710d0feb37b",
+            "posterior": [
+              "2/7",
+              "5/7"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "2/7",
+            "decisionRegret": "0",
+            "expectedBrier": "20/49",
+            "bayesBrier": "20/49",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "477a42b0895c15bd329eb3ca524e08b58d5ec520d556512fe0e59710d0feb37b",
+            "posterior": [
+              "2/7",
+              "5/7"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "5/7",
+            "decisionRegret": "3/7",
+            "expectedBrier": "44/63",
+            "bayesBrier": "20/49",
+            "forecastExcess": "128/441",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "favors-1",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            5,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "1481368a3805c0079fe6f1f09b3cb9b7f9f2c8a22360eb34dd30843b65473862",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            5,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/11 10/11",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "1481368a3805c0079fe6f1f09b3cb9b7f9f2c8a22360eb34dd30843b65473862",
+            "posterior": [
+              "1/11",
+              "10/11"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/11",
+            "decisionRegret": "0",
+            "expectedBrier": "20/121",
+            "bayesBrier": "20/121",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "1481368a3805c0079fe6f1f09b3cb9b7f9f2c8a22360eb34dd30843b65473862",
+            "posterior": [
+              "1/11",
+              "10/11"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/11",
+            "decisionRegret": "0",
+            "expectedBrier": "28/99",
+            "bayesBrier": "20/121",
+            "forecastExcess": "128/1089",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "uninformative",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "e46b8d713a61cb48e25597a948e92c48aa6df059d2164d6b05254fa38483319d",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "e46b8d713a61cb48e25597a948e92c48aa6df059d2164d6b05254fa38483319d",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "e46b8d713a61cb48e25597a948e92c48aa6df059d2164d6b05254fa38483319d",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "uninformative",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "a6baab9c1313683f953f34f5fd10e275ca6be6e66c38882e466f474c6c41fa11",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "a6baab9c1313683f953f34f5fd10e275ca6be6e66c38882e466f474c6c41fa11",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "a6baab9c1313683f953f34f5fd10e275ca6be6e66c38882e466f474c6c41fa11",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 5,
+      "law": "uninformative",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "c1a944e2a1de9b582692f925d191aa7a30e176440ea0508249b682eb154f6de1",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            1,
+            0,
+            5
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "c1a944e2a1de9b582692f925d191aa7a30e176440ea0508249b682eb154f6de1",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "c1a944e2a1de9b582692f925d191aa7a30e176440ea0508249b682eb154f6de1",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "favors-0",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            6,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "4d08e4bbeb745c442bbddbae339818b967d9fba3ac833a3e68baf156347ae79b",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            6,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 6/7 1/7",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "4d08e4bbeb745c442bbddbae339818b967d9fba3ac833a3e68baf156347ae79b",
+            "posterior": [
+              "6/7",
+              "1/7"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/7",
+            "decisionRegret": "0",
+            "expectedBrier": "12/49",
+            "bayesBrier": "12/49",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "4d08e4bbeb745c442bbddbae339818b967d9fba3ac833a3e68baf156347ae79b",
+            "posterior": [
+              "6/7",
+              "1/7"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/7",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "12/49",
+            "forecastExcess": "25/98",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "favors-0",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            6,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "5cc6afe1abedd504d3252a0796145b64b1266a81e748238c2ff01eae85843b67",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            6,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 12/13 1/13",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "5cc6afe1abedd504d3252a0796145b64b1266a81e748238c2ff01eae85843b67",
+            "posterior": [
+              "12/13",
+              "1/13"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/13",
+            "decisionRegret": "0",
+            "expectedBrier": "24/169",
+            "bayesBrier": "24/169",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "5cc6afe1abedd504d3252a0796145b64b1266a81e748238c2ff01eae85843b67",
+            "posterior": [
+              "12/13",
+              "1/13"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/13",
+            "decisionRegret": "0",
+            "expectedBrier": "32/117",
+            "bayesBrier": "24/169",
+            "forecastExcess": "200/1521",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "favors-0",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            6,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "067ae5320f2e6d56bcc3e85df99d4e0ae619f78b19e2ec342691b160c4ee0f77",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            6,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 3/4 1/4",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "067ae5320f2e6d56bcc3e85df99d4e0ae619f78b19e2ec342691b160c4ee0f77",
+            "posterior": [
+              "3/4",
+              "1/4"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/4",
+            "decisionRegret": "0",
+            "expectedBrier": "3/8",
+            "bayesBrier": "3/8",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "067ae5320f2e6d56bcc3e85df99d4e0ae619f78b19e2ec342691b160c4ee0f77",
+            "posterior": [
+              "3/4",
+              "1/4"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "3/4",
+            "decisionRegret": "1/2",
+            "expectedBrier": "13/18",
+            "bayesBrier": "3/8",
+            "forecastExcess": "25/72",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "favors-1",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            6,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "805c8d9e5487eef68918358f2ca0590867df7572c9308b2ca4c5705635ce77b4",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            6,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/7 6/7",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "805c8d9e5487eef68918358f2ca0590867df7572c9308b2ca4c5705635ce77b4",
+            "posterior": [
+              "1/7",
+              "6/7"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/7",
+            "decisionRegret": "0",
+            "expectedBrier": "12/49",
+            "bayesBrier": "12/49",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "805c8d9e5487eef68918358f2ca0590867df7572c9308b2ca4c5705635ce77b4",
+            "posterior": [
+              "1/7",
+              "6/7"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "6/7",
+            "decisionRegret": "5/7",
+            "expectedBrier": "1/2",
+            "bayesBrier": "12/49",
+            "forecastExcess": "25/98",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "favors-1",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            6,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "d0511330ac1f307616a4364b52976698036fc92e14829b82c42d36de7d3372e6",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            6,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/4 3/4",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "d0511330ac1f307616a4364b52976698036fc92e14829b82c42d36de7d3372e6",
+            "posterior": [
+              "1/4",
+              "3/4"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/4",
+            "decisionRegret": "0",
+            "expectedBrier": "3/8",
+            "bayesBrier": "3/8",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "d0511330ac1f307616a4364b52976698036fc92e14829b82c42d36de7d3372e6",
+            "posterior": [
+              "1/4",
+              "3/4"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "3/4",
+            "decisionRegret": "1/2",
+            "expectedBrier": "13/18",
+            "bayesBrier": "3/8",
+            "forecastExcess": "25/72",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "favors-1",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            6,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "42b63f57db5482171ab63710c8ac5df8a9244bdc2ea834d1da1d480c5bcfe17d",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            6,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/13 12/13",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "42b63f57db5482171ab63710c8ac5df8a9244bdc2ea834d1da1d480c5bcfe17d",
+            "posterior": [
+              "1/13",
+              "12/13"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/13",
+            "decisionRegret": "0",
+            "expectedBrier": "24/169",
+            "bayesBrier": "24/169",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "42b63f57db5482171ab63710c8ac5df8a9244bdc2ea834d1da1d480c5bcfe17d",
+            "posterior": [
+              "1/13",
+              "12/13"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/13",
+            "decisionRegret": "0",
+            "expectedBrier": "32/117",
+            "bayesBrier": "24/169",
+            "forecastExcess": "200/1521",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "uninformative",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "636239a27dcc1f7b45bb05860708e039147b8b0ed42e3977c2fcf7d72161ab6b",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "636239a27dcc1f7b45bb05860708e039147b8b0ed42e3977c2fcf7d72161ab6b",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "636239a27dcc1f7b45bb05860708e039147b8b0ed42e3977c2fcf7d72161ab6b",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "uninformative",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "5206b0a38c5268ba2bf2ac806cd23e481cd3449d4cbb7f8c9e3350a4ca73eb0e",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "5206b0a38c5268ba2bf2ac806cd23e481cd3449d4cbb7f8c9e3350a4ca73eb0e",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "5206b0a38c5268ba2bf2ac806cd23e481cd3449d4cbb7f8c9e3350a4ca73eb0e",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 6,
+      "law": "uninformative",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "34b55c2064fa688d859d6a9688841eafb4b3ee37e99ca4697529b1ad17f616c9",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            6,
+            0
+          ],
+          [
+            1,
+            0,
+            6
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "34b55c2064fa688d859d6a9688841eafb4b3ee37e99ca4697529b1ad17f616c9",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "34b55c2064fa688d859d6a9688841eafb4b3ee37e99ca4697529b1ad17f616c9",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "favors-0",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            7,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "7b82147b056e6cc7ccd44d13a1cdf3694e62e26a5ecb95be32800dd0c438544f",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            7,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 7/8 1/8",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "7b82147b056e6cc7ccd44d13a1cdf3694e62e26a5ecb95be32800dd0c438544f",
+            "posterior": [
+              "7/8",
+              "1/8"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/8",
+            "decisionRegret": "0",
+            "expectedBrier": "7/32",
+            "bayesBrier": "7/32",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "7b82147b056e6cc7ccd44d13a1cdf3694e62e26a5ecb95be32800dd0c438544f",
+            "posterior": [
+              "7/8",
+              "1/8"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/8",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "7/32",
+            "forecastExcess": "9/32",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "favors-0",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            7,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "0a16d0612464b9330da6472260073fc1a722bfdd0def4c571772ee73ca968bd0",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            7,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 14/15 1/15",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "0a16d0612464b9330da6472260073fc1a722bfdd0def4c571772ee73ca968bd0",
+            "posterior": [
+              "14/15",
+              "1/15"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/15",
+            "decisionRegret": "0",
+            "expectedBrier": "28/225",
+            "bayesBrier": "28/225",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "0a16d0612464b9330da6472260073fc1a722bfdd0def4c571772ee73ca968bd0",
+            "posterior": [
+              "14/15",
+              "1/15"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/15",
+            "decisionRegret": "0",
+            "expectedBrier": "4/15",
+            "bayesBrier": "28/225",
+            "forecastExcess": "32/225",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "favors-0",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            7,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "281d1dfc6525a71e749a673820dc9a26e6c192b6bf30be759677f260d5db45dc",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            7,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 7/9 2/9",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "281d1dfc6525a71e749a673820dc9a26e6c192b6bf30be759677f260d5db45dc",
+            "posterior": [
+              "7/9",
+              "2/9"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "2/9",
+            "decisionRegret": "0",
+            "expectedBrier": "28/81",
+            "bayesBrier": "28/81",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "281d1dfc6525a71e749a673820dc9a26e6c192b6bf30be759677f260d5db45dc",
+            "posterior": [
+              "7/9",
+              "2/9"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "7/9",
+            "decisionRegret": "5/9",
+            "expectedBrier": "20/27",
+            "bayesBrier": "28/81",
+            "forecastExcess": "32/81",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "favors-1",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            7,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "19a15aaff3a8133b141192712b9a1b7e0dd61950a5b1bbb103034bc211b77e75",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            7,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/8 7/8",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "19a15aaff3a8133b141192712b9a1b7e0dd61950a5b1bbb103034bc211b77e75",
+            "posterior": [
+              "1/8",
+              "7/8"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/8",
+            "decisionRegret": "0",
+            "expectedBrier": "7/32",
+            "bayesBrier": "7/32",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "19a15aaff3a8133b141192712b9a1b7e0dd61950a5b1bbb103034bc211b77e75",
+            "posterior": [
+              "1/8",
+              "7/8"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "7/8",
+            "decisionRegret": "3/4",
+            "expectedBrier": "1/2",
+            "bayesBrier": "7/32",
+            "forecastExcess": "9/32",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "favors-1",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            7,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "7f30839a27b1efda1f778f1dd01a66bcdc153c8c66c6622b0f8e8b9237b19759",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            7,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 2/9 7/9",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "7f30839a27b1efda1f778f1dd01a66bcdc153c8c66c6622b0f8e8b9237b19759",
+            "posterior": [
+              "2/9",
+              "7/9"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "2/9",
+            "decisionRegret": "0",
+            "expectedBrier": "28/81",
+            "bayesBrier": "28/81",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "7f30839a27b1efda1f778f1dd01a66bcdc153c8c66c6622b0f8e8b9237b19759",
+            "posterior": [
+              "2/9",
+              "7/9"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "7/9",
+            "decisionRegret": "5/9",
+            "expectedBrier": "20/27",
+            "bayesBrier": "28/81",
+            "forecastExcess": "32/81",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "favors-1",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            7,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "b2e9a84c1de094f44c8caf03f883391d0d66d3154d7daebcd6c6474d2f9bf23a",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            7,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/15 14/15",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "b2e9a84c1de094f44c8caf03f883391d0d66d3154d7daebcd6c6474d2f9bf23a",
+            "posterior": [
+              "1/15",
+              "14/15"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/15",
+            "decisionRegret": "0",
+            "expectedBrier": "28/225",
+            "bayesBrier": "28/225",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "b2e9a84c1de094f44c8caf03f883391d0d66d3154d7daebcd6c6474d2f9bf23a",
+            "posterior": [
+              "1/15",
+              "14/15"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/15",
+            "decisionRegret": "0",
+            "expectedBrier": "4/15",
+            "bayesBrier": "28/225",
+            "forecastExcess": "32/225",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "uninformative",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "00f65b0c83ee97ab087d7e6cff7de7137b4a6f1df3a7e37fc41a2e7a028759c5",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "00f65b0c83ee97ab087d7e6cff7de7137b4a6f1df3a7e37fc41a2e7a028759c5",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "00f65b0c83ee97ab087d7e6cff7de7137b4a6f1df3a7e37fc41a2e7a028759c5",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "uninformative",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "444f04d811ed815a00b34cf85be2d826abcfce4492cedb60d4faffc4b1a3c231",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "444f04d811ed815a00b34cf85be2d826abcfce4492cedb60d4faffc4b1a3c231",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "444f04d811ed815a00b34cf85be2d826abcfce4492cedb60d4faffc4b1a3c231",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 7,
+      "law": "uninformative",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "183071561680de137cd14ee6beac97a67f9185445aa6b660ac67171177453705",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            7,
+            0
+          ],
+          [
+            1,
+            0,
+            7
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "183071561680de137cd14ee6beac97a67f9185445aa6b660ac67171177453705",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "183071561680de137cd14ee6beac97a67f9185445aa6b660ac67171177453705",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "favors-0",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            8,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "51a0bb976afd1abdcb3f8a2212ec5a28ece826ccb4474353c761f6393379a6d3",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            8,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 8/9 1/9",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "51a0bb976afd1abdcb3f8a2212ec5a28ece826ccb4474353c761f6393379a6d3",
+            "posterior": [
+              "8/9",
+              "1/9"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/9",
+            "decisionRegret": "0",
+            "expectedBrier": "16/81",
+            "bayesBrier": "16/81",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "51a0bb976afd1abdcb3f8a2212ec5a28ece826ccb4474353c761f6393379a6d3",
+            "posterior": [
+              "8/9",
+              "1/9"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/9",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "16/81",
+            "forecastExcess": "49/162",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "favors-0",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            8,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "d104e7e1b4aa967f848d756bde4bd5991ad6959c305833dfad1a652540b0882c",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            8,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 16/17 1/17",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "d104e7e1b4aa967f848d756bde4bd5991ad6959c305833dfad1a652540b0882c",
+            "posterior": [
+              "16/17",
+              "1/17"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/17",
+            "decisionRegret": "0",
+            "expectedBrier": "32/289",
+            "bayesBrier": "32/289",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "d104e7e1b4aa967f848d756bde4bd5991ad6959c305833dfad1a652540b0882c",
+            "posterior": [
+              "16/17",
+              "1/17"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/17",
+            "decisionRegret": "0",
+            "expectedBrier": "40/153",
+            "bayesBrier": "32/289",
+            "forecastExcess": "392/2601",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "favors-0",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            8,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "700de7b21199daafb65ee86e799404c572dff6ef811a95fd6607af367a194145",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            8,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 4/5 1/5",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "700de7b21199daafb65ee86e799404c572dff6ef811a95fd6607af367a194145",
+            "posterior": [
+              "4/5",
+              "1/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "8/25",
+            "bayesBrier": "8/25",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "700de7b21199daafb65ee86e799404c572dff6ef811a95fd6607af367a194145",
+            "posterior": [
+              "4/5",
+              "1/5"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "4/5",
+            "decisionRegret": "3/5",
+            "expectedBrier": "34/45",
+            "bayesBrier": "8/25",
+            "forecastExcess": "98/225",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "favors-1",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            8,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "b54c0fce30e299cbda1ae7476dddf12b16bd1864f60d91575b971bfbdefbb7aa",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            8,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/9 8/9",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "b54c0fce30e299cbda1ae7476dddf12b16bd1864f60d91575b971bfbdefbb7aa",
+            "posterior": [
+              "1/9",
+              "8/9"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/9",
+            "decisionRegret": "0",
+            "expectedBrier": "16/81",
+            "bayesBrier": "16/81",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "b54c0fce30e299cbda1ae7476dddf12b16bd1864f60d91575b971bfbdefbb7aa",
+            "posterior": [
+              "1/9",
+              "8/9"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "8/9",
+            "decisionRegret": "7/9",
+            "expectedBrier": "1/2",
+            "bayesBrier": "16/81",
+            "forecastExcess": "49/162",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "favors-1",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            8,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "cc7569a3f15747d25970c9d422aad125fe05427eb0dbacc4acac37d01af7583c",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            8,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/5 4/5",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "cc7569a3f15747d25970c9d422aad125fe05427eb0dbacc4acac37d01af7583c",
+            "posterior": [
+              "1/5",
+              "4/5"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/5",
+            "decisionRegret": "0",
+            "expectedBrier": "8/25",
+            "bayesBrier": "8/25",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "cc7569a3f15747d25970c9d422aad125fe05427eb0dbacc4acac37d01af7583c",
+            "posterior": [
+              "1/5",
+              "4/5"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "4/5",
+            "decisionRegret": "3/5",
+            "expectedBrier": "34/45",
+            "bayesBrier": "8/25",
+            "forecastExcess": "98/225",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "favors-1",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            8,
+            0,
+            1
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "ea6d6bba7fc37ad892324812a0f0f93d4f0d7bb373d9c808aa1bfec2a06ed32f",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            8,
+            0,
+            1
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/17 16/17",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ea6d6bba7fc37ad892324812a0f0f93d4f0d7bb373d9c808aa1bfec2a06ed32f",
+            "posterior": [
+              "1/17",
+              "16/17"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/17",
+            "decisionRegret": "0",
+            "expectedBrier": "32/289",
+            "bayesBrier": "32/289",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ea6d6bba7fc37ad892324812a0f0f93d4f0d7bb373d9c808aa1bfec2a06ed32f",
+            "posterior": [
+              "1/17",
+              "16/17"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/17",
+            "decisionRegret": "0",
+            "expectedBrier": "40/153",
+            "bayesBrier": "32/289",
+            "forecastExcess": "392/2601",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "uninformative",
+      "prior": "common",
+      "spec": {
+        "prior": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "ff8f7ae94478793cb746c01896735c7d1454d85b9ebda6c36cd8f8000c1cf88b",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ff8f7ae94478793cb746c01896735c7d1454d85b9ebda6c36cd8f8000c1cf88b",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 1/2 1/2",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "ff8f7ae94478793cb746c01896735c7d1454d85b9ebda6c36cd8f8000c1cf88b",
+            "posterior": [
+              "1/2",
+              "1/2"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/2",
+            "decisionRegret": "0",
+            "expectedBrier": "1/2",
+            "bayesBrier": "1/2",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "uninformative",
+      "prior": "observer-0",
+      "spec": {
+        "prior": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "5bd0cc6eefa0cf6c8b46101593ec07a4c9040540af74f438672fda33f158e3d7",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          2,
+          1
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "5bd0cc6eefa0cf6c8b46101593ec07a4c9040540af74f438672fda33f158e3d7",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 0 2/3 1/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "5bd0cc6eefa0cf6c8b46101593ec07a4c9040540af74f438672fda33f158e3d7",
+            "posterior": [
+              "2/3",
+              "1/3"
+            ],
+            "decision": 0,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    },
+    {
+      "severity": 8,
+      "law": "uninformative",
+      "prior": "observer-1",
+      "spec": {
+        "prior": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "weights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observed": 0
+      },
+      "public": {
+        "schema": "truthful-selection-task/1",
+        "taskId": "e99cb062c416e7ce35258e88f377eeece454ed4fe8866b7fc5899e33f7452304",
+        "instruction": "Infer the world after the displayed message was selected. All selectable messages are literally true. Row weights are normalized separately in each world. Choose a world minimizing zero-one loss and report its full posterior distribution. Different priors are allowed and do not establish deception.",
+        "worlds": [
+          0,
+          1
+        ],
+        "priorWeights": [
+          1,
+          2
+        ],
+        "truthMasks": [
+          3,
+          1,
+          2
+        ],
+        "selectionWeights": [
+          [
+            1,
+            8,
+            0
+          ],
+          [
+            1,
+            0,
+            8
+          ]
+        ],
+        "observedMessage": 0,
+        "answerGrammar": "answer WORLD p_world_0 p_world_1 ...; exact fractions summing to one"
+      },
+      "policies": [
+        {
+          "policy": "selection",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "e99cb062c416e7ce35258e88f377eeece454ed4fe8866b7fc5899e33f7452304",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        },
+        {
+          "policy": "content",
+          "answer": "answer 1 1/3 2/3",
+          "score": {
+            "schema": "truthful-selection-score/1",
+            "taskId": "e99cb062c416e7ce35258e88f377eeece454ed4fe8866b7fc5899e33f7452304",
+            "posterior": [
+              "1/3",
+              "2/3"
+            ],
+            "decision": 1,
+            "expectedDecisionLoss": "1/3",
+            "decisionRegret": "0",
+            "expectedBrier": "4/9",
+            "bayesBrier": "4/9",
+            "forecastExcess": "0",
+            "literalFalsehoodProbability": "0"
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "schema": "truthful-selection-summary/1",
+    "cases": 63,
+    "scoredAnswers": 126,
+    "selectionLawDecisionReversals": 20,
+    "priorDisagreementPairs": 21,
+    "groups": [
+      {
+        "law": "favors-0",
+        "policy": "selection",
+        "cases": 21,
+        "meanDecisionRegret": "0",
+        "meanForecastExcess": "0",
+        "nonzeroDecisionRegret": 0,
+        "nonzeroForecastExcess": 0
+      },
+      {
+        "law": "favors-0",
+        "policy": "content",
+        "cases": 21,
+        "meanDecisionRegret": "1649/13230",
+        "meanForecastExcess": "25385701675987/131352711890400",
+        "nonzeroDecisionRegret": 6,
+        "nonzeroForecastExcess": 21
+      },
+      {
+        "law": "favors-1",
+        "policy": "selection",
+        "cases": 21,
+        "meanDecisionRegret": "0",
+        "meanForecastExcess": "0",
+        "nonzeroDecisionRegret": 0,
+        "nonzeroForecastExcess": 0
+      },
+      {
+        "law": "favors-1",
+        "policy": "content",
+        "cases": 21,
+        "meanDecisionRegret": "2923/8820",
+        "meanForecastExcess": "25385701675987/131352711890400",
+        "nonzeroDecisionRegret": 13,
+        "nonzeroForecastExcess": 21
+      },
+      {
+        "law": "uninformative",
+        "policy": "selection",
+        "cases": 21,
+        "meanDecisionRegret": "0",
+        "meanForecastExcess": "0",
+        "nonzeroDecisionRegret": 0,
+        "nonzeroForecastExcess": 0
+      },
+      {
+        "law": "uninformative",
+        "policy": "content",
+        "cases": 21,
+        "meanDecisionRegret": "0",
+        "meanForecastExcess": "0",
+        "nonzeroDecisionRegret": 0,
+        "nonzeroForecastExcess": 0
+      }
+    ]
+  }
+}

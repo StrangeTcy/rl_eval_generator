@@ -1,0 +1,36 @@
+{
+  "design": {
+    "schema": "truthful-selection-design/1",
+    "severities": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "laws": [
+      "favors-0",
+      "favors-1",
+      "uninformative"
+    ],
+    "priors": [
+      "common",
+      "observer-0",
+      "observer-1"
+    ],
+    "policies": [
+      "selection",
+      "content"
+    ],
+    "unit": "finite probability specification; deterministic parameter grid",
+    "score": "expected multiclass Brier and zero-one decision loss conditional on the observed true message",
+    "evidenceLimit": "Supplied-law and content-only scripted controls; no evaluated-model capability or population inference."
+  },
+  "sourceSha256": {
+    "arena/inquiry/selection_laws.mjs": "60b7d66a41cf0caa1ba51f3421affb22fef31fd99371cd05d08db39910f15ed5",
+    "tools/truthful_selection_study.mjs": "c7becd84b93af3b42b7dfebfae5de7da11da0f2c05bddde703b3643e8ab83201"
+  },
+  "node": "v24.19.0"
+}

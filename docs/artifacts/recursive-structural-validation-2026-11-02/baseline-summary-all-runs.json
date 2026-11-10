@@ -1,0 +1,659 @@
+{
+  "structural-rivals-final.json": {
+    "recursive_gluing": {
+      "checks": 11,
+      "strategies": {
+        "expanded_csp": {
+          "independence": "reference",
+          "n": 11,
+          "accepted": 11,
+          "outcomes": {
+            "accepted": 11
+          },
+          "runtime_seconds_sum": 0.003198999969754368,
+          "runtime_seconds_max": 0.0010806000209413469
+        },
+        "spanning_forest": {
+          "independence": "local_constraint_ablation",
+          "n": 11,
+          "accepted": 3,
+          "outcomes": {
+            "accepted": 3,
+            "rejected": 8
+          },
+          "runtime_seconds_sum": 0.002954399969894439,
+          "runtime_seconds_max": 0.0017510000034235418
+        }
+      }
+    },
+    "recursive_gluing_discovery": {
+      "checks": 9,
+      "strategies": {
+        "compact_relations": {
+          "independence": "reference",
+          "n": 9,
+          "accepted": 9,
+          "outcomes": {
+            "accepted": 9
+          },
+          "runtime_seconds_sum": 0.001335600041784346,
+          "runtime_seconds_max": 0.00016140000661835074
+        },
+        "expanded_csp": {
+          "independence": "independent_answer_construction",
+          "n": 9,
+          "accepted": 9,
+          "outcomes": {
+            "accepted": 9
+          },
+          "runtime_seconds_sum": 0.018367799988482147,
+          "runtime_seconds_max": 0.0024517999845556915
+        },
+        "copy_leaf": {
+          "independence": "local_template",
+          "n": 9,
+          "accepted": 1,
+          "outcomes": {
+            "accepted": 1,
+            "rejected": 8
+          },
+          "runtime_seconds_sum": 0.0009142999770119786,
+          "runtime_seconds_max": 0.00011329998960718513
+        }
+      }
+    },
+    "recursive_maze_gluing": {
+      "checks": 8,
+      "strategies": {
+        "full_state_bfs": {
+          "independence": "reference_search",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.0011550000053830445,
+          "runtime_seconds_max": 0.00021379999816417694
+        },
+        "ignore_orientation": {
+          "independence": "search_with_ablation",
+          "n": 8,
+          "accepted": 7,
+          "outcomes": {
+            "accepted": 7,
+            "rejected": 1
+          },
+          "runtime_seconds_sum": 0.0017488001030869782,
+          "runtime_seconds_max": 0.00031590001890435815
+        }
+      }
+    },
+    "recursive_distributed_gluing": {
+      "checks": 8,
+      "strategies": {
+        "scheduler_bfs": {
+          "independence": "reference_search",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.002510500024072826,
+          "runtime_seconds_max": 0.0007207000162452459
+        },
+        "ignore_capacity": {
+          "independence": "search_with_ablation",
+          "n": 8,
+          "accepted": 7,
+          "outcomes": {
+            "accepted": 7,
+            "rejected": 1
+          },
+          "runtime_seconds_sum": 0.0028112000436522067,
+          "runtime_seconds_max": 0.000769799982663244
+        }
+      }
+    },
+    "recursive_epistemic_gluing": {
+      "checks": 10,
+      "strategies": {
+        "finite_modal_evaluation": {
+          "independence": "reference_enumeration",
+          "n": 10,
+          "accepted": 10,
+          "outcomes": {
+            "accepted": 10
+          },
+          "runtime_seconds_sum": 0.005513299955055118,
+          "runtime_seconds_max": 0.0014378000050783157
+        },
+        "actual_facts": {
+          "independence": "reference_conditioned_negative_control",
+          "n": 10,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8,
+            "rejected": 2
+          },
+          "runtime_seconds_sum": 0.005291700013913214,
+          "runtime_seconds_max": 0.0014214999973773956
+        }
+      }
+    },
+    "recursive_compiler_bootstrap": {
+      "checks": 6,
+      "strategies": {
+        "known_l1_compiler": {
+          "independence": "reference_program",
+          "n": 6,
+          "accepted": 6,
+          "outcomes": {
+            "accepted": 6
+          },
+          "runtime_seconds_sum": 8.93285619985545,
+          "runtime_seconds_max": 1.5941963999648578
+        },
+        "local_decoder": {
+          "independence": "reference_conditioned_negative_control",
+          "n": 6,
+          "accepted": 4,
+          "outcomes": {
+            "accepted": 4,
+            "rejected": 2
+          },
+          "runtime_seconds_sum": 8.349333300138824,
+          "runtime_seconds_max": 1.603506900020875
+        }
+      }
+    },
+    "recursive_error_correcting_codes": {
+      "checks": 8,
+      "strategies": {
+        "field_elimination": {
+          "independence": "reference",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.0021842000423930585,
+          "runtime_seconds_max": 0.00034770002821460366
+        },
+        "exhaustive_coordinates": {
+          "independence": "independent_search_shared_assignment_predicate",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.15280550002353266,
+          "runtime_seconds_max": 0.07738730002893135
+        }
+      }
+    },
+    "recursive_coarse_graining": {
+      "checks": 8,
+      "strategies": {
+        "matrix_and_partition_enumeration": {
+          "independence": "reference_direct_algorithm",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.010165999934542924,
+          "runtime_seconds_max": 0.0056650000042282045
+        },
+        "local_table": {
+          "independence": "nuisance_certified_ablation",
+          "n": 8,
+          "accepted": 2,
+          "outcomes": {
+            "accepted": 2,
+            "rejected": 6
+          },
+          "runtime_seconds_sum": 0.008994099975097924,
+          "runtime_seconds_max": 0.005354299966711551
+        }
+      }
+    }
+  },
+  "structural-rivals-depth1-seed0.json": {
+    "recursive_gluing": {
+      "checks": 11,
+      "strategies": {
+        "expanded_csp": {
+          "independence": "reference",
+          "n": 11,
+          "accepted": 11,
+          "outcomes": {
+            "accepted": 11
+          },
+          "runtime_seconds_sum": 0.0023874000762589276,
+          "runtime_seconds_max": 0.0010944000096060336
+        },
+        "spanning_forest": {
+          "independence": "local_constraint_ablation",
+          "n": 11,
+          "accepted": 3,
+          "outcomes": {
+            "accepted": 3,
+            "rejected": 8
+          },
+          "runtime_seconds_sum": 0.0014174000825732946,
+          "runtime_seconds_max": 0.0006857000407762825
+        }
+      }
+    },
+    "recursive_gluing_discovery": {
+      "checks": 9,
+      "strategies": {
+        "compact_relations": {
+          "independence": "reference",
+          "n": 9,
+          "accepted": 9,
+          "outcomes": {
+            "accepted": 9
+          },
+          "runtime_seconds_sum": 0.0014662999892607331,
+          "runtime_seconds_max": 0.00022769998759031296
+        },
+        "expanded_csp": {
+          "independence": "independent_answer_construction",
+          "n": 9,
+          "accepted": 9,
+          "outcomes": {
+            "accepted": 9
+          },
+          "runtime_seconds_sum": 0.01705319987377152,
+          "runtime_seconds_max": 0.00289649999467656
+        },
+        "copy_leaf": {
+          "independence": "local_template",
+          "n": 9,
+          "accepted": 1,
+          "outcomes": {
+            "accepted": 1,
+            "rejected": 8
+          },
+          "runtime_seconds_sum": 0.0010366999777033925,
+          "runtime_seconds_max": 0.00015390000771731138
+        }
+      }
+    },
+    "recursive_maze_gluing": {
+      "checks": 8,
+      "strategies": {
+        "full_state_bfs": {
+          "independence": "reference_search",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.0010490999557077885,
+          "runtime_seconds_max": 0.00018079997971653938
+        },
+        "ignore_orientation": {
+          "independence": "search_with_ablation",
+          "n": 8,
+          "accepted": 5,
+          "outcomes": {
+            "accepted": 5,
+            "rejected": 3
+          },
+          "runtime_seconds_sum": 0.0015858999686315656,
+          "runtime_seconds_max": 0.00026380002964287996
+        }
+      }
+    },
+    "recursive_distributed_gluing": {
+      "checks": 8,
+      "strategies": {
+        "scheduler_bfs": {
+          "independence": "reference_search",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.0016459999023936689,
+          "runtime_seconds_max": 0.0004585999995470047
+        },
+        "ignore_capacity": {
+          "independence": "search_with_ablation",
+          "n": 8,
+          "accepted": 7,
+          "outcomes": {
+            "accepted": 7,
+            "rejected": 1
+          },
+          "runtime_seconds_sum": 0.002060599916148931,
+          "runtime_seconds_max": 0.0004992999602109194
+        }
+      }
+    },
+    "recursive_epistemic_gluing": {
+      "checks": 10,
+      "strategies": {
+        "finite_modal_evaluation": {
+          "independence": "reference_enumeration",
+          "n": 10,
+          "accepted": 10,
+          "outcomes": {
+            "accepted": 10
+          },
+          "runtime_seconds_sum": 0.0045729001285508275,
+          "runtime_seconds_max": 0.0019864000496454537
+        },
+        "actual_facts": {
+          "independence": "reference_conditioned_negative_control",
+          "n": 10,
+          "accepted": 7,
+          "outcomes": {
+            "accepted": 7,
+            "rejected": 3
+          },
+          "runtime_seconds_sum": 0.004465100064408034,
+          "runtime_seconds_max": 0.0019313000375404954
+        }
+      }
+    },
+    "recursive_compiler_bootstrap": {
+      "checks": 6,
+      "strategies": {
+        "known_l1_compiler": {
+          "independence": "reference_program",
+          "n": 6,
+          "accepted": 6,
+          "outcomes": {
+            "accepted": 6
+          },
+          "runtime_seconds_sum": 8.277481499884743,
+          "runtime_seconds_max": 1.767144899989944
+        },
+        "local_decoder": {
+          "independence": "reference_conditioned_negative_control",
+          "n": 6,
+          "accepted": 4,
+          "outcomes": {
+            "accepted": 4,
+            "rejected": 2
+          },
+          "runtime_seconds_sum": 7.888326699961908,
+          "runtime_seconds_max": 1.7496904999716207
+        }
+      }
+    },
+    "recursive_error_correcting_codes": {
+      "checks": 8,
+      "strategies": {
+        "field_elimination": {
+          "independence": "reference",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.0018263999954797328,
+          "runtime_seconds_max": 0.0003011999651789665
+        },
+        "exhaustive_coordinates": {
+          "independence": "independent_search_shared_assignment_predicate",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.14252589998068288,
+          "runtime_seconds_max": 0.0752700999728404
+        }
+      }
+    },
+    "recursive_coarse_graining": {
+      "checks": 8,
+      "strategies": {
+        "matrix_and_partition_enumeration": {
+          "independence": "reference_direct_algorithm",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.026424000039696693,
+          "runtime_seconds_max": 0.0065954000456258655
+        },
+        "local_table": {
+          "independence": "nuisance_certified_ablation",
+          "n": 8,
+          "accepted": 2,
+          "outcomes": {
+            "accepted": 2,
+            "rejected": 6
+          },
+          "runtime_seconds_sum": 0.026059399941004813,
+          "runtime_seconds_max": 0.0065953999874182045
+        }
+      }
+    }
+  },
+  "structural-rivals-depth3-seed7.json": {
+    "recursive_gluing": {
+      "checks": 11,
+      "strategies": {
+        "expanded_csp": {
+          "independence": "reference",
+          "n": 11,
+          "accepted": 11,
+          "outcomes": {
+            "accepted": 11
+          },
+          "runtime_seconds_sum": 0.005830699927173555,
+          "runtime_seconds_max": 0.0016191999893635511
+        },
+        "spanning_forest": {
+          "independence": "local_constraint_ablation",
+          "n": 11,
+          "accepted": 3,
+          "outcomes": {
+            "accepted": 3,
+            "rejected": 8
+          },
+          "runtime_seconds_sum": 0.003489399969112128,
+          "runtime_seconds_max": 0.0008896999643184245
+        }
+      }
+    },
+    "recursive_gluing_discovery": {
+      "checks": 9,
+      "strategies": {
+        "compact_relations": {
+          "independence": "reference",
+          "n": 9,
+          "accepted": 9,
+          "outcomes": {
+            "accepted": 9
+          },
+          "runtime_seconds_sum": 0.0020363000221550465,
+          "runtime_seconds_max": 0.00027050002245232463
+        },
+        "expanded_csp": {
+          "independence": "independent_answer_construction",
+          "n": 9,
+          "accepted": 9,
+          "outcomes": {
+            "accepted": 9
+          },
+          "runtime_seconds_sum": 0.056910399987827986,
+          "runtime_seconds_max": 0.010339299973566085
+        },
+        "copy_leaf": {
+          "independence": "local_template",
+          "n": 9,
+          "accepted": 1,
+          "outcomes": {
+            "accepted": 1,
+            "rejected": 8
+          },
+          "runtime_seconds_sum": 0.0011757000465877354,
+          "runtime_seconds_max": 0.0001598999951966107
+        }
+      }
+    },
+    "recursive_maze_gluing": {
+      "checks": 8,
+      "strategies": {
+        "full_state_bfs": {
+          "independence": "reference_search",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.001799900142941624,
+          "runtime_seconds_max": 0.0004358000005595386
+        },
+        "ignore_orientation": {
+          "independence": "search_with_ablation",
+          "n": 8,
+          "accepted": 5,
+          "outcomes": {
+            "accepted": 5,
+            "rejected": 3
+          },
+          "runtime_seconds_sum": 0.0026437000487931073,
+          "runtime_seconds_max": 0.0005831000162288547
+        }
+      }
+    },
+    "recursive_distributed_gluing": {
+      "checks": 8,
+      "strategies": {
+        "scheduler_bfs": {
+          "independence": "reference_search",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.005800099985208362,
+          "runtime_seconds_max": 0.0020330999977886677
+        },
+        "ignore_capacity": {
+          "independence": "search_with_ablation",
+          "n": 8,
+          "accepted": 7,
+          "outcomes": {
+            "accepted": 7,
+            "rejected": 1
+          },
+          "runtime_seconds_sum": 0.005270699970424175,
+          "runtime_seconds_max": 0.0014072000049054623
+        }
+      }
+    },
+    "recursive_epistemic_gluing": {
+      "checks": 10,
+      "strategies": {
+        "finite_modal_evaluation": {
+          "independence": "reference_enumeration",
+          "n": 10,
+          "accepted": 10,
+          "outcomes": {
+            "accepted": 10
+          },
+          "runtime_seconds_sum": 0.045275600044988096,
+          "runtime_seconds_max": 0.01794520003022626
+        },
+        "actual_facts": {
+          "independence": "reference_conditioned_negative_control",
+          "n": 10,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8,
+            "rejected": 2
+          },
+          "runtime_seconds_sum": 0.04484489996684715,
+          "runtime_seconds_max": 0.016169500013347715
+        }
+      }
+    },
+    "recursive_compiler_bootstrap": {
+      "checks": 6,
+      "strategies": {
+        "known_l1_compiler": {
+          "independence": "reference_program",
+          "n": 6,
+          "accepted": 6,
+          "outcomes": {
+            "accepted": 6
+          },
+          "runtime_seconds_sum": 12.16807339998195,
+          "runtime_seconds_max": 2.400168499967549
+        },
+        "local_decoder": {
+          "independence": "reference_conditioned_negative_control",
+          "n": 6,
+          "accepted": 4,
+          "outcomes": {
+            "accepted": 4,
+            "rejected": 2
+          },
+          "runtime_seconds_sum": 11.96625179995317,
+          "runtime_seconds_max": 2.491632999968715
+        }
+      }
+    },
+    "recursive_error_correcting_codes": {
+      "checks": 8,
+      "strategies": {
+        "field_elimination": {
+          "independence": "reference",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.0038047999842092395,
+          "runtime_seconds_max": 0.0005699999746866524
+        },
+        "exhaustive_coordinates": {
+          "independence": "independent_search_shared_assignment_predicate",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 4.824740799958818,
+          "runtime_seconds_max": 2.418770599993877
+        }
+      }
+    },
+    "recursive_coarse_graining": {
+      "checks": 8,
+      "strategies": {
+        "matrix_and_partition_enumeration": {
+          "independence": "reference_direct_algorithm",
+          "n": 8,
+          "accepted": 8,
+          "outcomes": {
+            "accepted": 8
+          },
+          "runtime_seconds_sum": 0.008049399999435991,
+          "runtime_seconds_max": 0.002904499997384846
+        },
+        "local_table": {
+          "independence": "nuisance_certified_ablation",
+          "n": 8,
+          "accepted": 2,
+          "outcomes": {
+            "accepted": 2,
+            "rejected": 6
+          },
+          "runtime_seconds_sum": 0.007399599940981716,
+          "runtime_seconds_max": 0.002711599983740598
+        }
+      }
+    }
+  }
+}

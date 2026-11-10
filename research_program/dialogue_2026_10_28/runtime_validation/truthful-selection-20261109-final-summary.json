@@ -1,0 +1,69 @@
+{
+  "directory": "C:\\Users\\hatgu\\rl_eval_generator\\research_program\\dialogue_2026_10_28\\runtime_validation\\truthful-selection-20261109-final",
+  "schema": "truthful-selection-summary/1",
+  "cases": 63,
+  "scoredAnswers": 126,
+  "selectionLawDecisionReversals": 20,
+  "priorDisagreementPairs": 21,
+  "groups": [
+    {
+      "law": "favors-0",
+      "policy": "selection",
+      "cases": 21,
+      "meanDecisionRegret": "0",
+      "meanForecastExcess": "0",
+      "nonzeroDecisionRegret": 0,
+      "nonzeroForecastExcess": 0
+    },
+    {
+      "law": "favors-0",
+      "policy": "content",
+      "cases": 21,
+      "meanDecisionRegret": "1649/13230",
+      "meanForecastExcess": "25385701675987/131352711890400",
+      "nonzeroDecisionRegret": 6,
+      "nonzeroForecastExcess": 21
+    },
+    {
+      "law": "favors-1",
+      "policy": "selection",
+      "cases": 21,
+      "meanDecisionRegret": "0",
+      "meanForecastExcess": "0",
+      "nonzeroDecisionRegret": 0,
+      "nonzeroForecastExcess": 0
+    },
+    {
+      "law": "favors-1",
+      "policy": "content",
+      "cases": 21,
+      "meanDecisionRegret": "2923/8820",
+      "meanForecastExcess": "25385701675987/131352711890400",
+      "nonzeroDecisionRegret": 13,
+      "nonzeroForecastExcess": 21
+    },
+    {
+      "law": "uninformative",
+      "policy": "selection",
+      "cases": 21,
+      "meanDecisionRegret": "0",
+      "meanForecastExcess": "0",
+      "nonzeroDecisionRegret": 0,
+      "nonzeroForecastExcess": 0
+    },
+    {
+      "law": "uninformative",
+      "policy": "content",
+      "cases": 21,
+      "meanDecisionRegret": "0",
+      "meanForecastExcess": "0",
+      "nonzeroDecisionRegret": 0,
+      "nonzeroForecastExcess": 0
+    }
+  ],
+  "replay": {
+    "status": "passed",
+    "casesChecked": 63,
+    "answersChecked": 126
+  }
+}

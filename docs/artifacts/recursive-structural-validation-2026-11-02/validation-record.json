@@ -1,0 +1,337 @@
+{
+  "schema_version": 1,
+  "validation_date": "2026-11-02",
+  "source_review_record": "docs/reports/2026-10-28-structural-source-review.json",
+  "base_commit": "ef2c9f8b906ee964d318182ed99169ad2793eeac",
+  "working_tree_status": [
+    " M envs/cat_theo/recursive_distributed_gluing/files/network.py",
+    " M envs/cat_theo/recursive_maze_gluing/files/network.py",
+    " M research_program/dialogue_2026_10_28/READINESS.md",
+    " M research_program/dialogue_2026_10_28/README.md",
+    " M research_program/dialogue_2026_10_28/RECURSIVE_PROGRAMS.md",
+    " M research_program/dialogue_2026_10_28/REPORT.md",
+    " M research_program/dialogue_2026_10_28/RUNTIME_VALIDATION.md",
+    " M research_program/dialogue_2026_10_28/inventory.json",
+    " M tests/test_epistemic_control_math.py",
+    " M tests/test_inquiry_games.py",
+    " M tests/test_recursive_gluing_study.py",
+    " M tests/test_recursive_programs.py",
+    "?? docs/artifacts/",
+    "?? research_program/dialogue_2026_10_28/runtime_validation/local-results-20261102.json",
+    "?? research_program/dialogue_2026_10_28/runtime_validation/local-run-20261102/"
+  ],
+  "working_tree_diff_sha256": "0c49ad412d7bd8e9271f920d9b7c59fea1ad05020d5ce7e0be8047854fed4020",
+  "working_tree_diff_bytes": 25110,
+  "tested_interpreter": "C:\\Users\\hatgu\\anaconda3\\envs\\hyge\\python.exe",
+  "python": "3.12.13",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "pytest": "9.1.1",
+  "pyyaml": "6.0.3",
+  "torch_available": false,
+  "source_hashes": {
+    "envs/cat_theo/recursive_coarse_graining/config.yaml": "8d0b7c21a53fdd33249b16e35cae074c8ca468b153ce68badc870737142e1386",
+    "envs/cat_theo/recursive_coarse_graining/files/judge.py": "bd6471b0861b01d6a3ff387708992008fd919ac0845628e3ed1dc9f884485622",
+    "envs/cat_theo/recursive_coarse_graining/files/network.py": "bd18d8957777d0c01335017cccd357d5cb918dd84b36515628ab18ca0b1f63a8",
+    "envs/cat_theo/recursive_coarse_graining/files/prompt.md": "7bda6db4610b1fee442cd79a27b9115b1721d45973af08b4dfece71fe37e62aa",
+    "envs/cat_theo/recursive_coarse_graining/files/solver.py": "e73b72e2c5a2c6c3b820f6d45f290e96b0fb2cb983d0c0b6dc8359e8dab8f128",
+    "envs/cat_theo/recursive_compiler_bootstrap/config.yaml": "88c6205b5f3087f71eb494e671ee21270305fd750eabfbaad5aa02997ade673a",
+    "envs/cat_theo/recursive_compiler_bootstrap/files/judge.py": "fd6271c3b50ce9f371b15904e900a0b51e0501647b38f28e421140ae8845f895",
+    "envs/cat_theo/recursive_compiler_bootstrap/files/network.py": "b77e35b1672d2ae073931a10a08425aed88b793e62f11eb75e26bb895b9399d7",
+    "envs/cat_theo/recursive_compiler_bootstrap/files/prompt.md": "3507af4bb8a1cf3d61f9ce180acc1c4d017cb65046b1a40bf01e5a604d1ffc94",
+    "envs/cat_theo/recursive_compiler_bootstrap/files/solver.py": "0bc82317715fadb5c4551696d245288ef09bb7472daf1add73957dd463c60c8f",
+    "envs/cat_theo/recursive_distributed_gluing/config.yaml": "ef8e21e6496e424b8ac57796c4aa644f487c879afce28e32c96e2df5f2a00d68",
+    "envs/cat_theo/recursive_distributed_gluing/files/judge.py": "d09da2003502db94b8cdf04daa0959eb1e7eb887767e9111431aeacfbed07b2c",
+    "envs/cat_theo/recursive_distributed_gluing/files/network.py": "b2108b9d9d82d03570ea011b5e59665321f212b6f4257361c3901906bea337e0",
+    "envs/cat_theo/recursive_distributed_gluing/files/prompt.md": "daca40e9893c1bc45706d0e7aaa594c8ffd71162108a8ffe3b70042b92828bf7",
+    "envs/cat_theo/recursive_distributed_gluing/files/solver.py": "a5072de34e9de9a0349e07953ca3d26542a4d34f7ce11cdd281835e6f2b6c3bc",
+    "envs/cat_theo/recursive_epistemic_gluing/config.yaml": "2e48173876b5dd4ff5a59cb0bbf7250c78b396e73dca6f168f060e5db71ab100",
+    "envs/cat_theo/recursive_epistemic_gluing/files/judge.py": "c90c6c70f1bc0e6e1c6e4ee3564e5e3945e9180081584a872efe1727625d4466",
+    "envs/cat_theo/recursive_epistemic_gluing/files/network.py": "c169ecbbcff4f5d60803f42e925a08a05980e6d01afa432ab5fc5df2bab59d8f",
+    "envs/cat_theo/recursive_epistemic_gluing/files/prompt.md": "423d2d61c6068037e46b318cded8c7a132dc2d27260dc8e1b73a2383d33749a0",
+    "envs/cat_theo/recursive_epistemic_gluing/files/solver.py": "75d4de8bce01568004311df8466966b3f9f461af0e0c2595ad96020b2c3d7037",
+    "envs/cat_theo/recursive_error_correcting_codes/config.yaml": "e16d94aae623d24b8d9d5326151031ad50b3b8412696c9dd39f551aed0309bf3",
+    "envs/cat_theo/recursive_error_correcting_codes/files/judge.py": "3db2c56cf9df3ff20ce4615ec9d8c497db9838684f1644166a2fcf6b8052985b",
+    "envs/cat_theo/recursive_error_correcting_codes/files/network.py": "0d73af93e58afa4fccd95ca84e5eede1bb1a3d6d9cf97780ad7f7cf7545757f4",
+    "envs/cat_theo/recursive_error_correcting_codes/files/prompt.md": "c76f4bd004c815d52f48603b4921af3d863cca099961dbd7be1dd7040a2b19ba",
+    "envs/cat_theo/recursive_error_correcting_codes/files/solver.py": "bf0abadd71dbc522d0aac710aa1cfdb39f0ba83e8083921a30dd0cdd22ce8999",
+    "envs/cat_theo/recursive_gluing/config.yaml": "cfeb7ec304b7a608bd2b07f179e376ef705666558246d30f041dbd9e92f58356",
+    "envs/cat_theo/recursive_gluing/files/judge.py": "07d9f00691e95ed5d2d13bae5e3352a13a7221a0fb8159bcb69b0d280e7ce47c",
+    "envs/cat_theo/recursive_gluing/files/network.py": "767f5aad9544f0e09f78504cf97f1eaa43e08033c99af63615760405e6def0bf",
+    "envs/cat_theo/recursive_gluing/files/prompt.md": "807ec0ec8c31f856e2f1bf12772eeb727c1824f64d65b9d0b227731f33fddf44",
+    "envs/cat_theo/recursive_gluing/files/solver.py": "4c1e093125495ac5bb3fee10264f402c216decce786acd24c0304674a2723ea0",
+    "envs/cat_theo/recursive_gluing_discovery/config.yaml": "5cb73842b6d7ec918519c846ddbd959bc21ee17ae155ea9cc9004b77c0917b24",
+    "envs/cat_theo/recursive_gluing_discovery/files/judge.py": "6c35bc144f1fc20dd3509b05b2fbea465faf5a2f647f39098b608b3c26b764fd",
+    "envs/cat_theo/recursive_gluing_discovery/files/network.py": "aa901f360cf42cae9e6fb44cfa05af9739e53408395780e4b50ee7e80735bb21",
+    "envs/cat_theo/recursive_gluing_discovery/files/prompt.md": "b998addbcf96eee65aca6d78ccf0befc2e4c952d4d7ba0e12fd199a1c26509fc",
+    "envs/cat_theo/recursive_gluing_discovery/files/solver.py": "5ed34393beb1169c649915df72f9afeab81a64760a1beb77fe877593a51324c5",
+    "envs/cat_theo/recursive_maze_gluing/config.yaml": "40c8389fc608521ece96d05d07a1c34518e4522fc4c3f78bafe6939e5caf9fdf",
+    "envs/cat_theo/recursive_maze_gluing/files/judge.py": "ac5a28d7b9554df89a964d6cdea8be05e5a463991488cff980341a77625c8ac0",
+    "envs/cat_theo/recursive_maze_gluing/files/network.py": "4ba04c730517be855e1b7fdef6e28b7b078b4ab6c807a588c2e9ae9ce83fda9f",
+    "envs/cat_theo/recursive_maze_gluing/files/prompt.md": "9301194779be0311954c4e9de60c379eec6995bd01bc40a75ec2dbd3096f77bc",
+    "envs/cat_theo/recursive_maze_gluing/files/solver.py": "05580d8702a41965cb75a91468ed314b9305d42333b100b64e7da76f22c0f6e9",
+    "tests/test_recursive_gluing_study.py": "98714c16bc55e8777df4aa699dd1556f35d6287e1939bdcc82f6d1de2497d941"
+  },
+  "structural_test_definitions": [
+    {
+      "path": "tests/test_recursive_apps_readiness.py",
+      "name": "test_structural_global_checks_cannot_be_sacrificed_for_pass",
+      "line": 474
+    },
+    {
+      "path": "tests/test_recursive_coarse_graining.py",
+      "name": "test_structural_quotient_and_single_transition_obstruction",
+      "line": 156
+    },
+    {
+      "path": "tests/test_recursive_coarse_graining.py",
+      "name": "test_structural_quotient_twin_and_wrong_prediction",
+      "line": 171
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_l1_compiler_compiles_itself",
+      "line": 144
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_bootstrap_json_and_alternative_source",
+      "line": 152
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_bootstrap_rejects_corruption_and_truncation",
+      "line": 169
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_invalid_source_is_not_a_compiler_counterexample",
+      "line": 179
+    },
+    {
+      "path": "tests/test_recursive_compiler_bootstrap.py",
+      "name": "test_structural_depth_does_real_work_or_fails_explicitly",
+      "line": 186
+    },
+    {
+      "path": "tests/test_recursive_distributed_gluing.py",
+      "name": "test_structural_capacity_changes_global_schedulability",
+      "line": 133
+    },
+    {
+      "path": "tests/test_recursive_distributed_gluing.py",
+      "name": "test_structural_explicit_endpoints_survive_renaming",
+      "line": 144
+    },
+    {
+      "path": "tests/test_recursive_distributed_gluing.py",
+      "name": "test_structural_worker_rules_and_spawn_causality",
+      "line": 153
+    },
+    {
+      "path": "tests/test_recursive_epistemic_gluing.py",
+      "name": "test_structural_modal_depth_boundary_and_minimal_counterfactual",
+      "line": 681
+    },
+    {
+      "path": "tests/test_recursive_epistemic_gluing.py",
+      "name": "test_structural_reachability_requires_all_layers_but_allows_row_order",
+      "line": 695
+    },
+    {
+      "path": "tests/test_recursive_epistemic_gluing.py",
+      "name": "test_structural_threewise_inner_cells_do_not_settle_global_intersection",
+      "line": 705
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_elimination_agrees_with_exhaustive_rival",
+      "line": 147
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_linear_solver_extends_past_enumeration_budget",
+      "line": 157
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_calibration_ambiguity_and_distinguishing_probe",
+      "line": 165
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_coordinate_twin_changes_math_and_preserves_verdict",
+      "line": 178
+    },
+    {
+      "path": "tests/test_recursive_error_correcting_codes.py",
+      "name": "test_structural_codeword_shape_and_field_domain_are_mandatory",
+      "line": 187
+    },
+    {
+      "path": "tests/test_recursive_gluing.py",
+      "name": "test_structural_branching_closing_intervention",
+      "line": 496
+    },
+    {
+      "path": "tests/test_recursive_gluing.py",
+      "name": "test_structural_alternative_global_assignment_is_accepted",
+      "line": 511
+    },
+    {
+      "path": "tests/test_recursive_gluing.py",
+      "name": "test_structural_rival_recorder_rejects_false_unsat_and_preserves_exhaustion",
+      "line": 527
+    },
+    {
+      "path": "tests/test_recursive_gluing_discovery.py",
+      "name": "test_structural_branching_expansion_agrees",
+      "line": 625
+    },
+    {
+      "path": "tests/test_recursive_gluing_discovery.py",
+      "name": "test_structural_expanded_solver_has_no_target_answer_dependency",
+      "line": 650
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "name": "test_structural_evidence_keeps_all_five_claims_separate",
+      "line": 1344
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "name": "test_structural_missing_control_is_not_a_passing_pair",
+      "line": 1357
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "name": "test_structural_failed_certificate_does_not_imply_wrong_decision",
+      "line": 1367
+    },
+    {
+      "path": "tests/test_recursive_gluing_study.py",
+      "name": "test_structural_holonomy_remains_outside_campaign_gate",
+      "line": 1375
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_direct_transport_rival_and_public_calibration",
+      "line": 194
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_curved_transport_can_have_a_global_section",
+      "line": 203
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_second_loop_and_complete_section_set_are_mandatory",
+      "line": 218
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_equal_nonidentity_paths_are_not_flat",
+      "line": 231
+    },
+    {
+      "path": "tests/test_recursive_holonomy_gluing.py",
+      "name": "test_structural_malformed_transport_is_rejected",
+      "line": 241
+    },
+    {
+      "path": "tests/test_recursive_maze_gluing.py",
+      "name": "test_structural_mixed_tiles_and_orientation_counterfactual",
+      "line": 243
+    },
+    {
+      "path": "tests/test_recursive_maze_gluing.py",
+      "name": "test_structural_clearing_does_not_reset_edge_identity",
+      "line": 256
+    }
+  ],
+  "structural_test_definition_count": 35,
+  "full_suite_junit": "docs/artifacts/recursive-structural-validation-2026-11-02/structural-validation-final.xml",
+  "full_suite_summary": {
+    "tests": 313,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "scope": {
+    "scored_environments": [
+      "recursive_gluing",
+      "recursive_gluing_discovery",
+      "recursive_maze_gluing",
+      "recursive_distributed_gluing",
+      "recursive_epistemic_gluing",
+      "recursive_compiler_bootstrap",
+      "recursive_error_correcting_codes",
+      "recursive_coarse_graining"
+    ],
+    "holonomy": "executed as research-only test/control; excluded from scored disposition"
+  },
+  "full_suite_elapsed_seconds": 202.219,
+  "executions": {
+    "full_suite": {
+      "artifact": "docs/artifacts/recursive-structural-validation-2026-11-02/structural-validation-final.xml",
+      "tests": 313,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "time_seconds": 202.219
+    },
+    "structural_selection": {
+      "artifact": "docs/artifacts/recursive-structural-validation-2026-11-02/structural-tests-final.xml",
+      "tests": 59,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "time_seconds": 19.801
+    },
+    "shared_gate": {
+      "artifact": "docs/artifacts/recursive-structural-validation-2026-11-02/shared-gate-tests.xml",
+      "tests": 44,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "time_seconds": 18.727
+    }
+  },
+  "source_review_sha256": "6bce146e42493f8885eb0044ae56b73dcbf0bcb8c1a99f2834f43a6005e82bdf",
+  "tested_state_note": "Post-fix working tree state; base commit is unchanged, with source/test edits recorded by working_tree_status and hashes.",
+  "production_gate": {
+    "scored_environments": 8,
+    "reset_successes": 8,
+    "submit_attempts": 8,
+    "judge_verdicts": 0,
+    "judge_runtime_errors": 8,
+    "blocker": "ModuleNotFoundError: No module named torch",
+    "docker": "not available"
+  },
+  "finalization_working_tree_status": [
+    " M docs/reports/2026-10-28-recursive-structural-rebuild.md",
+    " M envs/cat_theo/recursive_distributed_gluing/files/network.py",
+    " M envs/cat_theo/recursive_maze_gluing/files/network.py",
+    " M research_program/dialogue_2026_10_28/READINESS.md",
+    " M research_program/dialogue_2026_10_28/README.md",
+    " M research_program/dialogue_2026_10_28/RECURSIVE_PROGRAMS.md",
+    " M research_program/dialogue_2026_10_28/REPORT.md",
+    " M research_program/dialogue_2026_10_28/RUNTIME_VALIDATION.md",
+    " M research_program/dialogue_2026_10_28/inventory.json",
+    " M tests/test_epistemic_control_math.py",
+    " M tests/test_inquiry_games.py",
+    " M tests/test_recursive_gluing_study.py",
+    " M tests/test_recursive_programs.py",
+    "?? arena/epistemic_control/PROTOCOL.md",
+    "?? arena/epistemic_control/adapter.py",
+    "?? arena/epistemic_control/example_agent.py",
+    "?? arena/epistemic_control/protocol.py",
+    "?? arena/epistemic_control/runner.py",
+    "?? docs/artifacts/",
+    "?? research_program/dialogue_2026_10_28/runtime_validation/local-results-20261102.json",
+    "?? research_program/dialogue_2026_10_28/runtime_validation/local-run-20261102/",
+    "?? tests/test_epistemic_control_runner.py"
+  ],
+  "finalization_note": "Report and evidence artifacts were written after test execution; unrelated working-tree changes were preserved. source_hashes identify the code state actually exercised.",
+  "report_sha256": "9d2c01d5526101a6add68cfb0e79984676cb40e6d44bf4c14dd3615348966a4f",
+  "command_index_sha256": "ae0124b3dd9d48e4a10ccf46d8bd9c6ca474f6f00f1b095d4fb9f3297d984f66"
+}

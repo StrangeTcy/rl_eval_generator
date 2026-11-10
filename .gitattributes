@@ -1,0 +1,8 @@
+# Preserve the exact reviewed prompt bytes used by the frozen production gate.
+envs/cat_theo/recursive_coarse_graining/files/prompt.md -text
+envs/cat_theo/recursive_distributed_gluing/files/prompt.md -text
+envs/cat_theo/recursive_epistemic_gluing/files/prompt.md -text
+envs/cat_theo/recursive_error_correcting_codes/files/prompt.md -text
+envs/cat_theo/recursive_gluing/files/prompt.md -text
+envs/cat_theo/recursive_gluing_discovery/files/prompt.md -text
+envs/cat_theo/recursive_maze_gluing/files/prompt.md -text

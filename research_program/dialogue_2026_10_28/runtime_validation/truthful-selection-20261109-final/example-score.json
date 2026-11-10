@@ -1,0 +1,1 @@
+{"schema":"truthful-selection-score/1","taskId":"6dabd23888d373108b70a95ac90a88c7b3c65dec53a57b8479e46f383d17e1ba","posterior":["1/10","9/10"],"decision":1,"expectedDecisionLoss":"1/10","decisionRegret":"0","expectedBrier":"9/50","bayesBrier":"9/50","forecastExcess":"0","literalFalsehoodProbability":"0"}

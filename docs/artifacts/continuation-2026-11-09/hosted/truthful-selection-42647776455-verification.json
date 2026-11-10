@@ -1,0 +1,39 @@
+{
+  "schema": "hosted-artifact-verification/1",
+  "status": "passed",
+  "runId": 42647776455,
+  "runUrl": "https://github.com/StrangeTcy/rl_eval_generator/actions/runs/42647776455",
+  "commit": "a7979ef6ce58f9993ccaaa569ddd7d3f12783310",
+  "node": "v24.22.2",
+  "tests": {
+    "passed": 14,
+    "failed": 0,
+    "skipped": 0
+  },
+  "exitCodes": {
+    "tests": 0,
+    "study": 0,
+    "replay": 0
+  },
+  "cases": 63,
+  "scoredAnswers": 126,
+  "replay": {
+    "status": "passed",
+    "casesChecked": 63,
+    "answersChecked": 126
+  },
+  "sourceHashes": {
+    "arena/inquiry/selection_laws.mjs": {
+      "sha256": "60b7d66a41cf0caa1ba51f3421affb22fef31fd99371cd05d08db39910f15ed5",
+      "matchesCommittedBlob": true
+    },
+    "tools/truthful_selection_study.mjs": {
+      "sha256": "c7becd84b93af3b42b7dfebfae5de7da11da0f2c05bddde703b3643e8ab83201",
+      "matchesCommittedBlob": true
+    }
+  },
+  "recordSha256": "cfc684b2e41bb27123b22b2f699d8af3c4fa94c382fc63d85e8721e345591a01",
+  "designBindingVerified": true,
+  "summaryConsistencyVerified": true,
+  "scope": "Local verification of downloaded hosted evidence and committed Git blobs; hosted replay inspected, not rerun under the different local Node version."
+}

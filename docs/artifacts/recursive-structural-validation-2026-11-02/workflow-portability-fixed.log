@@ -1,0 +1,28 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____________ test_reasoning_pilot_steps_run_in_order_under_set_u _____________
+tests\test_recursive_gluing_study.py:935: in test_reasoning_pilot_steps_run_in_order_under_set_u
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\tools\recursive_gluing_study.py", line 59, in <module>
+E         from arena.secrets import provider_environment_name  # noqa: E402
+E         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\__init__.py", line 3, in <module>
+E         from .providers import PROVIDERS, Completion, ProviderClient, ProviderError
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\providers.py", line 22, in <module>
+E         from .secrets import (
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-15\test_reasoning_pilot_steps_run0\repo\arena\secrets.py", line 24, in <module>
+E         Path.home() / ".config" / "rl_eval_generator" / SECRET_FILE_NAME,
+E         ^^^^^^^^^^^
+E       File "C:\Users\hatgu\anaconda3\envs\hyge\Lib\pathlib.py", line 1202, in home
+E         return cls("~").expanduser()
+E                ^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\Users\hatgu\anaconda3\envs\hyge\Lib\pathlib.py", line 1406, in expanduser
+E         raise RuntimeError("Could not determine home directory.")
+E     RuntimeError: Could not determine home directory.
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['bash', '-euo', 'pipefail', '-c', 'set -euo pipefail\nPLAN_ARGS=(\n  --scope "$SCOPE"\n  --seed...r\n    raise RuntimeError("Could not determine home directory.")\nRuntimeError: Could not determine home directory.\n').returncode
+=========================== short test summary info ===========================
+FAILED tests/test_recursive_gluing_study.py::test_reasoning_pilot_steps_run_in_order_under_set_u
+EXIT_STATUS=1

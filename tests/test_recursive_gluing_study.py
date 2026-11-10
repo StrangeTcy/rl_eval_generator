@@ -37,6 +37,7 @@ from __future__ import annotations
 import copy
 import itertools
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -861,14 +862,35 @@ def test_reasoning_pilot_steps_run_in_order_under_set_u(tmp_path: Path) -> None:
     workdir.mkdir()
     # The plan step invokes `python tools/recursive_gluing_study.py`, so the
     # checkout must be reachable from the working directory.
-    (workdir / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
+    def expose_tree(name: str) -> None:
+        source = ROOT / name
+        target = workdir / name
+        try:
+            target.symlink_to(source, target_is_directory=True)
+        except OSError as exc:
+            # Windows without SeCreateSymbolicLinkPrivilege still has the
+            # same checkout semantics when the small provider-free fixture is
+            # copied.  Do not turn a host privilege limitation into a failed
+            # workflow assertion.
+            if getattr(exc, "winerror", None) != 1314:
+                raise
+            shutil.copytree(source, target)
+
+    expose_tree("tools")
     for name in ("arena", "envs", "shared", "spec"):
         if (ROOT / name).is_dir():
-            (workdir / name).symlink_to(ROOT / name, target_is_directory=True)
+            expose_tree(name)
+    # The workflow runs from the checkout root; expose the generator module
+    # alongside the directory trees used above so imports match that layout.
+    shutil.copy2(ROOT / "generate_env.py", workdir / "generate_env.py")
 
     env = {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        # Keep the interpreter running this test discoverable by the nested
+        # workflow command even when the host exposes only the Microsoft Store
+        # Python alias on PATH.
+        "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": os.environ.get("HOME", "/tmp"),
+        "USERPROFILE": os.environ.get("USERPROFILE", str(Path.home())),
         "GITHUB_ACTIONS": "true",
         "GITHUB_STEP_SUMMARY": str(tmp_path / "summary.md"),
         "GITHUB_ENV": str(tmp_path / "env"),

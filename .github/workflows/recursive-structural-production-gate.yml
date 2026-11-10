@@ -1,0 +1,88 @@
+name: Recursive structural production judge gate
+
+on:
+  push:
+    branches:
+      - codex/recursive-production-20261109
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag, or commit to test"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recursive-structural-production-${{ inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  production-gate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      GATE_TEST_REF: ${{ inputs.ref || github.ref }}
+    steps:
+      - name: Check out the requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check evidence classification and candidate controls
+        run: |
+          set -euo pipefail
+          mkdir -p docs/artifacts/recursive-structural-production-gate
+          node tools/recursive_structural_production_gate.mjs --self-test \
+            2>&1 | tee docs/artifacts/recursive-structural-production-gate/launch-preflight.log
+          node --test tests/test_recursive_structural_production_gate.mjs \
+            2>&1 | tee docs/artifacts/recursive-structural-production-gate/node-tests.log
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements.lock
+
+      - name: Install declared dependencies and pinned CPU PyTorch
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu \
+            torch==2.5.1 torchvision==0.20.1
+
+      - name: Execute all eight production judge environments
+        id: gate
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p docs/artifacts/recursive-structural-production-gate
+          node tools/recursive_structural_production_gate.mjs \
+            --output docs/artifacts/recursive-structural-production-gate \
+            --frozen-inputs tools/fixtures/recursive-structural-production \
+            2>&1 | tee docs/artifacts/recursive-structural-production-gate/hosted-console.log
+
+      - name: Upload production-gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recursive-structural-production-gate
+          path: docs/artifacts/recursive-structural-production-gate/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail the workflow when the gate did not pass
+        if: always() && steps.gate.outcome != 'success'
+        run: exit 1

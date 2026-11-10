@@ -1,7 +1,7 @@
 # Recursive family: implementation and scientific readiness
 
-Date: 2026-10-28
-Status: substantial source changes; Python execution and scientific validation outstanding.
+Date: 2026-10-28; validation completed 2026-11-03
+Status: implementation and lower-level gate validation completed on the post-fix working tree; production judge execution is blocked by unavailable PyTorch.
 
 ## What this pass does and does not establish
 
@@ -263,3 +263,222 @@ representation.
 Only after that should authorized model experiments test competence,
 shortcut resistance, structural inference, generalization, or cross-domain
 transfer. None of those model-level claims is established here.
+
+## Final validation execution record — 2026-11-03
+
+This section supersedes the earlier statement that no Python execution had
+occurred. The original source-review record remains unchanged at
+`docs/reports/2026-10-28-structural-source-review.json`; its status remains
+`static_source_review_only`, and its recorded digests are evidence of the
+reviewed pre-fix state. The final machine-readable validation record is
+`docs/artifacts/recursive-structural-validation-2026-11-02/validation-record.json`.
+
+### Exact source state and environment
+
+The repository was on branch `main`, base commit
+`ef2c9f8b906ee964d318182ed99169ad2793eeac`. Validation used the working tree
+after the distributed scheduler and maze replay fixes, plus the Windows
+workflow-fixture portability fix. The exact working-tree status, diff digest,
+and hashes of all eight environments' config/network/judge/solver/prompt
+files are in `validation-record.json`. Unrelated existing working-tree changes
+were preserved and are listed there rather than folded into the fixes.
+
+Runtime: Windows 11, `C:\Users\hatgu\anaconda3\envs\hyge\python.exe`, Python
+3.12.13, pytest 9.1.1, PyYAML 6.0.3. No provider credentials or model calls
+were used. The original source-review JSON is preserved and its SHA-256 is
+recorded in the final validation record.
+
+### Executed tests
+
+The 35 named `test_structural_*` definitions identified by the source review
+are inventoried in `structural-test-inventory.json`. Their parameterized pytest
+selection executed **59 cases, 59 passed, 0 failed**; the JUnit evidence is
+`structural-tests-final.xml`. An earlier progress message said 61, but the
+machine-readable JUnit artifact contains 59 and is the authoritative count;
+the report does not claim 61.
+
+The complete requested environment/readiness/study/reference suite executed
+**313/313 passed** in 202.219 seconds:
+`structural-validation-final.xml` and `pytest-suite-final.log`.
+Holonomy tests were included as research controls only; holonomy remains out
+of the eight-environment scored set.
+
+The shared scoring/runner suites executed **44/44 passed**:
+`shared-gate-tests.xml` and `shared-gate-tests.log`.
+
+The two genuine defects found during execution were fixed and regression-tested:
+
+1. `SchedulerControls.rendezvous()` did not actually create the documented
+   one-permit deadlock. It now holds the root permit while forwarding a
+   request and requires the leaf's second permit before receiving it. The
+   independent scheduler BFS records capacity 1 as unsatisfiable and capacity
+   2 as satisfiable. Regression evidence: `distributed-regression.xml`,
+   `distributed-control-check.log`.
+2. Maze replay and BFS treated every shaft-bearing tile as sealed even at the
+   nesting boundary, rejecting a legal boundary route. `_must_clear` now
+   considers remaining depth; the explicit illegal descent is still rejected.
+   Regression evidence: `maze-fixed.xml` and the final full suite.
+
+The workflow portability test also required a legitimate host-fixture repair:
+copy fallback when Windows symlink privilege is absent, explicit interpreter
+PATH/home propagation, and the checkout-root generator file. This changes no
+evaluation semantics and is covered by the final suite.
+
+### Production gate execution
+
+The real `env_runner.py reset` then `env_runner.py submit --confirm --timeout
+30` path was attempted for each of the eight scored environments at seed 41,
+easy difficulty. All eight resets generated recorded instances successfully;
+all eight submissions reached the local production judge launcher. Every judge
+failed closed before scoring with:
+
+```text
+ModuleNotFoundError: No module named 'torch'
+```
+
+The raw end-to-end evidence is `eight-gate-production.log`; the eight episode
+directories under `.episodes/gate_recursive_*` retain their judge stderr,
+stdout, patches, state, and event logs. These are runtime errors, not failed
+candidate solutions, and are not counted as PASS or task-level judge results.
+
+Available local Python installations were checked. None had PyTorch; no local
+PyTorch wheel/package was found in the inspected Anaconda trees or pip cache.
+Docker is not installed (`docker version` returned command not found). No
+network installation was attempted and no paid or provider evaluation ran.
+Details: `dependency-check.json`.
+
+The production judge source was inspected for its parsing, independent
+verification, deterministic repeat, and score path, but that inspection is
+not execution evidence. The source calls `verify_certificate` on every
+submitted output, checks the configured result again for determinism, and
+computes accuracy from named checks; a `reference_acc` field is not used by
+the judge code. The generated production judge could not reach those lines in
+this environment because `torch` imports first.
+
+### Certificate-path execution
+
+The provider-free certificate harness ran actual instance generation and the
+network parser/verifier for all eight environments on depth 2, seed 41. For
+every environment it checked valid reference certificates, deterministic
+repetition, wrong-status certificates, `null`, empty, missing-status,
+certificate-free/reference-accuracy-only payloads. All positive certificates
+were accepted; all deterministic repeats matched; all wrong-status and
+malformed cases were rejected. Full rows and reasons are in
+`certificate-path-matrix.json` and its log.
+
+This establishes lower-level certificate verification and fail-closed parsing.
+It does not establish the unavailable PyTorch-backed final judge or its final
+JSON score emission.
+
+### Offline competing explanations
+
+The provider-free runner was executed at depth/seed pairs `(1,0)`, `(2,41)`,
+and `(3,7)`. Raw machine-readable outputs are
+`structural-rivals-depth1-seed0.json`, `structural-rivals-final.json`, and
+`structural-rivals-depth3-seed7.json`; combined summaries are in
+`baseline-summary-all-runs.json`. Each row includes the public-input SHA-256,
+strategy label, outcome, solver time, and declared resource limits. The
+runner made zero provider calls and treats budget exhaustion as unmeasured,
+never as SAT/UNSAT.
+
+At the required `(depth=2, seed=41)` frozen set, the results were:
+
+| Environment | Conventional strategy | Result / success rate | Runtime sum | Interpretation |
+|---|---|---:|---:|---|
+| recursive_gluing | expanded CSP | 11/11 — 100% | 0.003199 s | complete ordinary rival |
+| recursive_gluing_discovery | expanded CSP | 9/9 — 100% | 0.018368 s | complete rival |
+| recursive_maze_gluing | full-state BFS | 8/8 — 100% | 0.001155 s | complete bounded search |
+| recursive_distributed_gluing | scheduler-state BFS | 8/8 — 100% | 0.002511 s | complete bounded search |
+| recursive_epistemic_gluing | finite modal evaluation | 10/10 — 100% | 0.005513 s | complete finite rival |
+| recursive_compiler_bootstrap | known L1 compiler | 6/6 — 100% | 8.932856 s | complete rival; semantic checks included |
+| recursive_error_correcting_codes | field elimination | 8/8 — 100% | 0.002184 s | complete ordinary rival |
+| recursive_coarse_graining | matrix/partition enumeration | 8/8 — 100% | 0.010166 s | complete exhaustive rival |
+
+The named ablations failed on the intended controls rather than being
+silently omitted: spanning forest 3/11, copy-leaf 1/9, ignore orientation
+7/8, ignore capacity 7/8, actual-facts negative control 8/10,
+local-decoder 4/6, and local-table 2/8. These are control outcomes, not
+claims that the competing methods are intrinsically weak. The codes
+enumeration rival also solved 8/8, so elimination is not evidence of a unique
+recursive capability. Holonomy's ninth runner row is retained in raw output
+but excluded from this table and from campaign disposition.
+
+### Evidence-based dispositions
+
+The disposition “Validated for the specified task” would require the full
+production gate to run, accept valid submissions, reject malformed and wrong
+submissions, emit a valid final score, and repeat deterministically. That
+evidence was not available here. “Usable with a narrowed claim” means the
+provider-free task/oracle subsystem is executed and independently checked but
+the production judge or scientific claim is outside the evidence. “Blocked”
+means a required execution stage could not run. “Research-only” is reserved
+for the excluded holonomy environment.
+
+| Environment | Disposition | Supported claim and limitation |
+|---|---|---|
+| recursive_gluing | Blocked; lower-level usable with narrowed claim | Finite CSP task, parser, oracle, and certificate controls executed; ordinary expanded CSP solves all frozen checks; final judge blocked by PyTorch. |
+| recursive_gluing_discovery | Blocked; lower-level usable with narrowed claim | Compact relation certificates and independent expanded-CSP rival agree; both are direct finite methods; final judge blocked. |
+| recursive_maze_gluing | Blocked; lower-level usable with narrowed claim | Bounded route replay/BFS and orientation negative controls execute; full-state search solves all frozen checks; final judge blocked. |
+| recursive_distributed_gluing | Blocked; lower-level usable with narrowed claim | Scheduler certificates and the corrected one-versus-two capacity intervention execute; scheduler BFS solves all frozen checks; final judge blocked. |
+| recursive_epistemic_gluing | Blocked; lower-level usable with narrowed claim | Finite-world modal verification and malformed-certificate rejection execute; finite evaluation solves all frozen checks; final judge blocked. |
+| recursive_compiler_bootstrap | Blocked; lower-level usable with narrowed claim | Bootstrap chain and semantic checks execute offline, and known compiler baseline solves 6/6; broader compiler correctness and final judge remain unexecuted. |
+| recursive_error_correcting_codes | Blocked; lower-level usable with narrowed claim | Elimination and enumeration agree on the frozen small code family; both solve 8/8; broader code families and final judge remain unexecuted. |
+| recursive_coarse_graining | Blocked; lower-level usable with narrowed claim | Quotient verifier and exhaustive partition rival execute; exhaustive method solves 8/8; physical/general abstraction claims and final judge remain unexecuted. |
+| recursive_holonomy_gluing | Research-only | Executed only as a control; excluded from scored campaigns, as required. |
+
+### Scientific interpretation and remaining gap
+
+Implementation validation is positive for the executed Python suites,
+certificate paths, deterministic checks, and generated-instance setup.
+Task-level validation is partial: the finite tasks and their lower-level
+verifiers distinguish the tested positive, negative, malformed, and
+reference-accuracy-only cases, but the production scoring gate did not import
+far enough to emit a judge verdict.
+
+Scientific validation is not established. Ordinary complete methods solve all
+required baseline instances for every environment; therefore these results do
+not support necessity of recursion, internal recursive reasoning,
+generalization, transfer, or model capability. The compiler, code, quotient,
+maze, and distributed tasks also remain narrow finite families with supplied
+structure.
+
+The highest-value remaining gap is to rerun the exact eight production gate
+submissions in a reproducible offline environment containing the declared
+PyTorch dependency (or dispatch the existing no-provider workflow on such a
+host), then capture valid and adversarial final judge JSON results. After that,
+scientific evidence would still require preregistered held-out instances and
+direct model experiments; no such experiments were run here.
+
+### Artifact index
+
+`docs/artifacts/recursive-structural-validation-2026-11-02/command-index.json`
+lists commands and exit statuses. The directory contains the JUnit XML files,
+raw logs, `validation-record.json`, `structural-test-inventory.json`, the
+three baseline JSON runs and combined summary, `certificate-path-matrix.json`,
+`dependency-check.json`, and the production gate log. The original source
+review record remains at its existing path and was not overwritten.
+
+## Hosted production-gate launch addendum — 2026-11-03
+
+The dedicated workflow and harness were added at
+`.github/workflows/recursive-structural-production-gate.yml` and
+`tools/recursive_structural_production_gate.py`. They are committed locally on
+branch `validation/recursive-structural-production-gate` at the local commit
+recorded by `git rev-parse HEAD` when this addendum was finalized
+and are configured to run on GitHub-hosted Ubuntu 22.04 with Python 3.11 and
+CPU PyTorch 2.5.1/torchvision 0.20.1.
+
+The push was rejected before dispatch because the authenticated GitHub OAuth
+token lacks the `workflow` scope:
+
+```text
+refusing to allow an OAuth App to create or update workflow
+`.github/workflows/recursive-structural-production-gate.yml` without `workflow` scope
+```
+
+The repository account has ADMIN permission, but the active token reported
+only `admin:public_key`, `gist`, `read:org`, and `repo`. GitHub device
+authorization was requested at `https://github.com/login/device` and did not
+complete in this session. Consequently, no GitHub Actions run URL, hosted
+PyTorch result, or production-gate artifact exists yet. The local commit is
+not presented as a remotely executed validation.

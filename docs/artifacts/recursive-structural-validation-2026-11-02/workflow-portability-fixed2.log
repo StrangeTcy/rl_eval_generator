@@ -1,0 +1,18 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____________ test_reasoning_pilot_steps_run_in_order_under_set_u _____________
+tests\test_recursive_gluing_study.py:936: in test_reasoning_pilot_steps_run_in_order_under_set_u
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-16\test_reasoning_pilot_steps_run0\repo\tools\recursive_gluing_study.py", line 61, in <module>
+E         from tools.suite_inventory import (  # noqa: E402
+E       File "C:\Users\hatgu\AppData\Local\Temp\pytest-of-hatgu\pytest-16\test_reasoning_pilot_steps_run0\repo\tools\suite_inventory.py", line 35, in <module>
+E         import generate_env as ge  # noqa: E402
+E         ^^^^^^^^^^^^^^^^^^^^^^^^^
+E     ModuleNotFoundError: No module named 'generate_env'
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['bash', '-euo', 'pipefail', '-c', 'set -euo pipefail\nPLAN_ARGS=(\n  --scope "$SCOPE"\n  --seed...erate_env as ge  # noqa: E402\n    ^^^^^^^^^^^^^^^^^^^^^^^^^\nModuleNotFoundError: No module named \'generate_env\'\n').returncode
+=========================== short test summary info ===========================
+FAILED tests/test_recursive_gluing_study.py::test_reasoning_pilot_steps_run_in_order_under_set_u
+EXIT_STATUS=1
