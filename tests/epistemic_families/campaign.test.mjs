@@ -28,6 +28,13 @@ class Fixture {
   }
 }
 
+test('the epistemic Mercury campaign selects Mercury 3 and rejects the older model profile', () => {
+  const selected = Campaign.profile(path.join(ROOT, 'experiments/epistemic_mercury_campaign.yaml'));
+  assert.equal(selected.model, 'mercury-3');
+  const older = Fixture.create({ model: 'mercury-2.5' });
+  assert.throws(() => Campaign.profile(older.profileFile), /unsupported provider profile/);
+});
+
 test('campaign plans cover every real axis and repeated attempts retain identical instances', async () => {
   const fixture = Fixture.create({ matrixMode: 'pairwise', attempts: 2 });
   const summary = await Campaign.plan(fixture.profileFile, fixture.directory, { executionMode: 'live', maxRequests: 512 });

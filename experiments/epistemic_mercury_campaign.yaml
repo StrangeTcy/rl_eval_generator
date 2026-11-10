@@ -2,7 +2,7 @@ schema: epistemic-family-campaign/1
 name: epistemic_mercury_campaign
 provider: mercury
 apiBase: https://api.inceptionlabs.ai/v1
-model: mercury-2.5
+model: mercury-3
 apiKeyEnv: INCEPTION_API_KEY
 wireApi: chat_completions
 reasoningEffort: high

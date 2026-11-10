@@ -6,7 +6,7 @@ import { Session } from '../../arena/epistemic_families/session.mjs';
 
 class Fixture {
   static profile(provider = 'mercury') {
-    return { provider, apiBase: provider === 'mercury' ? 'https://api.inceptionlabs.ai/v1' : 'https://discovery-api.intern-ai.org.cn/v1', model: provider === 'mercury' ? 'mercury-2.5' : 'Atria-Dawn-Preview', wireApi: provider === 'mercury' ? 'chat_completions' : 'responses', reasoningEffort: 'high', maxOutputTokens: 8192, timeoutMs: 30000, minIntervalMs: 0 };
+    return { provider, apiBase: provider === 'mercury' ? 'https://api.inceptionlabs.ai/v1' : 'https://discovery-api.intern-ai.org.cn/v1', model: provider === 'mercury' ? 'mercury-3' : 'Atria-Dawn-Preview', wireApi: provider === 'mercury' ? 'chat_completions' : 'responses', reasoningEffort: 'high', maxOutputTokens: 8192, timeoutMs: 30000, minIntervalMs: 0 };
   }
   static response(provider, action) {
     return provider === 'mercury'
@@ -17,11 +17,11 @@ class Fixture {
   static current(provider, body) { return provider === 'mercury' ? JSON.parse(body.messages.at(1).content) : JSON.parse(body.input.split('\n\nCurrent view:\n').at(1)); }
 }
 
-test('Mercury uses the existing high-effort Chat Completions token contract', () => {
+test('Mercury 3 uses high-effort Chat Completions with its supported default temperature', () => {
   const view = { family: 'memory_inquiry', phase: 'recall', retained: [], actionSchema: {} };
   const request = ModelPolicy.request(Fixture.profile(), view);
   assert.equal(request.url, 'https://api.inceptionlabs.ai/v1/chat/completions');
-  assert.deepEqual(request.body, { model: 'mercury-2.5', messages: [{ role: 'system', content: MODEL_POLICY_INSTRUCTIONS }, { role: 'user', content: JSON.stringify(view) }], max_completion_tokens: 8192, reasoning_effort: 'high', temperature: 0, stream: false });
+  assert.deepEqual(request.body, { model: 'mercury-3', messages: [{ role: 'system', content: MODEL_POLICY_INSTRUCTIONS }, { role: 'user', content: JSON.stringify(view) }], max_completion_tokens: 8192, reasoning_effort: 'high', temperature: 1, stream: false });
 });
 
 test('Atria uses the token-plan Responses endpoint and only the current view', () => {

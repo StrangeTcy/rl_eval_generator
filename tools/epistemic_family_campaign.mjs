@@ -19,7 +19,7 @@ export class Campaign {
     Contract.fields(p, ['schema', 'name', 'provider', 'apiBase', 'model', 'apiKeyEnv', 'wireApi', 'reasoningEffort', 'minIntervalMs', 'maxOutputTokens', 'timeoutMs', 'maxTurns', 'maxRequests', 'maxEpisodesPerRun', 'jobSeconds', 'matrixMode', 'families', 'attempts']);
     if (p.schema !== 'epistemic-family-campaign/1') throw new Error('unsupported campaign schema');
     if (!/^[a-z][a-z0-9_-]+$/.test(p.name)) throw new Error('invalid campaign name');
-    const mercury = p.provider === 'mercury' && p.apiBase === 'https://api.inceptionlabs.ai/v1' && p.model === 'mercury-2.5' && p.apiKeyEnv === 'INCEPTION_API_KEY' && p.wireApi === 'chat_completions';
+    const mercury = p.provider === 'mercury' && p.apiBase === 'https://api.inceptionlabs.ai/v1' && p.model === 'mercury-3' && p.apiKeyEnv === 'INCEPTION_API_KEY' && p.wireApi === 'chat_completions';
     const atria = p.provider === 'atria' && p.apiBase === 'https://discovery-api.intern-ai.org.cn/v1' && p.model === 'Atria-Dawn-Preview' && p.apiKeyEnv === 'ATRIA_API_KEY' && p.wireApi === 'responses';
     if ((!mercury && !atria) || p.reasoningEffort !== 'high') throw new Error('unsupported provider profile');
     Contract.integer(p.minIntervalMs, 0, 60000, 'minimum interval');

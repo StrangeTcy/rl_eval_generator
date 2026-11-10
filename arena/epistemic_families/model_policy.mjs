@@ -37,7 +37,7 @@ export class ModelPolicy {
     const current = JSON.stringify(view);
     if (profile.wireApi === 'chat_completions') return {
       url: `${profile.apiBase}/chat/completions`,
-      body: { model: profile.model, messages: [{ role: 'system', content: MODEL_POLICY_INSTRUCTIONS }, { role: 'user', content: current }], max_completion_tokens: profile.maxOutputTokens, reasoning_effort: profile.reasoningEffort, temperature: 0, stream: false },
+      body: { model: profile.model, messages: [{ role: 'system', content: MODEL_POLICY_INSTRUCTIONS }, { role: 'user', content: current }], max_completion_tokens: profile.maxOutputTokens, reasoning_effort: profile.reasoningEffort, temperature: 1, stream: false },
     };
     return {
       url: `${profile.apiBase}/responses`,

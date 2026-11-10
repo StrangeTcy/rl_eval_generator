@@ -5,7 +5,7 @@ families using the providers from the recent campaigns:
 
 | Workflow | Model | Repository secret |
 |---|---|---|
-| [Mercury](../../.github/workflows/epistemic-mercury-campaign.yml) | `mercury-2.5`, high reasoning effort, Chat Completions | `INCEPTION_API_KEY` |
+| [Mercury](../../.github/workflows/epistemic-mercury-campaign.yml) | `mercury-3`, high reasoning effort, Chat Completions, temperature 1 | `INCEPTION_API_KEY` |
 | [Reasoning Atria](../../.github/workflows/epistemic-reasoning-atria-campaign.yml) | `Atria-Dawn-Preview`, high reasoning effort, Responses | `ATRIA_API_KEY` |
 
 The Atria profile uses `https://discovery-api.intern-ai.org.cn/v1`, matching
@@ -13,6 +13,12 @@ the reasoning Atria pairwise campaign. Mercury uses
 `https://api.inceptionlabs.ai/v1`. Both use sequential requests, with minimum
 intervals of 1,100 ms and 200 ms respectively. Other workflows using the same
 account still share the provider's quota.
+
+The Mercury profile follows Inception's [model documentation](https://docs.inceptionlabs.ai/get-started/models.md)
+and [reasoning-effort documentation](https://docs.inceptionlabs.ai/capabilities/reasoning-efforts.md):
+`mercury-3` accepts `max_completion_tokens` and `reasoning_effort: high`.
+Requests explicitly use its default temperature of 1, within the supported
+0.5–1 range.
 
 The workflows share [one implementation](../../.github/workflows/epistemic-families-campaign.yml).
 Their profiles live in
