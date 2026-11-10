@@ -1,0 +1,202 @@
+name: Epistemic families campaign runner
+
+on:
+  workflow_call:
+    inputs:
+      provider:
+        type: string
+        required: true
+      execution_mode:
+        type: string
+        required: true
+      family:
+        type: string
+        required: true
+      matrix:
+        type: string
+        required: true
+      attempts:
+        type: number
+        required: true
+      max_requests:
+        type: number
+        required: true
+      max_episodes:
+        type: number
+        required: true
+      resume_run_id:
+        type: string
+        default: ''
+      resume_run_attempt:
+        type: number
+        default: 1
+    secrets:
+      PROVIDER_API_KEY:
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  campaign:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    env:
+      PROVIDER: ${{ inputs.provider }}
+      EXECUTION_MODE: ${{ inputs.execution_mode }}
+      FAMILY: ${{ inputs.family }}
+      MATRIX_MODE: ${{ inputs.matrix }}
+      ATTEMPTS: ${{ inputs.attempts }}
+      MAX_REQUESTS: ${{ inputs.max_requests }}
+      MAX_EPISODES: ${{ inputs.max_episodes }}
+      RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+      RESUME_RUN_ATTEMPT: ${{ inputs.resume_run_attempt }}
+    steps:
+      - name: Validate dispatch and select the latest checkpoint
+        id: checkpoint
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const env = process.env;
+            core.exportVariable('EVIDENCE_DIR', require('node:path').join(env.RUNNER_TEMP, 'epistemic-campaign'));
+            if (!['mercury', 'atria'].includes(env.PROVIDER)) throw new Error('Unknown provider');
+            if (!['plan', 'reference', 'live'].includes(env.EXECUTION_MODE)) throw new Error('Unknown execution mode');
+            if (!['configured', 'single', 'pairwise'].includes(env.MATRIX_MODE)) throw new Error('Unknown matrix');
+            const limits = [[env.ATTEMPTS, 10], [env.MAX_REQUESTS, 20000], [env.MAX_EPISODES, 1000], [env.RESUME_RUN_ATTEMPT, 10000]];
+            if (limits.some(([value, upper]) => !/^[1-9][0-9]*$/.test(value) || Number(value) > upper)) throw new Error('Invalid numeric input');
+            if (env.EXECUTION_MODE === 'live' && env.GITHUB_RUN_ATTEMPT !== '1') throw new Error('Use a new manual dispatch with resume_run_id; rerunning a paid job can repeat requests');
+            core.setOutput('profile', env.PROVIDER === 'mercury' ? 'experiments/epistemic_mercury_campaign.yaml' : 'experiments/epistemic_reasoning_atria_campaign.yaml');
+            if (env.RESUME_RUN_ID) {
+              if (!/^[1-9][0-9]*$/.test(env.RESUME_RUN_ID)) throw new Error('Invalid resume run ID');
+              if (env.EXECUTION_MODE === 'plan') throw new Error('Planning starts a separate artifact; select reference or live to resume');
+              const wrapper = env.PROVIDER === 'mercury' ? '.github/workflows/epistemic-mercury-campaign.yml' : '.github/workflows/epistemic-reasoning-atria-campaign.yml';
+              const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, { ...context.repo, per_page: 100 });
+              const name = `epistemic-${env.PROVIDER}-state-${env.RESUME_RUN_ID}-${env.RESUME_RUN_ATTEMPT}`;
+              const selected = artifacts.find(artifact => artifact.name === name && !artifact.expired);
+              if (!selected || String(selected.workflow_run?.id) !== env.RESUME_RUN_ID) throw new Error('Requested checkpoint is missing or expired');
+              const { data: source } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: env.RESUME_RUN_ID });
+              if (source.path !== wrapper || source.event !== 'workflow_dispatch' || source.status !== 'completed') throw new Error('Checkpoint must come from a completed manual run of this provider workflow');
+              const pattern = new RegExp(`^epistemic-${env.PROVIDER}-state-[0-9]+-[0-9]+$`);
+              const newer = artifacts.filter(artifact => !artifact.expired && artifact.id > selected.id && pattern.test(artifact.name));
+              const owners = await Promise.all(newer.map(artifact => github.rest.actions.getWorkflowRun({ ...context.repo, run_id: artifact.workflow_run.id })));
+              if (owners.some(({ data: run }) => run.path === wrapper && run.event === 'workflow_dispatch')) throw new Error('A newer checkpoint exists for this provider; resume it to avoid repeating paid work');
+              core.setOutput('artifact', name);
+            }
+
+      - name: Restore the selected checkpoint
+        if: inputs.resume_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.checkpoint.outputs.artifact }}
+          path: ${{ runner.temp }}/epistemic-campaign
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Resolve the original campaign revision
+        id: source
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const env = process.env;
+            let sha = context.sha;
+            if (env.RESUME_RUN_ID) {
+              const identity = JSON.parse(fs.readFileSync(path.join(env.EVIDENCE_DIR, 'workflow-identity.json'), 'utf8'));
+              if (identity.provider !== env.PROVIDER || identity.repository !== `${context.repo.owner}/${context.repo.repo}` || String(identity.runId) !== env.RESUME_RUN_ID || String(identity.runAttempt) !== env.RESUME_RUN_ATTEMPT) throw new Error('Checkpoint workflow identity mismatch');
+              sha = identity.sourceSha;
+            }
+            if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid campaign source revision');
+            core.setOutput('sha', sha);
+
+      - name: Record workflow identity
+        id: identity
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            fs.mkdirSync(process.env.EVIDENCE_DIR, { recursive: true });
+            fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, 'workflow-identity.json'), JSON.stringify({ repository: `${context.repo.owner}/${context.repo.repo}`, provider: process.env.PROVIDER, sourceSha: process.env.SOURCE_SHA, runId: context.runId, runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), resumedFrom: process.env.RESUME_RUN_ID || null }, null, 2) + '\n');
+
+      - name: Check out the pinned campaign revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run regression checks before provider access
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test --silent 2>&1 | tee "$EVIDENCE_DIR/tests.tap"
+
+      - name: Plan or execute the campaign
+        id: execute
+        timeout-minutes: 270
+        shell: bash
+        env:
+          PROFILE: ${{ steps.checkpoint.outputs.profile }}
+          INCEPTION_API_KEY: ${{ inputs.execution_mode == 'live' && inputs.provider == 'mercury' && secrets.PROVIDER_API_KEY || '' }}
+          ATRIA_API_KEY: ${{ inputs.execution_mode == 'live' && inputs.provider == 'atria' && secrets.PROVIDER_API_KEY || '' }}
+        run: |
+          set -o pipefail
+          campaign_command=run
+          mode_args=(--execution-mode "$EXECUTION_MODE")
+          if [ "$EXECUTION_MODE" = plan ]; then
+            campaign_command=plan
+            mode_args=()
+          fi
+          node tools/epistemic_family_campaign.mjs "$campaign_command" \
+            --profile "$PROFILE" --output "$EVIDENCE_DIR/campaign" \
+            --family "$FAMILY" --matrix "$MATRIX_MODE" --attempts "$ATTEMPTS" \
+            --max-requests "$MAX_REQUESTS" --max-episodes "$MAX_EPISODES" \
+            "${mode_args[@]}" 2>&1 | tee "$EVIDENCE_DIR/invocation.log"
+
+      - name: Verify saved requests and replay recorded episodes
+        if: always() && steps.execute.outcome != 'skipped'
+        shell: bash
+        env:
+          PROFILE: ${{ steps.checkpoint.outputs.profile }}
+        run: |
+          set -o pipefail
+          node tools/epistemic_family_campaign.mjs verify \
+            --profile "$PROFILE" --output "$EVIDENCE_DIR/campaign" \
+            2>&1 | tee "$EVIDENCE_DIR/verification.log"
+
+      - name: Publish run summary and classify evidence
+        id: evidence
+        if: always() && steps.source.outcome == 'success'
+        uses: actions/github-script@v7
+        env:
+          IDENTITY_RECORDED: ${{ steps.identity.outcome == 'success' }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const directory = process.env.EVIDENCE_DIR;
+            const report = path.join(directory, 'campaign', 'report.md');
+            if (fs.existsSync(report)) await core.summary.addRaw(fs.readFileSync(report, 'utf8')).write();
+            const category = process.env.EXECUTION_MODE === 'plan' ? 'plan' : process.env.IDENTITY_RECORDED === 'true' && fs.existsSync(path.join(directory, 'campaign', 'state.json')) ? 'state' : 'diagnostics';
+            core.setOutput('name', `epistemic-${process.env.PROVIDER}-${category}-${context.runId}-${process.env.GITHUB_RUN_ATTEMPT}`);
+
+      - name: Upload campaign evidence and checkpoint
+        if: always() && steps.evidence.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.evidence.outputs.name }}
+          path: ${{ runner.temp }}/epistemic-campaign/
+          if-no-files-found: error
+          retention-days: 90

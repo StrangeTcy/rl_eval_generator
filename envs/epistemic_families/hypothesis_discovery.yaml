@@ -1,0 +1,19 @@
+# Construct a symbolic law.
+# Axis meanings are defined in arena/epistemic_families/hypothesis_discovery.mjs.
+schema: epistemic-family-config/1
+family: hypothesis_discovery
+seed: 3
+privateSeed: 7
+axes:
+  # Maximum degree of a hidden integer polynomial.
+  # easy = 1; medium = 2; hard = 3
+  degree: easy
+  # Absolute bound on every canonical coefficient.
+  # easy = 1; medium = 2; hard = 3
+  coefficient_range: easy
+  # Number of input-output experiments available.
+  # easy = 6; medium = 4; hard = 2
+  experiment_budget: easy
+  # Inputs accessible to experimental interventions.
+  # easy = [-3, -2, -1, 0, 1, 2, 3]; medium = [-1, 0, 1]; hard = [0]
+  observable_domain: easy

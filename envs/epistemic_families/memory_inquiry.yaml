@@ -1,0 +1,25 @@
+# Inquiry after controlled retention.
+# Axis meanings are defined in arena/epistemic_families/memory_inquiry.mjs.
+schema: epistemic-family-config/1
+family: memory_inquiry
+seed: 3
+privateSeed: 7
+axes:
+  # Number of independently valued events in the exposure.
+  # easy = 4; medium = 6; hard = 8
+  events: easy
+  # Number of distinct event sources.
+  # easy = 1; medium = 2; hard = 3
+  sources: easy
+  # Number of event records restored after the boundary; selected independently of event values.
+  # easy = 4; medium = 2; hard = 1
+  retention: easy
+  # Recall a final value, final values by source, or parity of each source history.
+  # easy = last; medium = last_per_source; hard = source_parity
+  task: easy
+  # Number of additional original event values that can be recovered.
+  # easy = 2; medium = 1; hard = 0
+  retrievals: easy
+  # Irrelevant current events; a presentation intervention with no change in the exact posterior.
+  # easy = 0; medium = 2; hard = 5
+  distractors: easy

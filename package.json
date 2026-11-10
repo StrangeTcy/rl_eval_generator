@@ -1,0 +1,15 @@
+{
+  "name": "rl-eval-generator-epistemic-families",
+  "version": "0.0.0",
+  "private": true,
+  "description": "YAML configuration and validation for the interactive epistemic environment families",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test --test-reporter=tap tests/epistemic_families/*.test.mjs"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  }
+}

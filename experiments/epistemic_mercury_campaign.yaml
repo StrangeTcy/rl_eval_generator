@@ -1,0 +1,28 @@
+schema: epistemic-family-campaign/1
+name: epistemic_mercury_campaign
+provider: mercury
+apiBase: https://api.inceptionlabs.ai/v1
+model: mercury-2.5
+apiKeyEnv: INCEPTION_API_KEY
+wireApi: chat_completions
+reasoningEffort: high
+minIntervalMs: 200
+maxOutputTokens: 8192
+timeoutMs: 120000
+maxTurns: 32
+# Absolute campaign ceiling. The workflow starts with a smaller selected bound.
+maxRequests: 20000
+maxEpisodesPerRun: 25
+jobSeconds: 14400
+matrixMode: pairwise
+attempts: 1
+families:
+  - agent_reconstruction
+  - inquiry_control
+  - hypothesis_discovery
+  - evidence_process
+  - adaptive_agents
+  - recursive_delegation
+  - evaluator_prediction
+  - belief_revision
+  - memory_inquiry

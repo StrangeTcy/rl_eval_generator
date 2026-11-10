@@ -1,0 +1,22 @@
+# Revise conclusions after corrected evidence.
+# Axis meanings are defined in arena/epistemic_families/belief_revision.mjs.
+schema: epistemic-family-config/1
+family: belief_revision
+seed: 3
+privateSeed: 7
+axes:
+  # Number of binary root propositions.
+  # easy = 8; medium = 10; hard = 12
+  premises: easy
+  # Number of dependency layers from each corrected premise.
+  # easy = 1; medium = 3; hard = 5
+  depth: easy
+  # Number of independent supporting branches for the redundant conclusion.
+  # easy = 1; medium = 2; hard = 3
+  supports: easy
+  # Number of premise values replaced by corrected observations.
+  # easy = 1; medium = 2; hard = 3
+  corrections: easy
+  # Number of old observations withdrawn without replacement.
+  # easy = 0; medium = 1; hard = 2
+  uncertainty: easy

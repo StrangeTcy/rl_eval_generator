@@ -1,0 +1,25 @@
+{
+  "schema": "interactive-environment-registry/1",
+  "runtime": "node24",
+  "protocol": "epistemic-family-current-view/1",
+  "entrypoint": "tools/epistemic_families.mjs",
+  "configuration": {
+    "schema": "epistemic-family-config/1",
+    "pathTemplate": "envs/epistemic_families/{family}.yaml",
+    "guide": "envs/epistemic_families/README.md",
+    "validation": "node tools/epistemic_families.mjs validate-config YAML_PATH"
+  },
+  "definitionSource": "Each module exports its ordered axes and exact level-to-parameter mapping.",
+  "families": {
+    "agent_reconstruction": "arena/epistemic_families/agent_reconstruction.mjs",
+    "inquiry_control": "arena/epistemic_families/inquiry_control.mjs",
+    "hypothesis_discovery": "arena/epistemic_families/hypothesis_discovery.mjs",
+    "evidence_process": "arena/epistemic_families/evidence_process.mjs",
+    "adaptive_agents": "arena/epistemic_families/adaptive_agents.mjs",
+    "recursive_delegation": "arena/epistemic_families/recursive_delegation.mjs",
+    "evaluator_prediction": "arena/epistemic_families/evaluator_prediction.mjs",
+    "belief_revision": "arena/epistemic_families/belief_revision.mjs",
+    "memory_inquiry": "arena/epistemic_families/memory_inquiry.mjs"
+  },
+  "integration": "Interactive sessions have their own registry and launcher; the existing Python patch-task registry retains its contract."
+}

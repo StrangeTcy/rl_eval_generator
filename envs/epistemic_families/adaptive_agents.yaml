@@ -1,0 +1,25 @@
+# Forecast an adapting agent.
+# Axis meanings are defined in arena/epistemic_families/adaptive_agents.mjs.
+schema: epistemic-family-config/1
+family: adaptive_agents
+seed: 3
+privateSeed: 7
+axes:
+  # Number of possible initial learner states and polarities.
+  # easy = 2; medium = 4; hard = 6
+  learner_count: easy
+  # Executable state update rule.
+  # easy = cumulative; medium = leaky; hard = window-two
+  update_law: easy
+  # External polarity reverses every this many updates; zero keeps the regime fixed.
+  # easy = 0; medium = 3; hard = 1
+  change_cadence: easy
+  # Information returned by a diagnostic checkpoint.
+  # easy = state-and-action; medium = action-only; hard = alternate-action
+  observation_access: easy
+  # Number of future post-update actions forecast prospectively.
+  # easy = 1; medium = 2; hard = 4
+  forecast_horizon: easy
+  # Maximum historical diagnostic inspections.
+  # easy = 3; medium = 2; hard = 1
+  inspection_budget: easy

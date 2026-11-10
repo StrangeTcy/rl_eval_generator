@@ -1,0 +1,19 @@
+# Identify how evidence was produced
+
+`arena/epistemic_families/evidence_process.mjs` generates observations by executing a pipeline with an upstream uniform source, a gate, and a sensor. Three possible mechanisms have equal prior probability: ordinary sampling admits every source value and displays it unchanged; selection admits only the maximum value and displays it unchanged; sensor transformation admits every value and cyclically shifts its display. Selection is therefore distinct from a changed sensor reading.
+
+The axes are diagnostic access (complete, paired traces only, or upstream source audit only), initial evidence count (1, 2, 3), source alphabet size (2, 3, 5), and diagnostic budget (4, 2, 1). Selection amplifies the maximum displayed value by the alphabet size. Larger batches can concentrate support for selection, while access restrictions leave mechanisms unidentified. Each axis changes the evidence, operations, or resources; universal monotonic difficulty is not claimed.
+
+Diagnostic actions use `{kind:"diagnose",diagnostic:"paired_trace"}`. A paired trace costs one credit and shows both an admitted raw value and its display. A gate audit costs two and passes every known raw source value through the gate while bypassing the sensor. Calibration costs two and passes known raw zero directly into the sensor while bypassing the gate. An upstream source audit costs one and returns the same fixed source alphabet under every mechanism, making it a paid null intervention. The allowed operations depend on diagnostic access.
+
+The generator uses a finite mixed-radix random tape. A uniform private ticket chooses the mechanism independently of enough uniform source digits for every possible trajectory. Its ticket population has `3 * K^(batch + budget)` members for alphabet size `K`. The private seed indexes that population modulo its size. This gives an exact finite sampling interpretation rather than relying on approximate floating-point random probabilities. The likelihood engine independently enumerates gate acceptance and sensor operations. Tests enumerate an entire 48-ticket population and recover the posterior of each adaptive transcript by direct counting.
+
+The final action is `{kind:"identify",mechanism:"underdetermined",posterior:["1/11","9/11","1/11"]}`. A single mechanism can be claimed only if the evidence uniquely identifies it. Ordinary sampling and cyclic sensor transformation have the same displayed marginal distribution; ordinary displayed samples alone never distinguish them. Two maximum-only observations with a three-valued source yield posterior `[1/11,9/11,1/11]`, so strong support for selection is still not identification. All probability fields require normalized exact fractions.
+
+The reference computes exact finite-horizon Bayes Brier risk under every affordable diagnostic. Action regret is the excess continuation risk at each chosen diagnostic plus any loss from stopping early. The final posterior contributes squared forecast excess, and a wrong identification claim contributes one. The score is `1/(1 + diagnostic regret + posterior excess + claim error)`. Residual uncertainty is reported separately: correct uncertainty can receive full score when no identifying test is available. Invalid actions preserve both the public state and the private random tape.
+
+Tests cover all three mechanisms, the hand-derived selection posterior, direct gate and sensor interventions, observational equivalence, the null source audit, false certainty even about the hidden mechanism, every one of the 81 axis combinations, and private-state separation.
+
+The bounded claim is operational diagnosis among three finite evidence-production processes. It does not diagnose arbitrary real-world selection, deception, or sensor faults.
+
+Run `node --test tests/epistemic_families/evidence_process.test.mjs` from the repository root.

@@ -1,0 +1,22 @@
+# Reconstruct a strategic agent.
+# Axis meanings are defined in arena/epistemic_families/agent_reconstruction.mjs.
+schema: epistemic-family-config/1
+family: agent_reconstruction
+seed: 3
+privateSeed: 7
+axes:
+  # Number of candidate preference and belief hierarchies.
+  # easy = 3; medium = 5; hard = 7
+  models: easy
+  # Nested opponent models evaluated beneath the target agent.
+  # easy = 0; medium = 1; hard = 2
+  recursion: easy
+  # Available actions for each participant in every generated payoff game.
+  # easy = 2; medium = 3; hard = 4
+  actions: easy
+  # Diagnostic report retained from agent execution.
+  # easy = action-and-margin; medium = action; hard = action-parity
+  visibility: easy
+  # Maximum paid diagnostic queries.
+  # easy = 4; medium = 2; hard = 1
+  budget: easy

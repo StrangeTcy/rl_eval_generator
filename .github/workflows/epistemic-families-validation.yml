@@ -1,0 +1,179 @@
+name: Epistemic families configuration and replay
+
+on:
+  push:
+    paths:
+      - .github/workflows/epistemic-families-validation.yml
+      - envs/epistemic_families/**
+      - arena/epistemic_families/**
+      - arena/inquiry/selection_laws.mjs
+      - tools/epistemic_families.mjs
+      - tools/epistemic_family_campaign.mjs
+      - experiments/epistemic_*_campaign.yaml
+      - .github/workflows/epistemic*campaign.yml
+      - tests/epistemic_families/**
+      - package.json
+      - package-lock.json
+  pull_request:
+    paths:
+      - .github/workflows/epistemic-families-validation.yml
+      - envs/epistemic_families/**
+      - arena/epistemic_families/**
+      - arena/inquiry/selection_laws.mjs
+      - tools/epistemic_families.mjs
+      - tools/epistemic_family_campaign.mjs
+      - experiments/epistemic_*_campaign.yaml
+      - .github/workflows/epistemic*campaign.yml
+      - tests/epistemic_families/**
+      - package.json
+      - package-lock.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: epistemic-families-validation-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regressions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the requested revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Prepare regression evidence
+        shell: bash
+        run: |
+          evidence_dir="$RUNNER_TEMP/epistemic-families-regressions"
+          mkdir -p "$evidence_dir"
+          node --version > "$evidence_dir/node-version.txt"
+          printf '%s\n' "$GITHUB_SHA" > "$evidence_dir/commit.txt"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run all family regressions
+        shell: bash
+        run: |
+          evidence_dir="$RUNNER_TEMP/epistemic-families-regressions"
+          set +e
+          npm test --silent > "$evidence_dir/tests.tap" 2>&1
+          test_status=$?
+          printf '%s\n' "$test_status" > "$evidence_dir/tests.exit-code"
+          cat "$evidence_dir/tests.tap"
+          exit "$test_status"
+
+      - name: Upload regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: epistemic-families-regressions
+          path: ${{ runner.temp }}/epistemic-families-regressions/
+          if-no-files-found: error
+          retention-days: 30
+
+  configured-episodes:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        family:
+          - agent_reconstruction
+          - inquiry_control
+          - hypothesis_discovery
+          - evidence_process
+          - adaptive_agents
+          - recursive_delegation
+          - evaluator_prediction
+          - belief_revision
+          - memory_inquiry
+    env:
+      FAMILY: ${{ matrix.family }}
+    steps:
+      - name: Check out the requested revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Prepare family evidence
+        shell: bash
+        run: |
+          evidence_dir="$RUNNER_TEMP/epistemic-families/$FAMILY"
+          mkdir -p "$evidence_dir"
+          node --version > "$evidence_dir/node-version.txt"
+          printf '%s\n' "$GITHUB_SHA" > "$evidence_dir/commit.txt"
+          cp "envs/epistemic_families/$FAMILY.yaml" "$evidence_dir/config.yaml"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate YAML configuration
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/epistemic_families.mjs validate-config "envs/epistemic_families/$FAMILY.yaml" \
+            2> "$RUNNER_TEMP/epistemic-families/$FAMILY/validation.stderr" \
+            | tee "$RUNNER_TEMP/epistemic-families/$FAMILY/validation.json"
+
+      - name: Record pairwise axis coverage plan
+        shell: bash
+        run: |
+          node tools/epistemic_families.mjs matrix "$FAMILY" --mode pairwise \
+            > "$RUNNER_TEMP/epistemic-families/$FAMILY/pairwise-plan.json" \
+            2> "$RUNNER_TEMP/epistemic-families/$FAMILY/pairwise-plan.stderr"
+
+      - name: Generate configured instance package
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/epistemic_families.mjs generate "$FAMILY" \
+            --config "envs/epistemic_families/$FAMILY.yaml" \
+            --output "$RUNNER_TEMP/epistemic-families/$FAMILY/instance" \
+            2> "$RUNNER_TEMP/epistemic-families/$FAMILY/generation.stderr" \
+            | tee "$RUNNER_TEMP/epistemic-families/$FAMILY/generation.json"
+
+      - name: Run configured reference episode
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/epistemic_families.mjs run "$FAMILY" \
+            --config "envs/epistemic_families/$FAMILY.yaml" \
+            --policy reference \
+            --output "$RUNNER_TEMP/epistemic-families/$FAMILY/run" \
+            2> "$RUNNER_TEMP/epistemic-families/$FAMILY/run.stderr" \
+            | tee "$RUNNER_TEMP/epistemic-families/$FAMILY/run-summary.json"
+
+      - name: Replay recorded episode
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/epistemic_families.mjs replay "$RUNNER_TEMP/epistemic-families/$FAMILY/run" \
+            2> "$RUNNER_TEMP/epistemic-families/$FAMILY/replay.stderr" \
+            | tee "$RUNNER_TEMP/epistemic-families/$FAMILY/replay.json"
+
+      - name: Upload configured episode evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: epistemic-family-${{ matrix.family }}
+          path: ${{ runner.temp }}/epistemic-families/${{ matrix.family }}/
+          if-no-files-found: error
+          retention-days: 30

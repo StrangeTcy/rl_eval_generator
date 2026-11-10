@@ -1,0 +1,70 @@
+name: Epistemic families - Mercury campaign
+
+on:
+  workflow_dispatch:
+    inputs:
+      execution_mode:
+        description: Plan, run reference controls, or call Mercury
+        type: choice
+        options: [plan, reference, live]
+        default: plan
+        required: true
+      family:
+        description: Family to evaluate
+        type: choice
+        options: [all, agent_reconstruction, inquiry_control, hypothesis_discovery, evidence_process, adaptive_agents, recursive_delegation, evaluator_prediction, belief_revision, memory_inquiry]
+        default: all
+        required: true
+      matrix:
+        description: Configured YAML axes, single-axis sweep, or pairwise coverage
+        type: choice
+        options: [configured, single, pairwise]
+        default: pairwise
+        required: true
+      attempts:
+        description: Repeated model attempts on each fixed instance (1-10)
+        type: number
+        default: 1
+        required: true
+      max_requests:
+        description: Whole-campaign HTTP request ceiling, retained on resume (1-20000)
+        type: number
+        default: 512
+        required: true
+      max_episodes:
+        description: Episodes in this invocation before saving progress (1-1000)
+        type: number
+        default: 25
+        required: true
+      resume_run_id:
+        description: Resume the latest state artifact from this workflow's run ID; empty starts a new campaign
+        type: string
+        default: ''
+      resume_run_attempt:
+        description: Attempt number of the source run (shown on its Actions page)
+        type: number
+        default: 1
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: epistemic-families-mercury
+  cancel-in-progress: false
+
+jobs:
+  campaign:
+    uses: ./.github/workflows/epistemic-families-campaign.yml
+    with:
+      provider: mercury
+      execution_mode: ${{ inputs.execution_mode }}
+      family: ${{ inputs.family }}
+      matrix: ${{ inputs.matrix }}
+      attempts: ${{ inputs.attempts }}
+      max_requests: ${{ inputs.max_requests }}
+      max_episodes: ${{ inputs.max_episodes }}
+      resume_run_id: ${{ inputs.resume_run_id }}
+      resume_run_attempt: ${{ inputs.resume_run_attempt }}
+    secrets:
+      PROVIDER_API_KEY: ${{ secrets.INCEPTION_API_KEY }}

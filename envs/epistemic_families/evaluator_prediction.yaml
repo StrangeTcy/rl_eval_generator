@@ -1,0 +1,22 @@
+# Predict a document evaluator.
+# Axis meanings are defined in arena/epistemic_families/evaluator_prediction.mjs.
+schema: epistemic-family-config/1
+family: evaluator_prediction
+seed: 3
+privateSeed: 7
+axes:
+  # Number of criteria used by every evaluator.
+  # easy = 3; medium = 4; hard = 5
+  criteria: easy
+  # Number of distinct possible criterion-weight vectors.
+  # easy = 2; medium = 4; hard = 6
+  rubrics: easy
+  # Number of reports available for selection and revision.
+  # easy = 2; medium = 4; hard = 6
+  candidates: easy
+  # Maximum visible document edits; greater depth expands planning as well as resources.
+  # easy = 0; medium = 1; hard = 2
+  revisions: easy
+  # Prior weight on the first rubric; every other rubric has weight one.
+  # easy = 9; medium = 3; hard = 1
+  uncertainty: easy
