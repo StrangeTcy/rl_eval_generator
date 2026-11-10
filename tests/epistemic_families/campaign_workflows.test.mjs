@@ -61,6 +61,18 @@ test('dispatch guard rejects rerun billing and malformed limits before artifact 
   assert.equal((await Workflow.script('checkpoint')).profile, 'experiments/epistemic_mercury_campaign.yaml');
 });
 
+test('manual wrappers convert REST dispatch strings to reusable numeric inputs', () => {
+  const inputs = { attempts: '1', max_requests: '14944', max_episodes: '1000', resume_run_attempt: '1' };
+  ['epistemic-mercury-campaign.yml', 'epistemic-reasoning-atria-campaign.yml'].forEach(name => {
+    const forwarded = Workflow.read(name).jobs.campaign.with;
+    Object.entries(Workflow.shared().on.workflow_call.inputs).filter(([, definition]) => definition.type === 'number').forEach(([key]) => {
+      const expression = forwarded[key].slice(3, -2);
+      const value = vm.runInNewContext(expression, { inputs, fromJSON: JSON.parse });
+      assert.equal(value, Number(inputs[key]), `${name}: ${key} must reach workflow_call as a number`);
+    });
+  });
+});
+
 test('checkpoint guard accepts only the newest unexpired checkpoint owned by the provider wrapper', async () => {
   const selected = { id: 10, name: 'epistemic-mercury-state-100-1', expired: false, workflow_run: { id: 100 } };
   const newer = { id: 11, name: 'epistemic-mercury-state-200-1', expired: false, workflow_run: { id: 200 } };

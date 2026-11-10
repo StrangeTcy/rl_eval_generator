@@ -61,10 +61,10 @@ jobs:
       execution_mode: ${{ inputs.execution_mode }}
       family: ${{ inputs.family }}
       matrix: ${{ inputs.matrix }}
-      attempts: ${{ inputs.attempts }}
-      max_requests: ${{ inputs.max_requests }}
-      max_episodes: ${{ inputs.max_episodes }}
+      attempts: ${{ fromJSON(inputs.attempts) }}
+      max_requests: ${{ fromJSON(inputs.max_requests) }}
+      max_episodes: ${{ fromJSON(inputs.max_episodes) }}
       resume_run_id: ${{ inputs.resume_run_id }}
-      resume_run_attempt: ${{ inputs.resume_run_attempt }}
+      resume_run_attempt: ${{ fromJSON(inputs.resume_run_attempt) }}
     secrets:
       PROVIDER_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
