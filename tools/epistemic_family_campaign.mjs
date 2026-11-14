@@ -10,6 +10,7 @@ import { Configuration } from '../arena/epistemic_families/configuration.mjs';
 import { Contract, AxisMatrix } from '../arena/epistemic_families/runtime.mjs';
 import { Session } from '../arena/epistemic_families/session.mjs';
 import { ModelPolicy } from '../arena/epistemic_families/model_policy.mjs';
+import { ReferenceControl } from '../arena/epistemic_families/reference_control.mjs';
 
 export class Campaign {
   static profile(file) {
@@ -45,7 +46,7 @@ export class Campaign {
     return options;
   }
   static sources(families) {
-    return { ...Catalog.sources(), ...Object.fromEntries(['tools/epistemic_family_campaign.mjs', 'arena/epistemic_families/model_policy.mjs', ...families.map(id => `envs/epistemic_families/${id}.yaml`)].map(name => [name, Contract.hash(fs.readFileSync(path.join(ROOT, name)))])) };
+    return { ...Catalog.sources(), ...Object.fromEntries(['tools/epistemic_family_campaign.mjs', 'arena/epistemic_families/model_policy.mjs', 'arena/epistemic_families/reference_control.mjs', ...families.map(id => `envs/epistemic_families/${id}.yaml`)].map(name => [name, Contract.hash(fs.readFileSync(path.join(ROOT, name)))])) };
   }
   static atomic(file, value) {
     const temporary = `${file}.${randomUUID()}.tmp`, fd = fs.openSync(temporary, 'wx');
@@ -128,6 +129,7 @@ export class Campaign {
         const control = this.unseal(path.join(directory, 'episodes', name, 'control.json'));
         if (control.family !== row.family || Contract.hash(control.configuration) !== Contract.hash(row.configuration) || control.status !== 'completed') throw new Error('reference control mismatch');
         await Session.replay(control);
+        ReferenceControl.check(control);
         const expectedPolicy = { kind: 'model', provider: manifest.profile.provider, model: manifest.profile.model, apiBase: manifest.profile.apiBase, wireApi: manifest.profile.wireApi, reasoningEffort: manifest.profile.reasoningEffort, maxOutputTokens: manifest.profile.maxOutputTokens };
         if (Contract.hash(saved.record.policy) !== Contract.hash(expectedPolicy)) throw new Error('episode provider identity mismatch');
         const ledger = requests.filter(item => item.request.caseId === name), events = saved.record.events.filter(event => event.transport !== null);
@@ -144,7 +146,10 @@ export class Campaign {
             if (failure || Contract.hash(decoded.action) !== Contract.hash(event.action)) throw new Error('recorded action differs from provider response');
           } else if (failure !== event.failure || outcome !== event.outcome || saved.record.status !== outcome) throw new Error('recorded provider failure outcome mismatch');
         });
-      } else if (state.executionMode !== 'reference' || saved.record.policy !== 'reference') throw new Error('episode execution mode mismatch');
+      } else {
+        if (state.executionMode !== 'reference' || saved.record.policy !== 'reference') throw new Error('episode execution mode mismatch');
+        ReferenceControl.check(saved.record);
+      }
       return saved;
     }));
     if (state.recorded.some(checkpoint => !records.some(row => !row.incomplete && row.caseId === checkpoint.caseId && Contract.hash(row) === checkpoint.sha256))) throw new Error('episode evidence regressed from checkpoint');
@@ -232,10 +237,11 @@ export class Campaign {
         const control = await Session.run(row.family, row.configuration, 'reference', { maxTurns: profile.maxTurns, timeoutMs: profile.timeoutMs });
         this.seal(path.join(episodeDirectory, 'control.json'), control);
         await Session.replay(control);
-        if (control.status !== 'completed') throw new Error(`reference control failed: ${row.id}`);
+        ReferenceControl.check(control);
         policy = dependencies.policyFactory ? await dependencies.policyFactory(profile, { apiKey, beforeRequest, afterResponse }, row) : new ModelPolicy(profile, { apiKey, beforeRequest, afterResponse });
       }
       const record = await Session.run(row.family, row.configuration, policy, { maxTurns: profile.maxTurns, timeoutMs: profile.timeoutMs });
+      if (executionMode === 'reference') ReferenceControl.check(record);
       const replay = await Session.replay(record), saved = { identity, caseId: row.id, record, replay };
       this.seal(path.join(episodeDirectory, 'record.json'), saved);
       state.recorded.push({ caseId: row.id, sha256: Contract.hash(saved) });

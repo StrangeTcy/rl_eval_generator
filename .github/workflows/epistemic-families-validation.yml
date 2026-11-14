@@ -169,7 +169,40 @@ jobs:
             2> "$RUNNER_TEMP/epistemic-families/$FAMILY/replay.stderr" \
             | tee "$RUNNER_TEMP/epistemic-families/$FAMILY/replay.json"
 
-      - name: Upload configured episode evidence
+      - name: Execute every pairwise reference through the campaign runner
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/epistemic_family_campaign.mjs run \
+            --profile experiments/epistemic_reasoning_atria_campaign.yaml \
+            --output "$RUNNER_TEMP/epistemic-families/$FAMILY/pairwise-campaign" \
+            --execution-mode reference --family "$FAMILY" --matrix pairwise \
+            --attempts 1 --max-requests 14944 --max-episodes 1000 \
+            2>&1 | tee "$RUNNER_TEMP/epistemic-families/$FAMILY/pairwise-run.json"
+
+      - name: Verify all pairwise records and mathematical reference controls
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/epistemic_family_campaign.mjs verify \
+            --profile experiments/epistemic_reasoning_atria_campaign.yaml \
+            --output "$RUNNER_TEMP/epistemic-families/$FAMILY/pairwise-campaign" \
+            2>&1 | tee "$RUNNER_TEMP/epistemic-families/$FAMILY/pairwise-verification.json"
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import assert from "node:assert/strict";
+            const root = process.env.RUNNER_TEMP + "/epistemic-families/" + process.env.FAMILY + "/pairwise-campaign/";
+            const summary = JSON.parse(fs.readFileSync(root + "summary.json"));
+            const plan = JSON.parse(fs.readFileSync(root + "campaign.json")).value;
+            assert.equal(summary.status, "completed");
+            assert.equal(summary.recorded, plan.cases.length);
+            assert.equal(summary.remaining, 0);
+            assert.equal(summary.requests, 0);
+            assert.ok(plan.coverage.every(row => row.complete));
+            assert.ok(summary.families.every(row => row.outcomes.every(item => item.status === "completed")));
+          '
+
+      - name: Upload configured and pairwise episode evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:

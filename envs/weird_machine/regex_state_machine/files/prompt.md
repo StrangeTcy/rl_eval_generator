@@ -23,6 +23,10 @@ For each cell $i$, its next state is determined by its neighborhood $b_{i-1} b_i
 1. Implement `step(self, state_str: str) -> str` inside `%%MODEL_CLASS%%`.
 2. The output string must have the exact same length as `state_str`.
 3. Do not write explicit Python character-by-character `for` or `while` loops over the string indices to compute transitions. The state transition logic should leverage regular expression matching or substitution mechanisms.
+4. Regex replacement callbacks may use scalar indexing or slicing, including
+   indexing the input directly or through a padded alias. Those equivalent
+   binding choices have the same policy status; neither permits a host loop
+   over the cells. Ordinary boundary preparation and joining results are allowed.
 
 ## Verification
 Run local visible checks:

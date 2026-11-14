@@ -34,6 +34,7 @@ import torch
 workdir = sys.argv[1]
 seed_value = int(sys.argv[2])
 long_seq_value = int(sys.argv[3])
+offset_value = int(sys.argv[4])
 
 sys.path.insert(0, workdir)
 torch.manual_seed(seed_value)
@@ -51,7 +52,17 @@ try:
     rope = RotaryEmbedding(dim=8)
     x = torch.randn(2, 2, 6, 8)
     y = rope.apply_rope(x, offset=0)
-    pairing_ok = bool(torch.allclose(x.norm(dim=-1), y.norm(dim=-1), atol=1e-4))
+    angles = torch.arange(6).unsqueeze(1) * (1.0 / (10000.0 ** (torch.arange(0, 8, 2) / 8)))
+    expected = torch.stack((x[..., 0::2] * angles.cos() - x[..., 1::2] * angles.sin(),
+                            x[..., 0::2] * angles.sin() + x[..., 1::2] * angles.cos()), dim=-1).flatten(-2)
+    pairing_ok = torch.allclose(y, expected, atol=1e-5, rtol=1e-4)
+    rope = RotaryEmbedding(dim=12, base=37.0)
+    x = torch.randn(2, 3, 5, 12)
+    positions = torch.tensor((0, 2, 17, 49, 103))
+    angles = positions.unsqueeze(1) * (1.0 / (37.0 ** (torch.arange(0, 12, 2) / 12)))
+    expected = torch.stack((x[..., 0::2] * angles.cos() - x[..., 1::2] * angles.sin(),
+                            x[..., 0::2] * angles.sin() + x[..., 1::2] * angles.cos()), dim=-1).flatten(-2)
+    pairing_ok = pairing_ok and torch.allclose(rope.apply_rope(x, positions=positions), expected, atol=1e-5, rtol=1e-4)
     checks["rope_pairing"] = pairing_ok
     if not pairing_ok:
         notes.append("rope_pairing_wrong")
@@ -63,9 +74,14 @@ except Exception as exc:
 try:
     rope = RotaryEmbedding(dim=8)
     x = torch.randn(1, 1, 3, 8)
-    via_offset = rope.apply_rope(x, offset=5)
-    via_positions = rope.apply_rope(x, positions=torch.arange(5, 5 + 3))
-    offset_ok = bool(torch.allclose(via_offset, via_positions, atol=1e-4))
+    positions = torch.arange(offset_value, offset_value + 3)
+    via_offset = rope.apply_rope(x, offset=offset_value)
+    via_positions = rope.apply_rope(x, positions=positions)
+    angles = positions.unsqueeze(1) * (1.0 / (10000.0 ** (torch.arange(0, 8, 2) / 8)))
+    expected = torch.stack((x[..., 0::2] * angles.cos() - x[..., 1::2] * angles.sin(),
+                            x[..., 0::2] * angles.sin() + x[..., 1::2] * angles.cos()), dim=-1).flatten(-2)
+    offset_ok = (torch.allclose(via_offset, expected, atol=1e-4, rtol=1e-4)
+                 and torch.allclose(via_positions, expected, atol=1e-4, rtol=1e-4))
     moved = not torch.allclose(rope.apply_rope(x, offset=0), via_offset, atol=1e-4)
     offset_ok = offset_ok and moved
     checks["rope_offset"] = offset_ok
@@ -161,7 +177,7 @@ def main() -> None:
         f.write(PROBE_MODULE_TEMPLATE)
     ep = run([
         sys.executable, probe_path, workdir,
-        str(JUDGE_SEED + SEED_OFFSET), str(HIDDEN_LONG_SEQ),
+        str(JUDGE_SEED + SEED_OFFSET), str(HIDDEN_LONG_SEQ), str(HIDDEN_OFFSET),
     ], workdir, 180, eval_env())
     if ep.returncode != 0:
         set_failure(result, FAILURE_RUNTIME_ERROR, "Behavioral probe failed:\n" + ep.stderr[-1000:])

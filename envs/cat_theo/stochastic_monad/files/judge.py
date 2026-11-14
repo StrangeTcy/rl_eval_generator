@@ -27,44 +27,52 @@ from monad import %%MODEL_CLASS%%
 
 checks = {{}}
 
-# A standard random generator
-rand_dist = %%MODEL_CLASS%%(lambda: float(torch.randn(1).item()))
+torch.manual_seed(%%JUDGE_SEED%%)
+sigma = %%SIGMA_VAL%%
+rand_dist = %%MODEL_CLASS%%(lambda: sigma * torch.randn(128, dtype=torch.float64))
 
-# 1. Monad Left Identity
+# 1. Monad left identity
 try:
     f = lambda x: %%MODEL_CLASS%%.unit(x + 10)
     m1 = %%MODEL_CLASS%%.unit(5).bind(f)
     m2 = f(5)
-    checks["left_identity"] = bool(abs(m1.sample_fn() - m2.sample_fn()) < 1e-5)
+    checks["left_identity"] = int(abs(m1.sample_fn() - m2.sample_fn()) < 1e-5)
 except Exception:
-    checks["left_identity"] = False
+    checks["left_identity"] = 0
 
-# 2. Monad Right Identity
+# 2. Right identity preserves deferred sampling and random-stream state
 try:
+    rng_before = torch.random.get_rng_state().clone()
     m1 = rand_dist.bind(%%MODEL_CLASS%%.unit)
-    checks["right_identity"] = True
+    lazy_ok = int(torch.equal(rng_before, torch.random.get_rng_state()))
+    torch.random.set_rng_state(rng_before)
+    actual = m1.sample_fn()
+    torch.random.set_rng_state(rng_before)
+    expected = rand_dist.sample_fn()
+    checks["right_identity"] = int(lazy_ok and torch.equal(actual, expected))
 except Exception:
-    checks["right_identity"] = False
+    checks["right_identity"] = 0
 
-# 3. Monad Associativity & Statistical Independence Check
+# 3. Associativity under a common random stream and fresh repeated samples
 try:
-    f = lambda x: %%MODEL_CLASS%%(lambda: x + float(torch.randn(1).item()))
+    f = lambda x: %%MODEL_CLASS%%(lambda: x + sigma * torch.randn(128, dtype=torch.float64))
     g = lambda x: %%MODEL_CLASS%%(lambda: x * 2.0)
-    
-    m_assoc1 = (rand_dist.bind(f)).bind(g)
-    
-    # Run 100 samples to verify true independent random variables are generated,
-    # rather than a frozen point-value from a single premature evaluation.
-    samples = [m_assoc1.sample_fn() for _ in range(100)]
-    samples_tensor = torch.tensor(samples)
-    
-    # Calculate empirical variance. If samples are frozen (the evaluation bug),
-    # the variance will be exactly 0.0.
-    # If correctly lazy, the variance must be non-zero and statistically sound (expected std > 0.5)
-    std_dev = float(torch.std(samples_tensor).item())
-    checks["independence"] = bool(std_dev > 0.5)
-except Exception as e:
-    checks["independence"] = False
+    rng_before = torch.random.get_rng_state().clone()
+    left = rand_dist.bind(f).bind(g)
+    right = rand_dist.bind(lambda x: f(x).bind(g))
+    lazy_ok = int(torch.equal(rng_before, torch.random.get_rng_state()))
+    torch.random.set_rng_state(rng_before)
+    sample_left = left.sample_fn()
+    torch.random.set_rng_state(rng_before)
+    sample_right = right.sample_fn()
+    repeated = right.sample_fn()
+    checks["independence"] = int(
+        lazy_ok and torch.equal(sample_left, sample_right)
+        and not torch.equal(sample_right, repeated)
+        and torch.std(sample_left).item() > sigma
+    )
+except Exception:
+    checks["independence"] = 0
 
 torch.save(checks, "eval_outputs.pt")
 """)

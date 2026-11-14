@@ -37,27 +37,50 @@ try:
 except Exception:
     checks["basic_run"] = False
 
-# 2. Strict State Isolation & Associativity Verification
+# 2. Sequential recurrence, state isolation, and interleaved parameters
 try:
-    # Compose two separate MomentumStep modules in the same chain
     opt1 = MomentumStep(beta=0.9)
-    opt2 = MomentumStep(beta=0.99)
-    
-    p = torch.randn(2, 2)
-    g = torch.randn(2, 2)
-    
-    # Run step 1
+    opt2 = MomentumStep(beta=0.5)
+    opt3 = MomentumStep(beta=0.25)
+    p = torch.tensor(((1.0, 2.0), (3.0, 4.0)))
+    q = torch.tensor(((8.0, 7.0), (6.0, 5.0)))
+    g = torch.tensor(((0.2, -0.4), (0.6, -0.8)))
+    p_before = p.clone()
+    g_before = g.clone()
     v1 = opt1.update(p, g)
-    v2 = opt2.update(p, v1)
-    
-    # Expected reference calculation (fully isolated):
     v1_ref = 0.1 * g
-    v2_ref = 0.01 * v1_ref
-    
-    # If they collided via the class-level state, v2 and v2_ref will differ!
-    checks["state_isolated"] = bool(torch.allclose(v2, v2_ref, atol=1e-5))
-except Exception as e:
-    checks["state_isolated"] = False
+    v2 = opt2.update(p, v1)
+    v2_ref = 0.5 * v1_ref
+    v3 = opt3.update(p, v2)
+    v3_ref = 0.75 * v2_ref
+    first_ok = int(torch.allclose(v1, v1_ref) and torch.allclose(v2, v2_ref) and torch.allclose(v3, v3_ref))
+    untouched_ok = int(torch.equal(p, p_before) and torch.equal(g, g_before))
+    p.add_(v3, alpha=-%%LR_VAL%%)
+    p_ref = p_before - %%LR_VAL%% * v3_ref
+
+    q_update = opt1.update(q, g * 3).clone()
+    v1_next_ref = 0.9 * v1_ref + 0.1 * (p_ref * 0.2)
+    v2_next_ref = 0.5 * v2_ref + 0.5 * v1_next_ref
+    v3_next_ref = 0.25 * v3_ref + 0.75 * v2_next_ref
+    v1_next = opt1.update(p, p * 0.2)
+    v2_next = opt2.update(p, v1_next)
+    v3_next = opt3.update(p, v2_next)
+    p.add_(v3_next, alpha=-%%LR_VAL%%)
+    p_ref = p_ref - %%LR_VAL%% * v3_next_ref
+    q_next = opt1.update(q, g * -2)
+    fresh = MomentumStep(beta=0.9).update(p, g)
+    checks["state_isolated"] = int(
+        first_ok and untouched_ok
+        and torch.allclose(p, p_ref, atol=1e-6)
+        and torch.allclose(v1_next, v1_next_ref, atol=1e-6)
+        and torch.allclose(v2_next, v2_next_ref, atol=1e-6)
+        and torch.allclose(v3_next, v3_next_ref, atol=1e-6)
+        and torch.allclose(q_update, 0.3 * g, atol=1e-6)
+        and torch.allclose(q_next, 0.07 * g, atol=1e-6)
+        and torch.allclose(fresh, 0.1 * g, atol=1e-6)
+    )
+except Exception:
+    checks["state_isolated"] = 0
 
 torch.save(checks, "eval_outputs.pt")
 """)

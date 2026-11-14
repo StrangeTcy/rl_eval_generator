@@ -28,6 +28,7 @@ scoring:
   partial_threshold: 0.60
 
 constants:
+  "%%MODEL_MODULE%%": "template_machine"
   "%%PATCHABLE_FILES%%": '["template_machine.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '"jinja2"'
 

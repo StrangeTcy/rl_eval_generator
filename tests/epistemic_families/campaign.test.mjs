@@ -7,6 +7,7 @@ import { Campaign } from '../../tools/epistemic_family_campaign.mjs';
 import { Catalog, FAMILY_IDS, ROOT } from '../../arena/epistemic_families/catalog.mjs';
 import { Contract } from '../../arena/epistemic_families/runtime.mjs';
 import { ModelPolicy } from '../../arena/epistemic_families/model_policy.mjs';
+import { Session } from '../../arena/epistemic_families/session.mjs';
 
 class Fixture {
   static create(changes = {}) {
@@ -90,6 +91,25 @@ test('live campaign reserves calls, retains raw responses and reference control,
   await Campaign.run(fixture.profileFile, fixture.directory, options, dependencies);
   assert.equal(counter.requests, before);
   assert.equal((await Campaign.verify(fixture.profileFile, fixture.directory)).status, 'passed');
+});
+
+test('verification rejects a replayable but mathematically wrong saved reference control', async () => {
+  const fixture = Fixture.create({ families: ['memory_inquiry'] });
+  await Campaign.run(fixture.profileFile, fixture.directory, { executionMode: 'live', maxRequests: 32 }, { apiKey: 'test', policyFactory: Fixture.factory({ requests: 0, views: [] }) });
+  const file = path.join(fixture.directory, 'episodes', 'memory_inquiry-0-0', 'control.json');
+  const original = Campaign.unseal(file), module = await Catalog.load('memory_inquiry');
+  const wrong = await Session.run('memory_inquiry', original.configuration, {
+    identity: { kind: 'negative-control' },
+    act: async view => {
+      const action = module.reference(view);
+      if (action.kind === 'answer') action.predictions.forEach(row => { row.probability = row.probability === '1' ? '0' : '1'; });
+      return { action };
+    },
+  });
+  wrong.policy = 'reference';
+  assert.equal((await Session.replay(wrong)).status, 'passed');
+  Campaign.seal(file, wrong);
+  await assert.rejects(Campaign.verify(fixture.profileFile, fixture.directory), /reference control failed: memory_inquiry.forecastExcess/);
 });
 
 test('insufficient request allowance pauses before HTTP and a saved bound cannot increase on resume', async () => {

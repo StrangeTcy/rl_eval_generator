@@ -9,5 +9,4 @@ class %%MODEL_CLASS%%:
         """
         Return a Jinja2 template string that decodes the run-length operations list.
         """
-        # Buggy initial implementation: returns static literal string
         return "ABC"

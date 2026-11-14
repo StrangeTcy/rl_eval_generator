@@ -32,7 +32,7 @@ checks = {{}}
 
 # 1. Output shape correctness + Semantic Correctness (Not an identity/no-op hack!)
 try:
-    x = torch.randn(2, 8, 16)
+    x = torch.randn(2, 12, 16)
     out = tfm(x)
     
     # The expected output should scale x by tfm.scale (which starts as 2.0)
@@ -42,15 +42,15 @@ try:
 except Exception:
     checks["basic_run"] = False
 
-# 2. Naturality Commutativity under temporal slicing (length 4)
+# 2. Naturality under the selected slicing dimension
 try:
     x_large = torch.randn(2, 12, 16)
     
     # Path A: slice first, then transform
-    h_then_alpha = tfm(x_large[:, :4, :])
+    h_then_alpha = tfm(x_large.narrow(%%CHECK_DIM%%, start=0, length=4))
     
     # Path B: transform first, then slice
-    alpha_then_h = tfm(x_large)[:, :4, :]
+    alpha_then_h = tfm(x_large).narrow(%%CHECK_DIM%%, start=0, length=4)
     
     checks["naturality_commutes"] = bool(torch.allclose(h_then_alpha, alpha_then_h, atol=1e-5))
 except Exception as e:

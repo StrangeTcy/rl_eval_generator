@@ -41,12 +41,12 @@ def main():
 
     if INSPECT_STYLE == "hint":
         failures = state.get("observed_failures", [])
-        if "cross_file_offset_propagation" in failures:
+        if failures.count("chunk_full_disagreement"):
             print("\nSuggested next step: inspect how cache offsets reach the attention/RoPE call site.")
-        elif "cached_position_shift" in failures:
+        elif failures.count("offset_position_disagreement"):
             print("\nSuggested next step: inspect the appendix or offset convention.")
-        elif "phase_drift" in failures:
-            print("\nSuggested next step: inspect the complex-form/frequency definition.")
+        elif failures.count("rotation_composition_disagreement"):
+            print("\nSuggested next step: compare repeated rotations with the paper definition.")
         elif not state.get("available_sections"):
             print("\nSuggested next step: run the extraction tool and read the paper index.")
 

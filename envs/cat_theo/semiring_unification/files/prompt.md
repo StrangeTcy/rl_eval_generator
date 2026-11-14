@@ -13,7 +13,4 @@ A Semiring is a set equipped with two binary operations, addition ($\oplus$) and
 4. **Distributivity:** Multiplication distributes over addition:
    `otimes(x, oplus(y, z)) == oplus(otimes(x, y), otimes(x, z))`
 
-### The Bug
-The starting code in `semirings.py` contains incorrect `zero` and `one` identity elements and wrong operator implementations (for example, using standard multiplication instead of addition for the tropical multiplicative step, or standard zero instead of infinity for the tropical additive identity).
-
 Correct these classes so that they satisfy all semiring laws. The judge will evaluate your score based on which algebraic laws pass.

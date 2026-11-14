@@ -59,7 +59,9 @@ def verify_workflow(deps, wf):
 
 # 1. Basic structure check
 try:
-    deps = {{1: [], 2: [1]}}
+    deps = {{90: [], 7: [90]}}
+    deps[23] = deps[90][:]
+    deps[90] = deps.pop(90)
     wf = engine.generate_workflow(deps)
     checks["workflow_structure"] = verify_workflow(deps, wf)
 except Exception:
@@ -67,7 +69,9 @@ except Exception:
 
 # 2. Diamond DAG check
 try:
-    deps = {{1: [], 2: [1], 3: [1], 4: [2, 3], 5: [4]}}
+    deps = {{90: [], 70: [90], 11: [90], 4: [70, 11], 2: [4]}}
+    deps[31] = deps[90][:]
+    deps[90] = deps.pop(90)
     wf = engine.generate_workflow(deps)
     checks["diamond_dag"] = verify_workflow(deps, wf)
 except Exception:
@@ -81,9 +85,15 @@ try:
         deps = {{i: [] for i in range(1, n + 1)}}
         for i in range(2, n + 1):
             # Pick a random subset of earlier jobs
-            num_parents = rng.randint(1, min(3, i - 1))
+            num_parents = rng.randint(0, min(3, i - 1))
             parents = rng.sample(range(1, i), num_parents)
             deps[i] = sorted(parents)
+        # A separate component has its child before its higher-ID parent in
+        # both numeric and insertion order. Neither order is topological.
+        deps[n + 2] = deps[1][:]
+        deps[n + 1] = deps[1][:]
+        deps[n + 1].append(n + 2)
+        deps[n + 2] = deps.pop(n + 2)
         wf = engine.generate_workflow(deps)
         if not verify_workflow(deps, wf):
             all_ok = False

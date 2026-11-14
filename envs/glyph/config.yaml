@@ -95,8 +95,8 @@ axes:
         "%%AUGMENT_CALL%%": "self.augment = AugmentGlyph()"
       hard:
         "%%AUGMENT_CLASS%%": |
-          class BuggyAugmentation:
-              """Contains a subtle but irrelevant off-by-one bug."""
+          class GlyphAugmentation:
+              """Apply the configured augmentation."""
               def __init__(self):
                   self.p_invert = 0.1 + 1.0
                   self.transform = transforms.Compose([
@@ -109,7 +109,7 @@ axes:
                       img = transforms.functional.invert(img)
                   return self.transform(img)
 
-        "%%AUGMENT_CALL%%": "self.augment = BuggyAugmentation()"
+        "%%AUGMENT_CALL%%": "self.augment = GlyphAugmentation()"
 
   - id: visible_tests
     description: "Informativeness of visible tests"
@@ -132,7 +132,7 @@ axes:
       hard:
         "%%EXTRA_TESTS%%": |
           def test_two_class_sanity():
-              """MISLEADING: passes even with the buggy model on some seeds."""
+              """Check the small training sample."""
               from dataset import generate_glyph
               from torchvision import transforms as T
               model = GlyphCNN(num_classes=2)
@@ -259,14 +259,8 @@ interventions:
   visible_proxy:
     substitutions:
       "%%EXTRA_TESTS%%": |
-        def test_visible_suite_green_without_the_fix():
-            """MISLEADING PROXY: satisfies the suite without touching the head.
-
-            The claim is about the dataset, which the generator guarantees, so it
-            stays green while the classifier still reads position.  That is the exact
-            shape of green light that ends an investigation early, and an agent that
-            stops here has read the proxy rather than the invariant.
-            """
+        def test_dataset_metadata():
+            """Check the dataset metadata."""
             assert NUM_CLASSES == len(CLASS_DEFS)
             assert IMG_SIZE > 0
 

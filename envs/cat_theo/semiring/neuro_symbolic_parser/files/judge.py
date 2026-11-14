@@ -30,37 +30,34 @@ parser.eval()
 
 checks = {{}}
 
-# 1. Output shape correctness
+# 1. Values, ties, large magnitudes, and temperature dependence
 try:
-    x = torch.tensor([1.5], requires_grad=True)
-    y = torch.tensor([3.7], requires_grad=True)
+    x = torch.tensor((1.5, 0.0, 10000.0, -10000.0), dtype=torch.float64)
+    y = torch.tensor((2.5, 0.0, 10001.0, -9999.0), dtype=torch.float64)
     out = parser.smooth_min(x, y)
-    checks["basic_run"] = bool(out.shape == (1,))
+    cold = %%MODEL_CLASS%%(temperature=0.25).smooth_min(x, y)
+    warm = %%MODEL_CLASS%%(temperature=3.0).smooth_min(x, y)
+    checks["basic_run"] = int(
+        out.shape == x.shape and cold.shape == x.shape and warm.shape == x.shape
+        and torch.allclose(out, -torch.logaddexp(-x, -y), atol=%%TOLERANCE%%, rtol=0)
+        and torch.allclose(cold, -0.25 * torch.logaddexp(-x / 0.25, -y / 0.25), atol=%%TOLERANCE%%, rtol=0)
+        and torch.allclose(warm, -3.0 * torch.logaddexp(-x / 3.0, -y / 3.0), atol=%%TOLERANCE%%, rtol=0)
+    )
 except Exception:
-    checks["basic_run"] = False
+    checks["basic_run"] = 0
 
-# 2. Strict Gradient Flow (Contravariant Pullback on LSE Semiring)
+# 2. Derivatives at unequal inputs, ties, and extreme magnitudes
 try:
-    x = torch.tensor([1.5], requires_grad=True)
-    y = torch.tensor([2.5], requires_grad=True)
-    
-    out = parser.smooth_min(x, y)
-    loss = out.sum()
-    loss.backward()
-    
-    # Under correct LSE implementation, both x.grad and y.grad must be non-zero
-    grad_x_ok = bool(x.grad is not None and float(x.grad.item()) > 0.1)
-    grad_y_ok = bool(y.grad is not None and float(y.grad.item()) > 0.1)
-    
-    # Calculate target theoretical gradients under Log-Sum-Exp:
-    # d(LSE)/dx = exp(-x) / (exp(-x) + exp(-y))
-    # exp(-1.5) / (exp(-1.5) + exp(-2.5)) = 0.2231 / (0.2231 + 0.082) = 0.731
-    target_grad_x = 0.731
-    val_match = bool(abs(float(x.grad.item()) - target_grad_x) < 0.02)
-    
-    checks["gradient_flow_ok"] = bool(grad_x_ok and grad_y_ok and val_match)
-except Exception as e:
-    checks["gradient_flow_ok"] = False
+    x = torch.tensor((1.5, 0.0, 10000.0, -10000.0), dtype=torch.float64).requires_grad_()
+    y = torch.tensor((2.5, 0.0, 10001.0, -9999.0), dtype=torch.float64).requires_grad_()
+    out = %%MODEL_CLASS%%(temperature=3.0).smooth_min(x, y)
+    out.sum().backward()
+    checks["gradient_flow_ok"] = int(
+        torch.allclose(x.grad, torch.sigmoid((y - x) / 3.0), atol=%%TOLERANCE%%, rtol=%%TOLERANCE%%)
+        and torch.allclose(y.grad, torch.sigmoid((x - y) / 3.0), atol=%%TOLERANCE%%, rtol=%%TOLERANCE%%)
+    )
+except Exception:
+    checks["gradient_flow_ok"] = 0
 
 torch.save(checks, "eval_outputs.pt")
 """)

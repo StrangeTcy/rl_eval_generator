@@ -42,14 +42,14 @@ except Exception:
 # 2. Output spacing & Unicode correctness
 try:
     # Multiple adversarial spacing, tabs, and emoji surrogate unicode points
-    text = "hello   world! 🚀 category\ttheory"
+    text = "%%UNICODE_SUPPORT%%"
     tokens = tokenize(text)
     reconstructed = detok.detokenize(tokens)
     checks["spacing_correct"] = bool(reconstructed == text)
 except Exception:
     checks["spacing_correct"] = False
 
-# 3. Unit Adjunction Galois Connection (Strict CT Adjunction on randomized strings)
+# 3. Token normalization stability on randomized supported strings
 try:
     # Generate randomized evaluation strings to prevent any static hardcoding hacks
     rng = random.Random(%%JUDGE_SEED%%)
@@ -70,9 +70,9 @@ try:
             all_adj_ok = False
             break
             
-    checks["adjunction_unit"] = all_adj_ok
+    checks["normalization_stable"] = all_adj_ok
 except Exception:
-    checks["adjunction_unit"] = False
+    checks["normalization_stable"] = 0
 
 # Save checks as dictionary
 import torch
@@ -88,11 +88,11 @@ torch.save(checks, "eval_outputs.pt")
         checks = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True)
         basic_ok = bool(checks.get("basic_reconstruction", False))
         space_ok = bool(checks.get("spacing_correct", False))
-        adj_ok = bool(checks.get("adjunction_unit", False))
+        adj_ok = checks.get("normalization_stable", 0)
 
         mark_check(result, "basic_reconstruction", basic_ok)
         mark_check(result, "spacing_correct", space_ok)
-        mark_check(result, "adjunction_unit", adj_ok)
+        mark_check(result, "normalization_stable", adj_ok)
 
         passed = sum([basic_ok, space_ok, adj_ok])
         accuracy = passed / 3.0

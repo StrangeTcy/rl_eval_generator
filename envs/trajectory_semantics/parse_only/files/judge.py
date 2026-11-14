@@ -17,6 +17,29 @@ from judge_lib import (
 
 TOTAL_CHECKS = %%SCORING_TOTAL_CHECKS%%
 
+# Held-out rule combinations are evaluator data and are not copied into task.py.
+HIDDEN_FLAT_SPEC = '''format: flat-relay-v1
+templates: Larch, Umber, Zephyr
+payloads: amber, violet
+rules:
+- Larch(payload) -> Umber(flip(payload))
+- Umber(payload) -> Zephyr(payload)
+- Zephyr(payload) -> Larch(violet)
+'''
+HIDDEN_REFLECTIVE_SPEC = '''format: reflective-relay-v1
+payloads: ash, ink
+
+template Cedar(payload):
+  emit_source("Thyme(flip(payload))")
+
+template Thyme(payload):
+  emit_source("Pollen(ash)")
+
+template Pollen(payload):
+  emit_source("Cedar(payload)")
+'''
+
+
 
 def expected_parse(spec_text: str) -> str:
     """Parse the restricted relay DSL as data, never as Python source."""
@@ -68,7 +91,13 @@ def main() -> None:
         checks["witness_is_query_specific"] = (
             (outputs[0] == "same") if task.WITNESS_STATUS == "valid" else (outputs[0] != "same")
         )
-        checks["format_only_does_not_change_answer"] = outputs[0] == outputs[1]
+        checks["format_only_does_not_change_answer"] = outputs[0] == outputs[1] == expected_parse(task.SPEC_TEXT)
+        checks["case_2_exact"] = (
+            checks["case_2_exact"]
+            and solve(HIDDEN_FLAT_SPEC, "parse_only") == "violet"
+            and solve(HIDDEN_REFLECTIVE_SPEC, "parse_only") == "same"
+            and solve(HIDDEN_REFLECTIVE_SPEC.replace('Cedar(payload)")', 'Cedar(flip(payload))")'), "parse_only") == "flip(payload)"
+        )
         score_from_checks(result, checks, TOTAL_CHECKS)
         result["metrics"] = {"query_type": "parse_only", "track": "solver_synthesis_debugging"}
     except Exception as exc:

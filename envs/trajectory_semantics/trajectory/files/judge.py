@@ -17,6 +17,29 @@ from judge_lib import (
 
 TOTAL_CHECKS = %%SCORING_TOTAL_CHECKS%%
 
+# Held-out rule combinations are evaluator data and are not copied into task.py.
+HIDDEN_FLAT_SPEC = '''format: flat-relay-v1
+templates: Larch, Umber, Zephyr
+payloads: amber, violet
+rules:
+- Larch(payload) -> Umber(flip(payload))
+- Umber(payload) -> Zephyr(payload)
+- Zephyr(payload) -> Larch(violet)
+'''
+HIDDEN_REFLECTIVE_SPEC = '''format: reflective-relay-v1
+payloads: ash, ink
+
+template Cedar(payload):
+  emit_source("Thyme(flip(payload))")
+
+template Thyme(payload):
+  emit_source("Pollen(ash)")
+
+template Pollen(payload):
+  emit_source("Cedar(payload)")
+'''
+
+
 
 def parse_spec(spec_text: str):
     payload_line = re.search(r"^payloads:\s*([^,]+),\s*(.+)$", spec_text, re.M)
@@ -105,7 +128,8 @@ def main() -> None:
             "witness_sibling_matched_horizons": check_case(solve, task.SIBLING_SPEC_TEXT, task.HORIZONS),
             "witness_sibling_relabeling_matched_horizons": check_case(
                 solve, task.SIBLING_RELABELED_SPEC_TEXT, task.HORIZONS
-            ),
+            ) and check_case(solve, HIDDEN_FLAT_SPEC, (0, 1, 2, 5, 31, 127))
+            and check_case(solve, HIDDEN_REFLECTIVE_SPEC, (0, 1, 2, 5, 31, 127)),
             "same_orbit_long_horizons": check_case(solve, task.SPEC_TEXT, (6, 30, 126, 510)),
             "zero_horizon_is_identity": all(
                 solve(task.SPEC_TEXT, template, payload, 0) == (template, payload)

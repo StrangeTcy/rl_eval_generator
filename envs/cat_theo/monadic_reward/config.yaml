@@ -13,7 +13,7 @@ axes:
         "%%MODEL_FILE%%": "agent_code.py"
 
   - id: symptom_mask
-    description: "Whether AST/runtime side-effect limits are checked"
+    description: "Legacy presentation-only control; all safety checks run at every level"
     levels:
       easy:
         "%%SIDE_EFFECT_CHECK%%": "False"
@@ -29,7 +29,7 @@ scoring:
 
 constants:
   "%%PATCHABLE_FILES%%": '["agent_code.py"]'
-  "%%EXTRA_ALLOWED_IMPORTS%%": '"monad"'
+  "%%EXTRA_ALLOWED_IMPORTS%%": '"monad", "ast"'
 
 static_files: []
 
@@ -64,8 +64,7 @@ latent_factors:
   declared_by: scaffold_unreviewed
   factors:
     task_state:
-      # SIDE_EFFECT_CHECK <- default:task_state
-      placeholders: [SIDE_EFFECT_CHECK]
+      unavailable: no task-state variation; legacy side-effect axis is a presentation-only control
     causal_mechanism:
       unavailable: fixed hand-authored template code; a scaffold cannot derive a generative mechanism,
         and recording one it did not derive would be a causal claim nobody made (item 4 honesty
@@ -73,7 +72,7 @@ latent_factors:
     observable_state:
       # MODEL_CLASS <- axis_id:naming
       # MODEL_FILE <- axis_id:naming
-      placeholders: [MODEL_CLASS, MODEL_FILE]
+      placeholders: [MODEL_CLASS, MODEL_FILE, SIDE_EFFECT_CHECK]
     proxy_signal:
       unavailable: scaffold rules mapped no placeholder to proxy_signal
     evaluator_state:

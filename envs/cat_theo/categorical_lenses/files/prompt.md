@@ -12,3 +12,5 @@ To be a mathematically valid Lens, it must strictly satisfy the three fundamenta
 3. **Put-Put (Composition):** `update(update(s, a), a') == update(s, a')`
 
 The current implementation in `lenses.py` runs, but fails these laws. Correct the implementation to satisfy all three algebraic equations.
+
+All three lens laws are checked with absolute tolerance `%%STRICT_LAWS%%`.

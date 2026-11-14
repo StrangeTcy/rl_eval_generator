@@ -8,3 +8,5 @@ To allow sequential stochastic computations to compose correctly, the monadic cl
 3. **Associativity:** `(m >>= f) >>= g == m >>= (\x. f(x) >>= g)`
 
 The current implementation in `monad.py` runs, but fails these laws. Correct the `bind` and `unit` methods to ensure they compose functionally and satisfy all three laws under dynamic sampling.
+
+Constructing or binding a distribution must not consume randomness. Each `sample_fn()` call performs a fresh sample. The judge compares regrouped computations under the same random-stream state and uses noise scale `%%SIGMA_VAL%%`.

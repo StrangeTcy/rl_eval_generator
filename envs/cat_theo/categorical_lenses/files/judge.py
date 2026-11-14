@@ -39,7 +39,7 @@ a_prime = rng.uniform(-100.0, 100.0)
 try:
     s_updated = lens.update(s, a)
     v = lens.view(s_updated)
-    checks["put_get"] = bool(abs(v - a) < 1e-5)
+    checks["put_get"] = abs(v - a) < %%STRICT_LAWS%%
 except Exception:
     checks["put_get"] = False
 
@@ -47,7 +47,7 @@ except Exception:
 try:
     v = lens.view(s)
     s_restored = lens.update(s, v)
-    checks["get_put"] = bool(abs(s_restored[0] - s[0]) < 1e-5 and abs(s_restored[1] - s[1]) < 1e-5)
+    checks["get_put"] = abs(s_restored[0] - s[0]) < %%STRICT_LAWS%% and abs(s_restored[1] - s[1]) < %%STRICT_LAWS%%
 except Exception:
     checks["get_put"] = False
 
@@ -55,7 +55,7 @@ except Exception:
 try:
     s_double = lens.update(lens.update(s, a), a_prime)
     s_single = lens.update(s, a_prime)
-    checks["put_put"] = bool(abs(s_double[0] - s_single[0]) < 1e-5 and abs(s_double[1] - s_single[1]) < 1e-5)
+    checks["put_put"] = abs(s_double[0] - s_single[0]) < %%STRICT_LAWS%% and abs(s_double[1] - s_single[1]) < %%STRICT_LAWS%%
 except Exception:
     checks["put_put"] = False
 

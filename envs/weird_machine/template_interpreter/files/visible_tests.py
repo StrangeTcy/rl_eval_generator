@@ -1,5 +1,5 @@
 import jinja2
-from %%MODEL_FILE%% import %%MODEL_CLASS%%
+from %%MODEL_MODULE%% import %%MODEL_CLASS%%
 
 def test_visible():
     engine = %%MODEL_CLASS%%()
@@ -11,7 +11,7 @@ def test_visible():
         {"symbol": "B", "repeat": 2, "skip": False}
     ]
     
-    rendered = jinja2.Template(tpl_str).render(operations=ops).strip()
+    rendered = jinja2.Template(tpl_str).render(operations=ops)
     assert rendered == "AAABB", f"Expected 'AAABB', got {rendered!r}"
     print("Visible tests passed!")
 

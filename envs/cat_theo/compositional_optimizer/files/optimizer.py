@@ -1,14 +1,12 @@
 import torch
 
-class OptimizerModule:
-    # BUG: Class-level state dictionary.
-    # This causes all composed instances of OptimizerModule to collide and share the same buffers!
+class %%MODEL_CLASS%%:
     state = {}
 
     def __init__(self):
         pass
 
-class MomentumStep(OptimizerModule):
+class MomentumStep(%%MODEL_CLASS%%):
     def __init__(self, beta=0.9):
         super().__init__()
         self.beta = beta

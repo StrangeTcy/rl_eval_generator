@@ -28,6 +28,7 @@ scoring:
   partial_threshold: 0.60
 
 constants:
+  "%%MODEL_MODULE%%": "sheet_model"
   "%%PATCHABLE_FILES%%": '["sheet_model.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '""'
 

@@ -28,6 +28,7 @@ scoring:
   partial_threshold: 0.60
 
 constants:
+  "%%MODEL_MODULE%%": "ci_machine"
   "%%PATCHABLE_FILES%%": '["ci_machine.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '""'
 

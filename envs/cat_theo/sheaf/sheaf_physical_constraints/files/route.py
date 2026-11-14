@@ -9,9 +9,6 @@ class %%MODEL_CLASS%%:
         # - Switch S1 is shared by: route_A + route_C (capacity <= local_capacity)
         # - Switch S2 is shared by: route_A + route_B (capacity <= local_capacity)
         # - Switch S3 is shared by: route_B + route_C (capacity <= local_capacity)
-        #
-        # BUG: Naive allocator that only checks local individual route demands,
-        # ignoring the overlapping shared switch constraints and the global backbone capacity.
         allocations = {}
         for path, demand in demands.items():
             allocations[path] = min(demand, self.local_capacity)

@@ -29,49 +29,35 @@ augmenter = %%MODEL_CLASS%%()
 
 checks = {{}}
 
-# 1. Output shape correctness
+# 1. Default action, shape, dtype, and device
 try:
-    x = torch.randn(1, 3, 32, 32)
+    x = torch.arange(2 * 3 * 9 * 9, dtype=torch.float64).reshape(2, 3, 9, 9)
     out = augmenter.augment(x)
-    checks["basic_run"] = bool(out.shape == x.shape)
+    checks["basic_run"] = int(torch.equal(out, x) and out.dtype == x.dtype and out.device == x.device)
 except Exception:
-    checks["basic_run"] = False
+    checks["basic_run"] = 0
 
-# 2. Strict C_4 group-action symmetry & Non-Triviality verification
+# 2. Deterministic coverage of C4 and its composition law
 try:
-    # We must verify that:
-    # 1. The output is strictly a 90, 180, 270, or 360-degree rotation of x.
-    # 2. The augmenter is not a simple identity (no-op) return, meaning it produces
-    #    actual rotations (k > 0) under multiple independent runs.
-    x = torch.arange(1, 3 * 32 * 32 + 1, dtype=torch.float).reshape(1, 3, 32, 32)
-    
-    # Run 10 trials to check for dynamic, non-trivial rotations
-    non_trivial_count = 0
-    all_valid = True
-    
-    for _ in range(10):
-        out = augmenter.augment(x)
-        
-        is_valid_rotation = False
-        k_matched = -1
-        for k in range(4):
-            rotated_candidate = torch.rot90(x, k, [2, 3])
-            if torch.allclose(out, rotated_candidate, atol=1e-4):
-                is_valid_rotation = True
-                k_matched = k
-                break
-                
-        if not is_valid_rotation:
-            all_valid = False
-            break
-            
-        if k_matched > 0:
-            non_trivial_count += 1
-            
-    # Passes only if all 10 trials are valid C_4 group elements and at least 30% are non-trivial (k > 0)
-    checks["symmetry_preserved"] = bool(all_valid and non_trivial_count >= 3)
-except Exception as e:
-    checks["symmetry_preserved"] = False
+    width = 9 + %%AUG_PARAM%%
+    x = torch.arange(2 * 3 * 9 * width, dtype=torch.float64).reshape(2, 3, 9, width)
+    out0 = augmenter.augment(x, 0)
+    out1 = augmenter.augment(x, 1)
+    out2 = augmenter.augment(x, 2)
+    out3 = augmenter.augment(x, 3)
+    checks["symmetry_preserved"] = int(
+        torch.equal(out0, x)
+        and torch.equal(out1, torch.rot90(x, 1, (-2, -1)))
+        and torch.equal(out2, torch.rot90(x, 2, (-2, -1)))
+        and torch.equal(out3, torch.rot90(x, 3, (-2, -1)))
+        and torch.equal(augmenter.augment(out1, 2), out3)
+        and torch.equal(augmenter.augment(out3, 1), x)
+        and torch.equal(augmenter.augment(x, -1), out3)
+        and torch.equal(augmenter.augment(x, 5), out1)
+        and out1.dtype == x.dtype and out1.device == x.device
+    )
+except Exception:
+    checks["symmetry_preserved"] = 0
 
 torch.save(checks, "eval_outputs.pt")
 """)

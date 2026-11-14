@@ -53,9 +53,9 @@ except Exception as e:
 try:
     x = torch.randn(4, 16, 12, 12)
     # g o f
-    out_g_f = shift_2d(layer(x), shift_h=1, shift_w=2)
+    out_g_f = shift_2d(layer(x), %%SYMMETRY_DIM%%)
     # f o g
-    out_f_g = layer(shift_2d(x, shift_h=1, shift_w=2))
+    out_f_g = layer(shift_2d(x, %%SYMMETRY_DIM%%))
     
     # Check if they commute (within floating point precision tolerance)
     checks["equivariance_commutes"] = bool(torch.allclose(out_g_f, out_f_g, atol=1e-4))

@@ -34,8 +34,6 @@ class %%MODEL_CLASS%%:
         conn.close()
 
     def insert_transaction(self, db_path: str, t_id: int, u_id: int, a_id: int, amount: float) -> None:
-        # BUG: Naive insertion that fails under strict immediate circular foreign-key constraints.
-        # This breaks when executing transactions over overlapping, circular table layouts.
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON;")

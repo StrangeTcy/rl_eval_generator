@@ -10,5 +10,4 @@ class %%MODEL_CLASS%%:
         Return a list of CSS rules [(selector_str, declaration_dict), ...]
         that compute parity over checkboxes #c0..#c{n-1}.
         """
-        # Buggy initial implementation: returns empty rule list
         return []

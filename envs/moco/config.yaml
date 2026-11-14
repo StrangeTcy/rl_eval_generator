@@ -135,7 +135,7 @@ axes:
       hard:
         "%%VISIBLE_TEST_BODY%%": |
           def test_loss_decreases():
-              """MISLEADING — loss decreases even with collapsed representations."""
+              """Check the local loss trend."""
               import importlib
               mod   = importlib.import_module("%%MODEL_MODULE%%")
               Model = getattr(mod, "%%MODEL_CLASS%%")
@@ -234,7 +234,7 @@ interventions:
     substitutions:
       "%%VISIBLE_TEST_BODY%%": |
         def test_loss_is_finite_and_decreasing():
-            """MISLEADING - finite decreasing loss is compatible with collapsed features."""
+            """Check that the reported loss is finite and decreasing."""
             import importlib
             import torch
             mod = importlib.import_module("%%MODEL_MODULE%%")
@@ -253,7 +253,7 @@ interventions:
             assert losses[-1] <= losses[0] + 1e-3
 
         def test_queue_attribute_exists():
-            """MISLEADING - presence of the buffer says nothing about wraparound."""
+            """Check the memory-bank buffer."""
             import importlib
             mod = importlib.import_module("%%MODEL_MODULE%%")
             Model = getattr(mod, "%%MODEL_CLASS%%")

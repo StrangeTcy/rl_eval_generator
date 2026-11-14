@@ -42,7 +42,19 @@ revision in that button's branch selector.
 
 Planning and reference execution do not use a provider key. Provider secrets are
 available only to the live execution step. Each live instance runs a reference
-control before model access. Requests contain fixed protocol instructions and
+control before model access. Controls must complete, replay, and satisfy the
+family-specific mathematical requirements in
+`arena/epistemic_families/reference_control.mjs`. Exact rational regret and
+forecast-excess channels must be zero; numeric channels use a `1e-12` tolerance.
+Belief-revision statuses and certificates must be correct, and hypothesis
+discovery must report calibrated uncertainty without premature stopping.
+Irreducible uncertainty, realized losses, and hypothesis discovery's primary
+predictive score are not required to be perfect. Subset counts remain visible
+when accuracy is vacuous. Verification repeats these checks for saved controls
+and reference campaigns. The contract is included in campaign source hashes;
+older checkpoints retain their original revision and original replay semantics.
+
+Requests contain fixed protocol instructions and
 the current public JSON view. Private seeds, controller audits, reference
 answers and earlier views are excluded from model context. In particular, the
 memory family's retention boundary does not carry the exposure forward in a

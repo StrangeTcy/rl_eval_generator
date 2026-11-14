@@ -17,3 +17,5 @@ test_*/
 
 demo_*/
 _episode_env_*/
+node_modules/
+runs/environment-audit-*/

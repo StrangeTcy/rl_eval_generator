@@ -9,4 +9,4 @@ The task is to complete the `%%MODEL_CLASS%%` class in `migration.py` to constru
 2. Allow inserting and querying data over pairwise overlapping segments of these services.
 3. Be robust under global cascading operations (avoiding transactional foreign-key constraint deadlocks during bulk insertions where circular dependency loops are triggered).
 
-The current implementation in `migration.py` runs, but violates global consistency during concurrent, circular multi-table inserts. Correct the schema definition and transaction ordering to ensure the global migration is structurally sound.
+Ensure that the schema and insertion transaction satisfy these constraints. Some instances already defer foreign-key validation until commit and can satisfy the contract unchanged; an empty patch is allowed. Immediate and deferred checking are constraint modes, without an ordering of repair difficulty. Existing schema relationships must remain enforced after insertion.

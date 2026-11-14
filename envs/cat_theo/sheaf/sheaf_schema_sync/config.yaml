@@ -13,7 +13,7 @@ axes:
         "%%MODEL_FILE%%": "migration.py"
 
   - id: symptom_mask
-    description: "Whether the cascading foreign-key constraint loops are verified"
+    description: "Initial foreign-key checking mode; deferred cases are valid baseline controls"
     levels:
       easy:
         "%%DEFER_CONSTRAINTS%%": ""

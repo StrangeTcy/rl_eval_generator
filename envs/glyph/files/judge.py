@@ -73,12 +73,8 @@ def main() -> None:
         set_metric(result, "predicted_classes", coverage)
         anti_gaming_passed = coverage >= 7 and entropy >= 1.5
 
-        # --- behavioral probes: attribute *why* accuracy is low -----------
-        # The eval set draws each class many times at random spatial positions.
-        # A spatially invariant classifier predicts the same label for a given
-        # class regardless of where its shapes land, so per-class prediction
-        # agreement (fraction matching that class's modal prediction) is a direct
-        # invariance measure that does not depend on labels being correct.
+        # Within-class modal agreement is a symptom measure. Examples also vary
+        # in nuisance features, so it does not isolate spatial invariance.
         agreements = []
         for c in range(10):
             mask = labels == c
@@ -88,29 +84,25 @@ def main() -> None:
             modal_frac = torch.bincount(class_preds, minlength=10).max().item() / int(mask.sum())
             agreements.append(modal_frac)
         spatial_agreement = float(sum(agreements) / len(agreements)) if agreements else 0.0
-        set_metric(result, "spatial_prediction_agreement", round(spatial_agreement, 6))
+        set_metric(result, "within_class_modal_agreement", round(spatial_agreement, 6))
 
-        # Optimizer/architecture pathology: the model never learned to use its
-        # capacity and emits a near-degenerate distribution.
+        # Prediction coverage and entropy detect a concentrated distribution.
         optimizer_ok = anti_gaming_passed
-        mark_check(result, "optimization_progressed", optimizer_ok)
-        judge_event(result, "check", "ok" if optimizer_ok else "fail", "optimization_progressed")
+        mark_check(result, "prediction_diversity_sufficient", optimizer_ok)
+        judge_event(result, "check", "ok" if optimizer_ok else "fail", "prediction_diversity_sufficient")
         if not optimizer_ok:
-            result["notes"].append("optimizer_pathology_unfixed")
+            result["notes"].append("prediction_distribution_concentrated")
 
-        # Spatial invariance: predictions are inconsistent across positions for
-        # the same class even though the model is otherwise non-degenerate.
+        # Measure agreement among held-out examples sharing a class.
         spatial_ok = spatial_agreement >= 0.6
-        mark_check(result, "spatial_invariance_learned", spatial_ok)
-        judge_event(result, "check", "ok" if spatial_ok else "fail", "spatial_invariance_learned")
+        mark_check(result, "within_class_agreement_sufficient", spatial_ok)
+        judge_event(result, "check", "ok" if spatial_ok else "fail", "within_class_agreement_sufficient")
         if optimizer_ok and not spatial_ok:
-            result["notes"].append("spatial_invariance_not_learned")
+            result["notes"].append("within_class_prediction_disagreement")
 
-        # Overfit spatial layout: the model is confident and consistent per class
-        # (so it learned a stable mapping) yet generalizes poorly to held-out
-        # random positions.
+        # Consistency alone can still describe an incorrect class mapping.
         if optimizer_ok and spatial_ok and accuracy < PARTIAL_THRESHOLD:
-            result["notes"].append("overfit_spatial_layout")
+            result["notes"].append("consistent_predictions_with_low_accuracy")
     except Exception as exc:
         set_failure(result, FAILURE_REWARD_DENIAL, f"Failed to score outputs: {exc}")
         emit(result)

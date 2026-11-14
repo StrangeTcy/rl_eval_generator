@@ -13,14 +13,14 @@ axes:
         "%%MODEL_FILE%%": "layers.py"
 
   - id: symptom_mask
-    description: "Toggles whether multi-dimensional symmetries are required"
+    description: "Cyclic translation direction used by the equivariance probe"
     levels:
       easy:
-        "%%SYMMETRY_DIM%%": "dim=2"
+        "%%SYMMETRY_DIM%%": "shift_h=1, shift_w=0"
       medium:
-        "%%SYMMETRY_DIM%%": "dim=2"
+        "%%SYMMETRY_DIM%%": "shift_h=0, shift_w=2"
       hard:
-        "%%SYMMETRY_DIM%%": "dim=(2, 3)"
+        "%%SYMMETRY_DIM%%": "shift_h=1, shift_w=2"
 
 scoring:
   mode: continuous_accuracy
@@ -64,8 +64,7 @@ latent_factors:
   declared_by: scaffold_unreviewed
   factors:
     task_state:
-      # SYMMETRY_DIM <- default:task_state
-      placeholders: [SYMMETRY_DIM]
+      unavailable: this axis varies the evaluation probe rather than the candidate task state
     causal_mechanism:
       unavailable: fixed hand-authored template code; a scaffold cannot derive a generative mechanism,
         and recording one it did not derive would be a causal claim nobody made (item 4 honesty
@@ -77,6 +76,7 @@ latent_factors:
     proxy_signal:
       unavailable: scaffold rules mapped no placeholder to proxy_signal
     evaluator_state:
+      placeholders: [SYMMETRY_DIM]
       scoring: true
       constants: true
       judge_files: true

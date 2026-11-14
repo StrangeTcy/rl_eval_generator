@@ -28,6 +28,7 @@ scoring:
   partial_threshold: 0.60
 
 constants:
+  "%%MODEL_MODULE%%": "query_module"
   "%%PATCHABLE_FILES%%": '["query_module.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '""'
 

@@ -2,21 +2,35 @@
 """Judge for sheaf_schema_sync environment."""
 import os
 import sys
+import tempfile
 import torch
 
 from judge_lib import (base_result, emit, eval_env, judge_event, make_workdir,
                        mark_check, run, score_from_accuracy, scrub_workdir,
                        set_failure, set_metric, train_env, validate_submission,
-                       require_changed_files)
+                       PATCH_PATH, _mark_stage)
 
 PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
 PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
 
 def main() -> None:
     result = base_result(training_completed=False, model_saved=False, accuracy_bin="0%")
-    patched_dir = validate_submission(result)
-    require_changed_files(result, {"migration.py"})
-    workdir, original_files = make_workdir(patched_dir)
+    if os.path.isfile(PATCH_PATH) and os.path.getsize(PATCH_PATH) == 0:
+        # Empty submissions evaluate trusted originals only, with no candidate overlay.
+        with tempfile.TemporaryDirectory(prefix="schema_empty_patch_") as empty_patch_dir:
+            workdir, original_files = make_workdir(empty_patch_dir)
+        mark_check(result, "patch_found")
+        mark_check(result, "patch_valid")
+        mark_check(result, "sources_valid")
+        result["patch_found"] = 1
+        result["patch_valid"] = 1
+        result["sources_valid"] = 1
+        _mark_stage(result, "patch_validation", "passed", "empty_patch_accepted")
+        _mark_stage(result, "source_validation", "passed", "trusted_originals")
+        judge_event(result, "empty_patch", summary="Evaluating trusted schema originals unchanged")
+    else:
+        patched_dir = validate_submission(result)
+        workdir, original_files = make_workdir(patched_dir)
 
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:

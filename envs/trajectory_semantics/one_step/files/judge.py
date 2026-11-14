@@ -17,6 +17,29 @@ from judge_lib import (
 
 TOTAL_CHECKS = %%SCORING_TOTAL_CHECKS%%
 
+# Held-out rule combinations are evaluator data and are not copied into task.py.
+HIDDEN_FLAT_SPEC = '''format: flat-relay-v1
+templates: Larch, Umber, Zephyr
+payloads: amber, violet
+rules:
+- Larch(payload) -> Umber(flip(payload))
+- Umber(payload) -> Zephyr(payload)
+- Zephyr(payload) -> Larch(violet)
+'''
+HIDDEN_REFLECTIVE_SPEC = '''format: reflective-relay-v1
+payloads: ash, ink
+
+template Cedar(payload):
+  emit_source("Thyme(flip(payload))")
+
+template Thyme(payload):
+  emit_source("Pollen(ash)")
+
+template Pollen(payload):
+  emit_source("Cedar(payload)")
+'''
+
+
 
 def parse_spec(spec_text: str):
     payload_line = re.search(r"^payloads:\s*([^,]+),\s*(.+)$", spec_text, re.M)
@@ -101,9 +124,10 @@ def main() -> None:
             "witness_sibling_all_states": check_case(solve, task.SIBLING_SPEC_TEXT),
             "witness_sibling_relabeling_all_states": check_case(
                 solve, task.SIBLING_RELABELED_SPEC_TEXT
-            ),
+            ) and check_case(solve, HIDDEN_FLAT_SPEC) and check_case(solve, HIDDEN_REFLECTIVE_SPEC),
+            # Equal failures do not establish format invariance.
             "same_result_under_format_noise": check_case(solve, task.SPEC_TEXT)
-            == check_case(solve, task.NOISY_SPEC_TEXT),
+            and check_case(solve, task.NOISY_SPEC_TEXT),
             "returns_state_tuples": all(
                 isinstance(solve(task.SPEC_TEXT, template, payload), tuple)
                 and len(solve(task.SPEC_TEXT, template, payload)) == 2

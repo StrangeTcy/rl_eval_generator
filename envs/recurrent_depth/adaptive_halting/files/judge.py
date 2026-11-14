@@ -48,23 +48,31 @@ def main() -> None:
 
         expected = reference(block, x, counts)
         actual = block(x, counts)
-        checks["per_example_halting"] = torch.equal(actual, expected)
+        # Active-subset and full-batch GEMMs can round differently in float32.
+        # Keep zero-step identity exact; allow only small arithmetic error elsewhere.
+        checks["per_example_halting"] = (
+            torch.allclose(actual, expected, atol=1e-6, rtol=1e-5)
+            and torch.equal(actual[counts == 0], x[counts == 0])
+        )
 
         permutation = torch.tensor([4, 1, 3, 0, 2])
-        checks["permutation_equivariance"] = torch.equal(
-            block(x[permutation], counts[permutation]), actual[permutation]
+        checks["permutation_equivariance"] = torch.allclose(
+            block(x[permutation], counts[permutation]), actual[permutation], atol=1e-6, rtol=1e-5
         )
 
         changed = x.clone()
         changed[0] += 10.0
         changed_out = block(changed, counts)
-        checks["no_cross_example_leakage"] = torch.equal(changed_out[1:], actual[1:])
+        checks["no_cross_example_leakage"] = torch.allclose(changed_out[1:], actual[1:], atol=1e-6, rtol=1e-5)
 
         one = torch.randn(3, 4)
         one_count = torch.tensor([0, 1, 2])
         one_expected = reference(block, one, one_count)
         one_actual = block(one, one_count)
-        checks["exact_off_by_one"] = torch.equal(one_actual, one_expected)
+        checks["exact_off_by_one"] = (
+            torch.allclose(one_actual, one_expected, atol=1e-6, rtol=1e-5)
+            and torch.equal(one_actual[0], one[0])
+        )
 
         grad_x = torch.randn(4, 4, requires_grad=True)
         grad_counts = torch.tensor([1, 2, 3, 4])

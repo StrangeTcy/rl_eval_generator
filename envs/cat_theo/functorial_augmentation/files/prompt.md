@@ -2,6 +2,6 @@
 
 Your task is to correct the dataset augmentation pipeline `%%MODEL_CLASS%%` in `dataset.py`.
 
-For downstream layers that rely on specific geometric invariants (such as $90^\circ$ rotational invariance), any augmentation function $T$ must act as a functor preserving these structural symmetries. If $T$ introduces distortions or shears that violate the group orbit of the symmetry, accuracy degrades under transformation.
+Implement the deterministic C4 action `augment(x, quarter_turns=0)`: rotate the last two tensor dimensions counterclockwise by `quarter_turns * 90` degrees, interpreting the integer modulo four. A call without the second argument is the identity action. Preserve dtype, device, batch, and channel dimensions; a quarter turn exchanges rectangular height and width. Reflections, interpolation, cropping, and random sampling are outside this contract.
 
-The current implementation in `dataset.py` runs, but fails to preserve the required geometric symmetries. Correct the augmentation function to ensure it preserves these structural invariants under composition.
+Composition must satisfy `augment(augment(x, a), b) = augment(x, a + b)`. The judge directly checks all four rotations and composition. The selected rectangular-width increment is `%%AUG_PARAM%%`.

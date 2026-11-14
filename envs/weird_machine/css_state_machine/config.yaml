@@ -43,6 +43,7 @@ scoring:
   partial_threshold: 0.60
 
 constants:
+  "%%MODEL_MODULE%%": "css_logic"
   "%%PATCHABLE_FILES%%": '["css_logic.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '""'
 

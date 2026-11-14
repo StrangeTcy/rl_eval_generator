@@ -15,6 +15,5 @@ class RecurrentBlock(nn.Module):
         steps = self.depth if depth is None else int(depth)
         state = x
         for _ in range(max(0, steps)):
-            # BUG: this ignores the state produced by the preceding transition.
             state = self.transition(x)
         return state

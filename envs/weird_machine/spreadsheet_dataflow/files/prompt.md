@@ -20,6 +20,14 @@ The formulas in column `B` must compute the minimum cost path to reach step $i$ 
 2. Every returned cell value in column `B` (except optionally `B1` if assigned `=A1`) must be a valid formula string starting with `'='` (e.g., `'=A2+B1'`, `'=A3+MIN(B2, B1)'`).
 3. Do not pre-calculate numeric results in Python; the dictionary values must be declarative formulas that reference cells in `A` and `B` so they evaluate correctly for any numeric inputs placed in column `A`.
 
+### Supported formula grammar
+The evaluator accepts this closed spreadsheet subset (case-insensitive, with
+optional whitespace): a cell reference followed by zero or more additions of
+another cell reference or `MIN(cell, cell)`. Cell references are `A` or `B`
+followed by a positive row number. For example, `=A3+MIN(B2,B1)` is supported.
+Only input cells and already-computed output cells may be referenced. Numeric
+literals, other functions/operators, Python expressions, and cycles are rejected.
+
 ## Verification
 Run local visible checks:
 ```bash

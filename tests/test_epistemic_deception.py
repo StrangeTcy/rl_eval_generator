@@ -26,8 +26,8 @@ def test_detection_is_deterministic_and_keeps_latent_labels_private() -> None:
     second = GAME.build_detection("detect", "omission", "conflicted", "direct", "office", 3)
     assert first.to_spec() == second.to_spec()
     public = first.task()
-    assert first.recommended_action not in public
-    assert "recommended_action" not in public
+    assert public.count("`recommended_action`: accept, verify, or reject") == 1
+    assert public.count("Declared decision and audit protocol") == 1
     assert "ground_truth" not in public
 
 
@@ -39,6 +39,7 @@ def test_detection_scores_mechanism_and_action_separately() -> None:
         "incentive": case.incentive,
         "recommended_action": case.recommended_action,
         "counterfactual": case.counterfactual,
+        "justification": "The observed record and declared audit policy support these fields.",
     }
     assert case.grade(correct)["failure_mode"] == "pass"
     action_only = dict(correct, mechanism="accurate")
@@ -59,6 +60,7 @@ def test_signaling_is_a_distinct_deployment_task() -> None:
         "receiver_action": case.receiver_action,
         "incentive": case.incentive,
         "mechanism": case.mechanism,
+        "justification": "The supplied private state selects this row of the declared policy.",
     }
     assert case.grade(payload)["metrics"]["strict_correct"] is True
     assert json.dumps(case.to_spec(), sort_keys=True)

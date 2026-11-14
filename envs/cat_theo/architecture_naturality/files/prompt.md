@@ -6,3 +6,5 @@ A transformation $\alpha$ between two model architectures $F$ and $G$ is strictl
 $$\alpha_Y \circ F(h) \equiv G(h) \circ \alpha_X$$
 
 The current implementation of the conversion mapping in `converter.py` runs, but fails this naturality commutativity condition. Correct the implementation to ensure the conversion is strictly natural under sequence-length transformations.
+
+The required map is uniform multiplication by the existing learnable `scale`, preserving every input dimension. The judge also checks slicing along `%%CHECK_DIM%%`.

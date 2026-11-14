@@ -4,8 +4,8 @@ Your task is to implement a topologically aware load balancer in `route.py` for 
 
 In distributed GPU clusters, multiple nodes exchange gradients across overlapping local switches. To prevent switch saturation, the communication routing must be strictly bounded by the physical capacity of the switches.
 
-The task is to complete the `%%MODEL_CLASS%%` class in `route.py` to implement a bandwidth routing function:
-- It allocates bandwidth across Node 1, Node 2, and Node 3.
-- It must ensure that the sum of the allocated bandwidth across all active routes does not exceed the aggregate limit of the central backbone router under high traffic demands.
+Complete `%%MODEL_CLASS%%.allocate_bandwidth` for nonnegative demands on `route_A`, `route_B`, and `route_C`. Missing routes have zero demand. Every pair overlaps a switch: A+B, A+C, and B+C must each be at most `local_capacity`. The total must be at most `global_capacity`, and allocations must be nonnegative and no greater than demand.
 
-The current implementation in `route.py` runs and allocates local node bandwidth correctly, but overflows the global capacity limit of the main backbone router during concurrent communication loops. Correct the load balancing logic to scale routing paths safely.
+Use clipped-demand proportional allocation: first clip each route's demand to `local_capacity`, then multiply all clipped demands by the largest common scale in `[0, 1]` satisfying every pair limit and the global limit. This preserves equal-demand symmetry and uses the maximum feasible bandwidth under that proportional objective. For demands `(120, 60, 0)` with local capacity 100 and a nonbinding global limit, the result is `(62.5, 37.5, 0)`.
+
+Capacity feasibility and the proportional allocation objective are checked separately.

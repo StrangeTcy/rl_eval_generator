@@ -1,0 +1,78 @@
+name: Environment repair regressions
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/environment-repairs-validation.yml
+      - envs/**
+      - shared/**
+      - tests/environment_audit/**
+      - requirements.txt
+  pull_request:
+    paths:
+      - .github/workflows/environment-repairs-validation.yml
+      - envs/**
+      - shared/**
+      - tests/environment_audit/**
+      - requirements.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: environment-repairs-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generated-environments:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      ENV_AUDIT_PYTHON: python
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare validation evidence
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/environment-repairs"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/environment-repairs/commit.txt"
+          node --version > "$RUNNER_TEMP/environment-repairs/node-version.txt"
+          python --version > "$RUNNER_TEMP/environment-repairs/python-version.txt"
+      - name: Install locked Node and CPU tensor dependencies
+        id: dependencies
+        run: |
+          npm ci --ignore-scripts
+          pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt Jinja2
+          pip freeze > "$RUNNER_TEMP/environment-repairs/dependencies.txt"
+      - name: Exercise repaired generated templates and negative controls
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test --test-reporter=tap tests/environment_audit/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/environment-repairs/template-tests.tap"
+      - name: Run existing generator and epistemic regressions
+        if: always() && steps.dependencies.outcome == 'success'
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q tests/test_generator.py tests/test_scoring.py tests/test_trajectory_events.py tests/test_epistemic_deception.py tests/test_epistemic_nested_knowledge.py tests/test_epistemic_type_games.py 2>&1 | tee "$RUNNER_TEMP/environment-repairs/pytest.txt"
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: environment-repair-regressions
+          path: ${{ runner.temp }}/environment-repairs/
+          if-no-files-found: error
+          retention-days: 30

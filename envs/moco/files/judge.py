@@ -59,12 +59,26 @@ with torch.no_grad():
             baseline = copy.deepcopy(model)
             altered = copy.deepcopy(model)
             setattr(altered, attr, orig * 2)
+            original_queue = baseline.%%QUEUE_ATTR%%.clone()
+            original_ptr = baseline._ptr.clone()
+            query = torch.nn.functional.normalize(baseline.proj_q(baseline.encoder_q(train_in[:2])), dim=1)
             logits_before, _ = baseline(train_in[:2], train_in[:2])
             logits_after, _ = altered(train_in[:2], train_in[:2])
+            # Forward has now applied the momentum update to the key encoder.
+            keys = torch.nn.functional.normalize(baseline.proj_k(baseline.encoder_k(train_in[:2])), dim=1)
+            expected_logits = torch.cat(((query * keys).sum(dim=1, keepdim=1), query @ original_queue), dim=1) / orig
+            expected_queue = original_queue.clone()
+            expected_queue.index_copy_(1, (original_ptr + torch.arange(keys.shape[0])) % K_value, keys.T)
             if (logits_before.shape == logits_after.shape
                     and torch.isfinite(logits_before).all().item()
                     and torch.isfinite(logits_after).all().item()
-                    and not torch.allclose(logits_before, logits_after, atol=1e-4, rtol=1e-3)):
+                    and torch.allclose(logits_before, expected_logits, atol=1e-5, rtol=1e-4)
+                    and torch.allclose(logits_after, logits_before / 2, atol=1e-5, rtol=1e-4)
+                    and torch.allclose(baseline.%%QUEUE_ATTR%%, expected_queue, atol=1e-5, rtol=1e-4)
+                    and torch.allclose(altered.%%QUEUE_ATTR%%, expected_queue, atol=1e-5, rtol=1e-4)
+                    and torch.allclose(expected_queue.norm(dim=0), torch.ones(K_value), atol=1e-5, rtol=1e-4)
+                    and torch.equal(baseline._ptr, (original_ptr + keys.shape[0]) % K_value)
+                    and torch.equal(altered._ptr, baseline._ptr)):
                 tau_ok = True
                 break
         except Exception:
@@ -173,7 +187,7 @@ def main() -> None:
         mark_check(result, "temperature_sensitive", tau_ok)
         judge_event(result, "check", "ok" if tau_ok else "fail", "temperature_sensitive")
         if not tau_ok:
-            result["notes"].append("temperature_cancelled")
+            result["notes"].append("contrastive_logits_or_queue_invalid")
         queue_wrap_ok = bool(outputs.get("queue_wrap_ok", False))
         mark_check(result, "queue_wraparound", queue_wrap_ok)
         judge_event(result, "check", "ok" if queue_wrap_ok else "fail", "queue_wraparound")

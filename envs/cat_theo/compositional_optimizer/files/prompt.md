@@ -1,8 +1,7 @@
-# Associative Optimizer Composition
+# Sequential Momentum State Isolation
 
 Your task is to correct the modular optimizer blocks in `optimizer.py`.
 
-To allow sequential optimizer operations (like composing gradient momentum and scaling steps) to be modular, the composition of these updates must be strictly associative:
-$$((A \circ B) \circ C)(p) \equiv (A \circ (B \circ C))(p)$$
+`MomentumStep.update(p, grad)` returns the updated momentum `v = beta * v + (1 - beta) * grad`, starting from zero for each parameter. Each instance must maintain its own momentum for each parameter object. Updating one parameter or optimizer must not alter another's state or mutate `p` or `grad`.
 
-The current implementation of the modules in `optimizer.py` runs, but fails this associativity requirement under nested composition. Correct the modules so that their sequential composition is strictly associative and numerically correct across multiple training steps.
+The judge chains three instances, repeats updates while applying a learning rate of `%%LR_VAL%%`, and interleaves another parameter. Implement state isolation and the stated numerical recurrence. This interface exposes sequential updates rather than a separate composition object.

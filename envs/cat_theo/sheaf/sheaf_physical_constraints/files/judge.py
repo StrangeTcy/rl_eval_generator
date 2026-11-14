@@ -57,17 +57,16 @@ try:
     a3 = allocations.get("route_C", 0.0)
     
     # 1. Must be non-negative and individually bounded
-    bounds_ok = bool(0.0 <= a1 <= 100.0 and 0.0 <= a2 <= 100.0 and a3 == 0.0)
+    bounds_ok = int(0.0 <= a1 <= 100.0 and 0.0 <= a2 <= 60.0 and a3 == 0.0)
     
     # 2. Overlapping Switch S2 must strictly NOT exceed 100.0
     switch_S2_ok = bool((a1 + a2) <= 100.0 + 1e-4)
     
-    # 3. Proportionality: maintains the 5:3 ratio (tolerance 0.05 for minor floating-point shifts)
-    ratio_ok = bool(abs((a1 / a2) - 1.6666) < 0.05)
-    
-    checks["local_bounds_ok"] = bool(bounds_ok and switch_S2_ok and ratio_ok)
+    checks["local_bounds_ok"] = int(bounds_ok and switch_S2_ok)
+    checks["local_proportional_ok"] = int(abs(a1 - 62.5) < 1e-4 and abs(a2 - 37.5) < 1e-4 and a3 == 0.0)
 except Exception as e:
     checks["local_bounds_ok"] = False
+    checks["local_proportional_ok"] = 0
 
 # 3. Global Gluing Consistency (Proportional Scaling & Fairness under High Asymmetric Overlapping Demands)
 try:
@@ -91,14 +90,18 @@ try:
     
     # 2. Check global sum constraint
     total_bandwidth = a1 + a2 + a3
-    global_ok = bool(total_bandwidth <= cap_global + 1e-4 and total_bandwidth > 100.0)
+    global_ok = int(total_bandwidth <= cap_global + 1e-4 and 0.0 <= a1 <= 90.0 and 0.0 <= a2 <= 80.0 and 0.0 <= a3 <= 90.0)
     
-    # 3. Check symmetry: route_A and route_C have identical demands, so their allocations must be symmetric
-    symmetry_ok = bool(abs(a1 - a3) < 1e-4)
-    
-    checks["global_backbone_ok"] = bool(all_keys_present and switches_ok and global_ok and symmetry_ok)
+    checks["global_backbone_ok"] = int(all_keys_present and switches_ok and global_ok)
+    expected_scale = min(1.0, 100.0 / 180.0, cap_global / 260.0)
+    checks["global_proportional_ok"] = int(
+        abs(a1 - 90.0 * expected_scale) < 1e-4
+        and abs(a2 - 80.0 * expected_scale) < 1e-4
+        and abs(a3 - 90.0 * expected_scale) < 1e-4
+    )
 except Exception as e:
     checks["global_backbone_ok"] = False
+    checks["global_proportional_ok"] = 0
 
 import torch
 torch.save(checks, "eval_outputs.pt")
@@ -114,13 +117,17 @@ torch.save(checks, "eval_outputs.pt")
         local_ok = bool(checks.get("local_run_ok", False) or checks.get("local_routing_ok", False))
         bounds_ok = bool(checks.get("local_bounds_ok", False))
         global_ok = bool(checks.get("global_backbone_ok", False))
+        local_proportional_ok = int(checks.get("local_proportional_ok", 0))
+        global_proportional_ok = int(checks.get("global_proportional_ok", 0))
 
         mark_check(result, "local_routing_ok", local_ok)
         mark_check(result, "local_bounds_ok", bounds_ok)
         mark_check(result, "global_backbone_ok", global_ok)
+        mark_check(result, "local_proportional_ok", local_proportional_ok)
+        mark_check(result, "global_proportional_ok", global_proportional_ok)
 
-        passed = sum([local_ok, bounds_ok, global_ok])
-        accuracy = passed / 3.0
+        passed = sum((local_ok, bounds_ok, global_ok, local_proportional_ok, global_proportional_ok))
+        accuracy = passed / 5.0
         result["training_completed"] = True
         result["model_saved"] = True
         

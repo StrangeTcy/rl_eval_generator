@@ -39,6 +39,9 @@ def eval_sheet(inputs, formulas):
         if not f_str.startswith("="):
             raise ValueError(f"Cell {{cell}} does not start with '=': {{f_str!r}}")
         expr = f_str[1:]
+        expr = re.sub(r"\\s+", "", expr)
+        if re.fullmatch(r"[AB][1-9][0-9]*(?:\\+(?:[AB][1-9][0-9]*|MIN\\([AB][1-9][0-9]*,[AB][1-9][0-9]*\\)))*", expr, flags=re.IGNORECASE) is None:
+            raise ValueError("Formula is outside the declared cell/addition/MIN grammar")
         expr = re.sub(r'\\bMIN\\b', 'min', expr, flags=re.IGNORECASE)
         def repl(m):
             c = m.group(0).upper()

@@ -31,6 +31,7 @@ scoring:
   partial_threshold: 0.60
 
 constants:
+  "%%MODEL_MODULE%%": "regex_machine"
   "%%PATCHABLE_FILES%%": '["regex_machine.py"]'
   "%%EXTRA_ALLOWED_IMPORTS%%": '"re"'
 
