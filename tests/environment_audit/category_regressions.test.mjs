@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -132,7 +133,7 @@ const repairs = new Map([
         allocations["route_B"] = b * scale
         allocations["route_C"] = c * scale
         return allocations`)],
-  ['sheaf/sheaf_schema_sync', source => replace(source, '        cursor.execute("INSERT INTO addresses', '        cursor.execute("PRAGMA defer_foreign_keys = ON;")\n        cursor.execute("INSERT INTO addresses')],
+  ['sheaf/sheaf_schema_sync', source => replace(source, '        cursor.execute("INSERT INTO addresses', '        cursor.execute("BEGIN;")\n        cursor.execute("PRAGMA defer_foreign_keys = ON;")\n        cursor.execute("INSERT INTO addresses')],
 ]);
 
 test('all category reference fixtures render before hosted execution', () => {
@@ -142,6 +143,47 @@ test('all category reference fixtures render before hosted execution', () => {
     assert.notEqual(candidate, baseline, `${env} fixture must modify the starter`);
     assert.doesNotMatch(render(candidate), /%%[A-Z_]+%%/);
     assert.doesNotMatch(render(read(category(`${env}/files/judge.py`))), /%%[A-Z_]+%%/);
+  }
+});
+
+test('schema transaction begins before enabling foreign-key deferral', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'schema-deferral-order-'));
+  const schema = Array.from(starter('sheaf/sheaf_schema_sync').matchAll(/cursor.execute\("""([\s\S]*?)"""\)/g),
+    match => render(match[1]));
+  try {
+    for (const mode of ['defer-before-begin', 'begin-before-defer']) {
+      const filename = path.join(directory, `${mode}.db`);
+      const initial = new DatabaseSync(filename);
+      try {
+        for (const sql of schema) initial.exec(sql);
+      } finally {
+        initial.close();
+      }
+      const db = new DatabaseSync(filename);
+      try {
+        db.exec('PRAGMA foreign_keys = ON');
+        if (mode === 'begin-before-defer') db.exec('BEGIN');
+        db.exec('PRAGMA defer_foreign_keys = ON');
+        // The Python SQLite driver prepares the DML before opening its implicit transaction.
+        const insert = db.prepare('INSERT INTO addresses (id, transaction_id) VALUES (?, ?)');
+        if (mode === 'defer-before-begin') {
+          db.exec('BEGIN');
+          assert.throws(() => insert.run(303, 101), /FOREIGN KEY constraint failed/);
+        } else {
+          insert.run(303, 101);
+          db.prepare('INSERT INTO users (id, address_id) VALUES (?, ?)').run(202, 303);
+          db.prepare('INSERT INTO transactions (id, user_id, amount) VALUES (?, ?, ?)').run(101, 202, 99.9);
+          db.exec('COMMIT');
+          assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+          assert.equal(db.prepare('SELECT COUNT(*) AS count FROM transactions').get().count, 1);
+        }
+      } finally {
+        db.close();
+      }
+    }
+  } finally {
+    assert.ok(path.resolve(directory).startsWith(path.resolve(tmpdir()) + path.sep));
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 

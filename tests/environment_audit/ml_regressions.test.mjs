@@ -76,7 +76,7 @@ const mocoValues = {
 };
 
 for (const variant of ['correct', 'inverse-square', 'unnormalized-queue']) {
-  test(`MoCo real hidden probe: ${variant}`, hosted, () => {
+  test(`MoCo real hidden probe: ${variant}`, hosted, t => {
     let model = render(read('envs/moco/files/model.py'), mocoValues);
     model = model.replace('logits = torch.cat([l_pos, l_neg], dim=1)', 'logits = torch.cat((l_pos, l_neg), dim=1) / self.tau');
     if (variant === 'inverse-square') {
@@ -87,12 +87,17 @@ for (const variant of ['correct', 'inverse-square', 'unnormalized-queue']) {
     if (variant === 'unnormalized-queue') model = model.replace('self._dequeue_and_enqueue(k)', 'self._dequeue_and_enqueue(k / self.tau)');
     const queue = read('envs/moco/files/queue_ops.py').replace('queue[:, start:start + n] = keys.T',
       'queue.index_copy_(1, (start + torch.arange(n, device=queue.device)) % k, keys.T)');
+    const temperatureProbe = render(probe(read('envs/moco/files/judge.py')), mocoValues)
+      .replace('            if (logits_before.shape == logits_after.shape',
+        `            torch.save(((logits_before - expected_logits).abs().max().item(), (logits_after - logits_before / 2).abs().max().item(), (baseline.queue - expected_queue).abs().max().item(), (altered.queue - expected_queue).abs().max().item(), (expected_queue.norm(dim=0) - 1).abs().max().item(), baseline._ptr.item(), altered._ptr.item(), ((original_ptr + keys.shape[0]) % K_value).item()), "temperature_diagnostic.pt")\n            if (logits_before.shape == logits_after.shape`)
+      .replace('        except Exception:\n            pass', '        except Exception:\n            raise');
     const checks = runFixture({ 'model.py': model, 'queue_ops.py': queue,
-      'probe.py': render(probe(read('envs/moco/files/judge.py')), mocoValues),
+      'probe.py': temperatureProbe,
     }, ['model', 'MoCo', '10'],
     'import torch\nfrom model import MoCo\ntorch.manual_seed(71)\ntorch.save(MoCo(dim=16, K=10).state_dict(), "ckpt.pt")\ntorch.save(torch.randn(6, 1, 16, 16), "eval_train_inputs.pt")\ntorch.save(torch.randn(4, 1, 16, 16), "eval_test_inputs.pt")',
-    'import json, torch\noutputs = torch.load("eval_outputs.pt")\nprint(json.dumps((outputs["tau_ok"], outputs["queue_wrap_ok"])))');
-    assert.deepEqual(checks, [variant === 'correct', true]);
+    'import json, torch\noutputs = torch.load("eval_outputs.pt")\nprint(json.dumps((outputs["tau_ok"], outputs["queue_wrap_ok"], torch.load("temperature_diagnostic.pt"))))');
+    t.diagnostic(`Temperature residuals (reference logits, doubled temperature, baseline queue, altered queue, unit norm) and pointers (baseline, altered, expected): ${JSON.stringify(checks[2])}`);
+    assert.deepEqual(checks.slice(0, 2), [variant === 'correct', true]);
   });
 }
 
