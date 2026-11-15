@@ -1,7 +1,11 @@
 # Epistemic family model campaigns
 
-Two manual GitHub Actions workflows evaluate all nine interactive epistemic
-families using the providers from the recent campaigns:
+Two manual GitHub Actions workflows evaluate the original nine interactive
+epistemic families using the providers from the recent campaigns. The new
+`causal_structure` extension is registered for generation and provider-free
+validation; it is not enrolled in these existing campaign profiles. `all` means
+the families listed in the selected profile. Existing checkpoints retain their
+saved source revision and cohort.
 
 | Workflow | Model | Repository secret |
 |---|---|---|

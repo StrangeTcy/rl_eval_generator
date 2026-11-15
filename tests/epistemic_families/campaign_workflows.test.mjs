@@ -33,12 +33,16 @@ class Workflow {
   }
 }
 
-test('manual provider workflows expose every family and pass complete inputs to the shared runner', async () => {
+test('manual provider workflows expose their enrolled cohort and pass complete inputs to the shared runner', async () => {
   const shared = Workflow.shared();
-  ['epistemic-mercury-campaign.yml', 'epistemic-reasoning-atria-campaign.yml'].forEach(name => {
+  [['epistemic-mercury-campaign.yml', 'epistemic_mercury_campaign.yaml'], ['epistemic-reasoning-atria-campaign.yml', 'epistemic_reasoning_atria_campaign.yaml']].forEach(([name, profileName]) => {
     const wrapper = Workflow.read(name);
+    const profile = parseDocument(fs.readFileSync(path.join(ROOT, 'experiments', profileName), 'utf8')).toJS();
     assert.deepEqual(Object.keys(wrapper.on), ['workflow_dispatch']);
-    assert.deepEqual(wrapper.on.workflow_dispatch.inputs.family.options, ['all', ...FAMILY_IDS]);
+    assert.deepEqual(wrapper.on.workflow_dispatch.inputs.family.options, ['all', ...profile.families]);
+    assert.equal(profile.families.length, 9);
+    assert.equal(profile.families.includes('causal_structure'), false);
+    assert.ok(profile.families.every(family => FAMILY_IDS.includes(family)));
     assert.equal(wrapper.on.workflow_dispatch.inputs.execution_mode.default, 'plan');
     assert.deepEqual(Object.keys(wrapper.jobs.campaign.with).sort(), Object.keys(shared.on.workflow_call.inputs).sort());
     assert.equal(wrapper.concurrency['cancel-in-progress'], false);

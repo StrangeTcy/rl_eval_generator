@@ -1,6 +1,6 @@
 # Epistemic family YAML configurations
 
-These files configure the nine interactive epistemic families. Each file selects
+These files configure the ten interactive epistemic families. Each file selects
 a public seed, a private seed, and one level for every named difficulty axis.
 The checked-in settings use `seed: 3`, `privateSeed: 7`, and `easy` on every axis.
 
@@ -15,6 +15,7 @@ The checked-in settings use `seed: 3`, `privateSeed: 7`, and `easy` on every axi
 | Predict and revise for an evaluator | [evaluator_prediction.yaml](evaluator_prediction.yaml) |
 | Revise connected beliefs | [belief_revision.yaml](belief_revision.yaml) |
 | Investigate after limited retention | [memory_inquiry.yaml](memory_inquiry.yaml) |
+| Discover causal structure | [causal_structure.yaml](causal_structure.yaml) |
 
 ## Setup and first run
 
@@ -89,7 +90,7 @@ manifest hashes as the original recording.
 The GitHub Actions workflow
 [epistemic-families-validation.yml](../../.github/workflows/epistemic-families-validation.yml)
 validates the configurations and exercises reference episodes with replay checks
-across all nine families. It also provides a manual `workflow_dispatch` trigger.
+across all ten families. It also provides a manual `workflow_dispatch` trigger.
 Regression tests cover default and all-hard settings. The workflow saves a
 pairwise axis coverage plan for each family; that plan is a configuration
 inventory, not a record of model evaluations.
@@ -101,10 +102,17 @@ Run the same regression suite locally with `npm test`.
 The [Mercury](../../.github/workflows/epistemic-mercury-campaign.yml) and
 [reasoning Atria](../../.github/workflows/epistemic-reasoning-atria-campaign.yml)
 workflows provide manual planning, reference runs and live model evaluations
-across all nine families. They support configured, single-axis and pairwise
+across the original nine-family campaign cohort. They support configured, single-axis and pairwise
 difficulty plans, bounded provider requests, episode evidence and checkpoint
 resume. See the [campaign guide](../../docs/workflows/epistemic-family-campaigns.md)
 for inputs, secrets, resource ceilings and continuation instructions.
+
+`causal_structure` is available through the local launcher and provider-free
+validation workflow. It is not enrolled in either paid campaign preset or its
+dispatch choices. In those workflows, `all` means the families explicitly named
+in the selected campaign profile. Enrollment requires a separate profile and
+workflow update. Existing campaign checkpoints retain their original source
+revision; the workflow resumes that revision rather than rewriting the manifest.
 
 These interactive environments use their own
 [registry.json](registry.json) and `tools/epistemic_families.mjs` launcher.

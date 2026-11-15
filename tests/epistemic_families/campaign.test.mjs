@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Campaign } from '../../tools/epistemic_family_campaign.mjs';
-import { Catalog, FAMILY_IDS, ROOT } from '../../arena/epistemic_families/catalog.mjs';
+import { Catalog, ROOT } from '../../arena/epistemic_families/catalog.mjs';
 import { Contract } from '../../arena/epistemic_families/runtime.mjs';
 import { ModelPolicy } from '../../arena/epistemic_families/model_policy.mjs';
 
@@ -36,11 +36,13 @@ test('the epistemic Mercury campaign selects Mercury 3 and rejects the older mod
   assert.throws(() => Campaign.profile(older.profileFile), /unsupported provider profile/);
 });
 
-test('campaign plans cover every real axis and repeated attempts retain identical instances', async () => {
+test('campaign plans cover enrolled axes and repeated attempts retain identical instances', async () => {
   const fixture = Fixture.create({ matrixMode: 'pairwise', attempts: 2 });
   const summary = await Campaign.plan(fixture.profileFile, fixture.directory, { executionMode: 'live', maxRequests: 512 });
   const manifest = Campaign.unseal(path.join(fixture.directory, 'campaign.json'));
-  assert.deepEqual(manifest.selection.families, FAMILY_IDS);
+  assert.deepEqual(manifest.selection.families, fixture.profile.families);
+  assert.equal(manifest.selection.families.includes('causal_structure'), false);
+  await assert.rejects(Campaign.design(fixture.profile, { family: 'causal_structure' }), /family outside campaign profile/);
   assert.ok(manifest.coverage.every(item => item.complete));
   assert.ok(manifest.coverage.every(item => item.vectors > 1));
   assert.equal(summary.requests, 0);
@@ -52,7 +54,7 @@ test('campaign plans cover every real axis and repeated attempts retain identica
   assert.equal(manifest.estimates.maximumRequests, manifest.cases.length * fixture.profile.maxTurns);
 });
 
-test('all nine configured references run, checkpoint, resume without overwriting episodes, and verify', async () => {
+test('all enrolled references run, checkpoint, resume without overwriting episodes, and verify', async () => {
   const fixture = Fixture.create();
   await Campaign.plan(fixture.profileFile, fixture.directory, { executionMode: 'live' });
   const first = await Campaign.run(fixture.profileFile, fixture.directory, { executionMode: 'reference', maxEpisodes: 4 });
@@ -63,11 +65,11 @@ test('all nine configured references run, checkpoint, resume without overwriting
   const bytes = fs.readFileSync(preserved);
   const second = await Campaign.run(fixture.profileFile, fixture.directory, { executionMode: 'reference', maxEpisodes: 100 });
   assert.equal(second.status, 'completed');
-  assert.equal(second.recorded, 9);
+  assert.equal(second.recorded, fixture.profile.families.length);
   assert.equal(second.requests, 0);
   assert.deepEqual(fs.readFileSync(preserved), bytes);
   assert.ok(second.families.every(row => row.outcomes.at(0).status === 'completed'));
-  assert.equal((await Campaign.verify(fixture.profileFile, fixture.directory)).episodes, 9);
+  assert.equal((await Campaign.verify(fixture.profileFile, fixture.directory)).episodes, fixture.profile.families.length);
 });
 
 test('live campaign reserves calls, retains raw responses and reference control, and never repeats completed work', async () => {

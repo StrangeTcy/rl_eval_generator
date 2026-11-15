@@ -1,0 +1,17 @@
+# Discover a hidden binary causal tree through interventions.
+# Levels specify mechanisms and resource bounds, not measured model difficulty.
+schema: epistemic-family-config/1
+family: causal_structure
+seed: 3
+privateSeed: 7
+axes:
+  # Number of observed binary variables: easy = 3; medium = 4; hard = 5.
+  node_count: easy
+  # Maximum children per node: easy = 1; medium = 2; hard = 4.
+  # At three nodes, medium and hard admit the same structures.
+  max_children: easy
+  # Singleton intervention targets: easy = all; medium = half; hard = none.
+  intervention_access: easy
+  # Experiment credits: easy = all nodes; medium = half; hard = one.
+  # Budget changes are inactive when intervention access is none.
+  experiment_budget: easy

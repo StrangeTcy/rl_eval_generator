@@ -8,11 +8,16 @@ import { Session } from '../../arena/epistemic_families/session.mjs';
 import { AxisMatrix } from '../../arena/epistemic_families/runtime.mjs';
 import { FamilyCLI } from '../../tools/epistemic_families.mjs';
 
-test('nine registered families have complete real axis definitions', async () => {
+test('registered families have complete real axis definitions', async () => {
   const registry = JSON.parse(fs.readFileSync(path.join(ROOT, 'envs/epistemic_families/registry.json')));
   assert.deepEqual(Object.keys(registry.families), FAMILY_IDS);
   const definitions = await Catalog.definitions();
-  assert.equal(definitions.length, 9);
+  assert.equal(definitions.length, FAMILY_IDS.length);
+  assert.ok(FAMILY_IDS.includes('causal_structure'));
+  const sources = Catalog.sources();
+  assert.match(sources['arena/epistemic_families/causal_structure.mjs'], /^[a-f0-9]{64}$/);
+  assert.match(sources['arena/epistemic_families/causal_structure_oracle.mjs'], /^[a-f0-9]{64}$/);
+  assert.match(sources['arena/epistemic_families/causal_structure_reference.mjs'], /^[a-f0-9]{64}$/);
   definitions.forEach(definition => {
     definition.axes.forEach(axis => assert.equal(new Set(Object.values(axis.levels).map(value => JSON.stringify(value))).size, 3));
     const matrix = AxisMatrix.expand(definition, 'pairwise');

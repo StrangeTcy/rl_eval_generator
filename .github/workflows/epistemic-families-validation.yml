@@ -99,6 +99,7 @@ jobs:
           - evaluator_prediction
           - belief_revision
           - memory_inquiry
+          - causal_structure
     env:
       FAMILY: ${{ matrix.family }}
     steps:

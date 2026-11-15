@@ -19,7 +19,8 @@
     "recursive_delegation": "arena/epistemic_families/recursive_delegation.mjs",
     "evaluator_prediction": "arena/epistemic_families/evaluator_prediction.mjs",
     "belief_revision": "arena/epistemic_families/belief_revision.mjs",
-    "memory_inquiry": "arena/epistemic_families/memory_inquiry.mjs"
+    "memory_inquiry": "arena/epistemic_families/memory_inquiry.mjs",
+    "causal_structure": "arena/epistemic_families/causal_structure.mjs"
   },
   "integration": "Interactive sessions have their own registry and launcher; the existing Python patch-task registry retains its contract."
 }

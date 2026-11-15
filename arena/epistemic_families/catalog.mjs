@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Contract, AxisMatrix } from './runtime.mjs';
 
-export const FAMILY_IDS = Object.freeze(['agent_reconstruction', 'inquiry_control', 'hypothesis_discovery', 'evidence_process', 'adaptive_agents', 'recursive_delegation', 'evaluator_prediction', 'belief_revision', 'memory_inquiry']);
+export const FAMILY_IDS = Object.freeze(['agent_reconstruction', 'inquiry_control', 'hypothesis_discovery', 'evidence_process', 'adaptive_agents', 'recursive_delegation', 'evaluator_prediction', 'belief_revision', 'memory_inquiry', 'causal_structure']);
 export const PROTOCOL = 'epistemic-family-current-view/1';
 export const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -34,7 +34,7 @@ export class Catalog {
     return { family: id, mode, axes: definition.axes, vectors, pairCoverage: AxisMatrix.coverage(definition, vectors), inference: 'Coverage of configured levels only; not independent model trials or proven difficulty ordering.' };
   }
   static sources() {
-    const names = [...FAMILY_IDS.map(id => `arena/epistemic_families/${id}.mjs`), 'arena/epistemic_families/runtime.mjs', 'arena/epistemic_families/catalog.mjs', 'arena/epistemic_families/session.mjs', 'arena/epistemic_families/configuration.mjs', 'arena/inquiry/selection_laws.mjs', 'tools/epistemic_families.mjs', 'envs/epistemic_families/registry.json', 'package.json', 'package-lock.json'];
+    const names = [...FAMILY_IDS.map(id => `arena/epistemic_families/${id}.mjs`), 'arena/epistemic_families/causal_structure_oracle.mjs', 'arena/epistemic_families/causal_structure_reference.mjs', 'arena/epistemic_families/runtime.mjs', 'arena/epistemic_families/catalog.mjs', 'arena/epistemic_families/session.mjs', 'arena/epistemic_families/configuration.mjs', 'arena/inquiry/selection_laws.mjs', 'tools/epistemic_families.mjs', 'envs/epistemic_families/registry.json', 'package.json', 'package-lock.json'];
     return Object.fromEntries(names.map(name => [name, Contract.hash(fs.readFileSync(path.join(ROOT, name)))]));
   }
   static async generate(id, options, directory) {
