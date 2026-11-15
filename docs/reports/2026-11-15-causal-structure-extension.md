@@ -42,9 +42,13 @@ ten families. Local job metadata is retained in
 `runs/causal-structure-2026-11-15/github-validation-jobs.json`.
 
 The separate [repository-wide Python/Docker CI](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/43700480330)
-was still executing pytest at 09:49 UTC. The family workflow's success is not a
-claim that this broader job passed. The repair report records nine failures
-already present in its base revision.
+failed with the same nine pytest failures recorded in repair-validation CI run
+43688496954; the failure-name comparison found no new or resolved failures.
+These concern legacy campaign counts, budget/API assertions, and two recursive
+tests. The comparison and failed-job log are retained in
+`runs/causal-structure-2026-11-15/ci-comparison.json` and
+`github-ci-failures.log`. The family workflow's success does not imply that this
+broader job passed; Docker validation was skipped after pytest failed.
 
 The family includes an editable YAML preset and is enrolled in the provider-free
 GitHub validation matrix. The two existing paid campaign profiles retain their
