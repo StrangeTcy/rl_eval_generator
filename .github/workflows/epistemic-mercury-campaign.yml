@@ -58,6 +58,7 @@ jobs:
     uses: ./.github/workflows/epistemic-families-campaign.yml
     with:
       provider: mercury
+      model: ''
       execution_mode: ${{ inputs.execution_mode }}
       family: ${{ inputs.family }}
       matrix: ${{ inputs.matrix }}

@@ -20,8 +20,9 @@ export class Campaign {
     if (p.schema !== 'epistemic-family-campaign/1') throw new Error('unsupported campaign schema');
     if (!/^[a-z][a-z0-9_-]+$/.test(p.name)) throw new Error('invalid campaign name');
     const mercury = p.provider === 'mercury' && p.apiBase === 'https://api.inceptionlabs.ai/v1' && p.model === 'mercury-3' && p.apiKeyEnv === 'INCEPTION_API_KEY' && p.wireApi === 'chat_completions';
-    const atria = p.provider === 'atria' && p.apiBase === 'https://discovery-api.intern-ai.org.cn/v1' && p.model === 'Atria-Dawn-Preview' && p.apiKeyEnv === 'ATRIA_API_KEY' && p.wireApi === 'responses';
-    if ((!mercury && !atria) || p.reasoningEffort !== 'high') throw new Error('unsupported provider profile');
+    const atria = p.provider === 'atria' && p.apiBase === 'https://discovery-api.intern-ai.org.cn/v1' && ['Atria-Dawn', 'Agents-A1', 'Atria-Dawn-Preview'].includes(p.model) && p.apiKeyEnv === 'ATRIA_API_KEY' && p.wireApi === 'responses';
+    const reasoningEffort = atria && p.model !== 'Atria-Dawn-Preview' ? 'provider-default' : 'high';
+    if ((!mercury && !atria) || p.reasoningEffort !== reasoningEffort) throw new Error('unsupported provider profile');
     Contract.integer(p.minIntervalMs, 0, 60000, 'minimum interval');
     Contract.integer(p.maxOutputTokens, 1, 32768, 'output token limit');
     Contract.integer(p.timeoutMs, 1, 120000, 'request timeout');
@@ -35,7 +36,8 @@ export class Campaign {
     return p;
   }
   static options(options = {}) {
-    Contract.fields(options, [], ['family', 'matrix', 'attempts', 'executionMode', 'maxEpisodes', 'maxRequests']);
+    Contract.fields(options, [], ['family', 'matrix', 'attempts', 'executionMode', 'maxEpisodes', 'maxRequests', 'model']);
+    if (options.model !== undefined && !['Atria-Dawn', 'Agents-A1', 'Atria-Dawn-Preview'].includes(options.model)) throw new Error('unsupported Atria model');
     if (options.family !== undefined && options.family !== 'all' && !FAMILY_IDS.includes(options.family)) throw new Error('unknown family');
     if (options.matrix !== undefined && !['configured', 'single', 'pairwise'].includes(options.matrix)) throw new Error('invalid matrix mode');
     if (options.executionMode !== undefined && !['reference', 'live'].includes(options.executionMode)) throw new Error('invalid execution mode');
@@ -61,6 +63,8 @@ export class Campaign {
   }
   static async design(profile, options = {}) {
     this.options(options);
+    if (options.model !== undefined && profile.provider !== 'atria') throw new Error('model override is supported only for Atria');
+    const selectedProfile = options.model === undefined ? profile : { ...profile, model: options.model, reasoningEffort: options.model === 'Atria-Dawn-Preview' ? 'high' : 'provider-default' };
     const families = options.family && options.family !== 'all' ? [options.family] : profile.families;
     if (families.some(id => !profile.families.includes(id))) throw new Error('family outside campaign profile');
     const matrix = options.matrix ?? profile.matrixMode, attempts = options.attempts ?? profile.attempts;
@@ -71,7 +75,7 @@ export class Campaign {
       return { family, configuration, vectors, coverage: AxisMatrix.coverage(definition, vectors) };
     }));
     const cases = grids.flatMap(grid => grid.vectors.flatMap((axes, vector) => Array.from({ length: attempts }, (_, attempt) => ({ id: `${grid.family}-${vector}-${attempt}`, family: grid.family, vector, attempt, configuration: { ...grid.configuration, axes } }))));
-    return { schema: 'epistemic-family-campaign-plan/1', profile, selection: { families, matrix, attempts }, runtimeMajor: process.versions.node.split('.')[0], sourceSha256: this.sources(families), cases, coverage: grids.map(grid => ({ family: grid.family, vectors: grid.vectors.length, ...grid.coverage })), estimates: { episodes: cases.length, maximumRequests: cases.length * profile.maxTurns, maximumOutputTokens: cases.length * profile.maxTurns * profile.maxOutputTokens, campaignRequestCeiling: profile.maxRequests }, inference: 'Configured coverage and repeated attempts on fixed instances; not independent structural samples or proven difficulty ordering.' };
+    return { schema: 'epistemic-family-campaign-plan/1', profile: selectedProfile, profileSha256: Contract.hash(profile), selection: { families, matrix, attempts }, runtimeMajor: process.versions.node.split('.')[0], sourceSha256: this.sources(families), cases, coverage: grids.map(grid => ({ family: grid.family, vectors: grid.vectors.length, ...grid.coverage })), estimates: { episodes: cases.length, maximumRequests: cases.length * profile.maxTurns, maximumOutputTokens: cases.length * profile.maxTurns * profile.maxOutputTokens, campaignRequestCeiling: profile.maxRequests }, inference: 'Configured coverage and repeated attempts on fixed instances; not independent structural samples or proven difficulty ordering.' };
   }
   static async prepare(profileFile, directory, options = {}) {
     const profile = this.profile(profileFile), manifest = await this.design(profile, options), identity = Contract.hash(manifest);
@@ -91,7 +95,12 @@ export class Campaign {
   }
   static async inspect(directory, profileFile) {
     const manifest = this.unseal(path.join(directory, 'campaign.json')), identity = Contract.hash(manifest);
-    if (profileFile && Contract.hash(this.profile(profileFile)) !== Contract.hash(manifest.profile)) throw new Error('campaign profile changed');
+    if (profileFile) {
+      const configured = this.profile(profileFile);
+      if (configured.provider === 'atria') this.options({ model: manifest.profile.model });
+      const selected = configured.provider === 'atria' ? { ...configured, model: manifest.profile.model, reasoningEffort: manifest.profile.model === 'Atria-Dawn-Preview' ? 'high' : 'provider-default' } : configured;
+      if (Contract.hash(configured) !== (manifest.profileSha256 ?? Contract.hash(manifest.profile)) || Contract.hash(selected) !== Contract.hash(manifest.profile)) throw new Error('campaign profile changed');
+    }
     if (Contract.hash(manifest.sourceSha256) !== Contract.hash(this.sources(manifest.selection.families)) || manifest.runtimeMajor !== process.versions.node.split('.')[0]) throw new Error('campaign source or Node major version changed');
     const state = this.unseal(path.join(directory, 'state.json'));
     Contract.fields(state, ['identity', 'executionMode', 'maxRequests', 'halt', 'requestCount', 'recorded', 'activeCaseId']);
@@ -251,14 +260,14 @@ export class Campaign {
   }
   static async cli(args) {
     const [command, ...rest] = args;
-    if (!['plan', 'run', 'verify'].includes(command) || rest.length % 2) throw new Error('usage: plan|run|verify --profile YAML --output DIRECTORY [--execution-mode reference|live] [--family all|ID] [--matrix configured|single|pairwise] [--attempts N] [--max-episodes N] [--max-requests N]');
+    if (!['plan', 'run', 'verify'].includes(command) || rest.length % 2) throw new Error('usage: plan|run|verify --profile YAML --output DIRECTORY [--model Atria-Dawn|Agents-A1|Atria-Dawn-Preview] [--execution-mode reference|live] [--family all|ID] [--matrix configured|single|pairwise] [--attempts N] [--max-episodes N] [--max-requests N]');
     const parsed = rest.reduce((values, value, index) => {
       if (index % 2) return values;
-      if (!['--profile', '--output', '--execution-mode', '--family', '--matrix', '--attempts', '--max-episodes', '--max-requests'].includes(value) || Object.hasOwn(values, value)) throw new Error(`unknown or repeated option ${value}`);
+      if (!['--profile', '--output', '--model', '--execution-mode', '--family', '--matrix', '--attempts', '--max-episodes', '--max-requests'].includes(value) || Object.hasOwn(values, value)) throw new Error(`unknown or repeated option ${value}`);
       return { ...values, [value]: rest[index + 1] };
     }, {});
     if (!parsed['--profile'] || !parsed['--output']) throw new Error('profile and output are required');
-    const options = Object.fromEntries(Object.entries({ family: parsed['--family'], matrix: parsed['--matrix'], executionMode: parsed['--execution-mode'], attempts: parsed['--attempts'] === undefined ? undefined : Number(parsed['--attempts']), maxEpisodes: parsed['--max-episodes'] === undefined ? undefined : Number(parsed['--max-episodes']), maxRequests: parsed['--max-requests'] === undefined ? undefined : Number(parsed['--max-requests']) }).filter(([, value]) => value !== undefined));
+    const options = Object.fromEntries(Object.entries({ model: parsed['--model'], family: parsed['--family'], matrix: parsed['--matrix'], executionMode: parsed['--execution-mode'], attempts: parsed['--attempts'] === undefined ? undefined : Number(parsed['--attempts']), maxEpisodes: parsed['--max-episodes'] === undefined ? undefined : Number(parsed['--max-episodes']), maxRequests: parsed['--max-requests'] === undefined ? undefined : Number(parsed['--max-requests']) }).filter(([, value]) => value !== undefined));
     if (command === 'verify' && Object.keys(options).length) throw new Error('verify uses the saved plan and accepts no overrides');
     return this[command](parsed['--profile'], path.resolve(parsed['--output']), options);
   }

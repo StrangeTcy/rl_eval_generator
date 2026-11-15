@@ -3,6 +3,12 @@ name: Epistemic families - reasoning Atria campaign
 on:
   workflow_dispatch:
     inputs:
+      model:
+        description: Scientific model; keep the original selection when resuming
+        type: choice
+        options: [Atria-Dawn, Agents-A1, Atria-Dawn-Preview]
+        default: Atria-Dawn
+        required: true
       execution_mode:
         description: Plan, run reference controls, or call reasoning Atria
         type: choice
@@ -58,6 +64,7 @@ jobs:
     uses: ./.github/workflows/epistemic-families-campaign.yml
     with:
       provider: atria
+      model: ${{ inputs.model }}
       execution_mode: ${{ inputs.execution_mode }}
       family: ${{ inputs.family }}
       matrix: ${{ inputs.matrix }}

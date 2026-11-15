@@ -6,6 +6,9 @@ on:
       provider:
         type: string
         required: true
+      model:
+        type: string
+        default: ''
       execution_mode:
         type: string
         required: true
@@ -44,6 +47,7 @@ jobs:
     timeout-minutes: 300
     env:
       PROVIDER: ${{ inputs.provider }}
+      MODEL: ${{ inputs.model }}
       EXECUTION_MODE: ${{ inputs.execution_mode }}
       FAMILY: ${{ inputs.family }}
       MATRIX_MODE: ${{ inputs.matrix }}
@@ -61,6 +65,7 @@ jobs:
             const env = process.env;
             core.exportVariable('EVIDENCE_DIR', require('node:path').join(env.RUNNER_TEMP, 'epistemic-campaign'));
             if (!['mercury', 'atria'].includes(env.PROVIDER)) throw new Error('Unknown provider');
+            if (env.MODEL && (env.PROVIDER !== 'atria' || !['Atria-Dawn', 'Agents-A1', 'Atria-Dawn-Preview'].includes(env.MODEL))) throw new Error('Unsupported model selection for this provider');
             if (!['plan', 'reference', 'live'].includes(env.EXECUTION_MODE)) throw new Error('Unknown execution mode');
             if (!['configured', 'single', 'pairwise'].includes(env.MATRIX_MODE)) throw new Error('Unknown matrix');
             const limits = [[env.ATTEMPTS, 10], [env.MAX_REQUESTS, 20000], [env.MAX_EPISODES, 1000], [env.RESUME_RUN_ATTEMPT, 10000]];
@@ -159,11 +164,19 @@ jobs:
             campaign_command=plan
             mode_args=()
           fi
+          model_args=()
+          if [ -n "$MODEL" ]; then
+            profile_model=$(node --input-type=module -e 'import { Campaign } from "./tools/epistemic_family_campaign.mjs"; console.log(Campaign.profile(process.env.PROFILE).model);')
+            # A matching legacy profile needs no new CLI flag in its pinned source.
+            if [ "$MODEL" != "$profile_model" ]; then
+              model_args=(--model "$MODEL")
+            fi
+          fi
           node tools/epistemic_family_campaign.mjs "$campaign_command" \
             --profile "$PROFILE" --output "$EVIDENCE_DIR/campaign" \
             --family "$FAMILY" --matrix "$MATRIX_MODE" --attempts "$ATTEMPTS" \
             --max-requests "$MAX_REQUESTS" --max-episodes "$MAX_EPISODES" \
-            "${mode_args[@]}" 2>&1 | tee "$EVIDENCE_DIR/invocation.log"
+            "${mode_args[@]}" "${model_args[@]}" 2>&1 | tee "$EVIDENCE_DIR/invocation.log"
 
       - name: Verify saved requests and replay recorded episodes
         if: always() && steps.execute.outcome != 'skipped'

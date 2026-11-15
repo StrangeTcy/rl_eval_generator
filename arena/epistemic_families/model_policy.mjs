@@ -29,7 +29,8 @@ export class ModelPolicy {
     const endpoint = endpoints[profile.provider];
     if (!endpoint || profile.apiBase !== endpoint.at(0) || profile.wireApi !== endpoint.at(1)) throw new Error('unsupported provider endpoint or wire API');
     if (typeof profile.model !== 'string' || !profile.model.trim()) throw new Error('model is required');
-    if (profile.reasoningEffort !== 'high') throw new Error('campaign reasoning effort must be high');
+    const reasoningEffort = profile.provider === 'atria' && ['Atria-Dawn', 'Agents-A1'].includes(profile.model) ? 'provider-default' : 'high';
+    if (profile.reasoningEffort !== reasoningEffort) throw new Error(`campaign reasoning effort must be ${reasoningEffort}`);
     Contract.integer(profile.maxOutputTokens, 1, 131072, 'output token limit');
     Contract.integer(profile.timeoutMs, 1, 600000, 'request timeout');
     Contract.integer(profile.minIntervalMs, 0, 60000, 'request interval');
@@ -45,7 +46,7 @@ export class ModelPolicy {
     };
     return {
       url: `${profile.apiBase}/responses`,
-      body: { model: profile.model, input: `${MODEL_POLICY_INSTRUCTIONS}\n\nCurrent view:\n${current}`, reasoning: { effort: profile.reasoningEffort }, max_output_tokens: profile.maxOutputTokens, stream: false },
+      body: { model: profile.model, input: `${MODEL_POLICY_INSTRUCTIONS}\n\nCurrent view:\n${current}`, ...(profile.reasoningEffort === 'high' ? { reasoning: { effort: profile.reasoningEffort } } : {}), max_output_tokens: profile.maxOutputTokens, stream: false },
     };
   }
 
