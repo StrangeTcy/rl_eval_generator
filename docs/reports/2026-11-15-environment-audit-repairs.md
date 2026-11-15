@@ -56,8 +56,39 @@ Agent and judge Dockerfiles use matching Torch 2.5.1 / Torchvision 0.20.1 CPU
 packages. `run_eval.sh` records both built-image identities, resolved package
 versions, and package-manifest hashes under `runtime_manifest/`.
 
-Validation status: awaiting the hosted checks for this revision. The report
-will be updated with their result before this repair work is declared complete.
+All five targeted validation jobs passed at
+`bfd1350b423aedd61f2c3b770c068508aa32b5df` in
+[run 43688496933](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/43688496933):
+
+| Check | Verified coverage |
+|---|---|
+| Generation | 270 generated variants across 37 repaired environments; Python compilation and public-boundary/import checks |
+| Category | 153 baseline/reference/negative controls, zero failed expectations; 153 rendered profiles |
+| ML/recurrent | 36 mathematical and halting controls, including equivalent active-row halting and wrong RoPE/MoCo constructions |
+| Trajectory | 72 controls through the actual patch-validation and scoring path |
+| Substrate/epistemic | 162 substrate controls, 22 additional language/shortcut probes, 240 deception cases, 24 equivalence pairs, 8 signaling cases, and 4 existing tests |
+
+These are 423 primary behavioral controls plus the additional language and
+epistemic checks. They are not model episodes. The ML probes isolate mathematics
+with initialized MoCo checkpoints; they do not establish trained classifier
+accuracy. Full BatchNorm/Glyph training and Docker image builds were not part
+of these passing control jobs. Resolved image manifests will be produced when
+the generated Docker launcher is run.
+
+Repository-wide CI remains red. Standard CI at
+[run 43688496954](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/43688496954)
+has nine failing tests, all also failing in the unchanged base revision's
+[run 42894396764](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/42894396764).
+They concern legacy campaign plan counts, request ceilings/API configuration,
+and two recursive-environment tests outside this repair set. Three base failures
+were resolved: registry generation, latent metadata, and the deception privacy
+assertion. No new standard-CI failure remains.
+
+The regression job with Torch installed has one additional failure: the existing
+shortcut availability test passes an incomplete fixture without a `patch` field.
+Both that test and `tools/shortcut_gate.py` are byte-identical to the base Git
+blobs; this path is reached when Torch is available. It is recorded separately
+from the repaired judge controls, not hidden as a passing suite.
 
 The first hosted control run, 43684121777, passed the ML, trajectory, and
 substrate/epistemic suites. It exposed missing deception/signaling generation
