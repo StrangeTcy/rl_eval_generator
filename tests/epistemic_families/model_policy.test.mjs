@@ -32,6 +32,21 @@ test('Atria uses the token-plan Responses endpoint and only the current view', (
   assert.equal(Object.hasOwn(request.body, 'previous_response_id'), false);
 });
 
+test('current scientific models use provider-default reasoning without unsupported request controls', () => {
+  const view = { family: 'memory_inquiry', phase: 'recall', retained: [], actionSchema: {} };
+  ['Atria-Dawn', 'Agents-A1'].forEach(model => {
+    const profile = { ...Fixture.profile('atria'), model, reasoningEffort: 'provider-default' };
+    const policy = new ModelPolicy(profile, { apiKey: 'test-only' });
+    const request = ModelPolicy.request(profile, view);
+    assert.equal(request.url, 'https://discovery-api.intern-ai.org.cn/v1/responses');
+    assert.equal(request.body.model, model);
+    assert.equal(Object.hasOwn(request.body, 'reasoning'), false);
+    assert.equal(Object.hasOwn(request.body, 'reasoning_effort'), false);
+    assert.equal(policy.identity.reasoningEffort, 'provider-default');
+    assert.throws(() => ModelPolicy.request({ ...profile, reasoningEffort: 'high' }, view), /provider-default/);
+  });
+});
+
 test('unapproved endpoint and cross-wired provider profiles fail before transport', () => {
   assert.throws(() => new ModelPolicy({ ...Fixture.profile('atria'), apiBase: 'https://api.atria-asi.ai/v1' }, { apiKey: 'secret' }), /unsupported/);
   assert.throws(() => new ModelPolicy({ ...Fixture.profile(), wireApi: 'responses' }, { apiKey: 'secret' }), /unsupported/);

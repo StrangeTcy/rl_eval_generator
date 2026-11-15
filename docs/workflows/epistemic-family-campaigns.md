@@ -6,7 +6,7 @@ families using the providers from the recent campaigns:
 | Workflow | Model | Repository secret |
 |---|---|---|
 | [Mercury](../../.github/workflows/epistemic-mercury-campaign.yml) | `mercury-3`, high reasoning effort, Chat Completions, temperature 1 | `INCEPTION_API_KEY` |
-| [Reasoning Atria](../../.github/workflows/epistemic-reasoning-atria-campaign.yml) | `Atria-Dawn-Preview`, high reasoning effort, Responses | `ATRIA_API_KEY` |
+| [Reasoning Atria](../../.github/workflows/epistemic-reasoning-atria-campaign.yml) | `Atria-Dawn` (default) or `Agents-A1`, provider-default reasoning, Responses | `ATRIA_API_KEY` |
 
 The Atria profile uses `https://discovery-api.intern-ai.org.cn/v1`, matching
 the reasoning Atria pairwise campaign. Mercury uses
@@ -131,3 +131,6 @@ For live execution, supply the profile's API key through the environment and use
 the same plan options to continue a checkpoint. Local execution has the same
 ledger and compatibility checks; GitHub's artifact freshness and concurrency
 checks apply only in Actions.
+
+
+The Atria workflow accepts a model selection. Keep that selection unchanged when resuming; a different model requires a fresh campaign. Legacy Atria-Dawn-Preview remains selectable for its historical runs. Current Discovery models omit reasoning and reasoning.effort, as required by the [Responses API documentation](https://discovery.intern-ai.org.cn/token-plan/home?tabIndex=3&dockey=04-responses.md); their saved reasoning identity is provider-default. The Research Models Free catalogue lists these current models, but a successful call still depends on the account quota. An Ink Point price alone does not establish a monetary charge.
