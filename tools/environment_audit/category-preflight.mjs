@@ -59,7 +59,7 @@ function routeReference(source) {
 function schemaReference(source) {
   return replaceOnce(source,
     '        cursor.execute("INSERT INTO addresses (id, transaction_id) VALUES (?, ?);", (a_id, t_id))',
-    '        cursor.execute("PRAGMA defer_foreign_keys = ON;")\n        cursor.execute("INSERT INTO addresses (id, transaction_id) VALUES (?, ?);", (a_id, t_id))');
+    '        cursor.execute("BEGIN;")\n        cursor.execute("PRAGMA defer_foreign_keys = ON;")\n        cursor.execute("INSERT INTO addresses (id, transaction_id) VALUES (?, ?);", (a_id, t_id))');
 }
 const definitions = [
   {
@@ -94,6 +94,7 @@ const definitions = [
   },
   {
     path: 'tensor_functor', file: 'model.py', negativeLabel: 'identity omits the learned channel projection',
+    baselinePass: profile => profile.symptom_mask !== 'hard',
     reference: s => replaceOnce(s, '        x_sliced = %%RIGID_SLICE%%', '        return self.proj(x.movedim(1, -1)).movedim(-1, 1)\n        x_sliced = %%RIGID_SLICE%%'),
     negative: s => replaceOnce(s, '        x_sliced = %%RIGID_SLICE%%', '        return x\n        x_sliced = %%RIGID_SLICE%%'),
   },
@@ -224,7 +225,8 @@ for (const definition of definitions) {
       const runner = probeBody(files['judge.py'], definition.path);
       const entry = `from pathlib import Path\nimport runpy\nimport random\nimport torch\ntorch.set_num_threads(1)\ntorch.manual_seed(20261115)\nrandom.seed(20261115)\nworkdir = ${JSON.stringify(caseFolder.replaceAll('\\', '/'))}\nscript = f"""${runner}\nimport json\nprint("AUDIT_CHECKS " + json.dumps(checks, sort_keys=1))\n"""\nPath("_eval_runner.py").write_text(script, encoding="utf-8")\nrunpy.run_path("_eval_runner.py", run_name="__main__")\n`;
       await writeFile(join(caseFolder, '_case.py'), entry);
-      runtimeCases.push({ environment: definition.path, profile, variant, negativeLabel: definition.negativeLabel, folder: caseFolder });
+      const expectedPass = variant === 'reference' || (variant === 'baseline' && (definition.baselinePass?.(profile) ?? false));
+      runtimeCases.push({ environment: definition.path, profile, variant, expectedPass, negativeLabel: definition.negativeLabel, folder: caseFolder });
     }
   }
   if (byNaming.size) controlComparisons.push({ environment: definition.path, matchedNamingGroups: byNaming.size });
@@ -255,7 +257,7 @@ if (values['render-only']) {
         const outcomes = Object.values(checks);
         if (!outcomes.length || outcomes.some(value => value !== true && value !== false && value !== 0 && value !== 1)) throw new Error('Missing or unrecognized check outcomes');
         const allPass = outcomes.every(value => value === true || value === 1);
-        if (item.variant === 'reference' ? !allPass : allPass) throw new Error(item.variant === 'reference' ? 'Reference rejected by actual private probe' : `${item.variant} unexpectedly passed every private check`);
+        if (allPass !== item.expectedPass) throw new Error(item.expectedPass ? `${item.variant} rejected by actual private probe` : `${item.variant} unexpectedly passed every private check`);
       } catch (failure) { error = String(failure); }
       results.push({ ...item, checks, error, verified: !error });
       console.log(`${error ? 'FAIL' : 'PASS'} ${item.environment} ${JSON.stringify(item.profile)} ${item.variant}${error ? `: ${error}` : ''}`);

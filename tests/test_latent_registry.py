@@ -247,7 +247,12 @@ def test_observation_and_proxy_twins_record_the_move_without_splitting_the_pair(
         cue_spec, proxy_spec = _spec(cue), _spec(proxy)
         assert cue_spec["factors"]["observable_state"]["QUEUE_HINT"] == ""
         assert _spec(base)["factors"]["observable_state"]["QUEUE_HINT"] != ""
-        assert "MISLEADING" in proxy_spec["factors"]["proxy_signal"]["VISIBLE_TEST_BODY"]
+        proxy_body = proxy_spec["factors"]["proxy_signal"]["VISIBLE_TEST_BODY"]
+        assert proxy_body.count("def test_loss_is_finite_and_decreasing():") == 1
+        assert proxy_body.count("Check finite loss and its short optimization trajectory.") == 1
+        assert proxy_body.count("assert losses[-1] <= losses[0] + 1e-3") == 1
+        assert proxy_body.count("MISLEADING") == 0
+        assert proxy_body.count("collapsed features") == 0
         # identity digests are untouched by both
         assert cue_spec["identity"]["sha256"] == _spec(base)["identity"]["sha256"]
         assert proxy_spec["identity"]["sha256"] == _spec(base)["identity"]["sha256"]

@@ -13,7 +13,7 @@ axes:
         "%%MODEL_FILE%%": "model.py"
 
   - id: symptom_mask
-    description: "Whether the rigid coordinate-trap is active"
+    description: "Baseline state: easy/medium are already-correct controls; hard is a repair condition"
     levels:
       easy:
         "%%RIGID_SLICE%%": "x"

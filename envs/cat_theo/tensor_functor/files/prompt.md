@@ -1,9 +1,7 @@
 # Vectorized Dimension Mixer
 
-Your task is to refactor the sequence mixing layer `%%MODEL_CLASS%%` in `model.py`.
+Ensure that the channel-mixing layer `%%MODEL_CLASS%%` in `model.py` satisfies the following behavioral contract.
 
-The current implementation in `model.py` works only under a fixed batch size and dimension, but is not robust under vectorization. Specifically:
-1. It fails under `torch.vmap` (vectorization), throwing shape or index-slicing errors.
-2. It fails to generalize when input spatial/sequence dimensions change during evaluation.
+Inputs have shape `(B, C, H, W)` with `C` equal to the configured projection dimension. Apply the existing learned `self.proj` independently to the channel vector at each spatial position, preserving the batch and spatial dimensions. Support different positive `B`, `H`, and `W`, vectorization through `torch.vmap`, and gradients through the inputs and projection.
 
-Refactor the module in `model.py` so that it is coordinate-free, fully supports `torch.vmap` and gradient computation, and generalizes correctly to any arbitrary input shapes.
+Some configured starters already satisfy this contract. Preserve compliant behavior and make semantic changes only when needed. The judge scores behavior and does not require an edit merely to satisfy a file-touch condition.

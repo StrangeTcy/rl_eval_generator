@@ -59,6 +59,13 @@ versions, and package-manifest hashes under `runtime_manifest/`.
 Validation status: awaiting the hosted checks for this revision. The report
 will be updated with their result before this repair work is declared complete.
 
+The first hosted control run, 43684121777, passed the ML, trajectory, and
+substrate/epistemic suites. It exposed missing deception/signaling generation
+metadata, a schema reference transaction-order error, and already-correct
+tensor starters at easy/medium. The metadata and reference were repaired;
+the already-correct starters are now explicit controls with no file-touch gate.
+Their hard fixed-slice repair condition remains in place.
+
 ## Interpretation of historical results
 
 Keep prior campaigns unchanged. Earlier failures under the mismatched GNN,

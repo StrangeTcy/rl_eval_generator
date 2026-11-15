@@ -44,3 +44,26 @@ layout:
   judge/source_validator.py: shared/source_validator.py
   judge/Dockerfile: Dockerfile.judge
   run_eval.sh: shared/run_eval.sh
+
+# Provisional generation metadata. The complete baked specification is retained
+# conservatively: this does not claim that presentation variants share identity.
+# TASK_MD is the renderer's public projection; the full case remains judge-side.
+latent_factors:
+  schema_version: 1
+  declared_by: scaffold_unreviewed
+  factors:
+    task_state:
+      source: instance_spec
+      identity_keys: []
+    causal_mechanism:
+      unavailable: This control applies a prescribed policy table; it does not derive a signaling equilibrium or identify a causal model.
+    observable_state:
+      placeholders: [TASK_MD]
+    proxy_signal:
+      unavailable: The disclosed policy table is the intended task input, not a separately varied proxy signal.
+    evaluator_state:
+      scoring: true
+      constants: true
+      judge_files: true
+    agent_belief:
+      unavailable: The generated case does not contain an observed or inferred model belief state.

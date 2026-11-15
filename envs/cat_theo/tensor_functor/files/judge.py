@@ -15,7 +15,6 @@ PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
 def main() -> None:
     result = base_result(training_completed=False, model_saved=False, accuracy_bin="0%")
     patched_dir = validate_submission(result)
-    require_changed_files(result, {"model.py"})
     workdir, original_files = make_workdir(patched_dir)
 
     eval_script = os.path.join(workdir, "_eval_runner.py")
