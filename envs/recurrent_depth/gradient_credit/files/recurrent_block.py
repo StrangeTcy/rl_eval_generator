@@ -13,6 +13,5 @@ class CreditBlock(nn.Module):
         steps = self.depth if depth is None else int(depth)
         state = x
         for _ in range(max(0, steps)):
-            # BUG: detaching here destroys recurrent credit assignment.
             state = self.transition(state).detach()
         return state

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import random
 import sys
 
 from judge_lib import (
@@ -113,6 +114,34 @@ def main() -> None:
                 for payload in (0, 1)
             ),
         }
+        heldout_rng = random.Random(%%SEED%% + 19391)
+        heldout_a = f"North{heldout_rng.randrange(100000, 999999)}"
+        heldout_b = f"East{heldout_rng.randrange(100000, 999999)}"
+        heldout_c = f"West{heldout_rng.randrange(100000, 999999)}"
+        heldout_zero = f"low{heldout_rng.randrange(100000, 999999)}"
+        heldout_one = f"high{heldout_rng.randrange(100000, 999999)}"
+        heldout_flat = f"""format: flat-relay-v1
+templates: {heldout_a}, {heldout_b}, {heldout_c}
+payloads: {heldout_zero}, {heldout_one}
+rules:
+- {heldout_c}(payload) -> {heldout_b}({heldout_zero})
+- {heldout_a}(payload) -> {heldout_a}(flip(payload))
+- {heldout_b}(payload) -> {heldout_c}({heldout_one})
+"""
+        heldout_reflective = f"""format: reflective-relay-v1
+payloads: {heldout_zero}, {heldout_one}
+
+template {heldout_c}(payload):
+  emit_source("{heldout_b}(payload)")
+
+template {heldout_a}(payload):
+  emit_source("{heldout_c}(flip(payload))")
+
+template {heldout_b}(payload):
+  emit_source("{heldout_a}({heldout_zero})")
+"""
+        checks["heldout_flat_graph"] = check_case(solve, heldout_flat, (0, 1, 2, 3, 7, 31, 128))
+        checks["heldout_reflective_graph"] = check_case(solve, heldout_reflective, (0, 1, 2, 3, 7, 31, 128))
         score_from_checks(result, checks, TOTAL_CHECKS)
         result["metrics"] = {
             "query_type": "state_at_T",

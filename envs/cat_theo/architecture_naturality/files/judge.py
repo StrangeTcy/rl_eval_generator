@@ -53,6 +53,9 @@ try:
     alpha_then_h = tfm(x_large)[:, :4, :]
     
     checks["naturality_commutes"] = bool(torch.allclose(h_then_alpha, alpha_then_h, atol=1e-5))
+    checks["naturality_commutes"] *= torch.isclose(
+        tfm(x_large), tfm.scale * x_large, atol=1e-5, rtol=1e-5
+    ).all().to(torch.int64).item()
 except Exception as e:
     checks["naturality_commutes"] = False
 

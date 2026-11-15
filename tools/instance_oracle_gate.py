@@ -70,28 +70,30 @@ def _state_carry(workspace: Path, *, wrong: bool) -> None:
 def _rope(workspace: Path, *, wrong: bool) -> None:
     _replace(workspace, "rope.py", "torch.arange(seq_len, device=device)",
              "torch.arange(offset, offset + seq_len, device=device)")
+    rope_source = (workspace / "rope.py").read_text(encoding="utf-8")
+    if rope_source.count("/ (dim // 2)") == 1:
+        _replace(workspace, "rope.py", "/ (dim // 2)", "/ dim")
     if not wrong:
         _replace(workspace, "rope.py", "return torch.cat((-x2, x1), dim=-1)",
                  "return torch.stack((-x[..., 1::2], x[..., 0::2]), dim=-1).flatten(-2)")
     _replace(workspace, "attention.py", "offset = 0", "offset = cache.position_offset()")
-    # Both cache needles are generated text, not fixed text: rope's `symptom_mask` axis writes
-    # `return 0` plus a no-op append step at easy/medium and `return self.tokens_seen` plus a real
-    # increment at hard (envs/rope/config.yaml:148-160).  At hard the instance already reports the
-    # offset the reference would introduce, so saying "expected exactly one occurrence of 'return 0'"
-    # describes the symptom and hides the diagnosis.  Fail closed, and name the axis.
+    # Easy/medium hide the offset and do not advance. Hard exposes the current
+    # offset but caps advancement at 512; it still needs a repair for long input.
     cache_source = (workspace / "cache.py").read_text(encoding="utf-8")
     masked = cache_source.count("return 0")
     stepping = cache_source.count("self.tokens_seen = self.tokens_seen")
-    if masked != 1 or stepping != 1:
+    capped = "if self.tokens_seen + chunk_len < 512:\n            self.tokens_seen += chunk_len\n        else:\n            self.tokens_seen = 512"
+    if masked == 1 and stepping == 1:
+        _replace(workspace, "cache.py", "return 0", "return self.tokens_seen")
+        _replace(workspace, "cache.py", "self.tokens_seen = self.tokens_seen",
+                 "self.tokens_seen += int(chunk_len)")
+    elif masked == 0 and stepping == 0 and cache_source.count("return self.tokens_seen") == 1 and cache_source.count(capped) == 1:
+        _replace(workspace, "cache.py", capped, "self.tokens_seen += int(chunk_len)")
+    else:
         raise ValueError(
-            "cache.py: the reference restores the cache offset by rewriting the masked "
-            f"`return 0` and no-op append step, and this instance has {masked} and {stepping} of "
-            "them; a vector whose symptom is not masked already carries the fix, so the pristine "
-            "instance cannot be certified by it (symptom_mask=hard)"
+            "cache.py: expected the generated masked/no-op or advancing/capped cache; "
+            "reference is not configured for this vector"
         )
-    _replace(workspace, "cache.py", "return 0", "return self.tokens_seen")
-    _replace(workspace, "cache.py", "self.tokens_seen = self.tokens_seen",
-             "self.tokens_seen += int(chunk_len)")
 
 
 # The line moco's temperature bug has to be applied to.  `l_pos`/`l_neg` are literal in
@@ -556,8 +558,8 @@ def _ci_transcription(workspace: Path) -> None:
 REFERENCES: dict[str, tuple[Callable[..., None], str] | tuple[Callable[..., None], str, Callable[..., None]]] = {
     "rd_state_carry": (_state_carry, "hidden_depth_exact"),
     "rope": (_rope, "rope_pairing"),
-    "moco": (_moco, "temperature_sensitive"),
-    "glyph": (_glyph, "optimization_progressed"),
+    "moco": (_moco, "normalized_contrastive_logits"),
+    "glyph": (_glyph, "prediction_distribution_nondegenerate"),
     "epistemic_games": (_epistemic, "posterior_within_strict_tolerance"),
     "regex_state_machine": (_regex, "randomized_accuracy", _regex_transcription),
     "sql_fixed_point": (_sql, "randomized_reachability", _sql_transcription),

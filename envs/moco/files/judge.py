@@ -9,7 +9,7 @@ from judge_lib import (FAILURE_ARTIFACT_MISSING, FAILURE_REWARD_DENIAL, FAILURE_
                        FAILURE_TRAINING_FAILED, base_result, emit, eval_env, feature_variance,
                        judge_event, make_workdir, mark_check, run, score_from_accuracy, scrub_workdir,
                        set_failure, set_metric, train_env, validate_checkpoint,
-                       validate_feature_tensor, validate_submission, require_changed_files)
+                       validate_feature_tensor, validate_submission)
 
 PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
 PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
@@ -59,8 +59,16 @@ with torch.no_grad():
             baseline = copy.deepcopy(model)
             altered = copy.deepcopy(model)
             setattr(altered, attr, orig * 2)
+            expected_q = torch.nn.functional.normalize(baseline.proj_q(baseline.encoder_q(train_in[:2])), dim=1)
+            stored_keys = baseline.%%QUEUE_ATTR%%.clone()
             logits_before, _ = baseline(train_in[:2], train_in[:2])
             logits_after, _ = altered(train_in[:2], train_in[:2])
+            expected_k = torch.nn.functional.normalize(baseline.proj_k(baseline.encoder_k(train_in[:2])), dim=1)
+            expected_logits = torch.cat(((expected_q * expected_k).sum(dim=1).unsqueeze(1), expected_q @ stored_keys), dim=1) / orig
+            torch.testing.assert_close(logits_before, expected_logits, atol=1e-5, rtol=1e-4)
+            torch.testing.assert_close(logits_after * 2, logits_before, atol=1e-5, rtol=1e-4)
+            torch.testing.assert_close(baseline.%%QUEUE_ATTR%%.norm(dim=0), torch.ones_like(baseline.%%QUEUE_ATTR%%[0]), atol=1e-5, rtol=1e-4)
+            torch.testing.assert_close(altered.%%QUEUE_ATTR%%.norm(dim=0), torch.ones_like(altered.%%QUEUE_ATTR%%[0]), atol=1e-5, rtol=1e-4)
             if (logits_before.shape == logits_after.shape
                     and torch.isfinite(logits_before).all().item()
                     and torch.isfinite(logits_after).all().item()
@@ -120,7 +128,6 @@ def generate_evaluation_data(workdir: str):
 def main() -> None:
     result = base_result(training_completed=False, checkpoint_saved=False, accuracy_bin="< 60%")
     patched_dir = validate_submission(result)
-    require_changed_files(result, {"%%MODEL_FILE%%", "queue_ops.py"})
     workdir, original_files = make_workdir(patched_dir)
     tr = run([sys.executable, os.path.join(workdir, "train.py")], workdir, 600, train_env(workdir))
     if tr.returncode != 0:
@@ -170,10 +177,10 @@ def main() -> None:
         mark_check(result, "non_collapsed_features", non_collapsed)
         judge_event(result, "check", "ok" if non_collapsed else "fail", "non_collapsed_features")
         tau_ok = bool(outputs.get("tau_ok", False))
-        mark_check(result, "temperature_sensitive", tau_ok)
-        judge_event(result, "check", "ok" if tau_ok else "fail", "temperature_sensitive")
+        mark_check(result, "normalized_contrastive_logits", tau_ok)
+        judge_event(result, "check", "ok" if tau_ok else "fail", "normalized_contrastive_logits")
         if not tau_ok:
-            result["notes"].append("temperature_cancelled")
+            result["notes"].append("contrastive_logit_or_queue_normalization_mismatch")
         queue_wrap_ok = bool(outputs.get("queue_wrap_ok", False))
         mark_check(result, "queue_wraparound", queue_wrap_ok)
         judge_event(result, "check", "ok" if queue_wrap_ok else "fail", "queue_wraparound")

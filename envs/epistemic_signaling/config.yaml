@@ -1,4 +1,4 @@
-# Strategic signaling/deployment slice.  It shares the explicit actor,
+# Signaling policy-reading control. It shares the explicit actor,
 # information, incentive, and action representation with epistemic_deception.
 renderer: renderer.py
 axes:

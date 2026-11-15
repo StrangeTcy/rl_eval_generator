@@ -38,7 +38,7 @@ from tools.instance_oracle_gate import (  # noqa: E402
 
 # What envs/glyph/config.yaml substitutes for %%OPT_LINE%%, per axis value.
 AXIS_LINES = {
-    "easy": "optimizer = optim.SGD(model.parameters(), lr=1e-5)  # extremely slow",
+    "easy": "optimizer = optim.SGD(model.parameters(), lr=1e-5)",
     "medium": "optimizer = optim.SGD(model.parameters(), lr=1e-4)",
     "hard": "optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.5)",
 }
@@ -209,12 +209,17 @@ def test_an_ambiguous_moco_target_is_refused_not_guessed(tmp_path: Path) -> None
         _moco(workspace, wrong=False)
 
 
-def test_the_rope_reference_refuses_a_vector_that_is_already_fixed(tmp_path: Path) -> None:
-    """At symptom_mask=hard the cache offset is not masked, so rope's reference would be applying
-    its own fix to a file that already carries it. It fails closed - and now says which axis."""
-    workspace, _ = _generate(tmp_path, "rope", ROPE_EASY[:-1] + ["hard"])
-    with pytest.raises(ValueError, match="cannot be certified"):
-        _rope(workspace, wrong=False)
+def test_the_rope_reference_repairs_hard_frequency_and_capped_cache(tmp_path: Path) -> None:
+    """Hard cache advancement stops at 512 and hard frequencies use the wrong denominator."""
+    workspace, _ = _generate(tmp_path, "rope", ("hard",) * 8)
+    _rope(workspace, wrong=0)
+    cache = (workspace / "cache.py").read_text(encoding="utf-8")
+    rope = (workspace / "rope.py").read_text(encoding="utf-8")
+    assert cache.count("self.tokens_seen += int(chunk_len)") == 1
+    assert cache.count("self.tokens_seen = 512") == 0
+    assert rope.count("/ (dim // 2)") == 0
+    ast.parse(cache)
+    ast.parse(rope)
 
 
 def test_the_rope_reference_still_reaches_a_masked_vector(tmp_path: Path) -> None:

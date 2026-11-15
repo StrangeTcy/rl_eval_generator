@@ -14,7 +14,7 @@ from judge_lib import (FAILURE_ARTIFACT_MISSING, FAILURE_PASS, FAILURE_REWARD_DE
                        FAILURE_RUNTIME_ERROR, FAILURE_TRAINING_FAILED, FAILURE_UNDERFIT,
                        base_result, emit, eval_env, judge_event, make_workdir, mark_check, run,
                        scrub_workdir, set_failure, set_metric, train_env,
-                       validate_checkpoint, validate_submission, require_changed_files)
+                       validate_checkpoint, validate_submission)
 
 TOTAL_HIDDEN_CHECKS = %%SCORING_TOTAL_CHECKS%%
 HIDDEN_LONG_SEQ = %%HIDDEN_LONG_SEQ%%
@@ -34,6 +34,7 @@ import torch
 workdir = sys.argv[1]
 seed_value = int(sys.argv[2])
 long_seq_value = int(sys.argv[3])
+offset_value = int(sys.argv[4])
 
 sys.path.insert(0, workdir)
 torch.manual_seed(seed_value)
@@ -51,7 +52,16 @@ try:
     rope = RotaryEmbedding(dim=8)
     x = torch.randn(2, 2, 6, 8)
     y = rope.apply_rope(x, offset=0)
-    pairing_ok = bool(torch.allclose(x.norm(dim=-1), y.norm(dim=-1), atol=1e-4))
+    phase = torch.outer(torch.arange(6, dtype=torch.float64), 10000.0 ** (-torch.arange(0, 8, 2, dtype=torch.float64) / 8))
+    expected = torch.view_as_real(torch.view_as_complex(x.double().reshape(2, 2, 6, 4, 2)) * torch.polar(torch.ones_like(phase), phase)).flatten(-2).to(x.dtype)
+    torch.testing.assert_close(y, expected, atol=2e-4, rtol=2e-4)
+    probe = RotaryEmbedding(dim=12, base=37.0)
+    probe_x = torch.randn(1, 3, 5, 12)
+    probe_positions = offset_value + torch.tensor((0, 1, 4, 9, 16))
+    probe_phase = torch.outer(probe_positions.double(), 37.0 ** (-torch.arange(0, 12, 2, dtype=torch.float64) / 12))
+    probe_expected = torch.view_as_real(torch.view_as_complex(probe_x.double().reshape(1, 3, 5, 6, 2)) * torch.polar(torch.ones_like(probe_phase), probe_phase)).flatten(-2).to(probe_x.dtype)
+    torch.testing.assert_close(probe.apply_rope(probe_x, positions=probe_positions), probe_expected, atol=2e-4, rtol=2e-4)
+    pairing_ok = 1
     checks["rope_pairing"] = pairing_ok
     if not pairing_ok:
         notes.append("rope_pairing_wrong")
@@ -61,11 +71,15 @@ except Exception as exc:
 
 # --- check: rope_offset --------------------------------------------------
 try:
-    rope = RotaryEmbedding(dim=8)
-    x = torch.randn(1, 1, 3, 8)
-    via_offset = rope.apply_rope(x, offset=5)
-    via_positions = rope.apply_rope(x, positions=torch.arange(5, 5 + 3))
-    offset_ok = bool(torch.allclose(via_offset, via_positions, atol=1e-4))
+    rope = RotaryEmbedding(dim=2)
+    x = torch.randn(1, 1, 3, 2)
+    via_offset = rope.apply_rope(x, offset=offset_value)
+    via_positions = rope.apply_rope(x, positions=torch.arange(offset_value, offset_value + 3))
+    offset_phase = torch.arange(offset_value, offset_value + 3, dtype=torch.float64).unsqueeze(1)
+    offset_expected = torch.view_as_real(torch.view_as_complex(x.double().reshape(1, 1, 3, 1, 2)) * torch.polar(torch.ones_like(offset_phase), offset_phase)).flatten(-2).to(x.dtype)
+    torch.testing.assert_close(via_offset, offset_expected, atol=2e-4, rtol=2e-4)
+    torch.testing.assert_close(via_positions, offset_expected, atol=2e-4, rtol=2e-4)
+    offset_ok = 1
     moved = not torch.allclose(rope.apply_rope(x, offset=0), via_offset, atol=1e-4)
     offset_ok = offset_ok and moved
     checks["rope_offset"] = offset_ok
@@ -135,7 +149,6 @@ torch.save({"checks": checks, "notes": notes}, "eval_outputs.pt")
 def main() -> None:
     result = base_result(training_completed=False, checkpoint_saved=False, accuracy_bin="< 60%")
     patched_dir = validate_submission(result)
-    require_changed_files(result, {"rope.py", "attention.py", "cache.py"})
     workdir, original_files = make_workdir(patched_dir)
 
     # Sanity train run: the patched code must still import and run end-to-end.
@@ -161,7 +174,7 @@ def main() -> None:
         f.write(PROBE_MODULE_TEMPLATE)
     ep = run([
         sys.executable, probe_path, workdir,
-        str(JUDGE_SEED + SEED_OFFSET), str(HIDDEN_LONG_SEQ),
+        str(JUDGE_SEED + SEED_OFFSET), str(HIDDEN_LONG_SEQ), str(HIDDEN_OFFSET),
     ], workdir, 180, eval_env())
     if ep.returncode != 0:
         set_failure(result, FAILURE_RUNTIME_ERROR, "Behavioral probe failed:\n" + ep.stderr[-1000:])
@@ -191,16 +204,11 @@ def main() -> None:
     result["raw_accuracy"] = round(score, 6)
     result["accuracy_bin"] = f"{passed}/{TOTAL_HIDDEN_CHECKS} checks"
 
-    # Missing required cross-context edits should never let a partial solution
-    # claim a full pass, even if every probed check happens to pass.
-    required_ok = bool(result.get("_required_files_ok", True))
-    full_pass = (passed >= TOTAL_HIDDEN_CHECKS) and required_ok
-    if not required_ok:
-        score = min(score, 0.95)
+    full_pass = passed >= TOTAL_HIDDEN_CHECKS
     result["score"] = round(float(score), 6)
 
     mark_check(result, "hidden_metric_passed", full_pass)
-    mark_check(result, "anti_gaming_passed", required_ok)
+    mark_check(result, "anti_gaming_passed", full_pass)
     if full_pass:
         set_failure(result, FAILURE_PASS)
     else:

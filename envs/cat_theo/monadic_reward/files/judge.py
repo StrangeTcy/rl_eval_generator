@@ -47,7 +47,7 @@ try:
     m = verifier.compute("(42, 100)")
     val, state = m.run_fn([])
     
-    state_ok = bool(state == ["processed 42"])
+    state_ok = tuple(state) == ("processed 42",)
     
     global_untouched = True
     if hasattr(agent_code, "GLOBAL_LOG") and len(agent_code.GLOBAL_LOG) > 0:

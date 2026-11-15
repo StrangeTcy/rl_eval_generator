@@ -13,14 +13,14 @@ axes:
         "%%MODEL_FILE%%": "parser.py"
 
   - id: symptom_mask
-    description: "Whether automatic differentiation gradient checks are strict"
+    description: "Absolute and relative tolerance for value and derivative comparisons"
     levels:
       easy:
-        "%%TOLERANCE%%": "1e-5"
+        "%%TOLERANCE%%": "1e-3"
       medium:
         "%%TOLERANCE%%": "1e-4"
       hard:
-        "%%TOLERANCE%%": "1e-4"
+        "%%TOLERANCE%%": "1e-5"
 
 scoring:
   mode: continuous_accuracy
@@ -63,8 +63,7 @@ latent_factors:
   declared_by: scaffold_unreviewed
   factors:
     task_state:
-      # TOLERANCE <- default:task_state
-      placeholders: [TOLERANCE]
+      unavailable: fixed soft-min construction; tolerance varies only the evaluator
     causal_mechanism:
       unavailable: fixed hand-authored template code; a scaffold cannot derive a generative mechanism,
         and recording one it did not derive would be a causal claim nobody made (item 4 honesty
@@ -76,6 +75,7 @@ latent_factors:
     proxy_signal:
       unavailable: scaffold rules mapped no placeholder to proxy_signal
     evaluator_state:
+      placeholders: [TOLERANCE]
       scoring: true
       constants: true
       judge_files: true

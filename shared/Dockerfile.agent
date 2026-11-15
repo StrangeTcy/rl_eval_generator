@@ -1,8 +1,9 @@
 FROM python:3.11-slim
 
 RUN pip install --no-cache-dir \
-        torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+        torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir pillow pytest \
+    && pip freeze > /runtime-packages.txt \
     && apt-get update \
     && apt-get install -y --no-install-recommends diffutils \
     && rm -rf /var/lib/apt/lists/* \

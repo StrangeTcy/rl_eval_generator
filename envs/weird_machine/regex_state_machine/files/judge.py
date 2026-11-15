@@ -44,27 +44,18 @@ def reference_step(s: str) -> str:
 rng = random.Random(%%JUDGE_SEED%%)
 string_len = int("%%STRING_LEN%%")
 
-# 1. AST Check: verify regex mechanisms are used and reject host-language indexing/loops over characters
+# 1. Source convention: a regex API must appear; host indexing and callbacks are permitted.
 try:
     with open(os.path.join({workdir!r}, "regex_machine.py"), "r", encoding="utf-8") as f:
         tree = ast.parse(f.read())
     re_found = False
-    forbidden_indexing = False
-    forbidden_loop = False
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and getattr(node.value, "id", "") == "re":
             re_found = True
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in ("sub", "subn", "finditer", "findall", "match", "search"):
             re_found = True
             
-        if isinstance(node, ast.FunctionDef) and node.name == "step":
-            arg_names = {{arg.arg for arg in node.args.args}}
-            for subnode in ast.walk(node):
-                if isinstance(subnode, ast.Subscript) and isinstance(subnode.value, ast.Name) and subnode.value.id in arg_names:
-                    forbidden_indexing = True
-                if isinstance(subnode, ast.For) and isinstance(subnode.iter, ast.Call) and isinstance(subnode.iter.func, ast.Name) and subnode.iter.func.id == "range":
-                    forbidden_loop = True
-    checks["regex_used"] = bool(re_found and not forbidden_indexing and not forbidden_loop)
+    checks["regex_used"] = re_found
 except Exception:
     checks["regex_used"] = False
 

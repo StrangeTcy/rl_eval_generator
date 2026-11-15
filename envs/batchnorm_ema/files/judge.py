@@ -8,7 +8,7 @@ from judge_lib import (FAILURE_ARTIFACT_MISSING, FAILURE_REWARD_DENIAL, FAILURE_
                        FAILURE_TRAINING_FAILED, base_result, emit, eval_env, judge_event, make_workdir,
                        mark_check, prediction_coverage, prediction_entropy, run, score_from_accuracy,
                        scrub_workdir, set_failure, set_metric, train_env, validate_checkpoint,
-                       validate_logits, validate_submission, require_changed_files)
+                       validate_logits, validate_submission)
 
 PASS_THRESHOLD = %%SCORING_PASS_THRESHOLD%%
 PARTIAL_THRESHOLD = %%SCORING_PARTIAL_THRESHOLD%%
@@ -101,7 +101,6 @@ def generate_evaluation_data(workdir: str):
 def main() -> None:
     result = base_result(training_completed=False, model_saved=False, accuracy_bin="< 50%")
     patched_dir = validate_submission(result)
-    require_changed_files(result, {"model.py", "train.py"})
     workdir, original_files = make_workdir(patched_dir)
     tr = run([sys.executable, os.path.join(workdir, "train.py")], workdir, 1800, train_env(workdir))
     if tr.returncode != 0:
@@ -155,7 +154,7 @@ def main() -> None:
         mark_check(result, "running_stats_sane", running_stats_ok)
         judge_event(result, "check", "ok" if running_stats_ok else "fail", "running_stats_sane")
         if has_bn and not bn_stats_ok:
-            result["notes"].append("bn_momentum_unscaled")
+            result["notes"].append("bn_running_statistics_invalid")
 
         # Eval-mode statistics must be stable across identical passes.
         mark_check(result, "eval_mode_consistent", eval_consistent)

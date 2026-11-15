@@ -1,10 +1,9 @@
-"""Submit your answer to the sequential public-announcement task in task.md.
+"""Submit your answer to the fragmented-observation task in task.md.
 
 Edit ONLY this file. Fill in the ANSWER dictionary with your conclusions:
 
 - "truth": a JSON boolean (true/false) - whether the registered proposition
-  holds in the FINAL restricted model, after every announcement in task.md
-  has been applied in order.
+  holds under the observation fragments and information partitions in task.md.
 - "justification": a short explanation of your reasoning (max 600 chars).
 
 Constraints (enforced by the judge, no code execution):

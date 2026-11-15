@@ -21,7 +21,7 @@ def main() -> None:
     eval_script = os.path.join(workdir, "_eval_runner.py")
     with open(eval_script, "w", encoding="utf-8") as f:
         f.write(f"""
-import sys
+import sys, torch
 sys.path.insert(0, {workdir!r})
 from route import %%MODEL_CLASS%%
 
@@ -65,9 +65,13 @@ try:
     # 3. Proportionality: maintains the 5:3 ratio (tolerance 0.05 for minor floating-point shifts)
     ratio_ok = bool(abs((a1 / a2) - 1.6666) < 0.05)
     
-    checks["local_bounds_ok"] = bool(bounds_ok and switch_S2_ok and ratio_ok)
+    checks["local_bounds_ok"] = bounds_ok and switch_S2_ok
+    checks["local_allocation_policy"] = torch.isclose(
+        torch.tensor((a1, a2, a3)), torch.tensor((62.5, 37.5, 0.0)), atol=1e-4, rtol=1e-4
+    ).all().to(torch.int64).item()
 except Exception as e:
     checks["local_bounds_ok"] = False
+    checks["local_allocation_policy"] = 0
 
 # 3. Global Gluing Consistency (Proportional Scaling & Fairness under High Asymmetric Overlapping Demands)
 try:
@@ -91,14 +95,21 @@ try:
     
     # 2. Check global sum constraint
     total_bandwidth = a1 + a2 + a3
-    global_ok = bool(total_bandwidth <= cap_global + 1e-4 and total_bandwidth > 100.0)
+    global_ok = total_bandwidth <= cap_global + 1e-4
     
     # 3. Check symmetry: route_A and route_C have identical demands, so their allocations must be symmetric
     symmetry_ok = bool(abs(a1 - a3) < 1e-4)
     
-    checks["global_backbone_ok"] = bool(all_keys_present and switches_ok and global_ok and symmetry_ok)
+    checks["global_backbone_ok"] = all_keys_present and switches_ok and global_ok
+    common_scale = min(1.0, 100.0 / 180.0, cap_global / 260.0)
+    checks["global_allocation_policy"] = torch.isclose(
+        torch.tensor((a1, a2, a3)),
+        torch.tensor((90.0, 80.0, 90.0)) * common_scale,
+        atol=1e-4, rtol=1e-4,
+    ).all().to(torch.int64).item()
 except Exception as e:
     checks["global_backbone_ok"] = False
+    checks["global_allocation_policy"] = 0
 
 import torch
 torch.save(checks, "eval_outputs.pt")
@@ -114,13 +125,17 @@ torch.save(checks, "eval_outputs.pt")
         local_ok = bool(checks.get("local_run_ok", False) or checks.get("local_routing_ok", False))
         bounds_ok = bool(checks.get("local_bounds_ok", False))
         global_ok = bool(checks.get("global_backbone_ok", False))
+        local_policy = checks.get("local_allocation_policy", 0)
+        global_policy = checks.get("global_allocation_policy", 0)
 
         mark_check(result, "local_routing_ok", local_ok)
         mark_check(result, "local_bounds_ok", bounds_ok)
         mark_check(result, "global_backbone_ok", global_ok)
+        mark_check(result, "local_allocation_policy", local_policy)
+        mark_check(result, "global_allocation_policy", global_policy)
 
-        passed = sum([local_ok, bounds_ok, global_ok])
-        accuracy = passed / 3.0
+        passed = local_ok + bounds_ok + global_ok + local_policy + global_policy
+        accuracy = passed / 5.0
         result["training_completed"] = True
         result["model_saved"] = True
         

@@ -1,6 +1,6 @@
 axes:
   - id: surface_deceptiveness
-    description: "Framing of spreadsheet formula task (table layout vs dataflow computation graph)"
+    description: "Presentation control: class name only; no difficulty ordering is asserted"
     levels:
       easy:
         "%%MODEL_CLASS%%": "SpreadsheetDataflowEngine"

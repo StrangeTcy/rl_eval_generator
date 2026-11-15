@@ -1,5 +1,5 @@
 import sqlite3
-from %%MODEL_FILE%% import %%MODEL_CLASS%%
+from query_module import %%MODEL_CLASS%%
 
 def test_visible():
     engine = %%MODEL_CLASS%%()

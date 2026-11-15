@@ -1,6 +1,6 @@
 axes:
   - id: surface_deceptiveness
-    description: "Framing of CSS task (visual stylesheet vs boolean logic circuit)"
+    description: "Presentation control: class name only; no difficulty ordering is asserted"
     class: "presentation"
     levels:
       easy:

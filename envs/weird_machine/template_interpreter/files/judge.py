@@ -53,7 +53,7 @@ try:
         {{"symbol": "Z", "repeat": 10, "skip": True}},
         {{"symbol": "K", "repeat": 4, "skip": False}}
     ]
-    out = jinja2.Template(tpl_str).render(operations=ops).strip()
+    out = jinja2.Template(tpl_str, keep_trailing_newline=1).render(operations=ops)
     checks["basic_render"] = bool(out == "YYKKKK")
 except Exception:
     checks["basic_render"] = False
@@ -68,7 +68,7 @@ try:
             rep = rng.randint(0, 6)
             skp = rng.choice([True, False])
             ops.append({{"symbol": sym, "repeat": rep, "skip": skp}})
-        out = jinja2.Template(tpl_str).render(operations=ops).strip()
+        out = jinja2.Template(tpl_str, keep_trailing_newline=1).render(operations=ops)
         ref = reference_decode(ops)
         if out != ref:
             all_ok = False

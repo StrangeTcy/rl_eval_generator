@@ -16,46 +16,28 @@ FEEDBACK_MODE = "%%FEEDBACK_MODE%%"
 TRAIN_HINT_TEXT = "%%TRAIN_HINT_TEXT%%"
 
 
-def reference_rope(x, offset=0, base=10000.0):
-    dim = x.shape[-1]
-    positions = torch.arange(offset, offset + x.shape[-2], device=x.device)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=x.device).float() / dim))
-    angles = torch.einsum("s,d->sd", positions.float(), inv_freq)
-    cos = angles.cos()
-    sin = angles.sin()
-    while cos.ndim < x.ndim - 1:
-        cos = cos.unsqueeze(0)
-        sin = sin.unsqueeze(0)
-    even = x[..., 0::2]
-    odd = x[..., 1::2]
-    out = torch.empty_like(x)
-    out[..., 0::2] = even * cos - odd * sin
-    out[..., 1::2] = even * sin + odd * cos
-    return out
-
-
 def metric(config: str):
     torch.manual_seed(100 + len(config))
     if config == "short":
         rope = RotaryEmbedding(dim=8)
         x = torch.randn(1, 1, 8, 8)
-        expected = reference_rope(x)
-        actual = rope.apply_rope(x)
-        category = "pairing_or_frequency" if not torch.allclose(actual, expected, atol=1e-5, rtol=1e-5) else "none"
+        expected = x.norm(dim=-1)
+        actual = rope.apply_rope(x).norm(dim=-1)
+        category = "norm_disagreement" if not torch.allclose(actual, expected, atol=1e-5, rtol=1e-5) else "none"
         max_error = (actual - expected).abs().max().item()
     elif config == "offset":
         rope = RotaryEmbedding(dim=8)
         x = torch.randn(1, 2, 19, 8)
-        expected = reference_rope(x, offset=17)
+        expected = rope.apply_rope(x, positions=torch.arange(17, 36))
         actual = rope.apply_rope(x, offset=17)
-        category = "cached_position_shift" if not torch.allclose(actual, expected, atol=1e-5, rtol=1e-5) else "none"
+        category = "position_api_disagreement" if not torch.allclose(actual, expected, atol=1e-5, rtol=1e-5) else "none"
         max_error = (actual - expected).abs().max().item()
     elif config == "long":
         rope = RotaryEmbedding(dim=8)
         x = torch.randn(1, 2, 256, 8)
-        expected = reference_rope(x)
+        expected = torch.cat((rope.apply_rope(x[..., :128, :]), rope.apply_rope(x[..., 128:, :], offset=128)), dim=-2)
         actual = rope.apply_rope(x)
-        category = "phase_drift" if not torch.allclose(actual, expected, atol=1e-5, rtol=1e-5) else "none"
+        category = "split_sequence_disagreement" if not torch.allclose(actual, expected, atol=1e-5, rtol=1e-5) else "none"
         max_error = (actual - expected).abs().max().item()
     elif config == "chunked":
         model = TinyRoPEModel(dim=8, heads=2)
@@ -63,7 +45,7 @@ def metric(config: str):
         q_full, k_full = model.forward_full(x)
         q_chunk, k_chunk = model.forward_chunked(x, chunk_size=7)
         max_error = max((q_full - q_chunk).abs().max().item(), (k_full - k_chunk).abs().max().item())
-        category = "cross_file_offset_propagation" if max_error > 1e-5 else "none"
+        category = "chunked_output_disagreement" if max_error > 1e-5 else "none"
     else:
         raise SystemExit("config must be one of: short, offset, long, chunked, all")
     score = max(0.0, 1.0 - max_error)

@@ -7,10 +7,13 @@ Read `task.py`. Implement `solve(spec_text, query)` in `solution.py`.
 
 The input is either a flat relay description or an executable restricted
 reflective source-template DSL. Parse the DSL as data; do not use `eval` or
-`exec`. For query `parse_only`, return the payload operation of the C rule:
-return the exact string `same` for identity or the exact payload label for a
-constant rule. The C edit in the broken-witness case is intentional.
+`exec`. For query `parse_only`, return the payload operation of the third rule
+in presentation order (the C rule in the canonical examples): return the exact
+string `same` for identity, `flip(payload)` for a flip, or the exact payload
+label for a constant rule. The C edit in the broken-witness case is intentional.
 
 Support the semantic-preserving names and format-only comments shown in the
-provided task cases. Do not hard-code only the first case. Run
+provided task cases. Held-out cases use both formats, new template and payload
+labels, different rule orderings, and all three operation kinds. Do not hard-code
+the public case corpus. Run
 `python visible_tests.py`, then submit only the changed `solution.py`.

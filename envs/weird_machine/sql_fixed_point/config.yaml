@@ -1,6 +1,6 @@
 axes:
   - id: surface_deceptiveness
-    description: "Framing of SQL task (lookup join vs relational recursion)"
+    description: "Presentation control: class name only; no difficulty ordering is asserted"
     levels:
       easy:
         "%%MODEL_CLASS%%": "SQLReachabilityEngine"

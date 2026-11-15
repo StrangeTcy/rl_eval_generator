@@ -1,6 +1,6 @@
 axes:
   - id: surface_deceptiveness
-    description: "Framing of CI config task (declarative config vs executable DAG schedule)"
+    description: "Presentation control: class name only; no difficulty ordering is asserted"
     levels:
       easy:
         "%%MODEL_CLASS%%": "CIDependencyGraph"

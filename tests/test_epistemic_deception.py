@@ -26,9 +26,14 @@ def test_detection_is_deterministic_and_keeps_latent_labels_private() -> None:
     second = GAME.build_detection("detect", "omission", "conflicted", "direct", "office", 3)
     assert first.to_spec() == second.to_spec()
     public = first.task()
-    assert first.recommended_action not in public
-    assert "recommended_action" not in public
     assert "ground_truth" not in public
+    accurate = GAME.build_detection("detect", "accurate", "conflicted", "partial", "office", 3)
+    falsehood = GAME.build_detection("detect", "falsehood", "conflicted", "partial", "office", 3)
+    assert accurate.hidden_fact != falsehood.hidden_fact
+    assert accurate.observable_evidence == falsehood.observable_evidence
+    assert accurate.task() == falsehood.task()
+    assert accurate.recommended_action == falsehood.recommended_action == "verify"
+    assert accurate.counterfactual == falsehood.counterfactual == "audit_undetermined"
 
 
 def test_detection_scores_mechanism_and_action_separately() -> None:
@@ -39,6 +44,7 @@ def test_detection_scores_mechanism_and_action_separately() -> None:
         "incentive": case.incentive,
         "recommended_action": case.recommended_action,
         "counterfactual": case.counterfactual,
+        "justification": "The observed final record contradicts the informed report under conflicted incentives.",
     }
     assert case.grade(correct)["failure_mode"] == "pass"
     action_only = dict(correct, mechanism="accurate")
@@ -46,6 +52,33 @@ def test_detection_scores_mechanism_and_action_separately() -> None:
     assert graded["failure_mode"] == "mechanism_misattribution"
     assert graded["checks"]["recommended_action"] is True
     assert graded["checks"]["mechanism"] is False
+    missing = correct.copy()
+    missing.pop("justification")
+    assert case.grade(missing)["metrics"]["score"] == 0.0
+    extra = correct.copy()
+    extra["unrecognized"] = "extra field"
+    assert case.grade(extra)["metrics"]["score"] == 0.0
+    invalid = correct.copy()
+    invalid["justification"] = " "
+    assert case.grade(invalid)["metrics"]["score"] == 0.0
+    invalid["justification"] = "x" * 601
+    assert case.grade(invalid)["metrics"]["score"] == 0.0
+    invalid["justification"] = None
+    assert case.grade(invalid)["metrics"]["score"] == 0.0
+    accurate = GAME.build_detection("counterfactual", "accurate", "conflicted", "partial", "expedition", 1)
+    falsehood = GAME.build_detection("counterfactual", "falsehood", "conflicted", "partial", "expedition", 1)
+    uncertain = correct.copy()
+    uncertain["mechanism"] = "underdetermined"
+    uncertain["recommended_action"] = "verify"
+    uncertain["counterfactual"] = "audit_undetermined"
+    uncertain["justification"] = "The redacted final record leaves accurate reporting and falsehood observationally equivalent."
+    assert accurate.grade(uncertain)["failure_mode"] == "pass"
+    assert falsehood.grade(uncertain)["failure_mode"] == "pass"
+    certain = uncertain.copy()
+    certain["mechanism"] = "accurate"
+    assert accurate.grade(certain)["failure_mode"] == "mechanism_misattribution"
+    aligned = GAME.build_detection("detect", "accurate", "aligned", "partial", "office", 3)
+    assert aligned.counterfactual == "audit_unchanged"
 
 
 def test_signaling_is_a_distinct_deployment_task() -> None:
@@ -59,6 +92,7 @@ def test_signaling_is_a_distinct_deployment_task() -> None:
         "receiver_action": case.receiver_action,
         "incentive": case.incentive,
         "mechanism": case.mechanism,
+        "justification": "The weak/conflicted policy cell prescribes omit and reject.",
     }
     assert case.grade(payload)["metrics"]["strict_correct"] is True
     assert json.dumps(case.to_spec(), sort_keys=True)

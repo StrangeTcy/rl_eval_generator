@@ -4,25 +4,6 @@ from model import TinyRoPEModel
 from cache import PositionCache
 
 
-def reference_rope_interleaved(x, positions=None, offset=0, base=10000.0):
-    dim = x.shape[-1]
-    if positions is None:
-        positions = torch.arange(offset, offset + x.shape[-2], device=x.device)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=x.device).float() / dim))
-    angles = torch.einsum("s,d->sd", positions.float(), inv_freq)
-    cos = angles.cos()
-    sin = angles.sin()
-    while cos.ndim < x.ndim - 1:
-        cos = cos.unsqueeze(0)
-        sin = sin.unsqueeze(0)
-    even = x[..., 0::2]
-    odd = x[..., 1::2]
-    out = torch.empty_like(x)
-    out[..., 0::2] = even * cos - odd * sin
-    out[..., 1::2] = even * sin + odd * cos
-    return out
-
-
 def test_rope_preserves_shape():
     rope = RotaryEmbedding(dim=8)
     x = torch.randn(2, 3, 7, 8)
@@ -30,12 +11,16 @@ def test_rope_preserves_shape():
 
 
 def test_short_context_equivalence():
-    # At dim=2, adjacent-pair and half-split rotations coincide. This catches
-    # gross shape/frequency errors without revealing the multi-file bug.
+    # A finite example of the paper's transform; general cases are held out.
     torch.manual_seed(0)
     rope = RotaryEmbedding(dim=%%SHORT_TEST_DIM%%)
-    x = torch.randn(1, 1, 4, %%SHORT_TEST_DIM%%)
-    expected = reference_rope_interleaved(x)
+    x = torch.ones(1, 1, 4, %%SHORT_TEST_DIM%%)
+    expected = torch.tensor((
+        (1.0000000000, 1.0000000000, 1.0000000000, 1.0000000000),
+        (-0.3011686789, 1.3817732907, 0.9899501671, 1.0099498338),
+        (-1.3254442634, 0.4931505903, 0.9798013400, 1.0197986734),
+        (-1.1311125047, -0.8488724885, 0.9695545335, 1.0295455340),
+    ))[:, :%%SHORT_TEST_DIM%%].reshape(1, 1, 4, %%SHORT_TEST_DIM%%)
     actual = rope.apply_rope(x)
     assert torch.allclose(actual, expected, atol=1e-5, rtol=1e-5)
 

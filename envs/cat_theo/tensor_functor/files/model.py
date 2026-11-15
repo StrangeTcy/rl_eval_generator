@@ -9,8 +9,6 @@ class %%MODEL_CLASS%%(nn.Module):
         %%DIM_CHECK%%
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # BUG: Rigid looping and coordinate traps that violate functorial properties.
-        # This code works only for a fixed coordinate size and breaks under vmap and resizing.
         
         x_sliced = %%RIGID_SLICE%%
         

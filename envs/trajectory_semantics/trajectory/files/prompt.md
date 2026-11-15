@@ -5,7 +5,9 @@ behavioral benchmark. It is not evidence about a model's internal recurrence.
 
 Read `task.py`. Implement `solve(spec_text, template, payload, horizon)` in
 `solution.py`. Return the state after exactly `horizon` transitions as a tuple
-`(template_label, payload_int)`. Horizon is a non-negative integer and may be
+`(template_label, payload_int)`. Payloads are always integers: 0 denotes the first
+label in `payloads:` and 1 denotes the second, including renamed cases.
+Horizon is a non-negative integer and may be
 large. The specification is either flat relay data or an executable restricted
 reflective source-template DSL; parse it as data and do not use `eval` or
 `exec`.
@@ -13,5 +15,8 @@ reflective source-template DSL; parse it as data and do not use `eval` or
 The judge includes format-only variants, semantic-preserving relabelings,
 matched horizons including 6, 30, 126, and 510, and the witness sibling made
 by changing C(b) -> A(1). Do not treat the witness as a global property and do
-not hard-code a single horizon. Run `python visible_tests.py`, then submit
+not hard-code a single horizon. Held-out cases use new labels, rule orderings,
+and three-template transition graphs, including self-loops, with identity,
+flip, or constant payload operations. Follow each rule's named source and
+target rather than the public case corpus. Run `python visible_tests.py`, then submit
 only `solution.py`.

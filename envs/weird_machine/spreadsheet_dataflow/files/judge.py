@@ -38,15 +38,13 @@ def eval_sheet(inputs, formulas):
         f_str = formulas.get(cell, "")
         if not f_str.startswith("="):
             raise ValueError(f"Cell {{cell}} does not start with '=': {{f_str!r}}")
-        expr = f_str[1:]
-        expr = re.sub(r'\\bMIN\\b', 'min', expr, flags=re.IGNORECASE)
-        def repl(m):
-            c = m.group(0).upper()
-            if c in values:
-                return str(values[c])
-            raise ValueError(f"Unknown reference {{c}}")
-        eval_expr = re.sub(r'\\b[AB]\\d+\\b', repl, expr, flags=re.IGNORECASE)
-        values[cell] = float(eval(eval_expr, {{"__builtins__": None, "min": min, "max": max}}))
+        expr = re.sub(r"\\s+", "", f_str[1:]).upper()
+        parsed = re.fullmatch(r"(?:([AB][1-9][0-9]*)|MIN\\(([AB][1-9][0-9]*),([AB][1-9][0-9]*)\\))(?:\\+(?:([AB][1-9][0-9]*)|MIN\\(([AB][1-9][0-9]*),([AB][1-9][0-9]*)\\)))?", expr)
+        if parsed is None:
+            raise ValueError("Formula must contain one or two cell/MIN terms joined by +")
+        left = values[parsed.group(1)] if parsed.group(1) else min(values[parsed.group(2)], values[parsed.group(3)])
+        right = values[parsed.group(4)] if parsed.group(4) else min(values[parsed.group(5)], values[parsed.group(6)]) if parsed.group(5) else 0.0
+        values[cell] = left + right
     return values
 
 def reference_dp(inputs):
@@ -67,6 +65,7 @@ rng = random.Random(%%JUDGE_SEED%%)
 try:
     formulas = engine.build_dp_formulas(grid_len)
     all_eq = len(formulas) == grid_len and all(str(v).startswith("=") for v in formulas.values())
+    eval_sheet(range(grid_len), formulas)
     checks["formula_syntax"] = bool(all_eq)
 except Exception:
     checks["formula_syntax"] = False

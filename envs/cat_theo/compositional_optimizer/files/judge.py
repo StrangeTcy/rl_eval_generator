@@ -37,25 +37,45 @@ try:
 except Exception:
     checks["basic_run"] = False
 
-# 2. Strict State Isolation & Associativity Verification
+# 2. Three modules, three steps, regrouped calls, and independent parameters
 try:
-    # Compose two separate MomentumStep modules in the same chain
-    opt1 = MomentumStep(beta=0.9)
-    opt2 = MomentumStep(beta=0.99)
-    
-    p = torch.randn(2, 2)
-    g = torch.randn(2, 2)
-    
-    # Run step 1
-    v1 = opt1.update(p, g)
-    v2 = opt2.update(p, v1)
-    
-    # Expected reference calculation (fully isolated):
-    v1_ref = 0.1 * g
-    v2_ref = 0.01 * v1_ref
-    
-    # If they collided via the class-level state, v2 and v2_ref will differ!
-    checks["state_isolated"] = bool(torch.allclose(v2, v2_ref, atol=1e-5))
+    a = MomentumStep(beta=0.8)
+    b = MomentumStep(beta=0.6)
+    c = MomentumStep(beta=0.4)
+    aa = MomentumStep(beta=0.8)
+    bb = MomentumStep(beta=0.6)
+    cc = MomentumStep(beta=0.4)
+    p = torch.arange(4, dtype=torch.float64).reshape(2, 2)
+    q = p.clone()
+    g1 = torch.ones_like(p)
+    g2 = -2.0 * torch.ones_like(p)
+    g3 = torch.arange(4, dtype=torch.float64).reshape(2, 2) + 0.5
+    inputs_before = torch.stack((p, q, g1, g2, g3)).clone()
+    r_a1 = 0.2 * g1
+    r_b1 = 0.4 * r_a1
+    r_c1 = 0.6 * r_b1
+    r_a2 = 0.8 * r_a1 + 0.2 * g2
+    r_b2 = 0.6 * r_b1 + 0.4 * r_a2
+    r_c2 = 0.4 * r_c1 + 0.6 * r_b2
+    r_a3 = 0.8 * r_a2 + 0.2 * g3
+    r_b3 = 0.6 * r_b2 + 0.4 * r_a3
+    r_c3 = 0.4 * r_c2 + 0.6 * r_b3
+    left1 = c.update(p, b.update(p, a.update(p, g1))).clone()
+    mid1 = bb.update(p, aa.update(p, g1))
+    right1 = cc.update(p, mid1).clone()
+    left2 = c.update(p, b.update(p, a.update(p, g2))).clone()
+    mid2 = bb.update(p, aa.update(p, g2))
+    right2 = cc.update(p, mid2).clone()
+    independent = c.update(q, b.update(q, a.update(q, g3))).clone()
+    left3 = c.update(p, b.update(p, a.update(p, g3))).clone()
+    mid3 = bb.update(p, aa.update(p, g3))
+    right3 = cc.update(p, mid3).clone()
+    measured = torch.stack((left1, right1, left2, right2, left3, right3, independent))
+    expected = torch.stack((r_c1, r_c1, r_c2, r_c2, r_c3, r_c3, 0.048 * g3))
+    checks["state_isolated"] = (
+        torch.isclose(measured, expected, atol=1e-8, rtol=1e-6).all().to(torch.int64)
+        * torch.isclose(torch.stack((p, q, g1, g2, g3)), inputs_before, atol=0, rtol=0).all().to(torch.int64)
+    ).item()
 except Exception as e:
     checks["state_isolated"] = False
 

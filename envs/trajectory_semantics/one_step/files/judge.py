@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import random
 import sys
 
 from judge_lib import (
@@ -102,14 +103,49 @@ def main() -> None:
             "witness_sibling_relabeling_all_states": check_case(
                 solve, task.SIBLING_RELABELED_SPEC_TEXT
             ),
-            "same_result_under_format_noise": check_case(solve, task.SPEC_TEXT)
-            == check_case(solve, task.NOISY_SPEC_TEXT),
+            "same_result_under_format_noise": (
+                solve(task.SPEC_TEXT, "A", 0), solve(task.SPEC_TEXT, "A", 1),
+                solve(task.SPEC_TEXT, "B", 0), solve(task.SPEC_TEXT, "B", 1),
+                solve(task.SPEC_TEXT, "C", 0), solve(task.SPEC_TEXT, "C", 1),
+            ) == (
+                solve(task.NOISY_SPEC_TEXT, "A", 0), solve(task.NOISY_SPEC_TEXT, "A", 1),
+                solve(task.NOISY_SPEC_TEXT, "B", 0), solve(task.NOISY_SPEC_TEXT, "B", 1),
+                solve(task.NOISY_SPEC_TEXT, "C", 0), solve(task.NOISY_SPEC_TEXT, "C", 1),
+            ),
             "returns_state_tuples": all(
                 isinstance(solve(task.SPEC_TEXT, template, payload), tuple)
                 and len(solve(task.SPEC_TEXT, template, payload)) == 2
                 for template, payload in all_states(task.SPEC_TEXT)
             ),
         }
+        heldout_rng = random.Random(%%SEED%% + 19391)
+        heldout_a = f"North{heldout_rng.randrange(100000, 999999)}"
+        heldout_b = f"East{heldout_rng.randrange(100000, 999999)}"
+        heldout_c = f"West{heldout_rng.randrange(100000, 999999)}"
+        heldout_zero = f"low{heldout_rng.randrange(100000, 999999)}"
+        heldout_one = f"high{heldout_rng.randrange(100000, 999999)}"
+        heldout_flat = f"""format: flat-relay-v1
+templates: {heldout_a}, {heldout_b}, {heldout_c}
+payloads: {heldout_zero}, {heldout_one}
+rules:
+- {heldout_c}(payload) -> {heldout_b}({heldout_zero})
+- {heldout_a}(payload) -> {heldout_a}(flip(payload))
+- {heldout_b}(payload) -> {heldout_c}({heldout_one})
+"""
+        heldout_reflective = f"""format: reflective-relay-v1
+payloads: {heldout_zero}, {heldout_one}
+
+template {heldout_c}(payload):
+  emit_source("{heldout_b}(payload)")
+
+template {heldout_a}(payload):
+  emit_source("{heldout_c}(flip(payload))")
+
+template {heldout_b}(payload):
+  emit_source("{heldout_a}({heldout_zero})")
+"""
+        checks["heldout_flat_graph"] = check_case(solve, heldout_flat)
+        checks["heldout_reflective_graph"] = check_case(solve, heldout_reflective)
         score_from_checks(result, checks, TOTAL_CHECKS)
         result["metrics"] = {"query_type": "one_step", "track": "solver_synthesis_debugging"}
     except Exception as exc:

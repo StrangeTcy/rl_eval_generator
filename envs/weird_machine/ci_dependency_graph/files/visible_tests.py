@@ -1,4 +1,4 @@
-from %%MODEL_FILE%% import %%MODEL_CLASS%%
+from ci_machine import %%MODEL_CLASS%%
 
 def verify_workflow(deps: dict[int, list[int]], wf: dict[str, dict]) -> bool:
     for job_id, parents in deps.items():

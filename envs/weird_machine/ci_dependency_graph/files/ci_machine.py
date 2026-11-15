@@ -10,5 +10,4 @@ class %%MODEL_CLASS%%:
         Given dependencies mapping job IDs to lists of prerequisite job IDs,
         return a workflow dictionary mapping job names 'job_{i}' to config dictionaries.
         """
-        # Buggy initial implementation: returns empty workflow
         return {}

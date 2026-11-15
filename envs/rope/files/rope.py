@@ -15,7 +15,6 @@ class RotaryEmbedding(nn.Module):
 
     def _angles(self, seq_len: int, device, offset: int = 0, positions=None):
         if positions is None:
-            # BUG: cached decoding should use absolute positions offset..offset+T-1.
             positions = torch.arange(seq_len, device=device)
         else:
             positions = positions.to(device)

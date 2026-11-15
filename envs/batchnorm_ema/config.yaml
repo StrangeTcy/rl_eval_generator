@@ -27,7 +27,7 @@ axes:
         "%%SYNC_IMPORT%%": "from contextlib import nullcontext"
         "%%SYNC_CONTEXT_OPEN%%": |
           # NOTE: skip gradient sync on accumulation steps
-          _ctx = nullcontext()  # red herring: sync context is not the issue
+          _ctx = nullcontext()
         "%%SYNC_CONTEXT_CLOSE%%": ""
       hard:
         "%%SYNC_IMPORT%%": "from contextlib import nullcontext"

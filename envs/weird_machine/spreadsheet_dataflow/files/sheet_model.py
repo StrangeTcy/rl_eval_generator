@@ -10,5 +10,4 @@ class %%MODEL_CLASS%%:
         Return a dictionary mapping cell identifiers 'B1'..'B{n}' to formula strings.
         Formulas must reference cells in column A ('A1'..'A{n}') and column B ('B1'..'B{n}').
         """
-        # Buggy initial implementation: returns empty dictionary
         return {}

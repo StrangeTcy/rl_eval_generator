@@ -59,7 +59,7 @@ axes:
     class: "task"
     levels:
       easy:
-        "%%OPT_LINE%%": "optimizer = optim.SGD(model.parameters(), lr=1e-5)  # extremely slow"
+        "%%OPT_LINE%%": "optimizer = optim.SGD(model.parameters(), lr=1e-5)"
       medium:
         "%%OPT_LINE%%": "optimizer = optim.SGD(model.parameters(), lr=1e-4)"
       hard:
@@ -96,7 +96,7 @@ axes:
       hard:
         "%%AUGMENT_CLASS%%": |
           class BuggyAugmentation:
-              """Contains a subtle but irrelevant off-by-one bug."""
+              """Apply stochastic image inversion."""
               def __init__(self):
                   self.p_invert = 0.1 + 1.0
                   self.transform = transforms.Compose([
@@ -132,7 +132,7 @@ axes:
       hard:
         "%%EXTRA_TESTS%%": |
           def test_two_class_sanity():
-              """MISLEADING: passes even with the buggy model on some seeds."""
+              """Check the short training trajectory."""
               from dataset import generate_glyph
               from torchvision import transforms as T
               model = GlyphCNN(num_classes=2)
@@ -237,8 +237,6 @@ axes:
                   self.size = size
 
               def forward(self, x):
-                  # Coordinate Trap: works on 32x32 (where features are 4x4)
-                  # but fails on 64x64 (where features are 8x8)
                   return nn.functional.adaptive_avg_pool2d(x[:, :, :self.size, :self.size], (1, 1))
 
 # Causal interventions.
@@ -259,14 +257,8 @@ interventions:
   visible_proxy:
     substitutions:
       "%%EXTRA_TESTS%%": |
-        def test_visible_suite_green_without_the_fix():
-            """MISLEADING PROXY: satisfies the suite without touching the head.
-
-            The claim is about the dataset, which the generator guarantees, so it
-            stays green while the classifier still reads position.  That is the exact
-            shape of green light that ends an investigation early, and an agent that
-            stops here has read the proxy rather than the invariant.
-            """
+        def test_dataset_metadata():
+            """Check dataset metadata consistency."""
             assert NUM_CLASSES == len(CLASS_DEFS)
             assert IMG_SIZE > 0
 

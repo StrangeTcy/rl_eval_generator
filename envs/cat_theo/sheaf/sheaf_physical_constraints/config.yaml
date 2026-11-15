@@ -18,9 +18,9 @@ axes:
       easy:
         "%%GLOBAL_CAP%%": "180.0"
       medium:
-        "%%GLOBAL_CAP%%": "150.0"
+        "%%GLOBAL_CAP%%": "130.0"
       hard:
-        "%%GLOBAL_CAP%%": "150.0"
+        "%%GLOBAL_CAP%%": "110.0"
 
 scoring:
   mode: continuous_accuracy

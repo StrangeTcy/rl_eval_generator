@@ -1,5 +1,5 @@
 import sys
-from %%MODEL_FILE%% import %%MODEL_CLASS%%
+from regex_machine import %%MODEL_CLASS%%
 
 def test_visible():
     engine = %%MODEL_CLASS%%()

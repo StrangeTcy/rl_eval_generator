@@ -30,35 +30,34 @@ parser.eval()
 
 checks = {{}}
 
-# 1. Output shape correctness
+# 1. Values across temperatures, ties, and large finite inputs
 try:
-    x = torch.tensor([1.5], requires_grad=True)
-    y = torch.tensor([3.7], requires_grad=True)
-    out = parser.smooth_min(x, y)
-    checks["basic_run"] = bool(out.shape == (1,))
+    x = torch.tensor((-1000.0, -2.5, 0.0, 4.0, 1000.0), dtype=torch.float64).requires_grad_()
+    y = torch.tensor((-998.0, -2.5, 2.0, -3.0, 999.0), dtype=torch.float64).requires_grad_()
+    low = %%MODEL_CLASS%%(temperature=0.1).smooth_min(x, y)
+    middle = parser.smooth_min(x, y)
+    high = %%MODEL_CLASS%%(temperature=7.0).smooth_min(x, y)
+    reference = torch.stack((
+        -0.1 * torch.logaddexp(-x / 0.1, -y / 0.1),
+        -torch.logaddexp(-x, -y),
+        -7.0 * torch.logaddexp(-x / 7.0, -y / 7.0),
+    ))
+    outputs = torch.stack((low, middle, high))
+    checks["basic_run"] = torch.isclose(
+        outputs, reference, atol=%%TOLERANCE%%, rtol=%%TOLERANCE%%
+    ).all().to(torch.int64).item()
 except Exception:
     checks["basic_run"] = False
 
-# 2. Strict Gradient Flow (Contravariant Pullback on LSE Semiring)
+# 2. Exact derivatives at the same temperatures and tie cases
 try:
-    x = torch.tensor([1.5], requires_grad=True)
-    y = torch.tensor([2.5], requires_grad=True)
-    
-    out = parser.smooth_min(x, y)
-    loss = out.sum()
-    loss.backward()
-    
-    # Under correct LSE implementation, both x.grad and y.grad must be non-zero
-    grad_x_ok = bool(x.grad is not None and float(x.grad.item()) > 0.1)
-    grad_y_ok = bool(y.grad is not None and float(y.grad.item()) > 0.1)
-    
-    # Calculate target theoretical gradients under Log-Sum-Exp:
-    # d(LSE)/dx = exp(-x) / (exp(-x) + exp(-y))
-    # exp(-1.5) / (exp(-1.5) + exp(-2.5)) = 0.2231 / (0.2231 + 0.082) = 0.731
-    target_grad_x = 0.731
-    val_match = bool(abs(float(x.grad.item()) - target_grad_x) < 0.02)
-    
-    checks["gradient_flow_ok"] = bool(grad_x_ok and grad_y_ok and val_match)
+    grad_x, grad_y = torch.autograd.grad(outputs.sum(), (x, y))
+    expected_x = torch.sigmoid((y - x) / 0.1) + torch.sigmoid(y - x) + torch.sigmoid((y - x) / 7.0)
+    expected_y = 3.0 - expected_x
+    checks["gradient_flow_ok"] = torch.stack((
+        torch.isclose(grad_x, expected_x, atol=%%TOLERANCE%%, rtol=%%TOLERANCE%%).all(),
+        torch.isclose(grad_y, expected_y, atol=%%TOLERANCE%%, rtol=%%TOLERANCE%%).all(),
+    )).all().to(torch.int64).item()
 except Exception as e:
     checks["gradient_flow_ok"] = False
 

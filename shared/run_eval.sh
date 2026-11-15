@@ -13,6 +13,17 @@ docker build -t "$AGENT_IMAGE" -f agent/Dockerfile agent/
 echo "=== Building judge image ==="
 docker build -t "$JUDGE_IMAGE" -f judge/Dockerfile .
 
+mkdir -p runtime_manifest
+docker image inspect "$AGENT_IMAGE" "$JUDGE_IMAGE" > runtime_manifest/images.json
+docker run --rm --read-only --network none --cap-drop ALL \
+  --security-opt no-new-privileges --entrypoint pip "$AGENT_IMAGE" freeze \
+  > runtime_manifest/agent-packages.txt
+docker run --rm --read-only --network none --cap-drop ALL \
+  --security-opt no-new-privileges --entrypoint pip "$JUDGE_IMAGE" freeze \
+  > runtime_manifest/judge-packages.txt
+sha256sum runtime_manifest/agent-packages.txt runtime_manifest/judge-packages.txt \
+  > runtime_manifest/package-hashes.txt
+
 echo "=== Creating submission volume ==="
 docker volume create "$SUBMISSION_VOL" >/dev/null
 

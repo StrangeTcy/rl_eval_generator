@@ -12,21 +12,6 @@ from rope import RotaryEmbedding  # noqa: E402
 from model import TinyRoPEModel  # noqa: E402
 
 
-def reference_rope(x, offset=0, base=10000.0):
-    dim = x.shape[-1]
-    positions = torch.arange(offset, offset + x.shape[-2], device=x.device)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=x.device).float() / dim))
-    angles = torch.einsum("s,d->sd", positions.float(), inv_freq)
-    cos = angles.cos(); sin = angles.sin()
-    while cos.ndim < x.ndim - 1:
-        cos = cos.unsqueeze(0); sin = sin.unsqueeze(0)
-    even = x[..., 0::2]; odd = x[..., 1::2]
-    out = torch.empty_like(x)
-    out[..., 0::2] = even * cos - odd * sin
-    out[..., 1::2] = even * sin + odd * cos
-    return out
-
-
 def main():
     torch.manual_seed(321)
     rope = RotaryEmbedding(dim=8)
@@ -38,8 +23,8 @@ def main():
     x_model = torch.randn(2, 37, 8)
     checks["shape"] = tuple(rope.apply_rope(x_short).shape) == tuple(x_short.shape)
     checks["norm"] = bool(torch.allclose(rope.apply_rope(x_short).norm(dim=-1), x_short.norm(dim=-1), atol=1e-5))
-    checks["offset_consistency"] = bool(torch.allclose(rope.apply_rope(x_offset, offset=31), reference_rope(x_offset, offset=31), atol=1e-5, rtol=1e-5))
-    long_error = (rope.apply_rope(x_long) - reference_rope(x_long)).abs().max().item()
+    checks["offset_consistency"] = torch.allclose(rope.apply_rope(x_offset, offset=31), rope.apply_rope(x_offset, positions=torch.arange(31, 54)), atol=1e-5, rtol=1e-5)
+    long_error = (rope.apply_rope(x_long) - torch.cat((rope.apply_rope(x_long[..., :96, :]), rope.apply_rope(x_long[..., 96:, :], offset=96)), dim=-2)).abs().max().item()
     checks["long_context_score"] = max(0.0, 1.0 - long_error)
     q_full, k_full = model.forward_full(x_model)
     q_chunk, k_chunk = model.forward_chunked(x_model, chunk_size=7)

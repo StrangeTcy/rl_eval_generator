@@ -49,30 +49,34 @@ try:
 except Exception:
     checks["spacing_correct"] = False
 
-# 3. Unit Adjunction Galois Connection (Strict CT Adjunction on randomized strings)
+# 3. Exact reconstruction and token round trip on the supported source domain
 try:
     # Generate randomized evaluation strings to prevent any static hardcoding hacks
     rng = random.Random(%%JUDGE_SEED%%)
     words = ["adjunctions", "are", "functors", "compositionality", "is", "key", "sheaves", "and", "monads", "compose", "random", "sentence", "for", "validation", "🚀", "category", "theory", "functorial", "gluing"]
-    test_strings = [
+    test_strings = (
+        "",
+        "   ",
+        "café 🛰️" + chr(10) + " second line  ",
         "adjunctions are functors",
         "compositionality is key",
         "sheaves and monads compose",
         " ".join(rng.sample(words, k=5))
-    ]
+    )
     
     all_adj_ok = True
     for s in test_strings:
         tokens = tokenize(s)
         # tokenize o detokenize o tokenize must equal tokenize
-        m1 = tokenize(detok.detokenize(tokens))
-        if m1 != tokens:
+        reconstructed = detok.detokenize(tokens)
+        m1 = tokenize(reconstructed)
+        if m1 != tokens or reconstructed != s:
             all_adj_ok = False
             break
             
-    checks["adjunction_unit"] = all_adj_ok
+    checks["token_round_trip"] = all_adj_ok
 except Exception:
-    checks["adjunction_unit"] = False
+    checks["token_round_trip"] = 0
 
 # Save checks as dictionary
 import torch
@@ -88,11 +92,11 @@ torch.save(checks, "eval_outputs.pt")
         checks = torch.load(os.path.join(workdir, "eval_outputs.pt"), weights_only=True)
         basic_ok = bool(checks.get("basic_reconstruction", False))
         space_ok = bool(checks.get("spacing_correct", False))
-        adj_ok = bool(checks.get("adjunction_unit", False))
+        adj_ok = checks.get("token_round_trip", 0)
 
         mark_check(result, "basic_reconstruction", basic_ok)
         mark_check(result, "spacing_correct", space_ok)
-        mark_check(result, "adjunction_unit", adj_ok)
+        mark_check(result, "token_round_trip", adj_ok)
 
         passed = sum([basic_ok, space_ok, adj_ok])
         accuracy = passed / 3.0

@@ -15,6 +15,5 @@ class AdaptiveHaltingBlock(nn.Module):
             limit = min(limit, int(max_steps))
         state = x
         for step in range(limit):
-            # BUG: every row runs for the batch maximum instead of its own count.
             state = self.transition(state)
         return state

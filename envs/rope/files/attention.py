@@ -27,7 +27,6 @@ class RotaryFeatureProjector(nn.Module):
 
     def apply_chunk(self, x: torch.Tensor, cache: PositionCache):
         q, k = self._project(x)
-        # BUG: this should use the cache's current absolute position offset.
         offset = 0
         q = self.rope(q, offset=offset)
         k = self.rope(k, offset=offset)

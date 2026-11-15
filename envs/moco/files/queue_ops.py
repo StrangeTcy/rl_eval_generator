@@ -7,8 +7,6 @@ def enqueue_keys(queue: torch.Tensor, ptr: torch.Tensor, keys: torch.Tensor) -> 
     """
     Insert keys into a FIFO queue and advance ptr.
 
-    BUG: when ptr + batch_size > K, this slice assignment silently truncates
-    and drops tail keys instead of wrapping around.
     """
     n = keys.shape[0]
     k = queue.shape[1]

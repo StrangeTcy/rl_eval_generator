@@ -1,6 +1,6 @@
 axes:
   - id: surface_deceptiveness
-    description: "Framing of template task (string formatter vs data structure reducer)"
+    description: "Presentation control: class name only; no difficulty ordering is asserted"
     levels:
       easy:
         "%%MODEL_CLASS%%": "TemplateInterpreter"
@@ -13,7 +13,7 @@ axes:
         "%%MODEL_FILE%%": "template_machine.py"
 
   - id: hidden_depth
-    description: "Input structure depth and recursion complexity"
+    description: "Number of run-length operations"
     levels:
       easy:
         "%%MAX_ITEMS%%": "10"

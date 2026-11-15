@@ -20,7 +20,7 @@ SECTION_TEXT = {
     "relative_position": """Relative-position methods often add learned terms or biases depending on m - n. RoFormer instead derives a multiplicative rotational form for query and key vectors.""",
     "relative_bias_variant": """A learned relative bias b_{i,j} can be added to attention logits. This is a plausible but different method; it does not repair a wrong rotary transform.""",
     "additive_sinusoid_variant": """Sinusoidal vectors may be added to representations in absolute-position methods. RoPE uses sinusoidal factors as rotations rather than additive embeddings.""",
-    "rotary_derivation": """For a two-dimensional subspace, RoPE applies R(m theta) to the query at position m and R(n theta) to the key at position n. R(phi) = [[cos(phi), -sin(phi)], [sin(phi), cos(phi)]]. In higher dimensions, independent two-dimensional subspaces use frequencies theta_i. Adjacent real coordinates correspond to each complex component.""",
+    "rotary_derivation": """For a two-dimensional subspace, RoPE applies R(m theta) to the query at position m and R(n theta) to the key at position n. R(phi) = [[cos(phi), -sin(phi)], [sin(phi), cos(phi)]]. In higher dimensions, independent two-dimensional subspaces use frequencies theta_i = b^(-2i/d), where d is the even head dimension, b is the configured base, and 0 <= i < d/2. Adjacent real coordinates correspond to each complex component.""",
     "appendix_incremental": """During incremental evaluation, m is the absolute token position. A chunk beginning after k previous tokens uses positions k, k+1, ..., k+t-1; the rotary phase is not reset at the start of the chunk.""",
 }
 

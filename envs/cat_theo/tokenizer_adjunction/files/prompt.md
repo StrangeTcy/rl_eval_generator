@@ -1,9 +1,7 @@
-# Adjoint Tokenization & Detokenization
+# Exact Tokenization Round Trip
 
-Your task is to implement a robust Detokenizer in `detokenizer.py` that forms a mathematically correct adjunction (Galois connection) with the tokenizer in `tokenizer.py`.
+Implement `%%MODEL_CLASS%%.detokenize` in `detokenizer.py` as an inverse of the supplied tokenizer on its supported domain.
 
-Let $T$ be the tokenizer, and $D$ be the detokenizer. To form a valid adjunction, they must satisfy the algebraic unit property:
-$$T \circ D \circ T(s) \equiv T(s)$$
-for any input string $s$.
+The supported domain is every Unicode string that does not contain the literal reserved character `Ġ` (U+0120). That character is a token marker, not a supported source-text character. Spaces, repeated spaces, tabs, line breaks, combining characters, and emoji must otherwise be preserved exactly. Only token sequences emitted by `tokenize` on this domain are supplied to the detokenizer.
 
-The starting implementation of `%%MODEL_CLASS%%` in `detokenizer.py` runs, but fails this adjunction property on complex boundary inputs. Correct the detokenization logic to ensure it behaves as a mathematically valid adjoint.
+For every supported string `s`, require `D(T(s)) == s` and consequently `T(D(T(s))) == T(s)`. These are reconstruction and token round-trip contracts; they do not by themselves establish a categorical adjunction or Galois connection.

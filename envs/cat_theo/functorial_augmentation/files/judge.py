@@ -37,39 +37,21 @@ try:
 except Exception:
     checks["basic_run"] = False
 
-# 2. Strict C_4 group-action symmetry & Non-Triviality verification
+# 2. Deterministic C4 coverage on rectangular inputs and inverse composition
 try:
-    # We must verify that:
-    # 1. The output is strictly a 90, 180, 270, or 360-degree rotation of x.
-    # 2. The augmenter is not a simple identity (no-op) return, meaning it produces
-    #    actual rotations (k > 0) under multiple independent runs.
-    x = torch.arange(1, 3 * 32 * 32 + 1, dtype=torch.float).reshape(1, 3, 32, 32)
-    
-    # Run 10 trials to check for dynamic, non-trivial rotations
-    non_trivial_count = 0
-    all_valid = True
-    
-    for _ in range(10):
-        out = augmenter.augment(x)
-        
-        is_valid_rotation = False
-        k_matched = -1
-        for k in range(4):
-            rotated_candidate = torch.rot90(x, k, [2, 3])
-            if torch.allclose(out, rotated_candidate, atol=1e-4):
-                is_valid_rotation = True
-                k_matched = k
-                break
-                
-        if not is_valid_rotation:
-            all_valid = False
-            break
-            
-        if k_matched > 0:
-            non_trivial_count += 1
-            
-    # Passes only if all 10 trials are valid C_4 group elements and at least 30% are non-trivial (k > 0)
-    checks["symmetry_preserved"] = bool(all_valid and non_trivial_count >= 3)
+    x = torch.arange(1, 3 * 5 * 7 + 1, dtype=torch.float).reshape(1, 3, 5, 7)
+    out0 = augmenter.augment(x, quarter_turns=0)
+    out1 = augmenter.augment(x, quarter_turns=1)
+    out2 = augmenter.augment(x, quarter_turns=2)
+    out3 = augmenter.augment(x, quarter_turns=3)
+    restored = augmenter.augment(out1, quarter_turns=3)
+    checks["symmetry_preserved"] = torch.stack((
+        torch.isclose(out0, x, atol=1e-4, rtol=0).all(),
+        torch.isclose(out1, torch.rot90(x, 1, (-2, -1)), atol=1e-4, rtol=0).all(),
+        torch.isclose(out2, torch.rot90(x, 2, (-2, -1)), atol=1e-4, rtol=0).all(),
+        torch.isclose(out3, torch.rot90(x, 3, (-2, -1)), atol=1e-4, rtol=0).all(),
+        torch.isclose(restored, x, atol=1e-4, rtol=0).all(),
+    )).all().to(torch.int64).item()
 except Exception as e:
     checks["symmetry_preserved"] = False
 

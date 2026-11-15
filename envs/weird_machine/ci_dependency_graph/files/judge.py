@@ -59,7 +59,8 @@ def verify_workflow(deps, wf):
 
 # 1. Basic structure check
 try:
-    deps = {{1: [], 2: [1]}}
+    deps = checks.fromkeys((7, 19, 3), ())
+    deps[7] = (19,)
     wf = engine.generate_workflow(deps)
     checks["workflow_structure"] = verify_workflow(deps, wf)
 except Exception:
@@ -67,7 +68,11 @@ except Exception:
 
 # 2. Diamond DAG check
 try:
-    deps = {{1: [], 2: [1], 3: [1], 4: [2, 3], 5: [4]}}
+    deps = deps.fromkeys((5, 42, 19, 7, 83, 91), ())
+    deps[5] = (83,)
+    deps[42] = (19, 5)
+    deps[19] = (83,)
+    deps[7] = (42,)
     wf = engine.generate_workflow(deps)
     checks["diamond_dag"] = verify_workflow(deps, wf)
 except Exception:
@@ -78,12 +83,13 @@ try:
     all_ok = True
     for _ in range(15):
         n = rng.randint(4, num_jobs)
-        deps = {{i: [] for i in range(1, n + 1)}}
+        labels = tuple(rng.sample(range(100, 100 + n * 5), n))
+        deps = deps.fromkeys(rng.sample(labels, n), ())
         for i in range(2, n + 1):
-            # Pick a random subset of earlier jobs
-            num_parents = rng.randint(1, min(3, i - 1))
-            parents = rng.sample(range(1, i), num_parents)
-            deps[i] = sorted(parents)
+            # Topological position, public label, and insertion order are independent.
+            num_parents = 0 if i == 2 else rng.randint(0, min(3, i - 1))
+            parents = tuple(rng.sample(labels[:i - 1], num_parents))
+            deps[labels[i - 1]] = parents
         wf = engine.generate_workflow(deps)
         if not verify_workflow(deps, wf):
             all_ok = False

@@ -7,9 +7,6 @@ class %%MODEL_CLASS%%(nn.Module):
         self.dim = dim
 
     def lift_state(self, K: torch.Tensor, V: torch.Tensor) -> torch.Tensor:
-        # BUG: Naive temporal mean pooling.
-        # This collapses the associative sequence context into a simple diagonal vector,
-        # losing historical temporal correlations.
         B, T, D = K.shape
         out = torch.zeros(B, D, D, device=K.device)
         for b in range(B):

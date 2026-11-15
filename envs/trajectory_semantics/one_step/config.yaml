@@ -135,7 +135,7 @@ axes:
 
 scoring:
   mode: check_fraction
-  total_checks: 7
+  total_checks: 9
 
 constants:
   "%%PATCHABLE_FILES%%": '["solution.py"]'

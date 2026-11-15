@@ -12,6 +12,14 @@ There are at least two bugs split across the model and queue update code. Fix
 them so the linear probe reaches at least 85% accuracy.
 %%QUEUE_HINT%%
 
+The contrastive objective uses unit-length projected queries and keys. Each
+positive and negative dot product is divided by the scalar temperature exactly
+once. Stored queue columns are unit-length keys, and FIFO insertion preserves
+arrival order across the queue boundary. Preserve `encoder_q`, `encoder_k`,
+`proj_q`, `proj_k`, and the `%%QUEUE_ATTR%%` buffer interface. Behavioral checks
+and held-out accuracy determine acceptance; no particular set of edited files
+is required.
+
 ## Files
 
 | File              | Purpose                                       |

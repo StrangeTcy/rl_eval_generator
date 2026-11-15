@@ -2,6 +2,6 @@
 
 Your task is to correct the state lifting function `%%MODEL_CLASS%%` in `lifter.py`.
 
-In sequential sequence modeling, converting history-dependent self-attention key/values into a recurrent state matrix represents a state-space transformation. For the transformation to be correct and lossless, reading the lifted recurrent state must produce the exact same attention outputs as the original sequence history under composition.
+Inputs `K` and `V` have shape `(B, T, D)`. Return a state of shape `(B, D, D)` whose readout with any query tensor `Q` equals the unnormalized linear-attention readout `(Q @ K.transpose(-2, -1)) @ V`. Concatenating two histories must correspond to adding their lifted states.
 
-The starting implementation in `lifter.py` runs, but performs a lossy transformation that violates this stateful equivalence. Correct the lifting function so that the state conversion is mathematically correct and lossless.
+Preserve this readout exactly up to numerical tolerance. The contract concerns unnormalized linear attention; it does not claim equivalence to softmax attention or invertibility of the complete sequence history.

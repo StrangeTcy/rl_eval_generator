@@ -1,0 +1,75 @@
+name: Environment audit repair validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/environment-audit-repairs-*']
+  pull_request:
+    paths:
+      - 'envs/**'
+      - 'shared/**'
+      - 'tools/environment_audit/**'
+      - 'tools/instance_oracle_gate.py'
+      - '.github/workflows/environment-audit-validation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: environment-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controls:
+    name: ${{ matrix.suite }} controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [generation, category, ml, substrate-epistemic, trajectory]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: npm ci
+      - run: pip install -r requirements.txt jinja2 numpy
+      - run: pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+      - name: Validate real evaluator controls without provider calls
+        env:
+          OMP_NUM_THREADS: '1'
+          MKL_NUM_THREADS: '1'
+          OPENBLAS_NUM_THREADS: '1'
+        run: node tools/environment_audit/${{ matrix.suite }}-preflight.mjs runs/environment-audit/${{ matrix.suite }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: environment-audit-${{ matrix.suite }}-${{ github.run_id }}
+          path: runs/environment-audit/
+          if-no-files-found: warn
+          retention-days: 14
+
+  regression:
+    name: Existing regression suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt jinja2 numpy
+      - run: pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+      - name: Run regression checks
+        env:
+          OMP_NUM_THREADS: '1'
+          MKL_NUM_THREADS: '1'
+          OPENBLAS_NUM_THREADS: '1'
+        run: pytest -q

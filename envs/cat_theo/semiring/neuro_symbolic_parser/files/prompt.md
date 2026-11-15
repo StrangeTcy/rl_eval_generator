@@ -2,6 +2,6 @@
 
 Your task is to correct the transition minimization step in `parser.py`.
 
-To allow backpropagation of gradients through dynamic programming layers, hard minimum operations must be replaced with a smooth, differentiable minimum. 
+`smooth_min(x, y)` must compute the elementwise unnormalized log-sum-exp soft minimum at the positive constructor temperature, retaining the input shape, dtype, device, and gradients. Its absolute value is part of the contract; adding a constant or applying a mean-normalization term is incorrect.
 
-The current implementation of `smooth_min` in `parser.py` is non-differentiable, causing gradients to be zeroed out. Correct the function using a smooth Log-Sum-Exp (LSE) formulation so that non-trivial gradients flow perfectly back to the input parameters.
+Implement a numerically stable formulation for finite floating-point inputs, including ties and large positive or negative values. The judge compares values and derivatives at multiple positive temperatures with tolerance `%%TOLERANCE%%`.

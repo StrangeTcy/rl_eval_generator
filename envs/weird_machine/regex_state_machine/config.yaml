@@ -1,6 +1,6 @@
 axes:
   - id: surface_deceptiveness
-    description: "Framing of the regex task (pattern matcher vs computational automaton)"
+    description: "Presentation control: class name only; no difficulty ordering is asserted"
     levels:
       easy:
         "%%MODEL_CLASS%%": "RegexAutomaton"
@@ -13,10 +13,10 @@ axes:
       hard:
         "%%MODEL_CLASS%%": "StringValidator"
         "%%MODEL_FILE%%": "regex_machine.py"
-        "%%PERF_COMMENT%%": "\n        # Note: standard regex lookaheads and backreferences can cause O(N^2) backtracking overhead at large state lengths.\n        # Avoid lookarounds if possible to prevent performance collapse.\n"
+        "%%PERF_COMMENT%%": ""
 
   - id: hidden_depth
-    description: "Depth and complexity of generated string states"
+    description: "Input string length for one synchronous transition"
     levels:
       easy:
         "%%STRING_LEN%%": "32"

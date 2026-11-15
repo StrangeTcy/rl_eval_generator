@@ -12,18 +12,24 @@ axes:
               x'_1 = x_0 sin(m theta_i) + x_1 cos(m theta_i)
 
           The position index m is the absolute sequence position.
+          For head dimension d and base b, theta_i = b^(-2i/d),
+          with zero-based i from 0 through d/2 - 1.
       medium:
         "%%PAPER_BODY%%": |
           RoPE treats each two-dimensional subspace as a complex coordinate and
           multiplies that coordinate by exp(i m theta_i). In the real-valued
           representation this is exactly a planar rotation by angle m theta_i.
           In cached decoding, m remains the absolute index in the full sequence.
+          Frequencies are theta_i = b^(-2i/d) for head dimension d,
+          base b, and zero-based subspace index i.
       hard:
         "%%PAPER_BODY%%": |
           Let z_i(m) denote the i-th complex component of a token representation
           at location m. The rotary map sends z_i(m) to z_i(m) exp(i m theta_i).
           Relative displacement appears through phase differences between
           positions. Incremental evaluation does not reset m at chunk boundaries.
+          The frequency schedule is theta_i = b^(-2i/d), 0 <= i < d/2,
+          where d is the head dimension and b is the configured base.
 
   - id: implementation_style
     description: "How obvious the buggy helper and frequency calculation are"

@@ -13,7 +13,7 @@ axes:
         "%%MODEL_FILE%%": "detokenizer.py"
 
   - id: symptom_mask
-    description: "Whether Unicode boundary conditions are strict"
+    description: "Legacy control only: all levels have identical task behavior and scoring; not a difficulty axis"
     levels:
       easy:
         "%%UNICODE_SUPPORT%%": "False"
@@ -64,8 +64,7 @@ latent_factors:
   declared_by: scaffold_unreviewed
   factors:
     task_state:
-      # UNICODE_SUPPORT <- default:task_state
-      placeholders: [UNICODE_SUPPORT]
+      unavailable: fixed task behavior; symptom_mask is a nonsemantic compatibility control
     causal_mechanism:
       unavailable: fixed hand-authored template code; a scaffold cannot derive a generative mechanism,
         and recording one it did not derive would be a causal claim nobody made (item 4 honesty
