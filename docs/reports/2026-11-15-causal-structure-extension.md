@@ -35,6 +35,17 @@ Local evidence is saved in
 `runs/causal-structure-2026-11-15/tests.tap` and `validation.json`, including source
 fingerprints. These are instrument checks, not evaluated model episodes.
 
+[Hosted validation run 43700480422](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/43700480422)
+passed all 11 jobs at code revision `df8016189779b3e2f813547005feb39f616ae248`:
+the regression suite and configured generation/execution/replay for each of the
+ten families. Local job metadata is retained in
+`runs/causal-structure-2026-11-15/github-validation-jobs.json`.
+
+The separate [repository-wide Python/Docker CI](https://github.com/StrangeTcy/rl_eval_generator/actions/runs/43700480330)
+was still executing pytest at 09:49 UTC. The family workflow's success is not a
+claim that this broader job passed. The repair report records nine failures
+already present in its base revision.
+
 The family includes an editable YAML preset and is enrolled in the provider-free
 GitHub validation matrix. The two existing paid campaign profiles retain their
 original nine-family cohort. Their `all` selection and source-pinned continuation
