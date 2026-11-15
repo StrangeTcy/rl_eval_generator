@@ -598,6 +598,7 @@ def build_manifest(
     max_tokens_total: int | None = None,
     families: list[Path] | None = None,
     expand_interventions: bool = False,
+    cohort=None,
 ) -> dict[str, Any]:
     root = root.resolve()
     families = [path.resolve() for path in (families or [])]
@@ -613,6 +614,23 @@ def build_manifest(
         )
     if max_tokens_total is not None and max_tokens_total < 1:
         raise ValueError("max-tokens-total must be positive")
+    cohort_path = None
+    cohort_configs = None
+    pending_cohort_paths = set()
+    if cohort is not None:
+        if families:
+            raise ValueError("a cohort selects registry environments and cannot be combined with families")
+        cohort_path = (root / cohort).resolve()
+        cohort_manifest = _load_yaml(cohort_path)
+        if str(cohort_manifest.get("schema_version")) != "1":
+            raise ValueError(f"{cohort_path}: cohort schema_version must be 1")
+        cohort_configs = cohort_manifest.get("config_paths")
+        try:
+            pending_cohort_paths.update(cohort_configs.keys())
+        except (AttributeError, TypeError) as exc:
+            raise ValueError(f"{cohort_path}: cohort config_paths must be a non-empty mapping") from exc
+        if not pending_cohort_paths:
+            raise ValueError(f"{cohort_path}: cohort config_paths must be a non-empty mapping")
     registry = _load_registry(root)
     config_paths = sorted((root / "envs").rglob("config.yaml"))
     audit = _registry_audit(root, registry, config_paths)
@@ -624,7 +642,16 @@ def build_manifest(
     taxonomy = ge.load_intervention_taxonomy() if expand_interventions else {}
     for config_path in config_paths:
         relative = config_path.relative_to(root).as_posix()
+        if cohort_configs is not None:
+            cohort_name = cohort_configs.get(relative)
+            if cohort_name is None:
+                continue
+            pending_cohort_paths.discard(relative)
         names = [name for name, path in registry.items() if Path(path).as_posix() == relative]
+        if cohort_configs is not None and cohort_name != next(iter(names), None):
+            raise ValueError(
+                f"{cohort_path}: cohort name {cohort_name!r} does not match registered config {relative}"
+            )
         config = _load_yaml(config_path)
         axes, axis_issues = _validate_axes(config, config_path)
         if not names:
@@ -670,6 +697,10 @@ def build_manifest(
                                 twin.update(_preflight_case(twin, root))
                             cases.append(twin)
                         intervention_issues.extend(twin_issues)
+    if pending_cohort_paths:
+        raise ValueError(
+            f"{cohort_path}: cohort paths are missing or unregistered: {pending_cohort_paths}"
+        )
     family_sections: list[dict[str, Any]] = []
     family_issues: list[str] = []
     for family_dir in families:
@@ -720,6 +751,12 @@ def build_manifest(
             ],
         },
         "selection": {
+            "cohort": (
+                cohort_path.relative_to(root).as_posix()
+                if cohort_path is not None and cohort_path.is_relative_to(root)
+                else str(cohort_path) if cohort_path is not None else None
+            ),
+            "cohort_sha256": _sha256(cohort_path) if cohort_path is not None else None,
             "matrix": matrix,
             "seeds": seeds,
             "families": [str(path) for path in families],

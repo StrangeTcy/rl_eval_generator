@@ -260,7 +260,7 @@ def replay_route(maze: Mapping[str, Any], steps: list, max_steps: int = 10_000) 
             key = (MazeControls().occurrence(stack), room, dest)
             if key in used:
                 return False, f"step {i}: reused edge"
-            if dest == tile["exit"] and _must_clear(tile) and not stack[-1][3]:
+            if dest == tile["exit"] and remaining > 0 and _must_clear(tile) and not stack[-1][3]:
                 return False, f"step {i}: tile exit still sealed"
             used.add(key)
             room = dest
@@ -314,7 +314,7 @@ def _neighbours(maze: Mapping[str, Any], state: tuple) -> list[tuple[tuple, dict
         key = (MazeControls().occurrence(stack), room, dest)
         if key in used:
             continue
-        if dest == tile["exit"] and _must_clear(tile) and not stack[-1][3]:
+        if dest == tile["exit"] and remaining > 0 and _must_clear(tile) and not stack[-1][3]:
             continue
         nxt = (
             stack,

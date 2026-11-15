@@ -50,7 +50,9 @@ rate_limit:
   documented_requests_per_minute: 300
   min_interval_seconds: 0.2
 quota_ceiling_tokens: null
+# Retain the original 39-environment scope used to size these campaign ceilings.
 matrix:
+  cohort: experiments/legacy_campaign_cohort.yaml
   mode: pairwise
   seeds: [0]
   interventions: true

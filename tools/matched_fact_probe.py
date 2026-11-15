@@ -570,7 +570,7 @@ def plan_from_profile(profile: Mapping[str, object]) -> Dict[str, object]:
         },
         "atria": {
             "model": "Atria-Dawn-Preview",
-            "api_base": "https://api.atria-asi.ai/v1",
+            "api_base": "https://discovery-api.intern-ai.org.cn/v1" if profile.get("name") == "t1_same_fact_presentation_reasoning_atria_discovery" else "https://api.atria-asi.ai/v1",
             "api_key_env": "ATRIA_API_KEY",
             "wire_api": "responses",
             "reasoning_mode": "controlled_responses_reasoning_effort_high",

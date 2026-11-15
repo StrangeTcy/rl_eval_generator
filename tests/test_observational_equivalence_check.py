@@ -97,6 +97,7 @@ def test_a_taxonomy_entry_alone_cannot_replan_a_campaign() -> None:
             matrix=str(ac.matrix_mode_of(profile)),
             seeds=[0],
             expand_interventions=ac.matrix_interventions_of(profile),
+            cohort=profile["matrix"].get("cohort"),
         )
         return sorted(str(case["case_id"]) for case in manifest["cases"])
 

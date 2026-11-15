@@ -7,8 +7,10 @@ campaign preflights along with it, and both are asserted here.
 """
 from __future__ import annotations
 
+import hashlib
 import itertools
 import sys
+from operator import itemgetter
 from pathlib import Path
 
 import pytest
@@ -96,6 +98,8 @@ def test_pairwise_over_the_registry_ensures_every_level_and_stays_small() -> Non
             for axis, level in (case.get("difficulty_levels") or {}).items()
         }
 
+    assert pairwise["selection"]["cohort"] is None
+    assert pairwise["environment_count"] > 39, "the default inventory includes later environment families"
     assert levels(covering) <= levels(pairwise), "pairwise must not lose a level covering served"
     assert pairwise["case_count"] == len({case["case_id"] for case in pairwise["cases"]})
     assert pairwise["case_count"] < covering["case_count"] * 2
@@ -263,7 +267,7 @@ def test_twin_verification_policy_defaults_and_refusals() -> None:
         atria_campaign._validate_campaign_profile(_profile_with(interventions="yes"))
 
 
-def test_comprehensive_profiles_are_valid_and_priced_against_their_own_matrix() -> None:
+def test_comprehensive_profiles_are_valid_and_priced_against_their_own_matrix(tmp_path) -> None:
     for name in ("mercury", "reasoning_atria"):
         profile = yaml.safe_load((ROOT / f"experiments/{name}_pairwise_campaign.yaml").read_text())
         atria_campaign._validate_campaign_profile(profile)
@@ -276,10 +280,58 @@ def test_comprehensive_profiles_are_valid_and_priced_against_their_own_matrix() 
             matrix=atria_campaign.matrix_mode_of(profile),
             seeds=[0],
             expand_interventions=atria_campaign.matrix_interventions_of(profile),
+            cohort=profile["matrix"].get("cohort"),
         )
         assert manifest["case_count"] == 496
+        assert manifest["environment_count"] == 39
+        assert manifest["selection"]["cohort"] == "experiments/legacy_campaign_cohort.yaml"
+        assert manifest["selection"]["cohort_sha256"] == hashlib.sha256(
+            (ROOT / profile["matrix"]["cohort"]).read_bytes()
+        ).hexdigest()
+        assert set(map(itemgetter("environment"), manifest["environments"])).isdisjoint({
+            "recursive_coarse_graining", "recursive_compiler_bootstrap",
+            "recursive_distributed_gluing", "recursive_epistemic_gluing",
+            "recursive_error_correcting_codes", "recursive_gluing",
+            "recursive_gluing_discovery", "recursive_holonomy_gluing",
+            "recursive_maze_gluing", "epistemic_deception", "epistemic_signaling",
+        })
         assert profile["limits"]["max_api_calls"] >= manifest["case_count"] * 40
         assert profile["limits"]["max_tokens_total"] > 0
+        original_base = profile["api_base"]
+        profile["api_base"] = "https://invalid.example/v1"
+        with pytest.raises(ValueError, match="api_base"):
+            atria_campaign._validate_campaign_profile(profile)
+        profile["api_base"] = original_base
+        original_t1 = profile["research_context"]["t1_profile"]
+        profile["research_context"]["t1_profile"] = (
+            "experiments/t1_mercury.yaml" if name == "reasoning_atria"
+            else "experiments/t1_reasoning_atria.yaml"
+        )
+        with pytest.raises(ValueError, match="identities must match"):
+            atria_campaign._validate_campaign_profile(profile)
+        profile["research_context"]["t1_profile"] = original_t1
+
+    invalid_cohort = tmp_path / "invalid_cohort.yaml"
+    invalid_cohort.write_text("schema_version: 1\nconfig_paths: missing\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="config_paths must be a non-empty mapping"):
+        atria_campaign.build_manifest(root=ROOT, cohort=invalid_cohort)
+    invalid_cohort.write_text("schema_version: 1\nconfig_paths: {}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="config_paths must be a non-empty mapping"):
+        atria_campaign.build_manifest(root=ROOT, cohort=invalid_cohort)
+    invalid_cohort.write_text(
+        "schema_version: 1\nconfig_paths:\n  envs/missing_environment/config.yaml: missing_environment\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="cohort paths are missing or unregistered"):
+        atria_campaign.build_manifest(root=ROOT, cohort=invalid_cohort)
+    invalid_cohort.write_text(
+        "schema_version: 1\nconfig_paths:\n  envs/batchnorm_ema/config.yaml: wrong_registered_name\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="does not match registered config"):
+        atria_campaign.build_manifest(root=ROOT, cohort=invalid_cohort)
+    with pytest.raises(FileNotFoundError):
+        atria_campaign.build_manifest(root=ROOT, cohort=tmp_path / "missing_cohort.yaml")
 
 
 def test_pairwise_workflows_are_self_consistent_and_cannot_crosstalk() -> None:
@@ -464,6 +516,7 @@ def test_a_shipped_profile_ceiling_fits_the_bound_the_controller_checks(profile_
         matrix=str(atria_campaign.matrix_mode_of(profile)),
         seeds=[0],
         expand_interventions=atria_campaign.matrix_interventions_of(profile),
+        cohort=profile["matrix"].get("cohort"),
     )
     atria_campaign._apply_gate_blocked_exclusions(plan, profile)
     limits = profile["limits"]

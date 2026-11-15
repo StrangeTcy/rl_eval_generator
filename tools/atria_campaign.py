@@ -373,10 +373,12 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
     target = CAMPAIGN_TARGETS.get(provider)
     if target is None:
         raise ValueError(f"unsupported covering-campaign provider: {provider or '(missing)'}")
+    expected_base = "https://discovery-api.intern-ai.org.cn/v1" if provider == "atria" and profile.get("name") == "reasoning_atria_pairwise_campaign" else target["api_base"]
     for field in ("model", "api_base", "api_key_env"):
-        if profile.get(field) != target[field]:
+        expected_value = expected_base if field == "api_base" else target[field]
+        if profile.get(field) != expected_value:
             raise ValueError(
-                f"{provider} campaign profile must pin {field}: {target[field]!r}"
+                f"{provider} campaign profile must pin {field}: {expected_value!r}"
             )
 
     wire_api = str(profile.get("wire_api", "chat_completions"))
@@ -485,7 +487,7 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
             research,
             provider=provider,
             model=str(target["model"]),
-            api_base=str(target["api_base"]),
+            api_base=str(expected_base),
             api_key_env=str(target["api_key_env"]),
             wire_api=wire_api,
             effort=effort,
@@ -497,7 +499,7 @@ def _validate_campaign_profile(profile: Mapping[str, Any]) -> None:
             research,
             provider=provider,
             model=str(target["model"]),
-            api_base=str(target["api_base"]),
+            api_base=str(expected_base),
             api_key_env=str(target["api_key_env"]),
             wire_api=wire_api,
             effort=effort,
@@ -1767,6 +1769,7 @@ def main(argv: list[str] | None = None) -> int:
             matrix=str(matrix_mode_of(profile)),
             seeds=[0],
             expand_interventions=matrix_interventions_of(profile),
+            cohort=profile["matrix"].get("cohort") if profile.get("matrix") else None,
         )
         _apply_gate_blocked_exclusions(manifest, profile)
         target = CAMPAIGN_TARGETS[str(profile["provider"])]

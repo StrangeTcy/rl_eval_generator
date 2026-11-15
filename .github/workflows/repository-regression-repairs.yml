@@ -1,0 +1,65 @@
+name: Repository regression repair checks
+
+on:
+  push:
+    paths:
+      - .github/workflows/repository-regression-repairs.yml
+      - tests/test_inherit_campaign_state.py
+      - tests/test_observational_equivalence_check.py
+      - tests/test_pairwise_matrix.py
+      - tests/test_recursive_distributed_gluing.py
+      - tests/test_recursive_maze_gluing.py
+      - tools/atria_campaign.py
+      - tools/suite_inventory.py
+      - tools/matched_fact_probe.py
+      - tools/inherit_campaign_state.py
+      - experiments/*campaign.yaml
+      - experiments/legacy_campaign_cohort.yaml
+      - experiments/t1_reasoning_atria_discovery.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repaired-regressions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install repository dependencies
+        run: pip install -r requirements.txt
+      - name: Validate the matching Discovery endpoint T1 plan
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/regression-repairs"
+          python tools/matched_fact_probe.py \
+            --profile experiments/t1_reasoning_atria_discovery.yaml --plan \
+            | tee "$RUNNER_TEMP/regression-repairs/t1-plan.json"
+      - name: Check the nine recorded failures
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q \
+            tests/test_inherit_campaign_state.py::test_plan_comes_from_the_same_builder_the_campaign_uses \
+            tests/test_observational_equivalence_check.py::test_a_taxonomy_entry_alone_cannot_replan_a_campaign \
+            tests/test_pairwise_matrix.py::test_comprehensive_profiles_are_valid_and_priced_against_their_own_matrix \
+            tests/test_pairwise_matrix.py::test_a_shipped_profile_ceiling_fits_the_bound_the_controller_checks \
+            tests/test_recursive_distributed_gluing.py::test_structural_capacity_changes_global_schedulability \
+            tests/test_recursive_maze_gluing.py::test_replay_rejects_descend_when_nesting_depth_exhausted \
+            --junitxml="$RUNNER_TEMP/regression-repairs/results.xml" \
+            | tee "$RUNNER_TEMP/regression-repairs/results.txt"
+      - name: Save regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-regression-repairs
+          path: ${{ runner.temp }}/regression-repairs/
+          if-no-files-found: error
+          retention-days: 30

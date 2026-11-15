@@ -164,6 +164,7 @@ def plan_cases(*, profile_path: Path | None, manifest_path: Path | None) -> dict
             matrix=matrix_mode_of(profile),
             seeds=[0],
             expand_interventions=matrix_interventions_of(profile),
+            cohort=profile["matrix"].get("cohort") if profile.get("matrix") else None,
         )
     else:
         raise ValueError("either --profile or --manifest is required")

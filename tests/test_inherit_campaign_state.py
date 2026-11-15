@@ -150,8 +150,10 @@ def test_plan_comes_from_the_same_builder_the_campaign_uses(tmp_path: Path) -> N
     from tools import atria_campaign
 
     profile = ROOT / "experiments/mercury_pairwise_campaign.yaml"
+    campaign_profile = atria_campaign._load_yaml(profile)
     manifest = atria_campaign.build_manifest(
-        root=ROOT, matrix="pairwise", seeds=[0], expand_interventions=True
+        root=ROOT, matrix="pairwise", seeds=[0], expand_interventions=True,
+        cohort=campaign_profile["matrix"].get("cohort"),
     )
     written = tmp_path / "pilot_manifest.json"
     written.write_text(json.dumps(manifest), encoding="utf-8")

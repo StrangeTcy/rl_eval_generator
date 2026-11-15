@@ -552,7 +552,7 @@ class SchedulerControls:
         job = generate_job(depth=depth, regime=TREE, opacity=OPAQUE,
                            seed=seed, lock_count=capacity)
         root = job["workers"][job["root"]]
-        root["program"] = ("spawn", "lock", "recv:child", "compute", "unlock")
+        root["program"] = ("lock", "spawn", "recv:child", "compute", "unlock")
         job.pop("meta", None)
         return job
 

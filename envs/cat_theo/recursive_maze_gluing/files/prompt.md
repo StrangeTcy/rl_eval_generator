@@ -23,8 +23,10 @@ Implement `%%MODEL_CLASS%%.solve` in `%%MODEL_FILE%%`.
 - `nesting`: `{"deeper": tile_type}` naming the child type used when remaining
   depth is at least 2. May be empty when no deeper copy exists.
 
-If a tile lists shafts, the root copy of that tile keeps its `exit` **sealed**
-until the walker has descended into a child and ascended back at least once.
+Each tile copy with shafts and positive remaining depth keeps its `exit`
+**sealed** until the walker has descended into a child and ascended back at
+least once. At remaining depth zero, descent is unavailable and shafts do
+not seal that copy's exit.
 
 Each directed edge in a given nested copy may be used at most once.
 

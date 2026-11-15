@@ -1,0 +1,44 @@
+# Frozen environment membership for the original legacy campaign profiles.
+# Runtime config contents remain pinned by the campaign code revision.
+schema_version: 1
+source_revision: b56e33a76a0adc12b62d72a77cebad91bfdddb5d
+config_paths:
+  envs/batchnorm_ema/config.yaml: batchnorm_ema
+  envs/cat_theo/architecture_naturality/config.yaml: architecture_naturality
+  envs/cat_theo/categorical_lenses/config.yaml: categorical_lenses
+  envs/cat_theo/compositional_optimizer/config.yaml: compositional_optimizer
+  envs/cat_theo/equivariant_diagram/config.yaml: equivariant_diagram
+  envs/cat_theo/functorial_augmentation/config.yaml: functorial_augmentation
+  envs/cat_theo/monadic_reward/config.yaml: monadic_reward
+  envs/cat_theo/semiring_unification/config.yaml: semiring_unification
+  envs/cat_theo/semiring/gnn_message_passing/config.yaml: gnn_message_passing
+  envs/cat_theo/semiring/neuro_symbolic_parser/config.yaml: neuro_symbolic_parser
+  envs/cat_theo/semiring/ssm_parallel_scan/config.yaml: ssm_parallel_scan
+  envs/cat_theo/sheaf/sheaf_invariant_gluing/config.yaml: sheaf_invariant_gluing
+  envs/cat_theo/sheaf/sheaf_physical_constraints/config.yaml: sheaf_physical_constraints
+  envs/cat_theo/sheaf/sheaf_schema_sync/config.yaml: sheaf_schema_sync
+  envs/cat_theo/stochastic_monad/config.yaml: stochastic_monad
+  envs/cat_theo/tensor_functor/config.yaml: tensor_functor
+  envs/cat_theo/tokenizer_adjunction/config.yaml: tokenizer_adjunction
+  envs/cat_theo/transformer_ssm_lift/config.yaml: transformer_ssm_lift
+  envs/epistemic_announcements/config.yaml: epistemic_announcements
+  envs/epistemic_fragmented_observation/config.yaml: epistemic_fragmented_observation
+  envs/epistemic_games/config.yaml: epistemic_games
+  envs/epistemic_nested_knowledge/config.yaml: epistemic_nested_knowledge
+  envs/epistemic_silence/config.yaml: epistemic_silence
+  envs/epistemic_type_games/config.yaml: epistemic_type_games
+  envs/glyph/config.yaml: glyph
+  envs/moco/config.yaml: moco
+  envs/recurrent_depth/adaptive_halting/config.yaml: rd_adaptive_halting
+  envs/recurrent_depth/gradient_credit/config.yaml: rd_gradient_credit
+  envs/recurrent_depth/state_carry/config.yaml: rd_state_carry
+  envs/rope/config.yaml: rope
+  envs/trajectory_semantics/one_step/config.yaml: ts_one_step
+  envs/trajectory_semantics/parse_only/config.yaml: ts_parse_only
+  envs/trajectory_semantics/trajectory/config.yaml: ts_trajectory
+  envs/weird_machine/ci_dependency_graph/config.yaml: ci_dependency_graph
+  envs/weird_machine/css_state_machine/config.yaml: css_state_machine
+  envs/weird_machine/regex_state_machine/config.yaml: regex_state_machine
+  envs/weird_machine/spreadsheet_dataflow/config.yaml: spreadsheet_dataflow
+  envs/weird_machine/sql_fixed_point/config.yaml: sql_fixed_point
+  envs/weird_machine/template_interpreter/config.yaml: template_interpreter
